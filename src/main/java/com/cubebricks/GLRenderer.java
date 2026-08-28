@@ -8,7 +8,7 @@ public class GLRenderer {
     }
 
     public void resize(int width, int height) {
-        System.out.println("Resize: " + width + " x " + height);
+        // JavaFX canvas owns the initial editor preview. OpenGL can replace this implementation later.
     }
 
     public void render() {

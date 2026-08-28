@@ -1,4 +1,95 @@
 
-.root {
-    -fx-background-color:#181818;
+.editor-root {
+    -fx-background-color: #17191f;
+    -fx-font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+}
+
+.editor-toolbar {
+    -fx-background-color: #20242d;
+    -fx-padding: 8px 12px;
+    -fx-border-color: transparent transparent #323846 transparent;
+}
+
+.editor-toolbar .button {
+    -fx-background-color: #303847;
+    -fx-text-fill: #e7edf9;
+    -fx-background-radius: 5;
+}
+
+.editor-toolbar .button:hover {
+    -fx-background-color: #3c4860;
+}
+
+.editor-toolbar .toggle-button, .combo-box, .scroll-bar .thumb {
+    -fx-background-color: #303847;
+    -fx-text-fill: #e7edf9;
+    -fx-background-radius: 5;
+}
+
+.editor-toolbar .toggle-button:selected, .editor-toolbar .toggle-button:hover, .combo-box:hover {
+    -fx-background-color: #3c4860;
+}
+
+.combo-box .list-cell { -fx-text-fill: #e7edf9; -fx-background-color: #303847; }
+.combo-box-popup .list-view { -fx-background-color: #252b37; }
+.combo-box-popup .list-cell:hover { -fx-background-color: #3c4860; }
+.scroll-bar { -fx-background-color: #1b1f27; }
+.scroll-bar .increment-button, .scroll-bar .decrement-button { -fx-background-color: #252b37; }
+
+.editor-toolbar .check-box {
+    -fx-text-fill: #dce5f5;
+    -fx-padding: 0 6px;
+}
+
+.inspector-panel {
+    -fx-background-color: #20242d;
+    -fx-border-color: transparent transparent transparent #323846;
+}
+
+.panel-title {
+    -fx-text-fill: #f2f5fb;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.element-list, .element-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #dce5f5;
+}
+
+.element-list .list-cell:filled:selected {
+    -fx-background-color: #344463;
+}
+
+.inspector-scroll, .inspector-scroll > .viewport {
+    -fx-background-color: #1b1f27;
+}
+
+.inspector-content {
+    -fx-padding: 8px;
+}
+
+.inspector-content .label {
+    -fx-text-fill: #c8d2e4;
+}
+
+.number-field, .inspector-content .text-field {
+    -fx-pref-width: 145px;
+    -fx-background-color: #2a3140;
+    -fx-text-fill: #edf3ff;
+    -fx-background-radius: 4;
+}
+
+.section-title {
+    -fx-text-fill: #8fb9ff !important;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-padding: 8px 0 0 0;
+}
+
+.status-bar {
+    -fx-background-color: #20242d;
+    -fx-text-fill: #aab6ca;
+    -fx-padding: 7px 12px;
+    -fx-border-color: #323846 transparent transparent transparent;
 }
