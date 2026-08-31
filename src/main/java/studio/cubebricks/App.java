@@ -52,6 +52,7 @@ public final class App extends Application {
     private final ObservableList<Cube> cubes = FXCollections.observableArrayList();
     private final Map<Cube, CubeNodes> nodes = new LinkedHashMap<>();
     private final Group world = new Group();
+    private final Translations translations = new Translations();
     private TreeView<Cube> outliner;
     private GridPane inspector;
     private Cube selected;
@@ -68,7 +69,7 @@ public final class App extends Application {
         root.setLeft(outlinerPanel());
         root.setRight(inspectorPanel());
         root.setCenter(viewport());
-        root.setBottom(new Label("Wheel zoom · Right drag orbit · Click a cube to select · Ctrl+D duplicate · Delete remove"));
+        root.setBottom(new Label(t("status.help")));
 
         Scene scene = new Scene(root, 1280, 820);
         scene.getStylesheets().add(App.class.getResource("/studio/cubebricks/editor.css").toExternalForm());
@@ -83,17 +84,17 @@ public final class App extends Application {
     }
 
     private Node toolbar() {
-        Button add = new Button("Add Cube"); add.setOnAction(event -> addCube());
-        Button duplicate = new Button("Duplicate"); duplicate.setOnAction(event -> duplicateSelected());
-        Button remove = new Button("Delete"); remove.setOnAction(event -> removeSelected());
+        Button add = new Button(t("tool.add_cube")); add.setOnAction(event -> addCube());
+        Button duplicate = new Button(t("tool.duplicate")); duplicate.setOnAction(event -> duplicateSelected());
+        Button remove = new Button(t("tool.delete")); remove.setOnAction(event -> removeSelected());
         ToggleGroup tools = new ToggleGroup();
-        Menu file = new Menu("File");
-        MenuItem create = new MenuItem("New Project"); create.setOnAction(event -> newProject());
-        MenuItem open = new MenuItem("Open…"); open.setOnAction(event -> openProject());
-        MenuItem save = new MenuItem("Save"); save.setOnAction(event -> saveProject(false));
-        MenuItem saveAs = new MenuItem("Save As…"); saveAs.setOnAction(event -> saveProject(true));
+        Menu file = new Menu(t("menu.file"));
+        MenuItem create = new MenuItem(t("file.new")); create.setOnAction(event -> newProject());
+        MenuItem open = new MenuItem(t("file.open")); open.setOnAction(event -> openProject());
+        MenuItem save = new MenuItem(t("file.save")); save.setOnAction(event -> saveProject(false));
+        MenuItem saveAs = new MenuItem(t("file.save_as")); saveAs.setOnAction(event -> saveProject(true));
         file.getItems().addAll(create, open, new SeparatorMenuItem(), save, saveAs);
-        return new VBox(new MenuBar(file, new Menu("Edit"), new Menu("View")), new ToolBar(add, duplicate, remove, new Separator(), tool("Move", tools, true), tool("Resize", tools, false), tool("Rotate", tools, false)));
+        return new VBox(new MenuBar(file, new Menu(t("menu.edit")), new Menu(t("menu.view"))), new ToolBar(add, duplicate, remove, new Separator(), tool(t("tool.move"), tools, true), tool(t("tool.resize"), tools, false), tool(t("tool.rotate"), tools, false)));
     }
 
     private ToggleButton tool(String label, ToggleGroup group, boolean selectedTool) {
@@ -103,16 +104,16 @@ public final class App extends Application {
     private Node outlinerPanel() {
         outliner = new TreeView<>(); outliner.setShowRoot(true);
         outliner.getSelectionModel().selectedItemProperty().addListener((observable, oldItem, newItem) -> { if (!syncingTree) select(newItem == null || newItem.getParent() == null ? null : newItem.getValue()); });
-        VBox panel = new VBox(new Label("Outliner"), outliner); panel.getStyleClass().add("panel"); panel.setPrefWidth(220); VBox.setVgrow(outliner, Priority.ALWAYS); return panel;
+        VBox panel = new VBox(new Label(t("panel.outliner")), outliner); panel.getStyleClass().add("panel"); panel.setPrefWidth(220); VBox.setVgrow(outliner, Priority.ALWAYS); return panel;
     }
 
     private Node inspectorPanel() {
         inspector = new GridPane(); inspector.setHgap(8); inspector.setVgap(8);
-        VBox panel = new VBox(new Label("Inspector"), inspector); panel.getStyleClass().add("panel"); panel.setPrefWidth(255); return panel;
+        VBox panel = new VBox(new Label(t("panel.inspector")), inspector); panel.getStyleClass().add("panel"); panel.setPrefWidth(255); return panel;
     }
 
     private void addCube() {
-        Cube cube = new Cube("Cube " + (cubes.size() + 1)); cube.x = cubes.size() * 2.5; cubes.add(cube);
+        Cube cube = new Cube(t("cube.name") + " " + (cubes.size() + 1)); cube.x = cubes.size() * 2.5; cubes.add(cube);
         addVisual(cube); rebuildOutliner(); select(cube);
     }
 
@@ -124,7 +125,7 @@ public final class App extends Application {
 
     private void duplicateSelected() {
         if (selected == null) return;
-        Cube copy = selected.copy("Cube " + (cubes.size() + 1)); copy.x += 1; copy.y += 1; cubes.add(copy); addVisual(copy); rebuildOutliner(); select(copy);
+        Cube copy = selected.copy(t("cube.name") + " " + (cubes.size() + 1)); copy.x += 1; copy.y += 1; cubes.add(copy); addVisual(copy); rebuildOutliner(); select(copy);
     }
 
     private void removeSelected() {
@@ -150,7 +151,7 @@ public final class App extends Application {
             Files.writeString(projectFile, ProjectCodec.encode(cubes), StandardCharsets.UTF_8);
             updateTitle();
         } catch (IOException exception) {
-            showError("Could not save project", exception.getMessage());
+            showError(t("error.save"), exception.getMessage());
         }
     }
 
@@ -161,13 +162,13 @@ public final class App extends Application {
             loadProject(Files.readString(selectedFile.toPath(), StandardCharsets.UTF_8));
             projectFile = selectedFile.toPath(); updateTitle();
         } catch (IOException | IllegalArgumentException exception) {
-            showError("Could not open project", exception.getMessage());
+            showError(t("error.open"), exception.getMessage());
         }
     }
 
     private FileChooser projectChooser() {
-        FileChooser chooser = new FileChooser(); chooser.setTitle("CubeBricks Project");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CubeBricks project", "*.cbricks.json"));
+        FileChooser chooser = new FileChooser(); chooser.setTitle(t("app.title"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(t("file.filter"), "*.cbricks.json"));
         return chooser;
     }
 
@@ -179,11 +180,12 @@ public final class App extends Application {
         rebuildOutliner(); inspector.getChildren().clear(); selected = null; if (!cubes.isEmpty()) select(cubes.getFirst());
     }
 
-    private void updateTitle() { if (stage != null) stage.setTitle("CubeBricks Studio — " + (projectFile == null ? "Untitled" : projectFile.getFileName())); }
+    private String t(String key) { return translations.get(key); }
+    private void updateTitle() { if (stage != null) stage.setTitle(t("app.title") + " — " + (projectFile == null ? t("project.untitled") : projectFile.getFileName())); }
     private void showError(String title, String details) { new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR, details, javafx.scene.control.ButtonType.OK) {{ setTitle(title); setHeaderText(title); }}.show(); }
 
     private void rebuildOutliner() {
-        TreeItem<Cube> root = new TreeItem<>(new Cube("Scene")); root.setExpanded(true);
+        TreeItem<Cube> root = new TreeItem<>(new Cube(t("scene.name"))); root.setExpanded(true);
         for (Cube cube : cubes) root.getChildren().add(new TreeItem<>(cube));
         syncingTree = true; outliner.setRoot(root); syncingTree = false;
     }
@@ -200,10 +202,10 @@ public final class App extends Application {
 
     private void refreshInspector() {
         inspector.getChildren().clear(); if (selected == null) return;
-        addField("Name", selected.name, value -> { selected.name = value; rebuildOutliner(); selectInOutliner(selected); });
-        addField("X", selected.x, value -> selected.x = number(value, selected.x)); addField("Y", selected.y, value -> selected.y = number(value, selected.y)); addField("Z", selected.z, value -> selected.z = number(value, selected.z));
-        addField("Width", selected.width, value -> selected.width = positive(value, selected.width)); addField("Height", selected.height, value -> selected.height = positive(value, selected.height)); addField("Depth", selected.depth, value -> selected.depth = positive(value, selected.depth));
-        addField("Rotation X", selected.rotationX, value -> selected.rotationX = number(value, selected.rotationX)); addField("Rotation Y", selected.rotationY, value -> selected.rotationY = number(value, selected.rotationY)); addField("Rotation Z", selected.rotationZ, value -> selected.rotationZ = number(value, selected.rotationZ));
+        addField(t("field.name"), selected.name, value -> { selected.name = value; rebuildOutliner(); selectInOutliner(selected); });
+        addField(t("field.x"), selected.x, value -> selected.x = number(value, selected.x)); addField(t("field.y"), selected.y, value -> selected.y = number(value, selected.y)); addField(t("field.z"), selected.z, value -> selected.z = number(value, selected.z));
+        addField(t("field.width"), selected.width, value -> selected.width = positive(value, selected.width)); addField(t("field.height"), selected.height, value -> selected.height = positive(value, selected.height)); addField(t("field.depth"), selected.depth, value -> selected.depth = positive(value, selected.depth));
+        addField(t("field.rotation_x"), selected.rotationX, value -> selected.rotationX = number(value, selected.rotationX)); addField(t("field.rotation_y"), selected.rotationY, value -> selected.rotationY = number(value, selected.rotationY)); addField(t("field.rotation_z"), selected.rotationZ, value -> selected.rotationZ = number(value, selected.rotationZ));
     }
 
     private void addField(String label, Object current, ValueSetter setter) {
