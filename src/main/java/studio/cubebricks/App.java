@@ -22,6 +22,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
@@ -59,6 +60,10 @@ public final class App extends Application {
     private boolean syncingTree;
     private Stage stage;
     private Path projectFile;
+    private PerspectiveCamera camera;
+    private Rotate yaw;
+    private Rotate pitch;
+    private Node gridNode;
 
     @Override
     public void start(Stage stage) {
@@ -94,7 +99,14 @@ public final class App extends Application {
         MenuItem save = new MenuItem(t("file.save")); save.setOnAction(event -> saveProject(false));
         MenuItem saveAs = new MenuItem(t("file.save_as")); saveAs.setOnAction(event -> saveProject(true));
         file.getItems().addAll(create, open, new SeparatorMenuItem(), save, saveAs);
-        return new VBox(new MenuBar(file, new Menu(t("menu.edit")), new Menu(t("menu.view"))), new ToolBar(add, duplicate, remove, new Separator(), tool(t("tool.move"), tools, true), tool(t("tool.resize"), tools, false), tool(t("tool.rotate"), tools, false)));
+        Menu view = new Menu(t("menu.view"));
+        MenuItem isometric = new MenuItem(t("view.isometric")); isometric.setOnAction(event -> setView(-36, -28));
+        MenuItem front = new MenuItem(t("view.front")); front.setOnAction(event -> setView(0, 0));
+        MenuItem side = new MenuItem(t("view.side")); side.setOnAction(event -> setView(-90, 0));
+        MenuItem top = new MenuItem(t("view.top")); top.setOnAction(event -> setView(0, -80));
+        CheckMenuItem showGrid = new CheckMenuItem(t("view.grid")); showGrid.setSelected(true); showGrid.selectedProperty().addListener((observable, oldValue, visible) -> gridNode.setVisible(visible));
+        view.getItems().addAll(isometric, front, side, top, new SeparatorMenuItem(), showGrid);
+        return new VBox(new MenuBar(file, new Menu(t("menu.edit")), view), new ToolBar(add, duplicate, remove, new Separator(), tool(t("tool.move"), tools, true), tool(t("tool.resize"), tools, false), tool(t("tool.rotate"), tools, false)));
     }
 
     private ToggleButton tool(String label, ToggleGroup group, boolean selectedTool) {
@@ -225,15 +237,20 @@ public final class App extends Application {
     }
 
     private Node viewport() {
-        world.getChildren().add(GridFactory.createFloor(16)); world.getChildren().addAll(new AmbientLight(Color.web("#9caed2")), pointLight());
-        PerspectiveCamera camera = new PerspectiveCamera(true); camera.setTranslateZ(-24);
+        gridNode = GridFactory.createFloor(16); world.getChildren().add(gridNode); world.getChildren().addAll(new AmbientLight(Color.web("#9caed2")), pointLight());
+        camera = new PerspectiveCamera(true); camera.setTranslateZ(-24);
         SubScene scene = new SubScene(world, 600, 600, true, SceneAntialiasing.BALANCED); scene.setCamera(camera);
         StackPane host = new StackPane(scene); host.getStyleClass().add("viewport"); host.widthProperty().addListener((observable, oldWidth, width) -> scene.setWidth(width.doubleValue())); host.heightProperty().addListener((observable, oldHeight, height) -> scene.setHeight(height.doubleValue()));
-        Rotate yaw = new Rotate(-36, Rotate.Y_AXIS), pitch = new Rotate(-28, Rotate.X_AXIS); world.getTransforms().addAll(yaw, pitch); double[] start = new double[4];
+        yaw = new Rotate(-36, Rotate.Y_AXIS); pitch = new Rotate(-28, Rotate.X_AXIS); world.getTransforms().addAll(yaw, pitch); double[] start = new double[4];
         scene.setOnMousePressed(event -> { start[0] = event.getSceneX(); start[1] = event.getSceneY(); start[2] = yaw.getAngle(); start[3] = pitch.getAngle(); });
         scene.setOnMouseDragged(event -> { if (event.isSecondaryButtonDown()) { yaw.setAngle(start[2] + (event.getSceneX() - start[0]) * .35); pitch.setAngle(Math.clamp(start[3] - (event.getSceneY() - start[1]) * .35, -82, 82)); } });
         scene.setOnScroll(event -> camera.setTranslateZ(Math.clamp(camera.getTranslateZ() + (event.getDeltaY() > 0 ? 1.4 : -1.4), -70, -5)));
         return host;
+    }
+
+    private void setView(double yawAngle, double pitchAngle) {
+        if (yaw == null || pitch == null) return;
+        yaw.setAngle(yawAngle); pitch.setAngle(pitchAngle);
     }
 
     private PointLight pointLight() { PointLight light = new PointLight(Color.WHITE); light.setTranslateX(-8); light.setTranslateY(-12); light.setTranslateZ(-10); return light; }
