@@ -1,47 +1,9 @@
-
-<project xmlns="http://maven.apache.org/POM/4.0.0"
- xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
- xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
- <modelVersion>4.0.0</modelVersion>
-
- <groupId>com.cubebricks</groupId>
- <artifactId>CubeBricks</artifactId>
- <version>0.1.0</version>
-
- <properties>
-  <maven.compiler.source>21</maven.compiler.source>
-  <maven.compiler.target>21</maven.compiler.target>
- </properties>
-
- <dependencies>
-  <dependency>
-   <groupId>org.openjfx</groupId>
-   <artifactId>javafx-controls</artifactId>
-   <version>21</version>
-  </dependency>
-
-  <dependency>
-   <groupId>org.lwjgl</groupId>
-   <artifactId>lwjgl</artifactId>
-   <version>3.3.3</version>
-  </dependency>
-  <dependency>
-   <groupId>org.lwjgl</groupId>
-   <artifactId>lwjgl-opengl</artifactId>
-   <version>3.3.3</version>
-  </dependency>
- </dependencies>
-
- <build>
-  <plugins>
-   <plugin>
-    <groupId>org.openjfx</groupId>
-    <artifactId>javafx-maven-plugin</artifactId>
-    <version>0.0.8</version>
-    <configuration>
-     <mainClass>com.cubebricks.Launcher</mainClass>
-    </configuration>
-   </plugin>
-  </plugins>
- </build>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>studio.cubebricks</groupId>
+  <artifactId>cubebricks</artifactId>
+  <version>0.1.0</version>
+  <properties><maven.compiler.release>21</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+  <dependencies><dependency><groupId>org.openjfx</groupId><artifactId>javafx-controls</artifactId><version>21</version></dependency></dependencies>
+  <build><plugins><plugin><groupId>org.openjfx</groupId><artifactId>javafx-maven-plugin</artifactId><version>0.0.8</version><configuration><mainClass>studio.cubebricks.Launcher</mainClass></configuration></plugin></plugins></build>
 </project>

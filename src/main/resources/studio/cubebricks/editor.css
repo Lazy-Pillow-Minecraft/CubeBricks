@@ -1,0 +1,7 @@
+.app { -fx-background-color: #171a21; -fx-font-family: "Segoe UI", sans-serif; }
+.menu-bar, .tool-bar, .panel { -fx-background-color: #202632; }
+.panel { -fx-padding: 12; -fx-spacing: 10; -fx-border-color: #30394a; }
+.label { -fx-text-fill: #d8e0ed; }
+.button, .toggle-button, .text-field { -fx-background-color: #303b4e; -fx-text-fill: #edf3ff; -fx-background-radius: 5; }
+.viewport { -fx-background-color: #11141a; }
+.tree-view, .tree-cell, .grid-pane { -fx-background-color: transparent; -fx-text-fill: #d8e0ed; }
