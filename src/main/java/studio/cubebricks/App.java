@@ -1,7 +1,13 @@
 package studio.cubebricks;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -18,7 +24,9 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.Separator;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
@@ -38,6 +46,7 @@ import javafx.scene.shape.Box;
 import javafx.scene.shape.DrawMode;
 import javafx.scene.transform.Rotate;
 import javafx.stage.Stage;
+import javafx.stage.FileChooser;
 
 /** A deliberately independent, compact low-poly modelling workspace. */
 public final class App extends Application {
@@ -53,9 +62,12 @@ public final class App extends Application {
     private GridPane inspector;
     private Cube selected;
     private boolean syncingTree;
+    private Stage stage;
+    private Path projectFile;
 
     @Override
     public void start(Stage stage) {
+        this.stage = stage;
         BorderPane root = new BorderPane();
         root.getStyleClass().add("app");
         root.setTop(toolbar());
@@ -70,7 +82,7 @@ public final class App extends Application {
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) removeSelected();
             else if (event.isControlDown() && event.getCode() == KeyCode.D) duplicateSelected();
         });
-        stage.setTitle("CubeBricks Studio");
+        updateTitle();
         stage.setScene(scene);
         stage.show();
         addCube();
@@ -81,7 +93,13 @@ public final class App extends Application {
         Button duplicate = new Button("Duplicate"); duplicate.setOnAction(event -> duplicateSelected());
         Button remove = new Button("Delete"); remove.setOnAction(event -> removeSelected());
         ToggleGroup tools = new ToggleGroup();
-        return new VBox(new MenuBar(new Menu("File"), new Menu("Edit"), new Menu("View")), new ToolBar(add, duplicate, remove, new Separator(), tool("Move", tools, true), tool("Resize", tools, false), tool("Rotate", tools, false)));
+        Menu file = new Menu("File");
+        MenuItem create = new MenuItem("New Project"); create.setOnAction(event -> newProject());
+        MenuItem open = new MenuItem("Open…"); open.setOnAction(event -> openProject());
+        MenuItem save = new MenuItem("Save"); save.setOnAction(event -> saveProject(false));
+        MenuItem saveAs = new MenuItem("Save As…"); saveAs.setOnAction(event -> saveProject(true));
+        file.getItems().addAll(create, open, new SeparatorMenuItem(), save, saveAs);
+        return new VBox(new MenuBar(file, new Menu("Edit"), new Menu("View")), new ToolBar(add, duplicate, remove, new Separator(), tool("Move", tools, true), tool("Resize", tools, false), tool("Rotate", tools, false)));
     }
 
     private ToggleButton tool(String label, ToggleGroup group, boolean selectedTool) {
@@ -119,6 +137,74 @@ public final class App extends Application {
         if (selected == null) return;
         CubeNodes removed = nodes.remove(selected); world.getChildren().removeAll(removed.solid, removed.outline); cubes.remove(selected); selected = null; rebuildOutliner(); inspector.getChildren().clear(); if (!cubes.isEmpty()) select(cubes.getLast());
     }
+
+    private void newProject() {
+        for (CubeNodes visual : nodes.values()) world.getChildren().removeAll(visual.solid, visual.outline);
+        cubes.clear(); nodes.clear(); selected = null; projectFile = null;
+        rebuildOutliner(); inspector.getChildren().clear(); updateTitle(); addCube();
+    }
+
+    private void saveProject(boolean chooseFile) {
+        if (projectFile == null || chooseFile) {
+            FileChooser chooser = projectChooser();
+            chooser.setInitialFileName(projectFile == null ? "untitled.cbricks.json" : projectFile.getFileName().toString());
+            java.io.File selectedFile = chooser.showSaveDialog(stage);
+            if (selectedFile == null) return;
+            projectFile = selectedFile.toPath();
+        }
+        try {
+            Files.writeString(projectFile, projectJson(), StandardCharsets.UTF_8);
+            updateTitle();
+        } catch (IOException exception) {
+            showError("Could not save project", exception.getMessage());
+        }
+    }
+
+    private void openProject() {
+        java.io.File selectedFile = projectChooser().showOpenDialog(stage);
+        if (selectedFile == null) return;
+        try {
+            loadProject(Files.readString(selectedFile.toPath(), StandardCharsets.UTF_8));
+            projectFile = selectedFile.toPath(); updateTitle();
+        } catch (IOException | IllegalArgumentException exception) {
+            showError("Could not open project", exception.getMessage());
+        }
+    }
+
+    private FileChooser projectChooser() {
+        FileChooser chooser = new FileChooser(); chooser.setTitle("CubeBricks Project");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CubeBricks project", "*.cbricks.json"));
+        return chooser;
+    }
+
+    private String projectJson() {
+        StringBuilder json = new StringBuilder("{\n  \"format\": \"cubebricks\",\n  \"version\": 1,\n  \"cubes\": [");
+        for (int index = 0; index < cubes.size(); index++) {
+            Cube cube = cubes.get(index);
+            if (index > 0) json.append(',');
+            json.append("\n    {\"name\":\"").append(escape(cube.name)).append("\",\"x\":").append(cube.x).append(",\"y\":").append(cube.y).append(",\"z\":").append(cube.z).append(",\"width\":").append(cube.w).append(",\"height\":").append(cube.h).append(",\"depth\":").append(cube.d).append(",\"rotationX\":").append(cube.rx).append(",\"rotationY\":").append(cube.ry).append(",\"rotationZ\":").append(cube.rz).append('}');
+        }
+        return json.append("\n  ]\n}\n").toString();
+    }
+
+    private void loadProject(String json) {
+        Pattern cubePattern = Pattern.compile("\\{\\\"name\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"x\\\":([-+.0-9Ee]+),\\\"y\\\":([-+.0-9Ee]+),\\\"z\\\":([-+.0-9Ee]+),\\\"width\\\":([-+.0-9Ee]+),\\\"height\\\":([-+.0-9Ee]+),\\\"depth\\\":([-+.0-9Ee]+),\\\"rotationX\\\":([-+.0-9Ee]+),\\\"rotationY\\\":([-+.0-9Ee]+),\\\"rotationZ\\\":([-+.0-9Ee]+)\\}");
+        Matcher matcher = cubePattern.matcher(json); Map<Cube, CubeNodes> loaded = new LinkedHashMap<>();
+        while (matcher.find()) {
+            Cube cube = new Cube(unescape(matcher.group(1))); cube.x=Double.parseDouble(matcher.group(2)); cube.y=Double.parseDouble(matcher.group(3)); cube.z=Double.parseDouble(matcher.group(4)); cube.w=positive(matcher.group(5), 2); cube.h=positive(matcher.group(6), 2); cube.d=positive(matcher.group(7), 2); cube.rx=Double.parseDouble(matcher.group(8)); cube.ry=Double.parseDouble(matcher.group(9)); cube.rz=Double.parseDouble(matcher.group(10));
+            loaded.put(cube, new CubeNodes());
+        }
+        if (!json.contains("\"format\": \"cubebricks\"")) throw new IllegalArgumentException("Not a CubeBricks project file.");
+        for (CubeNodes visual : nodes.values()) world.getChildren().removeAll(visual.solid, visual.outline);
+        cubes.clear(); nodes.clear();
+        for (Cube cube : loaded.keySet()) { cubes.add(cube); addVisual(cube); }
+        rebuildOutliner(); inspector.getChildren().clear(); selected = null; if (!cubes.isEmpty()) select(cubes.getFirst());
+    }
+
+    private void updateTitle() { if (stage != null) stage.setTitle("CubeBricks Studio — " + (projectFile == null ? "Untitled" : projectFile.getFileName())); }
+    private String escape(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }
+    private String unescape(String value) { return value.replace("\\\"", "\"").replace("\\\\", "\\"); }
+    private void showError(String title, String details) { new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR, details, javafx.scene.control.ButtonType.OK) {{ setTitle(title); setHeaderText(title); }}.show(); }
 
     private void rebuildOutliner() {
         TreeItem<Cube> root = new TreeItem<>(new Cube("Scene")); root.setExpanded(true);
