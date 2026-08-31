@@ -1,28 +1,16 @@
 package studio.cubebricks;
-
-import javafx.application.Application;
-import javafx.scene.*;
-import javafx.scene.control.*;
-import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
-import javafx.scene.paint.PhongMaterial;
-import javafx.scene.shape.Box;
-import javafx.scene.transform.Rotate;
-import javafx.stage.Stage;
-
+import javafx.application.Application;import javafx.collections.*;import javafx.scene.*;import javafx.scene.control.*;import javafx.scene.input.MouseButton;import javafx.scene.layout.*;import javafx.scene.paint.*;import javafx.scene.shape.Box;import javafx.scene.transform.Rotate;import javafx.stage.Stage;import java.util.*;
+/** Independent low-poly editor foundation. */
 public final class App extends Application {
-  @Override public void start(Stage stage) {
-    BorderPane root = new BorderPane(); root.getStyleClass().add("app");
-    MenuBar menu = new MenuBar(new Menu("File"), new Menu("Edit"), new Menu("View"), new Menu("Help"));
-    ToolBar tools = new ToolBar(new Button("Add Cube"), new Separator(), new ToggleButton("Move"), new ToggleButton("Resize"), new ToggleButton("Rotate"));
-    VBox top = new VBox(menu, tools); root.setTop(top);
-    TreeItem<String> sceneRoot = new TreeItem<>("Scene"); sceneRoot.setExpanded(true); sceneRoot.getChildren().add(new TreeItem<>("Cube"));
-    TreeView<String> outliner = new TreeView<>(sceneRoot); outliner.setShowRoot(true);
-    VBox left = new VBox(new Label("Outliner"), outliner); left.getStyleClass().add("panel"); left.setPrefWidth(220); VBox.setVgrow(outliner, Priority.ALWAYS); root.setLeft(left);
-    GridPane properties = new GridPane(); properties.setHgap(8); properties.setVgap(8); properties.add(new Label("Transform"),0,0); String[] labels={"X","Y","Z","Width","Height","Depth"}; for(int i=0;i<labels.length;i++){properties.add(new Label(labels[i]),0,i+1);properties.add(new TextField(i<3?"0":"2"),1,i+1);} VBox right=new VBox(new Label("Inspector"),properties);right.getStyleClass().add("panel");right.setPrefWidth(250);root.setRight(right);
-    root.setCenter(viewport()); root.setBottom(new Label("Ready · Wheel zoom · Right drag orbit · Middle drag pan"));
-    Scene scene = new Scene(root, 1280, 820); scene.getStylesheets().add(App.class.getResource("/editor.css").toExternalForm()); stage.setTitle("CubeBricks Studio"); stage.setScene(scene); stage.show();
-  }
-  private Node viewport(){ Group sceneRoot=new Group(); Box cube=new Box(2,2,2);cube.setMaterial(new PhongMaterial(Color.web("#6fa7ff")));sceneRoot.getChildren().add(cube); PerspectiveCamera camera=new PerspectiveCamera(true);camera.setTranslateZ(-12); SubScene view=new SubScene(sceneRoot,600,600,true,SceneAntialiasing.BALANCED);view.setCamera(camera); view.widthProperty(); StackPane host=new StackPane(view);host.getStyleClass().add("viewport");host.widthProperty().addListener((o,a,b)->view.setWidth(b.doubleValue()));host.heightProperty().addListener((o,a,b)->view.setHeight(b.doubleValue())); Rotate yaw=new Rotate(-28,Rotate.Y_AXIS),pitch=new Rotate(-18,Rotate.X_AXIS);sceneRoot.getTransforms().addAll(yaw,pitch); final double[] start=new double[4];view.setOnMousePressed(e->{start[0]=e.getSceneX();start[1]=e.getSceneY();start[2]=yaw.getAngle();start[3]=pitch.getAngle();});view.setOnMouseDragged(e->{if(e.isSecondaryButtonDown()){yaw.setAngle(start[2]+(e.getSceneX()-start[0])*.35);pitch.setAngle(Math.clamp(start[3]-(e.getSceneY()-start[1])*.35,-80,80));}});view.setOnScroll(e->camera.setTranslateZ(Math.clamp(camera.getTranslateZ()+(e.getDeltaY()>0?1:-1),-40,-4)));return host; }
-  public static void main(String[] args){launch(args);}
+ private final ObservableList<Cube> cubes=FXCollections.observableArrayList();private final Map<Cube,Box> nodes=new LinkedHashMap<>();private final Group world=new Group();private TreeView<Cube> outliner;private GridPane inspector;private Cube selected;
+ @Override public void start(Stage stage){BorderPane root=new BorderPane();root.getStyleClass().add("app");Button add=new Button("Add Cube");add.setOnAction(e->addCube());ToggleGroup tg=new ToggleGroup();root.setTop(new VBox(new MenuBar(new Menu("File"),new Menu("Edit"),new Menu("View")),new ToolBar(add,new Separator(),tool("Move",tg,true),tool("Resize",tg,false),tool("Rotate",tg,false))));outliner=new TreeView<>();outliner.getSelectionModel().selectedItemProperty().addListener((o,a,b)->select(b==null?null:b.getValue()));VBox left=new VBox(new Label("Outliner"),outliner);left.getStyleClass().add("panel");left.setPrefWidth(220);VBox.setVgrow(outliner,Priority.ALWAYS);root.setLeft(left);inspector=new GridPane();inspector.setHgap(8);inspector.setVgap(8);VBox right=new VBox(new Label("Inspector"),inspector);right.getStyleClass().add("panel");right.setPrefWidth(250);root.setRight(right);root.setCenter(viewport());root.setBottom(new Label("Ready · Wheel zoom · Right drag orbit"));Scene scene=new Scene(root,1280,820);scene.getStylesheets().add(App.class.getResource("/studio/cubebricks/editor.css").toExternalForm());stage.setTitle("CubeBricks Studio");stage.setScene(scene);stage.show();addCube();}
+ private ToggleButton tool(String s,ToggleGroup g,boolean on){ToggleButton b=new ToggleButton(s);b.setToggleGroup(g);b.setSelected(on);return b;}
+ private void addCube(){Cube c=new Cube("Cube "+(cubes.size()+1));cubes.add(c);Box b=new Box(2,2,2);b.setMaterial(new PhongMaterial(Color.web("#6fa7ff")));b.setOnMouseClicked(e->{if(e.getButton()==MouseButton.PRIMARY)select(c);});nodes.put(c,b);world.getChildren().add(b);rebuild();select(c);}
+ private void rebuild(){TreeItem<Cube> r=new TreeItem<>(new Cube("Scene"));r.setExpanded(true);for(Cube c:cubes)r.getChildren().add(new TreeItem<>(c));outliner.setRoot(r);}
+ private void select(Cube c){selected=c;if(c==null)return;inspector.getChildren().clear();String[] n={"X","Y","Z","Width","Height","Depth"};for(int i=0;i<n.length;i++){int k=i;inspector.add(new Label(n[i]),0,i);TextField f=new TextField(""+get(k));f.setOnAction(e->set(k,f));f.focusedProperty().addListener((o,a,on)->{if(!on)set(k,f);});inspector.add(f,1,i);}}
+ private double get(int i){return switch(i){case 0->selected.x;case 1->selected.y;case 2->selected.z;case 3->selected.w;case 4->selected.h;default->selected.d;};}
+ private void set(int i,TextField f){try{double v=Double.parseDouble(f.getText());switch(i){case 0->selected.x=v;case 1->selected.y=v;case 2->selected.z=v;case 3->selected.w=Math.max(.05,v);case 4->selected.h=Math.max(.05,v);case 5->selected.d=Math.max(.05,v);}Box b=nodes.get(selected);b.setWidth(selected.w);b.setHeight(selected.h);b.setDepth(selected.d);b.setTranslateX(selected.x);b.setTranslateY(selected.y);b.setTranslateZ(selected.z);}catch(NumberFormatException e){f.setText(""+get(i));}}
+ private Node viewport(){PerspectiveCamera cam=new PerspectiveCamera(true);cam.setTranslateZ(-12);SubScene v=new SubScene(world,600,600,true,SceneAntialiasing.BALANCED);v.setCamera(cam);StackPane host=new StackPane(v);host.getStyleClass().add("viewport");host.widthProperty().addListener((o,a,b)->v.setWidth(b.doubleValue()));host.heightProperty().addListener((o,a,b)->v.setHeight(b.doubleValue()));Rotate yaw=new Rotate(-28,Rotate.Y_AXIS),pitch=new Rotate(-18,Rotate.X_AXIS);world.getTransforms().addAll(yaw,pitch);double[] s=new double[4];v.setOnMousePressed(e->{s[0]=e.getSceneX();s[1]=e.getSceneY();s[2]=yaw.getAngle();s[3]=pitch.getAngle();});v.setOnMouseDragged(e->{if(e.isSecondaryButtonDown()){yaw.setAngle(s[2]+(e.getSceneX()-s[0])*.35);pitch.setAngle(Math.clamp(s[3]-(e.getSceneY()-s[1])*.35,-80,80));}});v.setOnScroll(e->cam.setTranslateZ(Math.clamp(cam.getTranslateZ()+(e.getDeltaY()>0?1:-1),-40,-4)));return host;}
+ private static final class Cube{String name;double x,y,z,w=2,h=2,d=2;Cube(String n){name=n;}public String toString(){return name;}}
+ public static void main(String[]a){launch(a);}
 }
