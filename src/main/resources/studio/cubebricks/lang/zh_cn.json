@@ -17,6 +17,8 @@
   "file.filter": "CubeBricks 项目",
   "file.filter_blockbench": "Blockbench 通用模型",
   "tool.add_cube": "添加方块",
+  "tool.undo": "撤销",
+  "tool.redo": "重做",
   "tool.duplicate": "复制",
   "tool.delete": "删除",
   "tool.move": "移动",

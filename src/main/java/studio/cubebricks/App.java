@@ -43,7 +43,9 @@ import javafx.scene.shape.Box;
 import javafx.scene.transform.Rotate;
 import javafx.stage.Stage;
 import javafx.stage.FileChooser;
+import studio.cubebricks.history.UndoHistory;
 import studio.cubebricks.model.Cube;
+import studio.cubebricks.model.CubeState;
 import studio.cubebricks.persistence.ProjectCodec;
 import studio.cubebricks.persistence.BlockbenchExporter;
 import studio.cubebricks.render.CubeNodes;
@@ -55,6 +57,7 @@ public final class App extends Application {
     private final Map<Cube, CubeNodes> nodes = new LinkedHashMap<>();
     private final Group world = new Group();
     private final Translations translations = new Translations();
+    private final UndoHistory history = new UndoHistory();
     private TreeView<Cube> outliner;
     private GridPane inspector;
     private Cube selected;
@@ -80,7 +83,9 @@ public final class App extends Application {
         Scene scene = new Scene(root, 1280, 820);
         scene.getStylesheets().add(App.class.getResource("/studio/cubebricks/editor.css").toExternalForm());
         scene.setOnKeyPressed(event -> {
-            if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) removeSelected();
+            if (event.isControlDown() && event.getCode() == KeyCode.Z) { if (event.isShiftDown()) redo(); else undo(); }
+            else if (event.isControlDown() && event.getCode() == KeyCode.Y) redo();
+            else if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) removeSelected();
             else if (event.isControlDown() && event.getCode() == KeyCode.D) duplicateSelected();
         });
         updateTitle();
@@ -90,6 +95,8 @@ public final class App extends Application {
     }
 
     private Node toolbar() {
+        Button undo = new Button(t("tool.undo")); undo.setOnAction(event -> undo());
+        Button redo = new Button(t("tool.redo")); redo.setOnAction(event -> redo());
         Button add = new Button(t("tool.add_cube")); add.setOnAction(event -> addCube());
         Button duplicate = new Button(t("tool.duplicate")); duplicate.setOnAction(event -> duplicateSelected());
         Button remove = new Button(t("tool.delete")); remove.setOnAction(event -> removeSelected());
@@ -108,7 +115,7 @@ public final class App extends Application {
         MenuItem top = new MenuItem(t("view.top")); top.setOnAction(event -> setView(0, -80));
         CheckMenuItem showGrid = new CheckMenuItem(t("view.grid")); showGrid.setSelected(true); showGrid.selectedProperty().addListener((observable, oldValue, visible) -> gridNode.setVisible(visible));
         view.getItems().addAll(isometric, front, side, top, new SeparatorMenuItem(), showGrid);
-        return new VBox(new MenuBar(file, new Menu(t("menu.edit")), view), new ToolBar(add, duplicate, remove, new Separator(), tool(t("tool.move"), tools, true), tool(t("tool.resize"), tools, false), tool(t("tool.rotate"), tools, false)));
+        return new VBox(new MenuBar(file, new Menu(t("menu.edit")), view), new ToolBar(undo, redo, new Separator(), add, duplicate, remove, new Separator(), tool(t("tool.move"), tools, true), tool(t("tool.resize"), tools, false), tool(t("tool.rotate"), tools, false)));
     }
 
     private ToggleButton tool(String label, ToggleGroup group, boolean selectedTool) {
@@ -242,7 +249,16 @@ public final class App extends Application {
         inspector.add(new Label(label), 0, row); inspector.add(field, 1, row);
     }
 
-    private void applyField(TextField field, ValueSetter setter) { if (selected == null) return; setter.set(field.getText()); updateNode(selected); field.setText(field.getText().trim()); }
+    private void applyField(TextField field, ValueSetter setter) {
+        if (selected == null) return;
+        Cube cube = selected; CubeState before = CubeState.capture(cube); setter.set(field.getText()); CubeState after = CubeState.capture(cube);
+        if (!before.equals(after)) history.record(() -> applyState(cube, before), () -> applyState(cube, after));
+        updateNode(cube); field.setText(field.getText().trim());
+    }
+
+    private void applyState(Cube cube, CubeState state) { state.applyTo(cube); updateNode(cube); rebuildOutliner(); select(cube); }
+    private void undo() { history.undo(); }
+    private void redo() { history.redo(); }
     private double number(String value, double fallback) { try { return Double.parseDouble(value.trim()); } catch (NumberFormatException ignored) { return fallback; } }
     private double positive(String value, double fallback) { return Math.max(0.05, number(value, fallback)); }
 

@@ -17,6 +17,8 @@
   "file.filter": "CubeBricks project",
   "file.filter_blockbench": "Blockbench generic model",
   "tool.add_cube": "Add Cube",
+  "tool.undo": "Undo",
+  "tool.redo": "Redo",
   "tool.duplicate": "Duplicate",
   "tool.delete": "Delete",
   "tool.move": "Move",
