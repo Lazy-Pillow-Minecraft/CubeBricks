@@ -6,13 +6,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.AmbientLight;
-import javafx.scene.DepthTest;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.PerspectiveCamera;
@@ -41,20 +38,17 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Box;
-import javafx.scene.shape.DrawMode;
 import javafx.scene.transform.Rotate;
 import javafx.stage.Stage;
 import javafx.stage.FileChooser;
+import studio.cubebricks.model.Cube;
+import studio.cubebricks.persistence.ProjectCodec;
+import studio.cubebricks.render.CubeNodes;
+import studio.cubebricks.render.GridFactory;
 
 /** A deliberately independent, compact low-poly modelling workspace. */
 public final class App extends Application {
-    private static final PhongMaterial CUBE_MATERIAL = new PhongMaterial(Color.web("#719def"));
-    private static final PhongMaterial GRID_MATERIAL = new PhongMaterial(Color.web("#364158"));
-    private static final PhongMaterial MAJOR_GRID_MATERIAL = new PhongMaterial(Color.web("#667692"));
-    private static final PhongMaterial OUTLINE_MATERIAL = new PhongMaterial(Color.web("#e9f2ff"));
-
     private final ObservableList<Cube> cubes = FXCollections.observableArrayList();
     private final Map<Cube, CubeNodes> nodes = new LinkedHashMap<>();
     private final Group world = new Group();
@@ -153,7 +147,7 @@ public final class App extends Application {
             projectFile = selectedFile.toPath();
         }
         try {
-            Files.writeString(projectFile, projectJson(), StandardCharsets.UTF_8);
+            Files.writeString(projectFile, ProjectCodec.encode(cubes), StandardCharsets.UTF_8);
             updateTitle();
         } catch (IOException exception) {
             showError("Could not save project", exception.getMessage());
@@ -177,33 +171,15 @@ public final class App extends Application {
         return chooser;
     }
 
-    private String projectJson() {
-        StringBuilder json = new StringBuilder("{\n  \"format\": \"cubebricks\",\n  \"version\": 1,\n  \"cubes\": [");
-        for (int index = 0; index < cubes.size(); index++) {
-            Cube cube = cubes.get(index);
-            if (index > 0) json.append(',');
-            json.append("\n    {\"name\":\"").append(escape(cube.name)).append("\",\"x\":").append(cube.x).append(",\"y\":").append(cube.y).append(",\"z\":").append(cube.z).append(",\"width\":").append(cube.w).append(",\"height\":").append(cube.h).append(",\"depth\":").append(cube.d).append(",\"rotationX\":").append(cube.rx).append(",\"rotationY\":").append(cube.ry).append(",\"rotationZ\":").append(cube.rz).append('}');
-        }
-        return json.append("\n  ]\n}\n").toString();
-    }
-
     private void loadProject(String json) {
-        Pattern cubePattern = Pattern.compile("\\{\\\"name\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"x\\\":([-+.0-9Ee]+),\\\"y\\\":([-+.0-9Ee]+),\\\"z\\\":([-+.0-9Ee]+),\\\"width\\\":([-+.0-9Ee]+),\\\"height\\\":([-+.0-9Ee]+),\\\"depth\\\":([-+.0-9Ee]+),\\\"rotationX\\\":([-+.0-9Ee]+),\\\"rotationY\\\":([-+.0-9Ee]+),\\\"rotationZ\\\":([-+.0-9Ee]+)\\}");
-        Matcher matcher = cubePattern.matcher(json); Map<Cube, CubeNodes> loaded = new LinkedHashMap<>();
-        while (matcher.find()) {
-            Cube cube = new Cube(unescape(matcher.group(1))); cube.x=Double.parseDouble(matcher.group(2)); cube.y=Double.parseDouble(matcher.group(3)); cube.z=Double.parseDouble(matcher.group(4)); cube.w=positive(matcher.group(5), 2); cube.h=positive(matcher.group(6), 2); cube.d=positive(matcher.group(7), 2); cube.rx=Double.parseDouble(matcher.group(8)); cube.ry=Double.parseDouble(matcher.group(9)); cube.rz=Double.parseDouble(matcher.group(10));
-            loaded.put(cube, new CubeNodes());
-        }
-        if (!json.contains("\"format\": \"cubebricks\"")) throw new IllegalArgumentException("Not a CubeBricks project file.");
+        java.util.List<Cube> loaded = ProjectCodec.decode(json);
         for (CubeNodes visual : nodes.values()) world.getChildren().removeAll(visual.solid, visual.outline);
         cubes.clear(); nodes.clear();
-        for (Cube cube : loaded.keySet()) { cubes.add(cube); addVisual(cube); }
+        for (Cube cube : loaded) { cubes.add(cube); addVisual(cube); }
         rebuildOutliner(); inspector.getChildren().clear(); selected = null; if (!cubes.isEmpty()) select(cubes.getFirst());
     }
 
     private void updateTitle() { if (stage != null) stage.setTitle("CubeBricks Studio — " + (projectFile == null ? "Untitled" : projectFile.getFileName())); }
-    private String escape(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }
-    private String unescape(String value) { return value.replace("\\\"", "\"").replace("\\\\", "\\"); }
     private void showError(String title, String details) { new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR, details, javafx.scene.control.ButtonType.OK) {{ setTitle(title); setHeaderText(title); }}.show(); }
 
     private void rebuildOutliner() {
@@ -226,8 +202,8 @@ public final class App extends Application {
         inspector.getChildren().clear(); if (selected == null) return;
         addField("Name", selected.name, value -> { selected.name = value; rebuildOutliner(); selectInOutliner(selected); });
         addField("X", selected.x, value -> selected.x = number(value, selected.x)); addField("Y", selected.y, value -> selected.y = number(value, selected.y)); addField("Z", selected.z, value -> selected.z = number(value, selected.z));
-        addField("Width", selected.w, value -> selected.w = positive(value, selected.w)); addField("Height", selected.h, value -> selected.h = positive(value, selected.h)); addField("Depth", selected.d, value -> selected.d = positive(value, selected.d));
-        addField("Rotation X", selected.rx, value -> selected.rx = number(value, selected.rx)); addField("Rotation Y", selected.ry, value -> selected.ry = number(value, selected.ry)); addField("Rotation Z", selected.rz, value -> selected.rz = number(value, selected.rz));
+        addField("Width", selected.width, value -> selected.width = positive(value, selected.width)); addField("Height", selected.height, value -> selected.height = positive(value, selected.height)); addField("Depth", selected.depth, value -> selected.depth = positive(value, selected.depth));
+        addField("Rotation X", selected.rotationX, value -> selected.rotationX = number(value, selected.rotationX)); addField("Rotation Y", selected.rotationY, value -> selected.rotationY = number(value, selected.rotationY)); addField("Rotation Z", selected.rotationZ, value -> selected.rotationZ = number(value, selected.rotationZ));
     }
 
     private void addField(String label, Object current, ValueSetter setter) {
@@ -241,13 +217,13 @@ public final class App extends Application {
     private double positive(String value, double fallback) { return Math.max(0.05, number(value, fallback)); }
 
     private void updateNode(Cube cube) {
-        CubeNodes visual = nodes.get(cube); visual.solid.setWidth(cube.w); visual.solid.setHeight(cube.h); visual.solid.setDepth(cube.d);
-        visual.outline.setWidth(cube.w + 0.025); visual.outline.setHeight(cube.h + 0.025); visual.outline.setDepth(cube.d + 0.025);
-        for (Box box : new Box[] {visual.solid, visual.outline}) { box.setTranslateX(cube.x); box.setTranslateY(cube.y); box.setTranslateZ(cube.z); box.getTransforms().setAll(new Rotate(cube.rx, Rotate.X_AXIS), new Rotate(cube.ry, Rotate.Y_AXIS), new Rotate(cube.rz, Rotate.Z_AXIS)); }
+        CubeNodes visual = nodes.get(cube); visual.solid.setWidth(cube.width); visual.solid.setHeight(cube.height); visual.solid.setDepth(cube.depth);
+        visual.outline.setWidth(cube.width + 0.025); visual.outline.setHeight(cube.height + 0.025); visual.outline.setDepth(cube.depth + 0.025);
+        for (Box box : new Box[] {visual.solid, visual.outline}) { box.setTranslateX(cube.x); box.setTranslateY(cube.y); box.setTranslateZ(cube.z); box.getTransforms().setAll(new Rotate(cube.rotationX, Rotate.X_AXIS), new Rotate(cube.rotationY, Rotate.Y_AXIS), new Rotate(cube.rotationZ, Rotate.Z_AXIS)); }
     }
 
     private Node viewport() {
-        world.getChildren().add(grid()); world.getChildren().addAll(new AmbientLight(Color.web("#9caed2")), pointLight());
+        world.getChildren().add(GridFactory.createFloor(16)); world.getChildren().addAll(new AmbientLight(Color.web("#9caed2")), pointLight());
         PerspectiveCamera camera = new PerspectiveCamera(true); camera.setTranslateZ(-24);
         SubScene scene = new SubScene(world, 600, 600, true, SceneAntialiasing.BALANCED); scene.setCamera(camera);
         StackPane host = new StackPane(scene); host.getStyleClass().add("viewport"); host.widthProperty().addListener((observable, oldWidth, width) -> scene.setWidth(width.doubleValue())); host.heightProperty().addListener((observable, oldHeight, height) -> scene.setHeight(height.doubleValue()));
@@ -258,27 +234,8 @@ public final class App extends Application {
         return host;
     }
 
-    private Node grid() {
-        Group grid = new Group();
-        for (int value = -16; value <= 16; value++) { boolean major = value % 4 == 0; PhongMaterial material = major ? MAJOR_GRID_MATERIAL : GRID_MATERIAL; double thickness = major ? .035 : .015; grid.getChildren().add(line(32, thickness, thickness, 0, -1.02, value, material)); grid.getChildren().add(line(thickness, thickness, 32, value, -1.02, 0, material)); }
-        grid.setDepthTest(DepthTest.ENABLE); return grid;
-    }
-
-    private Box line(double width, double height, double depth, double x, double y, double z, PhongMaterial material) { Box line = new Box(width, height, depth); line.setTranslateX(x); line.setTranslateY(y); line.setTranslateZ(z); line.setMaterial(material); return line; }
     private PointLight pointLight() { PointLight light = new PointLight(Color.WHITE); light.setTranslateX(-8); light.setTranslateY(-12); light.setTranslateZ(-10); return light; }
     private interface ValueSetter { void set(String value); }
-
-    private static final class CubeNodes {
-        final Box solid = new Box(); final Box outline = new Box();
-        CubeNodes() { solid.setMaterial(CUBE_MATERIAL); outline.setMaterial(OUTLINE_MATERIAL); outline.setDrawMode(DrawMode.LINE); outline.setMouseTransparent(true); outline.setVisible(false); }
-    }
-
-    private static final class Cube {
-        String name; double x, y, z, w = 2, h = 2, d = 2, rx, ry, rz;
-        Cube(String name) { this.name = name; }
-        Cube copy(String copyName) { Cube copy = new Cube(copyName); copy.x=x; copy.y=y; copy.z=z; copy.w=w; copy.h=h; copy.d=d; copy.rx=rx; copy.ry=ry; copy.rz=rz; return copy; }
-        @Override public String toString() { return name; }
-    }
 
     public static void main(String[] args) { launch(args); }
 }
