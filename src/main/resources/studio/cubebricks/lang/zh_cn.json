@@ -13,7 +13,9 @@
   "file.open": "打开…",
   "file.save": "保存",
   "file.save_as": "另存为…",
+  "file.export_blockbench": "导出 Blockbench 模型…",
   "file.filter": "CubeBricks 项目",
+  "file.filter_blockbench": "Blockbench 通用模型",
   "tool.add_cube": "添加方块",
   "tool.duplicate": "复制",
   "tool.delete": "删除",
@@ -37,5 +39,6 @@
   "status.help": "滚轮缩放 · 右键拖拽旋转视角 · 点击方块选择 · Ctrl+D 复制 · Delete 删除",
   "error.save": "无法保存项目",
   "error.open": "无法打开项目",
+  "error.export": "无法导出 Blockbench 模型",
   "error.invalid_project": "这不是 CubeBricks 项目文件。"
 }

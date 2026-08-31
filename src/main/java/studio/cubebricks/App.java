@@ -45,6 +45,7 @@ import javafx.stage.Stage;
 import javafx.stage.FileChooser;
 import studio.cubebricks.model.Cube;
 import studio.cubebricks.persistence.ProjectCodec;
+import studio.cubebricks.persistence.BlockbenchExporter;
 import studio.cubebricks.render.CubeNodes;
 import studio.cubebricks.render.GridFactory;
 
@@ -98,7 +99,8 @@ public final class App extends Application {
         MenuItem open = new MenuItem(t("file.open")); open.setOnAction(event -> openProject());
         MenuItem save = new MenuItem(t("file.save")); save.setOnAction(event -> saveProject(false));
         MenuItem saveAs = new MenuItem(t("file.save_as")); saveAs.setOnAction(event -> saveProject(true));
-        file.getItems().addAll(create, open, new SeparatorMenuItem(), save, saveAs);
+        MenuItem export = new MenuItem(t("file.export_blockbench")); export.setOnAction(event -> exportBlockbench());
+        file.getItems().addAll(create, open, new SeparatorMenuItem(), save, saveAs, new SeparatorMenuItem(), export);
         Menu view = new Menu(t("menu.view"));
         MenuItem isometric = new MenuItem(t("view.isometric")); isometric.setOnAction(event -> setView(-36, -28));
         MenuItem front = new MenuItem(t("view.front")); front.setOnAction(event -> setView(0, 0));
@@ -178,6 +180,19 @@ public final class App extends Application {
         }
     }
 
+    private void exportBlockbench() {
+        FileChooser chooser = new FileChooser(); chooser.setTitle(t("file.export_blockbench"));
+        chooser.setInitialFileName((projectFile == null ? "untitled" : stripExtension(projectFile.getFileName().toString())) + ".bbmodel");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(t("file.filter_blockbench"), "*.bbmodel"));
+        java.io.File target = chooser.showSaveDialog(stage);
+        if (target == null) return;
+        try {
+            Files.writeString(target.toPath(), BlockbenchExporter.export(cubes, stripExtension(target.getName())), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            showError(t("error.export"), exception.getMessage());
+        }
+    }
+
     private FileChooser projectChooser() {
         FileChooser chooser = new FileChooser(); chooser.setTitle(t("app.title"));
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(t("file.filter"), "*.cbricks.json"));
@@ -193,6 +208,7 @@ public final class App extends Application {
     }
 
     private String t(String key) { return translations.get(key); }
+    private String stripExtension(String name) { int dot = name.lastIndexOf('.'); return dot < 1 ? name : name.substring(0, dot); }
     private void updateTitle() { if (stage != null) stage.setTitle(t("app.title") + " — " + (projectFile == null ? t("project.untitled") : projectFile.getFileName())); }
     private void showError(String title, String details) { new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR, details, javafx.scene.control.ButtonType.OK) {{ setTitle(title); setHeaderText(title); }}.show(); }
 
