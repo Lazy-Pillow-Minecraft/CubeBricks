@@ -1,16 +1,198 @@
 package studio.cubebricks;
-import javafx.application.Application;import javafx.collections.*;import javafx.scene.*;import javafx.scene.control.*;import javafx.scene.input.MouseButton;import javafx.scene.layout.*;import javafx.scene.paint.*;import javafx.scene.shape.Box;import javafx.scene.transform.Rotate;import javafx.stage.Stage;import java.util.*;
-/** Independent low-poly editor foundation. */
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import javafx.application.Application;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.scene.AmbientLight;
+import javafx.scene.DepthTest;
+import javafx.scene.Group;
+import javafx.scene.Node;
+import javafx.scene.PerspectiveCamera;
+import javafx.scene.PointLight;
+import javafx.scene.Scene;
+import javafx.scene.SceneAntialiasing;
+import javafx.scene.SubScene;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.Separator;
+import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.ToolBar;
+import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.paint.PhongMaterial;
+import javafx.scene.shape.Box;
+import javafx.scene.shape.DrawMode;
+import javafx.scene.transform.Rotate;
+import javafx.stage.Stage;
+
+/** A deliberately independent, compact low-poly modelling workspace. */
 public final class App extends Application {
- private final ObservableList<Cube> cubes=FXCollections.observableArrayList();private final Map<Cube,Box> nodes=new LinkedHashMap<>();private final Group world=new Group();private TreeView<Cube> outliner;private GridPane inspector;private Cube selected;
- @Override public void start(Stage stage){BorderPane root=new BorderPane();root.getStyleClass().add("app");Button add=new Button("Add Cube");add.setOnAction(e->addCube());ToggleGroup tg=new ToggleGroup();root.setTop(new VBox(new MenuBar(new Menu("File"),new Menu("Edit"),new Menu("View")),new ToolBar(add,new Separator(),tool("Move",tg,true),tool("Resize",tg,false),tool("Rotate",tg,false))));outliner=new TreeView<>();outliner.getSelectionModel().selectedItemProperty().addListener((o,a,b)->select(b==null?null:b.getValue()));VBox left=new VBox(new Label("Outliner"),outliner);left.getStyleClass().add("panel");left.setPrefWidth(220);VBox.setVgrow(outliner,Priority.ALWAYS);root.setLeft(left);inspector=new GridPane();inspector.setHgap(8);inspector.setVgap(8);VBox right=new VBox(new Label("Inspector"),inspector);right.getStyleClass().add("panel");right.setPrefWidth(250);root.setRight(right);root.setCenter(viewport());root.setBottom(new Label("Ready · Wheel zoom · Right drag orbit"));Scene scene=new Scene(root,1280,820);scene.getStylesheets().add(App.class.getResource("/studio/cubebricks/editor.css").toExternalForm());stage.setTitle("CubeBricks Studio");stage.setScene(scene);stage.show();addCube();}
- private ToggleButton tool(String s,ToggleGroup g,boolean on){ToggleButton b=new ToggleButton(s);b.setToggleGroup(g);b.setSelected(on);return b;}
- private void addCube(){Cube c=new Cube("Cube "+(cubes.size()+1));cubes.add(c);Box b=new Box(2,2,2);b.setMaterial(new PhongMaterial(Color.web("#6fa7ff")));b.setOnMouseClicked(e->{if(e.getButton()==MouseButton.PRIMARY)select(c);});nodes.put(c,b);world.getChildren().add(b);rebuild();select(c);}
- private void rebuild(){TreeItem<Cube> r=new TreeItem<>(new Cube("Scene"));r.setExpanded(true);for(Cube c:cubes)r.getChildren().add(new TreeItem<>(c));outliner.setRoot(r);}
- private void select(Cube c){selected=c;if(c==null)return;inspector.getChildren().clear();String[] n={"X","Y","Z","Width","Height","Depth"};for(int i=0;i<n.length;i++){int k=i;inspector.add(new Label(n[i]),0,i);TextField f=new TextField(""+get(k));f.setOnAction(e->set(k,f));f.focusedProperty().addListener((o,a,on)->{if(!on)set(k,f);});inspector.add(f,1,i);}}
- private double get(int i){return switch(i){case 0->selected.x;case 1->selected.y;case 2->selected.z;case 3->selected.w;case 4->selected.h;default->selected.d;};}
- private void set(int i,TextField f){try{double v=Double.parseDouble(f.getText());switch(i){case 0->selected.x=v;case 1->selected.y=v;case 2->selected.z=v;case 3->selected.w=Math.max(.05,v);case 4->selected.h=Math.max(.05,v);case 5->selected.d=Math.max(.05,v);}Box b=nodes.get(selected);b.setWidth(selected.w);b.setHeight(selected.h);b.setDepth(selected.d);b.setTranslateX(selected.x);b.setTranslateY(selected.y);b.setTranslateZ(selected.z);}catch(NumberFormatException e){f.setText(""+get(i));}}
- private Node viewport(){PerspectiveCamera cam=new PerspectiveCamera(true);cam.setTranslateZ(-12);SubScene v=new SubScene(world,600,600,true,SceneAntialiasing.BALANCED);v.setCamera(cam);StackPane host=new StackPane(v);host.getStyleClass().add("viewport");host.widthProperty().addListener((o,a,b)->v.setWidth(b.doubleValue()));host.heightProperty().addListener((o,a,b)->v.setHeight(b.doubleValue()));Rotate yaw=new Rotate(-28,Rotate.Y_AXIS),pitch=new Rotate(-18,Rotate.X_AXIS);world.getTransforms().addAll(yaw,pitch);double[] s=new double[4];v.setOnMousePressed(e->{s[0]=e.getSceneX();s[1]=e.getSceneY();s[2]=yaw.getAngle();s[3]=pitch.getAngle();});v.setOnMouseDragged(e->{if(e.isSecondaryButtonDown()){yaw.setAngle(s[2]+(e.getSceneX()-s[0])*.35);pitch.setAngle(Math.clamp(s[3]-(e.getSceneY()-s[1])*.35,-80,80));}});v.setOnScroll(e->cam.setTranslateZ(Math.clamp(cam.getTranslateZ()+(e.getDeltaY()>0?1:-1),-40,-4)));return host;}
- private static final class Cube{String name;double x,y,z,w=2,h=2,d=2;Cube(String n){name=n;}public String toString(){return name;}}
- public static void main(String[]a){launch(a);}
+    private static final PhongMaterial CUBE_MATERIAL = new PhongMaterial(Color.web("#719def"));
+    private static final PhongMaterial GRID_MATERIAL = new PhongMaterial(Color.web("#364158"));
+    private static final PhongMaterial MAJOR_GRID_MATERIAL = new PhongMaterial(Color.web("#667692"));
+    private static final PhongMaterial OUTLINE_MATERIAL = new PhongMaterial(Color.web("#e9f2ff"));
+
+    private final ObservableList<Cube> cubes = FXCollections.observableArrayList();
+    private final Map<Cube, CubeNodes> nodes = new LinkedHashMap<>();
+    private final Group world = new Group();
+    private TreeView<Cube> outliner;
+    private GridPane inspector;
+    private Cube selected;
+    private boolean syncingTree;
+
+    @Override
+    public void start(Stage stage) {
+        BorderPane root = new BorderPane();
+        root.getStyleClass().add("app");
+        root.setTop(toolbar());
+        root.setLeft(outlinerPanel());
+        root.setRight(inspectorPanel());
+        root.setCenter(viewport());
+        root.setBottom(new Label("Wheel zoom · Right drag orbit · Click a cube to select · Ctrl+D duplicate · Delete remove"));
+
+        Scene scene = new Scene(root, 1280, 820);
+        scene.getStylesheets().add(App.class.getResource("/studio/cubebricks/editor.css").toExternalForm());
+        scene.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) removeSelected();
+            else if (event.isControlDown() && event.getCode() == KeyCode.D) duplicateSelected();
+        });
+        stage.setTitle("CubeBricks Studio");
+        stage.setScene(scene);
+        stage.show();
+        addCube();
+    }
+
+    private Node toolbar() {
+        Button add = new Button("Add Cube"); add.setOnAction(event -> addCube());
+        Button duplicate = new Button("Duplicate"); duplicate.setOnAction(event -> duplicateSelected());
+        Button remove = new Button("Delete"); remove.setOnAction(event -> removeSelected());
+        ToggleGroup tools = new ToggleGroup();
+        return new VBox(new MenuBar(new Menu("File"), new Menu("Edit"), new Menu("View")), new ToolBar(add, duplicate, remove, new Separator(), tool("Move", tools, true), tool("Resize", tools, false), tool("Rotate", tools, false)));
+    }
+
+    private ToggleButton tool(String label, ToggleGroup group, boolean selectedTool) {
+        ToggleButton button = new ToggleButton(label); button.setToggleGroup(group); button.setSelected(selectedTool); return button;
+    }
+
+    private Node outlinerPanel() {
+        outliner = new TreeView<>(); outliner.setShowRoot(true);
+        outliner.getSelectionModel().selectedItemProperty().addListener((observable, oldItem, newItem) -> { if (!syncingTree) select(newItem == null || newItem.getParent() == null ? null : newItem.getValue()); });
+        VBox panel = new VBox(new Label("Outliner"), outliner); panel.getStyleClass().add("panel"); panel.setPrefWidth(220); VBox.setVgrow(outliner, Priority.ALWAYS); return panel;
+    }
+
+    private Node inspectorPanel() {
+        inspector = new GridPane(); inspector.setHgap(8); inspector.setVgap(8);
+        VBox panel = new VBox(new Label("Inspector"), inspector); panel.getStyleClass().add("panel"); panel.setPrefWidth(255); return panel;
+    }
+
+    private void addCube() {
+        Cube cube = new Cube("Cube " + (cubes.size() + 1)); cube.x = cubes.size() * 2.5; cubes.add(cube);
+        addVisual(cube); rebuildOutliner(); select(cube);
+    }
+
+    private void addVisual(Cube cube) {
+        CubeNodes visual = new CubeNodes();
+        visual.solid.setOnMouseClicked(event -> { if (event.getButton() == MouseButton.PRIMARY) { select(cube); event.consume(); } });
+        nodes.put(cube, visual); world.getChildren().addAll(visual.solid, visual.outline); updateNode(cube);
+    }
+
+    private void duplicateSelected() {
+        if (selected == null) return;
+        Cube copy = selected.copy("Cube " + (cubes.size() + 1)); copy.x += 1; copy.y += 1; cubes.add(copy); addVisual(copy); rebuildOutliner(); select(copy);
+    }
+
+    private void removeSelected() {
+        if (selected == null) return;
+        CubeNodes removed = nodes.remove(selected); world.getChildren().removeAll(removed.solid, removed.outline); cubes.remove(selected); selected = null; rebuildOutliner(); inspector.getChildren().clear(); if (!cubes.isEmpty()) select(cubes.getLast());
+    }
+
+    private void rebuildOutliner() {
+        TreeItem<Cube> root = new TreeItem<>(new Cube("Scene")); root.setExpanded(true);
+        for (Cube cube : cubes) root.getChildren().add(new TreeItem<>(cube));
+        syncingTree = true; outliner.setRoot(root); syncingTree = false;
+    }
+
+    private void select(Cube cube) {
+        selected = cube; nodes.forEach((model, visual) -> visual.outline.setVisible(model == cube)); refreshInspector(); if (cube != null) selectInOutliner(cube);
+    }
+
+    private void selectInOutliner(Cube cube) {
+        TreeItem<Cube> root = outliner.getRoot(); if (root == null) return; syncingTree = true;
+        for (TreeItem<Cube> item : root.getChildren()) if (item.getValue() == cube) outliner.getSelectionModel().select(item);
+        syncingTree = false;
+    }
+
+    private void refreshInspector() {
+        inspector.getChildren().clear(); if (selected == null) return;
+        addField("Name", selected.name, value -> { selected.name = value; rebuildOutliner(); selectInOutliner(selected); });
+        addField("X", selected.x, value -> selected.x = number(value, selected.x)); addField("Y", selected.y, value -> selected.y = number(value, selected.y)); addField("Z", selected.z, value -> selected.z = number(value, selected.z));
+        addField("Width", selected.w, value -> selected.w = positive(value, selected.w)); addField("Height", selected.h, value -> selected.h = positive(value, selected.h)); addField("Depth", selected.d, value -> selected.d = positive(value, selected.d));
+        addField("Rotation X", selected.rx, value -> selected.rx = number(value, selected.rx)); addField("Rotation Y", selected.ry, value -> selected.ry = number(value, selected.ry)); addField("Rotation Z", selected.rz, value -> selected.rz = number(value, selected.rz));
+    }
+
+    private void addField(String label, Object current, ValueSetter setter) {
+        int row = inspector.getRowCount(); TextField field = new TextField(String.valueOf(current));
+        field.setOnAction(event -> applyField(field, setter)); field.focusedProperty().addListener((observable, wasFocused, focused) -> { if (!focused) applyField(field, setter); });
+        inspector.add(new Label(label), 0, row); inspector.add(field, 1, row);
+    }
+
+    private void applyField(TextField field, ValueSetter setter) { if (selected == null) return; setter.set(field.getText()); updateNode(selected); field.setText(field.getText().trim()); }
+    private double number(String value, double fallback) { try { return Double.parseDouble(value.trim()); } catch (NumberFormatException ignored) { return fallback; } }
+    private double positive(String value, double fallback) { return Math.max(0.05, number(value, fallback)); }
+
+    private void updateNode(Cube cube) {
+        CubeNodes visual = nodes.get(cube); visual.solid.setWidth(cube.w); visual.solid.setHeight(cube.h); visual.solid.setDepth(cube.d);
+        visual.outline.setWidth(cube.w + 0.025); visual.outline.setHeight(cube.h + 0.025); visual.outline.setDepth(cube.d + 0.025);
+        for (Box box : new Box[] {visual.solid, visual.outline}) { box.setTranslateX(cube.x); box.setTranslateY(cube.y); box.setTranslateZ(cube.z); box.getTransforms().setAll(new Rotate(cube.rx, Rotate.X_AXIS), new Rotate(cube.ry, Rotate.Y_AXIS), new Rotate(cube.rz, Rotate.Z_AXIS)); }
+    }
+
+    private Node viewport() {
+        world.getChildren().add(grid()); world.getChildren().addAll(new AmbientLight(Color.web("#9caed2")), pointLight());
+        PerspectiveCamera camera = new PerspectiveCamera(true); camera.setTranslateZ(-24);
+        SubScene scene = new SubScene(world, 600, 600, true, SceneAntialiasing.BALANCED); scene.setCamera(camera);
+        StackPane host = new StackPane(scene); host.getStyleClass().add("viewport"); host.widthProperty().addListener((observable, oldWidth, width) -> scene.setWidth(width.doubleValue())); host.heightProperty().addListener((observable, oldHeight, height) -> scene.setHeight(height.doubleValue()));
+        Rotate yaw = new Rotate(-36, Rotate.Y_AXIS), pitch = new Rotate(-28, Rotate.X_AXIS); world.getTransforms().addAll(yaw, pitch); double[] start = new double[4];
+        scene.setOnMousePressed(event -> { start[0] = event.getSceneX(); start[1] = event.getSceneY(); start[2] = yaw.getAngle(); start[3] = pitch.getAngle(); });
+        scene.setOnMouseDragged(event -> { if (event.isSecondaryButtonDown()) { yaw.setAngle(start[2] + (event.getSceneX() - start[0]) * .35); pitch.setAngle(Math.clamp(start[3] - (event.getSceneY() - start[1]) * .35, -82, 82)); } });
+        scene.setOnScroll(event -> camera.setTranslateZ(Math.clamp(camera.getTranslateZ() + (event.getDeltaY() > 0 ? 1.4 : -1.4), -70, -5)));
+        return host;
+    }
+
+    private Node grid() {
+        Group grid = new Group();
+        for (int value = -16; value <= 16; value++) { boolean major = value % 4 == 0; PhongMaterial material = major ? MAJOR_GRID_MATERIAL : GRID_MATERIAL; double thickness = major ? .035 : .015; grid.getChildren().add(line(32, thickness, thickness, 0, -1.02, value, material)); grid.getChildren().add(line(thickness, thickness, 32, value, -1.02, 0, material)); }
+        grid.setDepthTest(DepthTest.ENABLE); return grid;
+    }
+
+    private Box line(double width, double height, double depth, double x, double y, double z, PhongMaterial material) { Box line = new Box(width, height, depth); line.setTranslateX(x); line.setTranslateY(y); line.setTranslateZ(z); line.setMaterial(material); return line; }
+    private PointLight pointLight() { PointLight light = new PointLight(Color.WHITE); light.setTranslateX(-8); light.setTranslateY(-12); light.setTranslateZ(-10); return light; }
+    private interface ValueSetter { void set(String value); }
+
+    private static final class CubeNodes {
+        final Box solid = new Box(); final Box outline = new Box();
+        CubeNodes() { solid.setMaterial(CUBE_MATERIAL); outline.setMaterial(OUTLINE_MATERIAL); outline.setDrawMode(DrawMode.LINE); outline.setMouseTransparent(true); outline.setVisible(false); }
+    }
+
+    private static final class Cube {
+        String name; double x, y, z, w = 2, h = 2, d = 2, rx, ry, rz;
+        Cube(String name) { this.name = name; }
+        Cube copy(String copyName) { Cube copy = new Cube(copyName); copy.x=x; copy.y=y; copy.z=z; copy.w=w; copy.h=h; copy.d=d; copy.rx=rx; copy.ry=ry; copy.rz=rz; return copy; }
+        @Override public String toString() { return name; }
+    }
+
+    public static void main(String[] args) { launch(args); }
 }
