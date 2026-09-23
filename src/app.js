@@ -43,7 +43,8 @@ const state = {
   collapsedGroups: new Set(),
   textureAssets: [],
   timelinePlaying: false,
-  timelineFrame: 0
+  timelineFrame: 0,
+  layoutResizing: false
 };
 
 state.selectedUid = state.project.elements[0]?.uid;
@@ -60,6 +61,7 @@ const languageSelect = $('#languageSelect');
 const fileInput = $('#fileInput');
 const textureInput = $('#textureInput');
 let toastTimer;
+let outlinerFrame = null;
 
 function selected() {
   return state.project.getNode(state.selectedUid);
@@ -135,32 +137,50 @@ function renderOutliner() {
     if (!filter || node.name.toLowerCase().includes(filter) || node.uid.toLowerCase().includes(filter)) return true;
     return node.type === 'group' && node.children.some(matches);
   };
-  const renderNode = (uidValue, depth = 0) => {
+  const rows = [];
+  const collectNode = (uidValue, depth = 0) => {
     const node = state.project.getNode(uidValue);
-    if (!node || !matches(uidValue)) return '';
+    if (!node || !matches(uidValue)) return;
     const group = node.type === 'group';
     const collapsed = group && state.collapsedGroups.has(node.uid);
-    return `<button class="outliner-item ${node.uid === state.selectedUid ? 'active' : ''}" data-uid="${node.uid}" style="padding-left:${5 + depth * 13}px">
+    rows.push({ node, depth, group, collapsed });
+    if (group && !collapsed) node.children.forEach(child => collectNode(child, depth + 1));
+  };
+  state.project.outliner.forEach(uidValue => collectNode(uidValue));
+  state.outlinerRows = rows;
+  state.outlinerWindowStart = -1;
+  state.outlinerWindowEnd = -1;
+  const scrollTop = outliner.scrollTop;
+  outliner.innerHTML = `<div class="outliner-virtual-spacer" style="height:${rows.length * 31}px"></div><div class="outliner-virtual-window"></div>`;
+  outliner.scrollTop = scrollTop;
+  renderOutlinerWindow();
+}
+
+function renderOutlinerWindow() {
+  const rows = state.outlinerRows || [];
+  const rowHeight = 31;
+  const overscan = 6;
+  const start = Math.max(0, Math.floor(outliner.scrollTop / rowHeight) - overscan);
+  const end = Math.min(rows.length, Math.ceil((outliner.scrollTop + outliner.clientHeight) / rowHeight) + overscan);
+  if (start === state.outlinerWindowStart && end === state.outlinerWindowEnd) return;
+  state.outlinerWindowStart = start;
+  state.outlinerWindowEnd = end;
+  const windowNode = $('.outliner-virtual-window', outliner);
+  if (!windowNode) return;
+  windowNode.style.transform = `translateY(${start * rowHeight}px)`;
+  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, group, collapsed }) => `<button class="outliner-item ${node.uid === state.selectedUid ? 'active' : ''}" data-uid="${node.uid}" style="padding-left:${5 + depth * 13}px">
       <span data-disclosure="${group ? node.uid : ''}">${group ? (collapsed ? '›' : '⌄') : ''}</span>
       <span class="kind">${group ? '▰' : node.type === 'shape' ? '◉' : node.type === 'locator' ? '⌖' : '◇'}</span>
       <span class="item-name">${escapeHtml(node.name)}</span><span class="eye" data-toggle-visible="${node.uid}">${node.visible ? '◉' : '○'}</span>
-    </button>${group && !collapsed ? node.children.map(child => renderNode(child, depth + 1)).join('') : ''}`;
-  };
-  outliner.innerHTML = state.project.outliner.map(uidValue => renderNode(uidValue)).join('');
-  $$('[data-uid]', outliner).forEach(button => button.addEventListener('click', event => {
-    const visibility = event.target.closest('[data-toggle-visible]');
-    if (visibility) {
-      const node = state.project.getNode(visibility.dataset.toggleVisible);
-      node.visible = !node.visible; markDirty(); renderAll(); return;
-    }
-    const disclosure = event.target.closest('[data-disclosure]');
-    if (disclosure?.dataset.disclosure) {
-      const uidValue = disclosure.dataset.disclosure;
-      state.collapsedGroups.has(uidValue) ? state.collapsedGroups.delete(uidValue) : state.collapsedGroups.add(uidValue);
-      renderOutliner(); return;
-    }
-    selectItem(button.dataset.uid);
-  }));
+    </button>`).join('');
+}
+
+function scheduleOutlinerWindow() {
+  if (outlinerFrame !== null) return;
+  outlinerFrame = requestAnimationFrame(() => {
+    outlinerFrame = null;
+    renderOutlinerWindow();
+  });
 }
 
 function renderInspector() {
@@ -282,8 +302,30 @@ function bindInspector() {
 }
 
 function selectItem(uid) {
+  if (uid === state.selectedUid) return;
+  sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
+  const previous = outliner.querySelector('.outliner-item.active');
+  previous?.classList.remove('active');
   state.selectedUid = uid;
-  renderAll();
+  outliner.querySelector(`[data-uid="${uid}"]`)?.classList.add('active');
+  sceneRenderer.invalidateSelectionGeometry();
+  renderInspector();
+  renderScene();
+  updateSelectionLabels();
+}
+
+function syncInspectorValues(item) {
+  if (!item) return;
+  $$('[data-vector]', inspector).forEach(input => {
+    const values = item[input.dataset.vector];
+    if (!values) return;
+    const value = round(values[Number(input.dataset.axis)]);
+    if (document.activeElement !== input) input.value = String(value);
+  });
+  $$('[data-parameter]', inspector).forEach(input => {
+    const value = item.parameters?.[input.dataset.parameter];
+    if (value !== undefined && document.activeElement !== input) input.value = String(round(value));
+  });
 }
 
 function addCube() {
@@ -328,9 +370,32 @@ function deleteSelected() {
 }
 
 function renderScene() {
-  state.hitAreas = sceneRenderer.render(state.project, state.selectedUid, state);
+  sceneRenderer.render(state.project, state.selectedUid, state);
   updateTransformGizmo();
   updateAxisWidget();
+}
+
+function bakeCameraPan() {
+  const frame = sceneRenderer.getCameraFrame();
+  if (frame?.target) state.target = [...frame.target];
+  state.panX = 0;
+  state.panY = 0;
+}
+
+function focusSelected() {
+  const center = state.selectedUid && sceneRenderer.getGeometryCenter(state.project, state.selectedUid);
+  if (!center) return toast('目前沒有可聚焦的物件');
+  state.target = [...center];
+  state.panX = 0;
+  state.panY = 0;
+  renderScene();
+}
+
+function focusSceneOrigin() {
+  state.target = [0, 0, 0];
+  state.panX = 0;
+  state.panY = 0;
+  renderScene();
 }
 
 function updateAxisWidget() {
@@ -994,12 +1059,25 @@ function applyRegisteredConfig(id, value, notify = false) {
   if (id === ConfigKey.PREVIEW_SHADE) { state.previewShade = value; $('#previewShadeToggle').checked = value; }
   if (id === ConfigKey.SHOW_GEOMETRY_ONLY) { state.geometryOnly = value; $('#geometryOnlyToggle').checked = value; }
   if (id === ConfigKey.PROJECTION) {
+    if (state.projection && state.projection !== value) {
+      state.zoom = mapProjectionZoom(state.zoom, state.projection, value);
+    }
     state.projection = value;
     $$('[data-projection]').forEach(button => button.classList.toggle('active', button.dataset.projection === value));
   }
   if (id === ConfigKey.SHOW_GRID) state.grid = value;
   if (id === ConfigKey.SHOW_WIREFRAME) state.wire = value;
   if (notify && id !== ConfigKey.LANGUAGE) renderScene();
+}
+
+function mapProjectionZoom(zoom, fromProjection, toProjection) {
+  if (fromProjection === toProjection) return zoom;
+  const perspectiveHalfHeightAtUnitZoom = 42 * Math.tan(45 * Math.PI / 360);
+  const orthographicHalfHeightAtUnitZoom = 18;
+  const mapped = fromProjection === 'perspective' && toProjection === 'orthographic'
+    ? zoom * orthographicHalfHeightAtUnitZoom / perspectiveHalfHeightAtUnitZoom
+    : zoom * perspectiveHalfHeightAtUnitZoom / orthographicHalfHeightAtUnitZoom;
+  return Math.max(.002, Math.min(100, mapped));
 }
 
 function setConfigFromControl(control) {
@@ -1017,6 +1095,7 @@ function setConfigFromControl(control) {
 
 function toggleDock(panelName) {
   const panel = $(`[data-panel="${panelName}"]`);
+  if (!panel) return;
   const detached = panel.classList.toggle('detached');
   $('.app-shell').classList.toggle(`${panelName}-detached`, detached);
   $$(`[data-target-panel="${panelName}"]`).forEach(button => button.textContent = detached ? '↙' : '↗');
@@ -1024,6 +1103,7 @@ function toggleDock(panelName) {
     panel.style.left = ''; panel.style.right = ''; panel.style.top = ''; panel.style.bottom = '';
     panel.style.width = ''; panel.style.height = '';
   }
+  scheduleOutlinerWindow();
   requestAnimationFrame(renderScene);
 }
 
@@ -1034,25 +1114,55 @@ function initializePanelSystem() {
 
   $$('[data-resize-panel]').forEach(handle => handle.addEventListener('pointerdown', event => {
     event.preventDefault(); event.stopPropagation(); handle.setPointerCapture(event.pointerId); handle.classList.add('active');
+    state.layoutResizing = true;
     const panelName = handle.dataset.resizePanel;
     const panel = $(`[data-panel="${panelName}"]`);
+    const edge = handle.dataset.resizeEdge || (panelName === 'bottom' ? 'top' : panelName === 'texture' ? 'right' : 'left');
     const rect = panel.getBoundingClientRect();
     const start = { x: event.clientX, y: event.clientY, width: rect.width, height: rect.height };
+    let pendingSize = edge === 'top' || edge === 'bottom' ? start.height : start.width;
+    let resizeFrame = null;
+    const applyPendingSize = () => {
+      resizeFrame = null;
+      if (panelName === 'texture') {
+        panel.classList.contains('detached') ? panel.style.width = `${pendingSize}px` : document.documentElement.style.setProperty('--left-panel-width', `${pendingSize}px`);
+      } else if (panelName === 'bottom') {
+        panel.classList.contains('detached') ? panel.style.height = `${pendingSize}px` : document.documentElement.style.setProperty('--bottom-panel-height', `${pendingSize}px`);
+      } else if (edge === 'left') {
+        panel.classList.contains('detached') ? panel.style.width = `${pendingSize}px` : document.documentElement.style.setProperty('--right-panel-width', `${pendingSize}px`);
+      } else if (edge === 'bottom') {
+        panel.classList.contains('detached') ? panel.style.height = `${pendingSize}px` : document.documentElement.style.setProperty('--inspector-panel-height', `${pendingSize}px`);
+      }
+      scheduleOutlinerWindow();
+      renderScene();
+    };
     const move = moveEvent => {
       if (panelName === 'texture') {
         const width = Math.max(170, Math.min(520, start.width + moveEvent.clientX - start.x));
-        panel.classList.contains('detached') ? panel.style.width = `${width}px` : document.documentElement.style.setProperty('--left-panel-width', `${width}px`);
-      } else if (panelName === 'properties') {
-        const width = Math.max(230, Math.min(560, start.width - (moveEvent.clientX - start.x)));
-        panel.classList.contains('detached') ? panel.style.width = `${width}px` : document.documentElement.style.setProperty('--right-panel-width', `${width}px`);
+        pendingSize = width;
+      } else if (panelName === 'inspector' || panelName === 'outliner') {
+        if (edge === 'bottom') {
+          pendingSize = Math.max(150, Math.min(innerHeight - 130, start.height + moveEvent.clientY - start.y));
+        } else {
+          pendingSize = Math.max(230, Math.min(560, start.width - (moveEvent.clientX - start.x)));
+        }
       } else {
         const height = Math.max(90, Math.min(480, start.height - (moveEvent.clientY - start.y)));
-        panel.classList.contains('detached') ? panel.style.height = `${height}px` : document.documentElement.style.setProperty('--bottom-panel-height', `${height}px`);
+        pendingSize = height;
       }
-      renderScene();
+      if (resizeFrame === null) resizeFrame = requestAnimationFrame(applyPendingSize);
     };
-    const end = () => { handle.classList.remove('active'); handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); };
+    const end = () => {
+      handle.classList.remove('active');
+      if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+      state.layoutResizing = false;
+      applyPendingSize();
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+    };
     handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
   }));
 
   $$('.panel-drag-handle').forEach(handle => handle.addEventListener('pointerdown', event => {
@@ -1113,7 +1223,7 @@ function bindEvents() {
   $('[data-action="grid"]').addEventListener('click', () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-toolbar' }));
   $('[data-action="wire"]').addEventListener('click', () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-toolbar' }));
   $('[data-action="cycleSnap"]').addEventListener('click', cycleSnap);
-  $('[data-action="frame"]').addEventListener('click', () => { state.zoom = 1; state.panX = 0; state.panY = 0; renderScene(); });
+  $('[data-action="frame"]').addEventListener('click', focusSelected);
   $$('[data-projection]').forEach(button => button.addEventListener('click', () => {
     configRegistry.set(ConfigKey.PROJECTION, button.dataset.projection, { source: 'viewport-toolbar' });
   }));
@@ -1151,6 +1261,23 @@ function bindEvents() {
   $('[data-action="stopTimeline"]').addEventListener('click', stopTimeline);
   $('[data-action="addPaletteRow"]').addEventListener('click', addPaletteRow);
   $('#outlinerSearch').addEventListener('input', renderOutliner);
+  outliner.addEventListener('scroll', scheduleOutlinerWindow, { passive: true });
+  outliner.addEventListener('click', event => {
+    const button = event.target.closest('[data-uid]');
+    if (!button) return;
+    const visibility = event.target.closest('[data-toggle-visible]');
+    if (visibility) {
+      const node = state.project.getNode(visibility.dataset.toggleVisible);
+      node.visible = !node.visible; markDirty(); renderAll(); return;
+    }
+    const disclosure = event.target.closest('[data-disclosure]');
+    if (disclosure?.dataset.disclosure) {
+      const uidValue = disclosure.dataset.disclosure;
+      state.collapsedGroups.has(uidValue) ? state.collapsedGroups.delete(uidValue) : state.collapsedGroups.add(uidValue);
+      renderOutliner(); return;
+    }
+    selectItem(button.dataset.uid);
+  });
   $$('[data-theme-var]').forEach(input => input.addEventListener('input', () => setThemeVar(input.dataset.themeVar, `${input.value}${input.dataset.unit || ''}`)));
   $$('[data-preset]').forEach(button => button.addEventListener('click', () => applyPreset(button.dataset.preset)));
   $('[data-action="resetTheme"]').addEventListener('click', () => {
@@ -1214,6 +1341,10 @@ function bindEvents() {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
     if (event.key === 'Delete') deleteSelected();
     if (event.key.toLowerCase() === 'f') { state.zoom = 1.12; state.panX = 0; state.panY = 0; renderScene(); }
+    if (event.key.toLowerCase() === 'r') {
+      event.preventDefault();
+      event.shiftKey ? focusSceneOrigin() : focusSelected();
+    }
     const shortcuts = { '1': 'move', '2': 'resize', '3': 'rotate' }; if (shortcuts[event.key]) setTool(shortcuts[event.key]);
   });
 }
@@ -1260,16 +1391,20 @@ function onPointerDown(event) {
     return;
   }
   if (event.button !== 0) return;
-  const hit = [...state.hitAreas].reverse().find(area => x >= area.x1 && x <= area.x2 && y >= area.y1 && y <= area.y2);
-  if (!hit) return;
-  if (hit.uid !== state.selectedUid) selectItem(hit.uid);
+  const hitUid = sceneRenderer.pick(state.project, x, y, state.geometryOnly);
+  if (hitUid && hitUid !== state.selectedUid) selectItem(hitUid);
 }
 
 function startCameraDrag(event, captureTarget) {
   event.preventDefault();
   captureTarget.setPointerCapture(event.pointerId);
+  bakeCameraPan();
+  const frame = sceneRenderer.getCameraFrame();
   state.dragging = event.shiftKey
-    ? { type: 'pan', pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY }
+    ? {
+        type: 'pan', pointerId: event.pointerId, x: event.clientX, y: event.clientY,
+        target: [...state.target], right: [...frame.right], up: [...frame.up], worldPerPixel: frame.worldPerPixel
+      }
     : { type: 'orbit', pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: state.yaw, pitch: state.pitch };
   sceneCanvas.classList.add(event.shiftKey ? 'is-panning' : 'is-orbiting');
 }
@@ -1358,12 +1493,13 @@ function onPointerMove(event) {
     updateTransformTooltip(event, state.dragging);
     sceneRenderer.invalidateSelectionGeometry();
     markDirty();
-    renderInspector();
+    syncInspectorValues(state.dragging.item);
     renderScene();
     return;
   } else if (state.dragging.type === 'pan') {
-    state.panX = state.dragging.panX + dx;
-    state.panY = state.dragging.panY + dy;
+    state.target = [0, 1, 2].map(axis => state.dragging.target[axis]
+      - state.dragging.right[axis] * dx * state.dragging.worldPerPixel
+      + state.dragging.up[axis] * dy * state.dragging.worldPerPixel);
   } else {
     const fullTurn = Math.PI * 2;
     state.yaw = ((state.dragging.yaw - dx * .01) % fullTurn + fullTurn) % fullTurn;
@@ -1374,10 +1510,14 @@ function onPointerMove(event) {
 
 function endPointerDrag(event) {
   if (!state.dragging) return;
+  const finishedDrag = state.dragging;
   state.dragging.handleElement?.classList.remove('active');
   const captureTarget = event.currentTarget;
   if (captureTarget.hasPointerCapture?.(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
   state.dragging = null;
+  if (finishedDrag.type === 'transform' && finishedDrag.snapshotTaken) {
+    sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
+  }
   sceneRenderer.endTransformGhost();
   $('#transformTooltip').hidden = true;
   sceneCanvas.classList.remove('is-orbiting', 'is-panning', 'is-move', 'is-resize', 'is-rotate');

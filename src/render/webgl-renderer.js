@@ -57,7 +57,8 @@ export class WebGLSceneRenderer {
     });
     if (!this.gl) throw new Error('WebGL is unavailable.');
 
-    this.program = createProgram(this.gl, VERTEX_SHADER, FRAGMENT_SHADER);
+    this.logDepthEnabled = Boolean(this.gl.getExtension('EXT_frag_depth'));
+    this.program = createProgram(this.gl, VERTEX_SHADER, this.logDepthEnabled ? LOG_DEPTH_FRAGMENT_SHADER : FRAGMENT_SHADER);
     this.postProgram = createProgram(this.gl, POST_VERTEX_SHADER, FXAA_FRAGMENT_SHADER);
     this.positionLocation = this.gl.getAttribLocation(this.program, 'aPosition');
     this.colorLocation = this.gl.getAttribLocation(this.program, 'aColor');
@@ -70,6 +71,8 @@ export class WebGLSceneRenderer {
     this.renderModeLocation = this.gl.getUniformLocation(this.program, 'uRenderMode');
     this.alphaModeLocation = this.gl.getUniformLocation(this.program, 'uAlphaMode');
     this.textureLocation = this.gl.getUniformLocation(this.program, 'uTexture');
+    this.useLogDepthLocation = this.gl.getUniformLocation(this.program, 'uUseLogDepth');
+    this.logDepthFactorLocation = this.gl.getUniformLocation(this.program, 'uLogDepthFactor');
     this.postPositionLocation = this.gl.getAttribLocation(this.postProgram, 'aPosition');
     this.postTextureLocation = this.gl.getUniformLocation(this.postProgram, 'uScreenTexture');
     this.postResolutionLocation = this.gl.getUniformLocation(this.postProgram, 'uResolution');
@@ -96,6 +99,7 @@ export class WebGLSceneRenderer {
     this.lastViewProjection = identity();
     this.lastViewport = { width: 1, height: 1 };
     this.lastCameraState = null;
+    this.lastCameraInput = null;
     this.lastOwnerPoints = new Map();
     this.geometryRevision = 0;
     this.selectionRevision = 0;
@@ -203,6 +207,54 @@ export class WebGLSceneRenderer {
     this.ghostWireCount = 0;
   }
 
+  commitSelectionGeometry(project, selectedUid) {
+    if (!this.staticCache || this.staticCache.project !== project || !selectedUid) return false;
+    const dynamicUids = getDynamicElementUids(project, selectedUid);
+    if (!dynamicUids.size) return false;
+    const elements = project.elements.filter(element => dynamicUids.has(element.uid));
+    const geometry = buildElementGeometry(project, elements, null);
+    for (const uid of dynamicUids) {
+      const checks = [
+        [this.staticCache.triangleRanges.get(uid), geometry.triangleRanges.get(uid)],
+        [this.staticCache.edgeRanges.get(uid), geometry.edgeRanges.get(uid)],
+        [this.staticCache.helperRanges.get(uid), geometry.helperRanges.get(uid)]
+      ];
+      if (checks.some(([target, source]) => !target || !source || target.count !== source.count)) {
+        this.invalidateGeometry();
+        return false;
+      }
+    }
+    this.patchGeometryBuffer(this.staticTriangleBuffer, this.staticCache.triangles, this.staticCache.triangleRanges, geometry.triangles, geometry.triangleRanges, dynamicUids);
+    this.patchGeometryBuffer(this.staticWireBuffer, this.staticCache.edges, this.staticCache.edgeRanges, geometry.edges, geometry.edgeRanges, dynamicUids);
+    patchVertexArrays(this.staticCache.helpers, this.staticCache.helperRanges, geometry.helpers, geometry.helperRanges, dynamicUids);
+    this.staticCache.faces = this.staticCache.faces.filter(face => !dynamicUids.has(face.uid)).concat(geometry.faces);
+    for (const uid of dynamicUids) {
+      if (geometry.ownerPoints.has(uid)) this.staticCache.ownerPoints.set(uid, geometry.ownerPoints.get(uid));
+      else this.staticCache.ownerPoints.delete(uid);
+    }
+    return true;
+  }
+
+  patchGeometryBuffer(buffer, targetVertices, targetRanges, sourceVertices, sourceRanges, uids) {
+    const { gl } = this;
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    for (const uid of uids) {
+      const target = targetRanges.get(uid), source = sourceRanges.get(uid);
+      if (!target?.count) continue;
+      const sourceStart = source.start * 12;
+      const sourceEnd = sourceStart + source.count * 12;
+      const values = new Float32Array(sourceVertices.slice(sourceStart, sourceEnd));
+      gl.bufferSubData(gl.ARRAY_BUFFER, target.start * 48, values);
+      for (let index = 0; index < values.length; index++) targetVertices[target.start * 12 + index] = values[index];
+    }
+  }
+
+  drawBufferExcluding(buffer, totalCount, excludedUids, rangesByUid, primitive, matrix, options = {}) {
+    for (const range of complementVertexRanges(totalCount, excludedUids, rangesByUid)) {
+      this.drawBuffer(buffer, range.count, primitive, matrix, { ...options, first: range.start });
+    }
+  }
+
   render(project, selectedUid, camera) {
     const { gl, canvas } = this;
     this.previewShade = camera.previewShade !== false;
@@ -210,8 +262,12 @@ export class WebGLSceneRenderer {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const width = Math.max(1, Math.floor(rect.width));
     const height = Math.max(1, Math.floor(rect.height));
-    const pixelWidth = Math.max(1, Math.floor(width * dpr));
-    const pixelHeight = Math.max(1, Math.floor(height * dpr));
+    const pixelWidth = camera.layoutResizing && canvas.width
+      ? canvas.width
+      : Math.max(1, Math.floor(width * dpr));
+    const pixelHeight = camera.layoutResizing && canvas.height
+      ? canvas.height
+      : Math.max(1, Math.floor(height * dpr));
     if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
       canvas.width = pixelWidth;
       canvas.height = pixelHeight;
@@ -231,15 +287,14 @@ export class WebGLSceneRenderer {
     this.lastViewProjection = viewProjection;
     this.lastViewport = { width, height };
     this.lastCameraState = cameraState;
+    this.lastCameraInput = { ...camera };
 
     const dynamicUids = getDynamicElementUids(project, selectedUid);
     if (!this.staticCache
       || this.staticCache.project !== project
-      || this.staticCache.revision !== this.geometryRevision
-      || this.staticCache.selectedUid !== selectedUid) {
-      const staticElements = project.elements.filter(element => !dynamicUids.has(element.uid));
-      const geometry = buildElementGeometry(project, staticElements, selectedUid);
-      this.staticCache = { project, revision: this.geometryRevision, selectedUid, ...geometry };
+      || this.staticCache.revision !== this.geometryRevision) {
+      const geometry = buildElementGeometry(project, project.elements, null);
+      this.staticCache = { project, revision: this.geometryRevision, ...geometry };
       this.uploadBuffer(this.staticTriangleBuffer, geometry.triangles, gl.STATIC_DRAW);
       this.uploadBuffer(this.staticWireBuffer, geometry.edges, gl.STATIC_DRAW);
     }
@@ -266,10 +321,10 @@ export class WebGLSceneRenderer {
       this.drawVertices(grid.direction, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
     }
     if (camera.renderMode === 'wireframe') {
-      this.drawBuffer(this.staticWireBuffer, this.staticCache.edges.length / 12, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+      this.drawBufferExcluding(this.staticWireBuffer, this.staticCache.edges.length / 12, dynamicUids, this.staticCache.edgeRanges, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
       this.drawBuffer(this.selectedWireBuffer, this.selectedCache.edges.length / 12, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
     } else if (camera.renderMode === 'textured' && minecraftRenderType.pass === RenderPass.TRANSLUCENT) {
-      const sortedFaces = [...this.staticCache.faces, ...this.selectedCache.faces]
+      const sortedFaces = [...this.staticCache.faces.filter(face => !dynamicUids.has(face.uid)), ...this.selectedCache.faces]
         .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
       const translucentVertices = sortedFaces.flatMap(face => face.vertices);
       this.drawVertices(translucentVertices, gl.TRIANGLES, viewProjection, {
@@ -285,7 +340,7 @@ export class WebGLSceneRenderer {
         ? minecraftRenderType
         : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
       const cull = project.cullFaces;
-      this.drawBuffer(this.staticTriangleBuffer, this.staticCache.triangles.length / 12, gl.TRIANGLES, viewProjection, {
+      this.drawBufferExcluding(this.staticTriangleBuffer, this.staticCache.triangles.length / 12, dynamicUids, this.staticCache.triangleRanges, gl.TRIANGLES, viewProjection, {
         depthWrite: pipeline.depthWrite, cull, renderMode, alphaMode: pipeline.alphaMode, blend: pipeline.blend
       });
       this.drawBuffer(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12, gl.TRIANGLES, viewProjection, {
@@ -313,16 +368,54 @@ export class WebGLSceneRenderer {
     }
 
     if (!camera.geometryOnly) {
-      this.drawVertices([...this.staticCache.helpers, ...this.selectedCache.helpers], gl.LINES, viewProjection, {
+      const visibleHelpers = collectVertexRanges(this.staticCache.helpers,
+        complementVertexRanges(this.staticCache.helpers.length / 12, dynamicUids, this.staticCache.helperRanges));
+      this.drawVertices([...visibleHelpers, ...this.selectedCache.helpers], gl.LINES, viewProjection, {
         depthWrite: false, cull: false, renderMode: 0
       });
     }
 
     if (minecraftRenderType.smooth) this.presentAntialiased(pixelWidth, pixelHeight);
 
-    return [...ownerPoints.entries()]
-      .filter(([uid]) => !camera.geometryOnly || project.getNode(uid)?.type !== 'locator')
-      .map(([uid, points]) => ({ uid, ...screenBounds(points, viewProjection, width, height) }));
+  }
+
+  getHitAreas(project, geometryOnly = false) {
+    return [...this.lastOwnerPoints.entries()]
+      .filter(([uid]) => !geometryOnly || project.getNode(uid)?.type !== 'locator')
+      .map(([uid, points]) => ({ uid, ...screenBounds(points, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height) }));
+  }
+
+  pick(project, screenX, screenY, geometryOnly = false) {
+    if (!this.lastCameraState || !this.lastCameraInput) return null;
+    const ray = screenRay(screenX, screenY, this.lastViewport, this.lastCameraState, this.lastCameraInput);
+    let closestUid = null;
+    let closestDistance = Infinity;
+    for (const [uid, points] of this.lastOwnerPoints) {
+      const node = project.getNode(uid);
+      if (!node || (geometryOnly && node.type === 'locator')) continue;
+      if (node.type === 'locator') {
+        const distance = raySphereDistance(ray.origin, ray.direction, points[0], 1);
+        if (distance !== null && distance < closestDistance) {
+          closestDistance = distance; closestUid = uid;
+        }
+        continue;
+      }
+      for (let offset = 0; offset + 7 < points.length; offset += 8) {
+        const corners = points.slice(offset, offset + 8);
+        for (const quadIndices of Object.values(FACE_LAYOUTS)) {
+          const indices = FACE_TRIANGLE_SLOTS.map(slot => quadIndices[slot]);
+          for (let triangle = 0; triangle < 2; triangle++) {
+            const base = triangle * 3;
+            const distance = rayTriangleDistance(ray.origin, ray.direction,
+              corners[indices[base]], corners[indices[base + 1]], corners[indices[base + 2]]);
+            if (distance !== null && distance < closestDistance) {
+              closestDistance = distance; closestUid = uid;
+            }
+          }
+        }
+      }
+    }
+    return closestUid;
   }
 
   projectPoint(point) {
@@ -358,7 +451,7 @@ export class WebGLSceneRenderer {
   }
 
   drawBuffer(buffer, vertexCount, primitive, matrix, {
-    depthWrite = true, cull = true, renderMode = 1, alphaMode = 0, blend = false
+    depthWrite = true, cull = true, renderMode = 1, alphaMode = 0, blend = false, first = 0
   } = {}) {
     if (!vertexCount) return;
     const { gl } = this;
@@ -371,6 +464,9 @@ export class WebGLSceneRenderer {
     gl.uniform1i(this.previewShadeLocation, this.previewShade ? 1 : 0);
     gl.uniform1i(this.renderModeLocation, renderMode);
     gl.uniform1i(this.alphaModeLocation, alphaMode);
+    if (this.useLogDepthLocation) gl.uniform1i(this.useLogDepthLocation,
+      this.logDepthEnabled && this.lastCameraState?.projection === 'perspective' ? 1 : 0);
+    if (this.logDepthFactorLocation) gl.uniform1f(this.logDepthFactorLocation, 1 / Math.log2(30001));
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.uniform1i(this.textureLocation, 0);
@@ -391,10 +487,49 @@ export class WebGLSceneRenderer {
       gl.blendEquation(gl.FUNC_ADD);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     } else gl.disable(gl.BLEND);
-    gl.drawArrays(primitive, 0, vertexCount);
+    gl.drawArrays(primitive, first, vertexCount);
     gl.depthMask(true);
     gl.disable(gl.BLEND);
   }
+}
+
+function complementVertexRanges(totalCount, excludedUids, rangesByUid) {
+  if (!excludedUids?.size) return totalCount ? [{ start: 0, count: totalCount }] : [];
+  const excluded = [...excludedUids]
+    .map(uid => rangesByUid.get(uid))
+    .filter(range => range?.count)
+    .sort((left, right) => left.start - right.start);
+  const merged = [];
+  for (const range of excluded) {
+    const last = merged[merged.length - 1];
+    if (last && range.start <= last.start + last.count) {
+      last.count = Math.max(last.start + last.count, range.start + range.count) - last.start;
+    } else merged.push({ ...range });
+  }
+  const visible = [];
+  let cursor = 0;
+  for (const range of merged) {
+    if (range.start > cursor) visible.push({ start: cursor, count: range.start - cursor });
+    cursor = Math.max(cursor, range.start + range.count);
+  }
+  if (cursor < totalCount) visible.push({ start: cursor, count: totalCount - cursor });
+  return visible;
+}
+
+function patchVertexArrays(targetVertices, targetRanges, sourceVertices, sourceRanges, uids) {
+  for (const uid of uids) {
+    const target = targetRanges.get(uid), source = sourceRanges.get(uid);
+    if (!target?.count) continue;
+    const sourceStart = source.start * 12;
+    const targetStart = target.start * 12;
+    for (let index = 0; index < source.count * 12; index++) targetVertices[targetStart + index] = sourceVertices[sourceStart + index];
+  }
+}
+
+function collectVertexRanges(vertices, ranges) {
+  const output = [];
+  for (const range of ranges) output.push(...vertices.slice(range.start * 12, (range.start + range.count) * 12));
+  return output;
 }
 
 function getDynamicElementUids(project, selectedUid) {
@@ -421,15 +556,27 @@ function buildElementGeometry(project, elements, selectedUid) {
   const edges = [];
   const helpers = [];
   const ownerPoints = new Map();
+  const triangleRanges = new Map();
+  const edgeRanges = new Map();
+  const helperRanges = new Map();
   for (const element of elements) {
-    if (!element.visible) continue;
+    const triangleStart = triangles.length / 12;
+    const edgeStart = edges.length / 12;
+    const helperStart = helpers.length / 12;
+    const finishRanges = () => {
+      triangleRanges.set(element.uid, { start: triangleStart, count: triangles.length / 12 - triangleStart });
+      edgeRanges.set(element.uid, { start: edgeStart, count: edges.length / 12 - edgeStart });
+      helperRanges.set(element.uid, { start: helperStart, count: helpers.length / 12 - helperStart });
+    };
+    if (!element.visible) { finishRanges(); continue; }
     const groupChain = project.getGroupChain(element.uid);
-    if (groupChain.some(group => !group.visible)) continue;
+    if (groupChain.some(group => !group.visible)) { finishRanges(); continue; }
     const selectedByGroup = groupChain.some(group => group.uid === selectedUid);
     if (element.type === 'locator') {
       const geometry = locatorGeometry(element, groupChain, element.uid === selectedUid || selectedByGroup);
       helpers.push(...geometry.lines);
       ownerPoints.set(element.uid, geometry.points);
+      finishRanges();
       continue;
     }
     const cubes = element.type === 'shape'
@@ -439,13 +586,14 @@ function buildElementGeometry(project, elements, selectedUid) {
     for (const entry of cubes) {
       const geometry = cubeGeometry(entry, element.color, element.uid === selectedUid || selectedByGroup);
       triangles.push(...geometry.triangles);
-      faces.push(...geometry.faces);
+      faces.push(...geometry.faces.map(face => ({ ...face, uid: element.uid })));
       edges.push(...geometry.edges);
       if (!ownerPoints.has(element.uid)) ownerPoints.set(element.uid, []);
       ownerPoints.get(element.uid).push(...geometry.corners);
     }
+    finishRanges();
   }
-  return { triangles, faces, edges, helpers, ownerPoints };
+  return { triangles, faces, edges, helpers, ownerPoints, triangleRanges, edgeRanges, helperRanges };
 }
 
 function locatorGeometry(locator, groupChain, selected) {
@@ -518,16 +666,13 @@ function cubeGeometry(entry, color, selected) {
 
 function gridGeometry(subdivisions = 16) {
   const fine = [], major = [], direction = [];
-  const floorY = -.002;
-  const majorColor = [.57, .64, .53, .28];
-  const axisColor = [.5, .75, .28, .44];
-  const fineColor = [.48, .55, .45, .095];
+  const floorY = -.025;
+  const majorColor = [.43, .34, .5, .38];
+  const fineColor = [.46, .37, .54, .28];
   for (const coordinate of [-24, -8, 8, 24]) {
     pushVertex(major, [coordinate, floorY, -24], majorColor); pushVertex(major, [coordinate, floorY, 24], majorColor);
     pushVertex(major, [-24, floorY, coordinate], majorColor); pushVertex(major, [24, floorY, coordinate], majorColor);
   }
-  pushVertex(major, [0, floorY, -24], axisColor); pushVertex(major, [0, floorY, 24], axisColor);
-  pushVertex(major, [-24, floorY, 0], axisColor); pushVertex(major, [24, floorY, 0], axisColor);
 
   const count = Math.max(1, Math.min(512, Number(subdivisions) || 16));
   const step = 16 / count;
@@ -537,17 +682,20 @@ function gridGeometry(subdivisions = 16) {
     pushVertex(fine, [coordinate, floorY, -8], fineColor); pushVertex(fine, [coordinate, floorY, 8], fineColor);
     pushVertex(fine, [-8, floorY, coordinate], fineColor); pushVertex(fine, [8, floorY, coordinate], fineColor);
   }
+  pushVertex(fine, [0, floorY, -8], fineColor); pushVertex(fine, [0, floorY, 0], fineColor);
+  pushVertex(fine, [-8, floorY, 0], fineColor); pushVertex(fine, [0, floorY, 0], fineColor);
 
-  const markerColor = [.76, .88, .63, .72];
-  const y = .012;
-  const addLine = (a, b) => { pushVertex(direction, a, markerColor); pushVertex(direction, b, markerColor); };
-  // Minecraft north is negative Z. Draw a small ground-plane N and arrow just outside the central cell.
-  addLine([-1.1, y, -10.1], [-1.1, y, -8.8]);
-  addLine([-1.1, y, -8.8], [-.25, y, -10.1]);
-  addLine([-.25, y, -10.1], [-.25, y, -8.8]);
-  addLine([.35, y, -9.25], [1.15, y, -10.05]);
-  addLine([1.15, y, -10.05], [1.95, y, -9.25]);
-  addLine([1.95, y, -9.25], [.35, y, -9.25]);
+  const addLine = (a, b, color) => { pushVertex(direction, a, color); pushVertex(direction, b, color); };
+  const red = [.96, .18, .28, .9], blue = [.18, .42, 1, .9], marker = [.55, .43, .65, .72];
+  addLine([0, floorY + .004, 0], [8, floorY + .004, 0], red);
+  addLine([0, floorY + .004, 0], [0, floorY + .004, 8], blue);
+  const y = floorY + .006;
+  // Minecraft north is negative Z. Keep the N and arrow centred above the central cell.
+  addLine([-.45, y, -8.65], [-.45, y, -9.75], marker);
+  addLine([-.45, y, -9.75], [.45, y, -8.65], marker);
+  addLine([.45, y, -8.65], [.45, y, -9.75], marker);
+  addLine([-.42, y, -10.15], [0, y, -10.57], marker);
+  addLine([0, y, -10.57], [.42, y, -10.15], marker);
   return { fine, major, direction };
 }
 
@@ -567,7 +715,7 @@ function boundsWireGeometry(points) {
 
 function buildCameraState(camera, aspect, width, height) {
   const pitch = clamp(camera.pitch, -Math.PI / 2 + .001, Math.PI / 2 - .001);
-  const distance = 42 / camera.zoom;
+  const distance = camera.projection === 'perspective' ? 42 / camera.zoom : 4096;
   const baseTarget = camera.target || [0, 9, 0];
   const direction = [Math.sin(camera.yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(camera.yaw) * Math.cos(pitch)];
   const preliminaryEye = add(baseTarget, scale(direction, distance));
@@ -583,8 +731,8 @@ function buildCameraState(camera, aspect, width, height) {
   const view = lookAt(eye, target, [0, 1, 0]);
   const projection = camera.projection === 'perspective'
     ? perspective(45 * DEG, aspect, .05, 30000)
-    : orthographic(-18 * aspect / camera.zoom, 18 * aspect / camera.zoom, -18 / camera.zoom, 18 / camera.zoom, .05, 30000);
-  return { matrix: multiply(projection, view), eye, forward, right, up, worldPerPixel, projection: camera.projection };
+    : orthographic(-18 * aspect / camera.zoom, 18 * aspect / camera.zoom, -18 / camera.zoom, 18 / camera.zoom, -30000, 30000);
+  return { matrix: multiply(projection, view), eye, target, forward, right, up, worldPerPixel, projection: camera.projection };
 }
 
 function projectScreenPoint(point, matrix, width, height) {
@@ -596,6 +744,51 @@ function projectScreenPoint(point, matrix, width, height) {
     depth: clip[2] / w,
     behind: w < 0
   };
+}
+
+function screenRay(screenX, screenY, viewport, cameraState, camera) {
+  const ndcX = screenX / viewport.width * 2 - 1;
+  const ndcY = 1 - screenY / viewport.height * 2;
+  const aspect = viewport.width / viewport.height;
+  if (cameraState.projection === 'perspective') {
+    const halfFovTangent = Math.tan(45 * DEG / 2);
+    const direction = normalize(add(cameraState.forward,
+      add(scale(cameraState.right, ndcX * aspect * halfFovTangent), scale(cameraState.up, ndcY * halfFovTangent))));
+    return { origin: cameraState.eye, direction };
+  }
+  const halfHeight = 18 / camera.zoom;
+  const origin = add(cameraState.eye,
+    add(scale(cameraState.right, ndcX * halfHeight * aspect), scale(cameraState.up, ndcY * halfHeight)));
+  return { origin, direction: cameraState.forward };
+}
+
+function rayTriangleDistance(origin, direction, a, b, c) {
+  const epsilon = 1e-7;
+  const edge1 = subtract(b, a), edge2 = subtract(c, a);
+  const p = cross(direction, edge2);
+  const determinant = dot(edge1, p);
+  if (Math.abs(determinant) < epsilon) return null;
+  const inverse = 1 / determinant;
+  const fromA = subtract(origin, a);
+  const u = dot(fromA, p) * inverse;
+  if (u < 0 || u > 1) return null;
+  const q = cross(fromA, edge1);
+  const v = dot(direction, q) * inverse;
+  if (v < 0 || u + v > 1) return null;
+  const distance = dot(edge2, q) * inverse;
+  return distance > epsilon ? distance : null;
+}
+
+function raySphereDistance(origin, direction, center, radius) {
+  const offset = subtract(origin, center);
+  const b = dot(offset, direction);
+  const c = dot(offset, offset) - radius * radius;
+  const discriminant = b * b - c;
+  if (discriminant < 0) return null;
+  const near = -b - Math.sqrt(discriminant);
+  const far = -b + Math.sqrt(discriminant);
+  if (near > 0) return near;
+  return far > 0 ? far : null;
 }
 
 function screenBounds(points, matrix, width, height) {
@@ -784,8 +977,10 @@ const VERTEX_SHADER = `
   varying vec4 vColor;
   varying vec2 vUv;
   varying float vSelected;
+  varying float vFragDepth;
   void main() {
     gl_Position = uViewProjection * vec4(aPosition, 1.0);
+    vFragDepth = 1.0 + gl_Position.w;
     float normalLength = length(aNormal);
     float diffuse = 1.0;
     if (uPreviewShade == 1 && normalLength > 0.1) {
@@ -804,7 +999,7 @@ const VERTEX_SHADER = `
   }
 `;
 const FRAGMENT_SHADER = `
-  precision mediump float;
+  precision highp float;
   precision highp int;
   varying vec4 vColor;
   varying vec2 vUv;
@@ -824,6 +1019,38 @@ const FRAGMENT_SHADER = `
       if (uAlphaMode == 2 && color.a < 0.1) discard;
     }
     color.rgb = mix(color.rgb, vec3(1.0), vSelected * 0.13);
+    gl_FragColor = color;
+  }
+`;
+
+const LOG_DEPTH_FRAGMENT_SHADER = `
+  #extension GL_EXT_frag_depth : enable
+  precision highp float;
+  precision highp int;
+  varying vec4 vColor;
+  varying vec2 vUv;
+  varying float vSelected;
+  varying float vFragDepth;
+  uniform sampler2D uTexture;
+  uniform int uRenderMode;
+  uniform int uAlphaMode;
+  uniform int uUseLogDepth;
+  uniform float uLogDepthFactor;
+  void main() {
+    vec4 color = vColor;
+    if (uRenderMode == 2) {
+      color *= texture2D(uTexture, vUv);
+      if (uAlphaMode == 0) color.a = 1.0;
+      if (uAlphaMode == 1) {
+        if (color.a < 0.1) discard;
+        color.a = 1.0;
+      }
+      if (uAlphaMode == 2 && color.a < 0.1) discard;
+    }
+    color.rgb = mix(color.rgb, vec3(1.0), vSelected * 0.13);
+    gl_FragDepthEXT = uUseLogDepth == 1
+      ? log2(max(1.0e-6, vFragDepth)) * uLogDepthFactor
+      : gl_FragCoord.z;
     gl_FragColor = color;
   }
 `;

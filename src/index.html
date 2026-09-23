@@ -144,7 +144,7 @@
             <button class="axis-x" data-view-axis="x" title="右視圖">X</button>
             <button class="axis-z" data-view-axis="z" title="正視圖">Z</button>
           </div>
-          <div class="view-hint"><kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>F</kbd> 聚焦</div>
+          <div class="view-hint"><kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心</div>
           <div class="selection-badge"><span id="selectionType">Cube</span><strong id="selectionName">body</strong></div>
         </div>
         <section class="bottom-dock" id="bottomDock" data-panel="bottom">
@@ -172,19 +172,22 @@
         </section>
       </section>
 
-      <aside class="right-panel" data-panel="properties">
-        <div class="panel-resizer panel-resizer-left" data-resize-panel="properties"></div>
-        <section class="panel-section inspector-section">
-          <div class="panel-heading compact">
+      <aside class="right-panel">
+        <section class="panel-section inspector-section" data-panel="inspector">
+          <div class="panel-resizer panel-resizer-left" data-resize-panel="inspector" data-resize-edge="left"></div>
+          <div class="panel-resizer panel-resizer-bottom" data-resize-panel="inspector" data-resize-edge="bottom"></div>
+          <div class="panel-heading compact panel-drag-handle">
             <div><span class="eyebrow">INSPECTOR</span><strong>物件屬性</strong></div>
-            <span class="uid-chip" id="uidChip">—</span>
+            <div class="panel-heading-actions"><span class="uid-chip" id="uidChip">—</span><button data-action="toggleDock" data-target-panel="inspector" title="脫離／吸回">↗</button></div>
           </div>
           <div class="inspector" id="inspector"></div>
         </section>
-        <section class="panel-section outliner-section">
+        <section class="panel-section outliner-section" data-panel="outliner">
+          <div class="panel-resizer panel-resizer-left" data-resize-panel="outliner" data-resize-edge="left"></div>
+          <div class="panel-resizer panel-resizer-bottom" data-resize-panel="outliner" data-resize-edge="bottom"></div>
           <div class="panel-heading panel-drag-handle">
             <div><span class="eyebrow">PROJECT</span><strong>場景層級</strong></div>
-            <div><button data-action="addCube" title="新增方塊">＋</button><button data-action="addGroup" title="新增組">▰＋</button><button data-action="toggleDock" data-target-panel="properties" title="脫離／吸回">↗</button><button data-action="more">•••</button></div>
+            <div><button data-action="addCube" title="新增方塊">＋</button><button data-action="addGroup" title="新增組">▰＋</button><button data-action="toggleDock" data-target-panel="outliner" title="脫離／吸回">↗</button><button data-action="more">•••</button></div>
           </div>
           <label class="search-box"><span>⌕</span><input id="outlinerSearch" placeholder="搜尋物件或 UID" /></label>
           <div class="outliner" id="outliner"></div>
