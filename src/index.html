@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>CubeBricks</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="titlebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+        <span>CubeBricks</span>
+        <span class="project-state" id="projectState">未保存</span>
+      </div>
+      <nav class="main-menu" aria-label="主選單">
+        <button data-action="new">新建</button>
+        <button data-action="open">打開</button>
+        <button data-action="save">保存</button>
+        <button data-action="undo">撤銷</button>
+        <button data-action="redo">重做</button>
+      </nav>
+      <div class="mode-tabs" role="tablist">
+        <button class="mode-tab active" data-mode="edit"><span>◇</span> 編輯</button>
+        <button class="mode-tab" data-mode="paint"><span>◒</span> 繪畫</button>
+        <button class="mode-tab" data-mode="animate"><span>⌁</span> 動畫</button>
+      </div>
+      <div class="title-actions">
+        <button class="icon-button" data-action="theme" title="設定">⚙</button>
+        <button class="primary-button" data-action="export">導出</button>
+      </div>
+    </header>
+
+    <nav class="tool-strip" aria-label="工具欄">
+      <div class="toolbar-lane tool-lane" aria-label="工具">
+        <button class="tool active" data-tool="move" title="移動" aria-label="移動"><span>✥</span></button>
+        <button class="tool" data-tool="resize" title="縮放" aria-label="縮放"><span>⌗</span></button>
+        <button class="tool" data-tool="rotate" title="旋轉" aria-label="旋轉"><span>⟳</span></button>
+        <i class="lane-divider" aria-hidden="true"></i>
+        <button class="tool" data-tool="cube" title="新增方塊" aria-label="新增方塊"><span>⬡</span></button>
+        <button class="tool" data-tool="shape" title="新增形狀" aria-label="新增形狀"><span>◉</span></button>
+        <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆" aria-label="畫筆"><span>◍</span></button>
+      </div>
+      <div class="toolbar-lane tool-options-lane" id="toolOptionsLane" aria-label="目前工具參數" hidden>
+        <span class="lane-caption" id="toolContext">工具參數</span>
+        <div class="toolbar-segment" id="transformSpaceControl" role="group" aria-label="變換坐標系">
+          <button type="button" data-transform-space="global" title="全局坐標系">全局</button>
+          <button type="button" data-transform-space="parent" title="父級坐標系">父級</button>
+          <button type="button" data-transform-space="self" title="自身坐標系">自身</button>
+        </div>
+        <div class="toolbar-segment" id="scaleHandleModeControl" role="group" aria-label="縮放手柄長度" hidden>
+          <button type="button" data-scale-handle-mode="bounds" title="手柄貼合物體幾何範圍">貼合</button>
+          <button type="button" data-scale-handle-mode="fixed" title="手柄使用和移動工具相同的固定視覺長度">固定</button>
+        </div>
+        <button class="toolbar-option" id="snapButton" data-action="cycleSnap" title="切換吸附精度">吸附 1.0</button>
+      </div>
+      <div class="toolbar-lane global-options-lane" aria-label="全局選項">
+        <label class="toolbar-check" title="全局開啟或關閉面陰影預覽；不會覆蓋物件自身的陰影設定"><input type="checkbox" id="previewShadeToggle" checked /><span>◐</span> 面陰影</label>
+        <label class="toolbar-check" title="只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件"><input type="checkbox" id="geometryOnlyToggle" /><span>◇</span> 僅幾何</label>
+        <label class="toolbar-check" title="沿 X 軸對稱編輯"><input type="checkbox" id="symmetryToggle" /><span>◫</span> 對稱</label>
+        <label class="toolbar-check" title="繪畫時鎖定透明度"><input type="checkbox" id="alphaLockToggle" /><span>◩</span> 鎖透明</label>
+      </div>
+    </nav>
+
+    <main class="workspace">
+      <aside class="texture-panel" data-panel="texture">
+        <div class="panel-heading texture-heading panel-drag-handle">
+          <div><span class="eyebrow">TEXTURES</span><strong>貼圖與圖層</strong></div>
+          <div><button data-action="addTexture" title="導入貼圖">＋</button><button data-action="toggleDock" data-target-panel="texture" title="脫離／吸回">↗</button><button data-action="more">•••</button></div>
+        </div>
+        <div class="texture-preview" id="texturePreview">
+          <div class="checkerboard"></div>
+          <canvas id="textureCanvas" width="160" height="160"></canvas>
+          <span>64 × 64</span>
+        </div>
+        <div class="texture-list" id="textureList">
+          <button class="texture-item active">
+            <span class="texture-thumb moss-texture"></span>
+            <span><strong>moss_golem.png</strong><small>64 × 64 · PNG</small></span>
+            <i>◉</i>
+          </button>
+          <button class="texture-item">
+            <span class="texture-thumb mask-texture"></span>
+            <span><strong>detail_mask</strong><small>圖層 · 正片疊底</small></span>
+            <i>◉</i>
+          </button>
+        </div>
+        <div class="layer-heading"><strong>圖層</strong><button data-action="addLayer">＋</button></div>
+        <div class="layer-list">
+          <button class="layer-item active"><span class="layer-dot light"></span><span>高光</span><small>100%</small></button>
+          <button class="layer-item"><span class="layer-dot mid"></span><span>苔痕</span><small>82%</small></button>
+          <button class="layer-item"><span class="layer-dot dark"></span><span>基底</span><small>100%</small></button>
+        </div>
+        <div class="texture-footer"><button data-action="openUv">▦ UV</button><button data-action="openColorMap">色階映射</button></div>
+        <div class="panel-resizer panel-resizer-right" data-resize-panel="texture"></div>
+      </aside>
+
+      <section class="viewport-panel">
+        <div class="viewport-toolbar">
+          <div class="segmented" aria-label="視圖模式">
+            <button class="active" data-projection="perspective">透視</button><button data-projection="orthographic">正交</button>
+          </div>
+          <div class="viewport-title"><span class="live-dot"></span><span id="viewLabel">實體著色</span></div>
+          <div class="viewport-buttons">
+            <button data-action="frame" title="聚焦">⌖</button><button data-action="grid" title="網格">#</button><button data-action="wire" title="邊界線框">▧</button>
+            <select id="minecraftRenderType" title="Minecraft Java RenderType" aria-label="Minecraft Java RenderType">
+              <option value="solid">實心</option>
+              <option value="solid_smooth">實心 Mipped</option>
+              <option value="cutout">Cutout</option>
+              <option value="cutout_smooth">Cutout Mipped</option>
+              <option value="translucent">半透明</option>
+              <option value="translucent_smooth">半透明 Mipped</option>
+            </select>
+            <label class="cull-toggle" title="背面剔除"><input id="cullFaces" type="checkbox" />剔除</label>
+          </div>
+        </div>
+        <div class="viewport" id="viewport">
+          <canvas id="sceneCanvas"></canvas>
+          <svg class="transform-gizmo" id="transformGizmo" aria-label="變換手柄" hidden></svg>
+          <div class="transform-tooltip" id="transformTooltip" role="status" hidden></div>
+          <div class="viewport-render-menu" id="viewportRenderMenu">
+            <button class="render-mode-current" id="renderModeButton" type="button" data-mode="textured" data-tooltip="目前：紋理" aria-label="目前渲染模式：紋理" aria-expanded="false" aria-controls="renderModeMenu">
+              <svg data-icon-mode="wireframe" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4L12 2.8Zm0 0v9.3m8-4.7-8 4.7-8-4.7m8 4.7v9.1"/></svg>
+              <svg data-icon-mode="solid" viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/></svg>
+              <svg data-icon-mode="textured" viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/><path class="texture-mark" d="m5.7 10.3 2 1.1v2.3l-2-1.1v-2.3Zm4 2.3 2 1.1V16l-2-1.1v-2.3Zm-4 2.3 2 1.1v2.3l-2-1.1v-2.3Z"/></svg>
+            </button>
+            <div class="render-mode-popover" id="renderModeMenu" role="menu" hidden>
+              <button type="button" data-render-mode="wireframe" role="menuitem" title="線框">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4L12 2.8Zm0 0v9.3m8-4.7-8 4.7-8-4.7m8 4.7v9.1"/></svg><span>線框</span>
+              </button>
+              <button type="button" data-render-mode="solid" role="menuitem" title="體塊">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/></svg><span>體塊</span>
+              </button>
+              <button class="active" type="button" data-render-mode="textured" role="menuitem" title="紋理">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/><path class="texture-mark" d="m5.7 10.3 2 1.1v2.3l-2-1.1v-2.3Zm4 2.3 2 1.1V16l-2-1.1v-2.3Zm-4 2.3 2 1.1v2.3l-2-1.1v-2.3Z"/></svg><span>紋理</span>
+              </button>
+            </div>
+          </div>
+          <div class="axis-widget" aria-label="座標軸">
+            <svg viewBox="0 0 66 66" aria-hidden="true"><line id="axisLineX" x1="33" y1="33"/><line id="axisLineY" x1="33" y1="33"/><line id="axisLineZ" x1="33" y1="33"/></svg>
+            <button class="axis-y" data-view-axis="y" title="頂視圖">Y</button>
+            <button class="axis-x" data-view-axis="x" title="右視圖">X</button>
+            <button class="axis-z" data-view-axis="z" title="正視圖">Z</button>
+          </div>
+          <div class="view-hint"><kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>F</kbd> 聚焦</div>
+          <div class="selection-badge"><span id="selectionType">Cube</span><strong id="selectionName">body</strong></div>
+        </div>
+        <section class="bottom-dock" id="bottomDock" data-panel="bottom">
+          <div class="panel-resizer panel-resizer-top" data-resize-panel="bottom"></div>
+          <div class="dock-tabs panel-drag-handle">
+            <button class="dock-tab active" data-dock="palette">色卡</button>
+            <button class="dock-tab" data-dock="timeline">時間軸</button>
+            <button class="dock-tab" data-dock="console">輸出</button>
+            <span class="dock-spacer"></span>
+            <button class="dock-icon" data-action="toggleDock" data-target-panel="bottom" title="脫離／吸回">↗</button>
+            <button class="dock-icon" data-action="collapseDock">⌄</button>
+          </div>
+          <div class="dock-content palette-view active" data-dock-view="palette">
+            <div class="palette-meta">
+              <strong>模型色卡</strong><span id="paletteSummary">3 行 · 每行獨立設定</span>
+              <button class="add-palette-row" data-action="addPaletteRow">＋ 新增一行</button>
+            </div>
+            <div class="palette-rows" id="paletteRows"></div>
+          </div>
+          <div class="dock-content timeline-view" data-dock-view="timeline">
+          <div class="timeline-controls"><button data-action="playTimeline">▶</button><button data-action="stopTimeline">■</button><span id="timelineTime">00:00:00</span><label>24 FPS</label></div>
+            <div class="timeline-ruler" id="timelineRuler"></div>
+          </div>
+          <div class="dock-content console-view" data-dock-view="console"><code>CubeBricks 0.1 — 項目已就緒。</code></div>
+        </section>
+      </section>
+
+      <aside class="right-panel" data-panel="properties">
+        <div class="panel-resizer panel-resizer-left" data-resize-panel="properties"></div>
+        <section class="panel-section inspector-section">
+          <div class="panel-heading compact">
+            <div><span class="eyebrow">INSPECTOR</span><strong>物件屬性</strong></div>
+            <span class="uid-chip" id="uidChip">—</span>
+          </div>
+          <div class="inspector" id="inspector"></div>
+        </section>
+        <section class="panel-section outliner-section">
+          <div class="panel-heading panel-drag-handle">
+            <div><span class="eyebrow">PROJECT</span><strong>場景層級</strong></div>
+            <div><button data-action="addCube" title="新增方塊">＋</button><button data-action="addGroup" title="新增組">▰＋</button><button data-action="toggleDock" data-target-panel="properties" title="脫離／吸回">↗</button><button data-action="more">•••</button></div>
+          </div>
+          <label class="search-box"><span>⌕</span><input id="outlinerSearch" placeholder="搜尋物件或 UID" /></label>
+          <div class="outliner" id="outliner"></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="themeDialog" class="theme-dialog">
+    <form method="dialog">
+      <div class="dialog-heading"><div><span class="eyebrow">SETTINGS</span><h2>CubeBricks 設定</h2></div><button value="cancel" class="close-button">×</button></div>
+      <p>所有選項即時生效，並通過配置註冊表保存在這台電腦上。</p>
+      <div class="settings-layout">
+        <nav class="settings-nav" aria-label="設定分類">
+          <button type="button" class="active" data-settings-page="general">一般</button>
+          <button type="button" data-settings-page="snapping">吸附</button>
+          <button type="button" data-settings-page="appearance">外觀</button>
+        </nav>
+        <div class="settings-pages">
+          <section class="settings-page active" data-settings-panel="general">
+            <div class="settings-page-heading"><strong>一般</strong><span>介面、視口與編輯行為</span></div>
+            <div class="theme-grid">
+              <label class="config-select-label"><span>介面語言<small>application.language</small></span><select id="languageSelect" aria-label="介面語言"><option value="zh-Hant">繁體中文</option><option value="zh-Hans">简体中文</option><option value="en">English</option></select></label>
+              <label class="config-select-label"><span>視口投影<small>viewport.projection</small></span><select data-config-key="viewport.projection"><option value="perspective">透視</option><option value="orthographic">正交</option></select></label>
+              <label class="config-toggle-label"><span>顯示網格<small>viewport.show-grid</small></span><input type="checkbox" data-config-key="viewport.show-grid" /></label>
+              <label class="config-toggle-label"><span>線框邊界<small>viewport.show-wireframe</small></span><input type="checkbox" data-config-key="viewport.show-wireframe" /></label>
+              <label class="config-toggle-label"><span>僅顯示幾何<small>viewport.show-geometry-only</small></span><input type="checkbox" data-config-key="viewport.show-geometry-only" /></label>
+              <label class="config-toggle-label"><span>面陰影預覽<small>viewport.preview-shade</small></span><input type="checkbox" data-config-key="viewport.preview-shade" /></label>
+              <label class="config-toggle-label"><span>對稱編輯<small>editor.symmetry</small></span><input type="checkbox" data-config-key="editor.symmetry" /></label>
+              <label class="config-toggle-label"><span>鎖定透明度<small>paint.alpha-lock</small></span><input type="checkbox" data-config-key="paint.alpha-lock" /></label>
+            </div>
+          </section>
+          <section class="settings-page" data-settings-panel="snapping">
+            <div class="settings-page-heading"><strong>吸附</strong><span>吸附步長為 16 ÷ 精度；16 = 1px，32 = 0.5px</span></div>
+            <div class="snap-settings">
+              <label class="config-toggle-label"><span>允許負尺寸<small>關閉時 Cube 最小尺寸為 0</small></span><input type="checkbox" data-config-key="editor.allow-negative-size" /></label>
+              <label class="config-number-label"><span>吸附精度<small>editor.snap-subdivisions</small></span><input type="number" min="0.0001" step="any" data-config-key="editor.snap-subdivisions" /></label>
+              <div class="modifier-snap-row"><span>Shift<small>默認 4</small></span><select data-config-key="editor.snap-shift-mode"><option value="value">直接數值</option><option value="multiplier">默認乘數</option></select><input type="number" min="0.0001" step="any" data-config-key="editor.snap-shift-value" /></div>
+              <div class="modifier-snap-row"><span>Ctrl<small>默認 8</small></span><select data-config-key="editor.snap-ctrl-mode"><option value="value">直接數值</option><option value="multiplier">默認乘數</option></select><input type="number" min="0.0001" step="any" data-config-key="editor.snap-ctrl-value" /></div>
+              <div class="modifier-snap-row"><span>Shift + Ctrl<small>默認 64</small></span><select data-config-key="editor.snap-shift-ctrl-mode"><option value="value">直接數值</option><option value="multiplier">默認乘數</option></select><input type="number" min="0.0001" step="any" data-config-key="editor.snap-shift-ctrl-value" /></div>
+            </div>
+          </section>
+          <section class="settings-page" data-settings-panel="appearance">
+            <div class="settings-page-heading"><strong>外觀</strong><span>顏色、圓角與介面縮放</span></div>
+            <div class="theme-grid">
+              <label>強調色<input type="color" data-theme-var="--accent" value="#b9f55a" /></label>
+              <label>背景色<input type="color" data-theme-var="--bg" value="#11130f" /></label>
+              <label>面板色<input type="color" data-theme-var="--panel" value="#1b1f18" /></label>
+              <label>視窗色<input type="color" data-theme-var="--viewport" value="#20251e" /></label>
+              <label class="range-label">圓角 <output id="radiusOutput">10px</output><input type="range" min="0" max="22" value="10" data-theme-var="--radius" data-unit="px" /></label>
+              <label class="range-label">介面縮放 <output id="scaleOutput">100%</output><input type="range" min="85" max="120" value="100" data-theme-var="--ui-scale" data-unit="%" /></label>
+            </div>
+            <div class="preset-row"><button type="button" data-preset="moss">苔原</button><button type="button" data-preset="ember">熔岩</button><button type="button" data-preset="slate">深海</button></div>
+          </section>
+        </div>
+      </div>
+      <div class="dialog-actions"><button type="button" data-action="resetTheme">恢復預設</button><button class="primary-button" value="ok">完成</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+  <input type="file" id="fileInput" accept=".cbmodel,.bbmodel,.json" hidden />
+  <input type="file" id="textureInput" accept="image/png,image/jpeg,image/webp" hidden />
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

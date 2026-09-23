@@ -1,0 +1,20 @@
+{
+  "name": "cubebricks",
+  "version": "0.1.0",
+  "description": "A modular Minecraft modelling workspace built around cubes and procedural shapes.",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "start:safe": "set CUBEBRICKS_SOFTWARE_RENDERING=1&& electron .",
+    "preview": "node scripts/preview-server.cjs",
+    "dev": "electron .",
+    "check": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check src/app.js && node --check src/model.js && node --check src/render/webgl-renderer.js && node --check src/core/config-registry.js && node --check src/config/app-config.js",
+    "test:config": "node scripts/test-config-registry.mjs",
+    "test:model": "node scripts/test-model-groups.mjs",
+    "test:render": "node scripts/test-render-uv.mjs"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0"
+  }
+}

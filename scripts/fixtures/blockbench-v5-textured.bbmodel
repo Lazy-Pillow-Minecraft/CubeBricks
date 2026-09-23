@@ -1,0 +1,44 @@
+{
+  "meta": { "format_version": "5.0", "model_format": "free", "box_uv": false },
+  "name": "blockbench_v5_textured",
+  "resolution": { "width": 1, "height": 1 },
+  "elements": [
+    {
+      "type": "cube",
+      "uuid": "fixture-cube",
+      "name": "rotated_cube",
+      "from": [0, 0, 0],
+      "to": [4, 8, 3],
+      "origin": [2, 4, 1.5],
+      "rotation": [0, 0, 0],
+      "faces": {
+        "north": { "uv": [0, 0, 1, 1], "texture": 0 },
+        "east": { "uv": [0, 0, 1, 1], "texture": 0 },
+        "south": { "uv": [0, 0, 1, 1], "texture": 0 },
+        "west": { "uv": [0, 0, 1, 1], "texture": 0 },
+        "up": { "uv": [0, 0, 1, 1], "texture": 0 },
+        "down": { "uv": [0, 0, 1, 1], "texture": 0 }
+      }
+    }
+  ],
+  "groups": [
+    { "uuid": "fixture-root", "name": "root_rotated", "origin": [0, 0, 0], "rotation": [10, 35, 0], "visibility": true },
+    { "uuid": "fixture-child", "name": "child_rotated", "origin": [1, 2, 0], "rotation": [0, 0, 25], "visibility": true }
+  ],
+  "outliner": [
+    { "uuid": "fixture-root", "isOpen": true, "children": [
+      { "uuid": "fixture-child", "isOpen": true, "children": ["fixture-cube"] }
+    ] }
+  ],
+  "textures": [
+    {
+      "uuid": "fixture-texture",
+      "id": "0",
+      "name": "fixture-green.png",
+      "uv_width": 1,
+      "uv_height": 1,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    }
+  ]
+}
