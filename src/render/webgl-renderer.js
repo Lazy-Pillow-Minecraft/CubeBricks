@@ -1,4 +1,5 @@
 const DEG = Math.PI / 180;
+const MIPPED_SUPERSAMPLE = 1.5;
 
 // Minecraft-like pass order: opaque geometry writes depth first, then overlays.
 // Cutout/translucent passes are reserved here so textures can join the same pipeline.
@@ -18,7 +19,7 @@ export const MinecraftRenderType = Object.freeze({
 });
 
 const MINECRAFT_RENDER_TYPES = Object.freeze({
-  // `smooth` means a screen-space antialias pass. It must never change how
+  // `smooth` means a supersampled screen resolve. It must never change how
   // the model texture itself is sampled; Minecraft pixel art stays NEAREST.
   [MinecraftRenderType.SOLID]: { pass: RenderPass.SOLID, smooth: false, alphaMode: 0, blend: false, cull: true, depthWrite: true },
   [MinecraftRenderType.SOLID_SMOOTH]: { pass: RenderPass.SOLID, smooth: true, alphaMode: 0, blend: false, cull: true, depthWrite: true },
@@ -50,7 +51,9 @@ export class WebGLSceneRenderer {
     this.canvas = canvas;
     this.gl = canvas.getContext('webgl', {
       alpha: true,
-      antialias: false,
+      // Native MSAA keeps editor lines (grid, selection and bounds) smooth in
+      // every render type. Mipped modes add a separate full-scene SSAA pass.
+      antialias: true,
       depth: true,
       premultipliedAlpha: false,
       preserveDrawingBuffer: false
@@ -59,7 +62,7 @@ export class WebGLSceneRenderer {
 
     this.logDepthEnabled = Boolean(this.gl.getExtension('EXT_frag_depth'));
     this.program = createProgram(this.gl, VERTEX_SHADER, this.logDepthEnabled ? LOG_DEPTH_FRAGMENT_SHADER : FRAGMENT_SHADER);
-    this.postProgram = createProgram(this.gl, POST_VERTEX_SHADER, FXAA_FRAGMENT_SHADER);
+    this.postProgram = createProgram(this.gl, POST_VERTEX_SHADER, SSAA_RESOLVE_FRAGMENT_SHADER);
     this.positionLocation = this.gl.getAttribLocation(this.program, 'aPosition');
     this.colorLocation = this.gl.getAttribLocation(this.program, 'aColor');
     this.normalLocation = this.gl.getAttribLocation(this.program, 'aNormal');
@@ -105,6 +108,7 @@ export class WebGLSceneRenderer {
     this.selectionRevision = 0;
     this.staticCache = null;
     this.selectedCache = null;
+    this.selectionOutline = hexToRgb('#d8f59b');
 
     this.gl.enable(this.gl.DEPTH_TEST);
     this.gl.depthFunc(this.gl.LEQUAL);
@@ -122,6 +126,11 @@ export class WebGLSceneRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
+
+  setSelectionOutline(color) {
+    this.selectionOutline = hexToRgb(color);
+    this.invalidateSelectionGeometry();
   }
 
   applyTextureSampling() {
@@ -152,12 +161,10 @@ export class WebGLSceneRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  presentAntialiased(width, height) {
+  presentAntialiased(outputWidth, outputHeight, sourceWidth, sourceHeight) {
     const { gl } = this;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.viewport(0, 0, outputWidth, outputHeight);
     gl.useProgram(this.postProgram);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.postQuadBuffer);
     gl.enableVertexAttribArray(this.postPositionLocation);
@@ -165,7 +172,7 @@ export class WebGLSceneRenderer {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.postColorTexture);
     gl.uniform1i(this.postTextureLocation, 0);
-    gl.uniform2f(this.postResolutionLocation, width, height);
+    gl.uniform2f(this.postResolutionLocation, sourceWidth, sourceHeight);
     gl.depthMask(false);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
@@ -255,6 +262,78 @@ export class WebGLSceneRenderer {
     }
   }
 
+  drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, viewProjection, cameraState) {
+    const { gl } = this;
+    if (camera.renderMode === 'wireframe') return;
+    if (camera.renderMode === 'textured' && minecraftRenderType.pass === RenderPass.TRANSLUCENT) {
+      const sortedFaces = [...this.staticCache.faces.filter(face => !dynamicUids.has(face.uid)), ...this.selectedCache.faces]
+        .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
+      const translucentVertices = sortedFaces.flatMap(face => face.vertices);
+      this.drawVertices(translucentVertices, gl.TRIANGLES, viewProjection, {
+        depthWrite: minecraftRenderType.depthWrite,
+        cull: project.cullFaces,
+        renderMode: 2,
+        alphaMode: minecraftRenderType.alphaMode,
+        blend: minecraftRenderType.blend
+      });
+      return;
+    }
+    const renderMode = camera.renderMode === 'textured' ? 2 : 1;
+    const pipeline = camera.renderMode === 'textured'
+      ? minecraftRenderType
+      : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+    const options = {
+      depthWrite: pipeline.depthWrite,
+      cull: project.cullFaces,
+      renderMode,
+      alphaMode: pipeline.alphaMode,
+      blend: pipeline.blend
+    };
+    this.drawBufferExcluding(this.staticTriangleBuffer, this.staticCache.triangles.length / 12,
+      dynamicUids, this.staticCache.triangleRanges, gl.TRIANGLES, viewProjection, options);
+    this.drawBuffer(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12,
+      gl.TRIANGLES, viewProjection, options);
+  }
+
+  drawGrid(camera, viewProjection) {
+    if (!camera.grid) return;
+    const { gl } = this;
+    const grid = gridGeometry(camera.snap);
+    this.drawVertices(grid.fine, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+    this.drawVertices(grid.major, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+    this.drawVertices(grid.direction, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+  }
+
+  drawEditorLines(project, camera, dynamicUids, ownerPoints, viewProjection) {
+    const { gl } = this;
+    if (camera.renderMode === 'wireframe') {
+      this.drawBufferExcluding(this.staticWireBuffer, this.staticCache.edges.length / 12,
+        dynamicUids, this.staticCache.edgeRanges, gl.LINES, viewProjection,
+        { depthWrite: true, cull: false, renderMode: 0 });
+      this.drawBuffer(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
+        gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+    }
+    this.drawBuffer(this.ghostWireBuffer, this.ghostWireCount, gl.LINES, viewProjection, {
+      depthWrite: false, cull: false, renderMode: 0
+    });
+    if (camera.renderMode !== 'wireframe') {
+      this.drawBuffer(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
+        gl.LINES, viewProjection, { depthWrite: false, cull: false, renderMode: 0 });
+    }
+    if (camera.wire) {
+      const wire = [];
+      for (const points of ownerPoints.values()) wire.push(...boundsWireGeometry(points));
+      this.drawVertices(wire, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+    }
+    if (!camera.geometryOnly) {
+      const visibleHelpers = collectVertexRanges(this.staticCache.helpers,
+        complementVertexRanges(this.staticCache.helpers.length / 12, dynamicUids, this.staticCache.helperRanges));
+      this.drawVertices([...visibleHelpers, ...this.selectedCache.helpers], gl.LINES, viewProjection, {
+        depthWrite: false, cull: false, renderMode: 0
+      });
+    }
+  }
+
   render(project, selectedUid, camera) {
     const { gl, canvas } = this;
     this.previewShade = camera.previewShade !== false;
@@ -273,11 +352,18 @@ export class WebGLSceneRenderer {
       canvas.height = pixelHeight;
     }
     const minecraftRenderType = getMinecraftRenderType(project.renderType);
-    if (minecraftRenderType.smooth) {
-      this.ensurePostProcessTarget(pixelWidth, pixelHeight);
+    const useMippedAntialias = minecraftRenderType.smooth && camera.renderMode === 'textured';
+    const renderWidth = useMippedAntialias
+      ? Math.max(1, Math.floor(pixelWidth * MIPPED_SUPERSAMPLE))
+      : pixelWidth;
+    const renderHeight = useMippedAntialias
+      ? Math.max(1, Math.floor(pixelHeight * MIPPED_SUPERSAMPLE))
+      : pixelHeight;
+    if (useMippedAntialias) {
+      this.ensurePostProcessTarget(renderWidth, renderHeight);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.postFramebuffer);
     } else gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, pixelWidth, pixelHeight);
+    gl.viewport(0, 0, renderWidth, renderHeight);
     gl.clearColor(0, 0, 0, 0);
     gl.clearDepth(1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -304,7 +390,7 @@ export class WebGLSceneRenderer {
       || this.selectedCache.revision !== this.selectionRevision
       || this.selectedCache.selectedUid !== selectedUid) {
       const selectedElements = project.elements.filter(element => dynamicUids.has(element.uid));
-      const geometry = buildElementGeometry(project, selectedElements, selectedUid);
+      const geometry = buildElementGeometry(project, selectedElements, selectedUid, this.selectionOutline);
       this.selectedCache = { project, revision: this.selectionRevision, selectedUid, ...geometry };
       this.uploadBuffer(this.selectedTriangleBuffer, geometry.triangles, gl.DYNAMIC_DRAW);
       this.uploadBuffer(this.selectedWireBuffer, geometry.edges, gl.DYNAMIC_DRAW);
@@ -314,68 +400,27 @@ export class WebGLSceneRenderer {
 
     this.applyTextureSampling();
 
-    if (camera.grid) {
-      const grid = gridGeometry(camera.snap);
-      this.drawVertices(grid.fine, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
-      this.drawVertices(grid.major, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
-      this.drawVertices(grid.direction, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
-    }
-    if (camera.renderMode === 'wireframe') {
-      this.drawBufferExcluding(this.staticWireBuffer, this.staticCache.edges.length / 12, dynamicUids, this.staticCache.edgeRanges, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
-      this.drawBuffer(this.selectedWireBuffer, this.selectedCache.edges.length / 12, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
-    } else if (camera.renderMode === 'textured' && minecraftRenderType.pass === RenderPass.TRANSLUCENT) {
-      const sortedFaces = [...this.staticCache.faces.filter(face => !dynamicUids.has(face.uid)), ...this.selectedCache.faces]
-        .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
-      const translucentVertices = sortedFaces.flatMap(face => face.vertices);
-      this.drawVertices(translucentVertices, gl.TRIANGLES, viewProjection, {
-        depthWrite: minecraftRenderType.depthWrite,
-        cull: project.cullFaces,
-        renderMode: 2,
-        alphaMode: minecraftRenderType.alphaMode,
-        blend: minecraftRenderType.blend
-      });
+    if (useMippedAntialias) {
+      // Only model surfaces are supersampled. Rebuild their depth in the
+      // native-MSAA framebuffer, resolve the colour, then draw editor lines
+      // directly so Mipped never changes grid or wire appearance.
+      this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, viewProjection, cameraState);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, pixelWidth, pixelHeight);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clearDepth(1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.colorMask(false, false, false, false);
+      this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, viewProjection, cameraState);
+      gl.colorMask(true, true, true, true);
+      this.presentAntialiased(pixelWidth, pixelHeight, renderWidth, renderHeight);
+      this.drawGrid(camera, viewProjection);
+      this.drawEditorLines(project, camera, dynamicUids, ownerPoints, viewProjection);
     } else {
-      const renderMode = camera.renderMode === 'textured' ? 2 : 1;
-      const pipeline = camera.renderMode === 'textured'
-        ? minecraftRenderType
-        : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
-      const cull = project.cullFaces;
-      this.drawBufferExcluding(this.staticTriangleBuffer, this.staticCache.triangles.length / 12, dynamicUids, this.staticCache.triangleRanges, gl.TRIANGLES, viewProjection, {
-        depthWrite: pipeline.depthWrite, cull, renderMode, alphaMode: pipeline.alphaMode, blend: pipeline.blend
-      });
-      this.drawBuffer(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12, gl.TRIANGLES, viewProjection, {
-        depthWrite: pipeline.depthWrite, cull, renderMode, alphaMode: pipeline.alphaMode, blend: pipeline.blend
-      });
+      this.drawGrid(camera, viewProjection);
+      this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, viewProjection, cameraState);
+      this.drawEditorLines(project, camera, dynamicUids, ownerPoints, viewProjection);
     }
-
-    if (camera.renderMode !== 'wireframe') {
-      this.drawBuffer(this.ghostWireBuffer, this.ghostWireCount, gl.LINES, viewProjection, {
-        depthWrite: false, cull: false, renderMode: 0
-      });
-      this.drawBuffer(this.selectedWireBuffer, this.selectedCache.edges.length / 12, gl.LINES, viewProjection, {
-        depthWrite: false, cull: false, renderMode: 0
-      });
-    } else {
-      this.drawBuffer(this.ghostWireBuffer, this.ghostWireCount, gl.LINES, viewProjection, {
-        depthWrite: false, cull: false, renderMode: 0
-      });
-    }
-
-    if (camera.wire) {
-      const wire = [];
-      for (const points of ownerPoints.values()) wire.push(...boundsWireGeometry(points));
-      this.drawVertices(wire, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
-    }
-
-    if (!camera.geometryOnly) {
-      const visibleHelpers = collectVertexRanges(this.staticCache.helpers,
-        complementVertexRanges(this.staticCache.helpers.length / 12, dynamicUids, this.staticCache.helperRanges));
-      this.drawVertices([...visibleHelpers, ...this.selectedCache.helpers], gl.LINES, viewProjection, {
-        depthWrite: false, cull: false, renderMode: 0
-      });
-    }
-
-    if (minecraftRenderType.smooth) this.presentAntialiased(pixelWidth, pixelHeight);
 
   }
 
@@ -550,7 +595,7 @@ function getDynamicElementUids(project, selectedUid) {
   return dynamic;
 }
 
-function buildElementGeometry(project, elements, selectedUid) {
+function buildElementGeometry(project, elements, selectedUid, selectionOutline = [1, 1, 1]) {
   const triangles = [];
   const faces = [];
   const edges = [];
@@ -584,7 +629,7 @@ function buildElementGeometry(project, elements, selectedUid) {
       : [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
 
     for (const entry of cubes) {
-      const geometry = cubeGeometry(entry, element.color, element.uid === selectedUid || selectedByGroup);
+      const geometry = cubeGeometry(entry, element.color, element.uid === selectedUid || selectedByGroup, selectionOutline);
       triangles.push(...geometry.triangles);
       faces.push(...geometry.faces.map(face => ({ ...face, uid: element.uid })));
       edges.push(...geometry.edges);
@@ -624,7 +669,7 @@ function mergeOwnerPoints(staticPoints, dynamicPoints) {
   return merged;
 }
 
-function cubeGeometry(entry, color, selected) {
+function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1]) {
   const { cube, offset, ownerRotation, ownerOrigin, groupChain, textureSize, shade } = entry;
   const inflate = cube.inflate || 0;
   const start = cube.position.map((value, axis) => value + offset[axis]);
@@ -657,7 +702,7 @@ function cubeGeometry(entry, color, selected) {
     triangles.push(...faceVertices);
     faceBatches.push({ vertices: faceVertices, center: averagePoints(quadIndices.map(index => corners[index])) });
   }
-  const edges = [], edgeColor = selected ? [1, 1, 1, 1] : [.46, .56, .4, 1];
+  const edges = [], edgeColor = selected ? [...selectionOutline, 1] : [.46, .56, .4, 1];
   for (const [a, b] of [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]) {
     pushVertex(edges, corners[a], edgeColor); pushVertex(edges, corners[b], edgeColor);
   }
@@ -923,43 +968,21 @@ const POST_VERTEX_SHADER = `
   }
 `;
 
-// FXAA is deliberately applied to the completed framebuffer, not to model
-// texture lookups. This smooths projected polygon/alpha edges while retaining
-// Minecraft's nearest-neighbour texels inside the model.
-const FXAA_FRAGMENT_SHADER = `
+// Resolve a genuinely higher-resolution framebuffer into the canvas. Model
+// textures are still fetched with NEAREST in the scene pass; only the finished
+// screen image is averaged here.
+const SSAA_RESOLVE_FRAGMENT_SHADER = `
   precision mediump float;
   varying vec2 vScreenUv;
   uniform sampler2D uScreenTexture;
   uniform vec2 uResolution;
   void main() {
-    vec2 inverseResolution = 1.0 / uResolution;
-    vec4 rgbaNW = texture2D(uScreenTexture, vScreenUv + vec2(-1.0, -1.0) * inverseResolution);
-    vec4 rgbaNE = texture2D(uScreenTexture, vScreenUv + vec2( 1.0, -1.0) * inverseResolution);
-    vec4 rgbaSW = texture2D(uScreenTexture, vScreenUv + vec2(-1.0,  1.0) * inverseResolution);
-    vec4 rgbaSE = texture2D(uScreenTexture, vScreenUv + vec2( 1.0,  1.0) * inverseResolution);
-    vec4 rgbaM  = texture2D(uScreenTexture, vScreenUv);
-    vec3 lumaWeights = vec3(0.299, 0.587, 0.114);
-    float lumaNW = dot(rgbaNW.rgb, lumaWeights);
-    float lumaNE = dot(rgbaNE.rgb, lumaWeights);
-    float lumaSW = dot(rgbaSW.rgb, lumaWeights);
-    float lumaSE = dot(rgbaSE.rgb, lumaWeights);
-    float lumaM = dot(rgbaM.rgb, lumaWeights);
-    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
-    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
-    vec2 direction;
-    direction.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
-    direction.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
-    float reduction = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.03125, 0.0078125);
-    float reciprocalMinimum = 1.0 / (min(abs(direction.x), abs(direction.y)) + reduction);
-    direction = clamp(direction * reciprocalMinimum, vec2(-8.0), vec2(8.0)) * inverseResolution;
-    vec4 rgbaA = 0.5 * (
-      texture2D(uScreenTexture, vScreenUv + direction * (1.0 / 3.0 - 0.5)) +
-      texture2D(uScreenTexture, vScreenUv + direction * (2.0 / 3.0 - 0.5)));
-    vec4 rgbaB = rgbaA * 0.5 + 0.25 * (
-      texture2D(uScreenTexture, vScreenUv + direction * -0.5) +
-      texture2D(uScreenTexture, vScreenUv + direction * 0.5));
-    float lumaB = dot(rgbaB.rgb, lumaWeights);
-    gl_FragColor = (lumaB < lumaMin || lumaB > lumaMax) ? rgbaA : rgbaB;
+    vec2 offset = 0.35 / uResolution;
+    gl_FragColor = 0.25 * (
+      texture2D(uScreenTexture, vScreenUv + vec2(-offset.x, -offset.y)) +
+      texture2D(uScreenTexture, vScreenUv + vec2( offset.x, -offset.y)) +
+      texture2D(uScreenTexture, vScreenUv + vec2(-offset.x,  offset.y)) +
+      texture2D(uScreenTexture, vScreenUv + vec2( offset.x,  offset.y)));
   }
 `;
 

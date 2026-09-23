@@ -1,6 +1,7 @@
 import { Cube, Group, Shape, CubeBricksProject, importBlockbench } from './model.js';
 import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
 import { WebGLSceneRenderer, applyGroupTransforms, getBlockbenchBoxUv } from './render/webgl-renderer.js';
+import { DockManager } from './ui/dock-manager.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -47,6 +48,13 @@ const state = {
   layoutResizing: false
 };
 
+const DOCK_PANEL_DEFINITIONS = Object.freeze([
+  { id: 'texture', index: 0, modes: ['edit', 'paint'], defaultDock: 'left', defaultOrder: 0, defaultPosition: { x: 24, y: 104 }, defaultSize: { width: 236, height: 620 }, defaultCollapsed: false },
+  { id: 'inspector', index: 1, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 0, defaultPosition: { x: 920, y: 104 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
+  { id: 'outliner', index: 2, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 1, defaultPosition: { x: 920, y: 460 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
+  { id: 'bottom', index: 3, modes: ['edit', 'paint', 'animate'], defaultDock: 'bottom', defaultOrder: 0, defaultPosition: { x: 280, y: 620 }, defaultSize: { width: 720, height: 176 }, defaultCollapsed: false }
+]);
+
 state.selectedUid = state.project.elements[0]?.uid;
 
 const sceneCanvas = $('#sceneCanvas');
@@ -62,6 +70,7 @@ const fileInput = $('#fileInput');
 const textureInput = $('#textureInput');
 let toastTimer;
 let outlinerFrame = null;
+let dockManager = null;
 
 function selected() {
   return state.project.getNode(state.selectedUid);
@@ -873,6 +882,7 @@ function activateProjectTexture(index) {
 
 function setMode(mode) {
   state.mode = mode;
+  dockManager?.setMode(mode);
   $$('.mode-tab').forEach(button => button.classList.toggle('active', button.dataset.mode === mode));
   $('.paint-tool').style.display = mode === 'paint' ? '' : 'none';
   $('#viewLabel').textContent = mode === 'paint' ? '貼圖預覽' : mode === 'animate' ? '動畫預覽' : '實體著色';
@@ -921,7 +931,7 @@ function setRenderModeMenu(open) {
 function activateDock(name) {
   $$('.dock-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.dock === name));
   $$('[data-dock-view]').forEach(view => view.classList.toggle('active', view.dataset.dockView === name));
-  $('#bottomDock').classList.remove('collapsed');
+  dockManager?.expand('bottom');
 }
 
 async function openProject() {
@@ -979,14 +989,15 @@ function newProject() {
 }
 
 const themePresets = {
-  moss: { '--accent': '#b9f55a', '--bg': '#11130f', '--panel': '#1b1f18', '--viewport': '#20251e' },
-  ember: { '--accent': '#ff9d57', '--bg': '#160f0e', '--panel': '#241917', '--viewport': '#291d1b' },
-  slate: { '--accent': '#65d7e8', '--bg': '#0d1115', '--panel': '#171e24', '--viewport': '#1b242b' }
+  moss: { '--accent': '#b9f55a', '--selection-outline': '#d8f59b', '--bg': '#11130f', '--panel': '#1b1f18', '--viewport': '#20251e' },
+  ember: { '--accent': '#ff9d57', '--selection-outline': '#ffd0a6', '--bg': '#160f0e', '--panel': '#241917', '--viewport': '#291d1b' },
+  slate: { '--accent': '#65d7e8', '--selection-outline': '#a7f0fa', '--bg': '#0d1115', '--panel': '#171e24', '--viewport': '#1b242b' }
 };
 
 function setThemeVar(key, value, persist = true) {
   document.documentElement.style.setProperty(key, value);
   if (key === '--accent') document.documentElement.style.setProperty('--accent-rgb', hexToRgb(value).join(', '));
+  if (key === '--selection-outline') sceneRenderer.setSelectionOutline(value);
   if (key === '--radius') $('#radiusOutput').textContent = value;
   if (key === '--ui-scale') $('#scaleOutput').textContent = value;
   if (persist) saveTheme();
@@ -1031,6 +1042,10 @@ function initializeConfigRegistry() {
       reset: id => configRegistry.reset(id, { source: 'public-api' }),
       list: () => configRegistry.list(),
       subscribe: (id, listener) => configRegistry.subscribe(id, listener)
+    }),
+    docks: Object.freeze({
+      list: () => dockManager?.getIndex() || [],
+      get: id => dockManager?.getIndex().find(panel => panel.id === id) || null
     })
   });
 }
@@ -1093,102 +1108,23 @@ function setConfigFromControl(control) {
   }
 }
 
-function toggleDock(panelName) {
-  const panel = $(`[data-panel="${panelName}"]`);
-  if (!panel) return;
-  const detached = panel.classList.toggle('detached');
-  $('.app-shell').classList.toggle(`${panelName}-detached`, detached);
-  $$(`[data-target-panel="${panelName}"]`).forEach(button => button.textContent = detached ? '↙' : '↗');
-  if (!detached) {
-    panel.style.left = ''; panel.style.right = ''; panel.style.top = ''; panel.style.bottom = '';
-    panel.style.width = ''; panel.style.height = '';
-  }
-  scheduleOutlinerWindow();
-  requestAnimationFrame(renderScene);
-}
-
-function initializePanelSystem() {
-  $$('[data-action="toggleDock"]').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation(); toggleDock(button.dataset.targetPanel);
-  }));
-
-  $$('[data-resize-panel]').forEach(handle => handle.addEventListener('pointerdown', event => {
-    event.preventDefault(); event.stopPropagation(); handle.setPointerCapture(event.pointerId); handle.classList.add('active');
-    state.layoutResizing = true;
-    const panelName = handle.dataset.resizePanel;
-    const panel = $(`[data-panel="${panelName}"]`);
-    const edge = handle.dataset.resizeEdge || (panelName === 'bottom' ? 'top' : panelName === 'texture' ? 'right' : 'left');
-    const rect = panel.getBoundingClientRect();
-    const start = { x: event.clientX, y: event.clientY, width: rect.width, height: rect.height };
-    let pendingSize = edge === 'top' || edge === 'bottom' ? start.height : start.width;
-    let resizeFrame = null;
-    const applyPendingSize = () => {
-      resizeFrame = null;
-      if (panelName === 'texture') {
-        panel.classList.contains('detached') ? panel.style.width = `${pendingSize}px` : document.documentElement.style.setProperty('--left-panel-width', `${pendingSize}px`);
-      } else if (panelName === 'bottom') {
-        panel.classList.contains('detached') ? panel.style.height = `${pendingSize}px` : document.documentElement.style.setProperty('--bottom-panel-height', `${pendingSize}px`);
-      } else if (edge === 'left') {
-        panel.classList.contains('detached') ? panel.style.width = `${pendingSize}px` : document.documentElement.style.setProperty('--right-panel-width', `${pendingSize}px`);
-      } else if (edge === 'bottom') {
-        panel.classList.contains('detached') ? panel.style.height = `${pendingSize}px` : document.documentElement.style.setProperty('--inspector-panel-height', `${pendingSize}px`);
-      }
+function initializeDockSystem() {
+  dockManager = new DockManager({
+    root: $('.workspace'),
+    definitions: DOCK_PANEL_DEFINITIONS,
+    onInteraction: active => { state.layoutResizing = active; },
+    onLayoutChange: () => {
       scheduleOutlinerWindow();
-      renderScene();
-    };
-    const move = moveEvent => {
-      if (panelName === 'texture') {
-        const width = Math.max(170, Math.min(520, start.width + moveEvent.clientX - start.x));
-        pendingSize = width;
-      } else if (panelName === 'inspector' || panelName === 'outliner') {
-        if (edge === 'bottom') {
-          pendingSize = Math.max(150, Math.min(innerHeight - 130, start.height + moveEvent.clientY - start.y));
-        } else {
-          pendingSize = Math.max(230, Math.min(560, start.width - (moveEvent.clientX - start.x)));
-        }
-      } else {
-        const height = Math.max(90, Math.min(480, start.height - (moveEvent.clientY - start.y)));
-        pendingSize = height;
-      }
-      if (resizeFrame === null) resizeFrame = requestAnimationFrame(applyPendingSize);
-    };
-    const end = () => {
-      handle.classList.remove('active');
-      if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
-      state.layoutResizing = false;
-      applyPendingSize();
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
-    };
-    handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
-  }));
-
-  $$('.panel-drag-handle').forEach(handle => handle.addEventListener('pointerdown', event => {
-    if (event.target.closest('button,input,select')) return;
-    const panel = event.currentTarget.closest('[data-panel]');
-    if (!panel?.classList.contains('detached')) return;
-    event.preventDefault(); handle.setPointerCapture(event.pointerId);
-    const rect = panel.getBoundingClientRect();
-    const start = { x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
-    panel.style.right = 'auto'; panel.style.bottom = 'auto';
-    const move = moveEvent => {
-      const left = Math.max(0, Math.min(innerWidth - rect.width, start.left + moveEvent.clientX - start.x));
-      const top = Math.max(38, Math.min(innerHeight - 50, start.top + moveEvent.clientY - start.y));
-      panel.style.left = `${left}px`; panel.style.top = `${top}px`;
-    };
-    const end = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); };
-    handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', end);
-  }));
+      requestAnimationFrame(renderScene);
+    }
+  });
+  dockManager.setMode(state.mode);
 }
 
 function bindEvents() {
-  initializePanelSystem();
   $$('.mode-tab').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
   $$('.tool').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
   $$('.dock-tab').forEach(button => button.addEventListener('click', () => activateDock(button.dataset.dock)));
-  $('[data-action="collapseDock"]').addEventListener('click', () => $('#bottomDock').classList.toggle('collapsed'));
   $('[data-action="addCube"]').addEventListener('click', addCube);
   $('[data-action="addGroup"]').addEventListener('click', addGroup);
   $('[data-action="new"]').addEventListener('click', newProject);
@@ -1658,8 +1594,10 @@ function escapeAttribute(value) { return escapeHtml(value).replaceAll('"', '&quo
 function round(value) { return Math.round(value * 100) / 100; }
 function hexToRgb(hex) { const n = parseInt(hex.replace('#', ''), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
 
+initializeDockSystem();
 initializeConfigRegistry();
 loadTheme();
+sceneRenderer.setSelectionOutline(getComputedStyle(document.documentElement).getPropertyValue('--selection-outline').trim());
 renderTexture();
 renderPalette();
 bindEvents();
