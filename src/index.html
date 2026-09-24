@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
   <title>CubeBricks</title>
+  <link rel="icon" type="image/png" href="./assets/shortcut-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <div class="app-shell">
     <header class="titlebar">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+        <img class="brand-mark" src="./assets/brand-icon.png" alt="" aria-hidden="true" />
         <span>CubeBricks</span>
         <span class="project-state" id="projectState">未保存</span>
       </div>
@@ -35,12 +36,16 @@
 
     <nav class="tool-strip" aria-label="工具欄">
       <div class="toolbar-lane tool-lane" aria-label="工具">
-        <button class="tool active" data-tool="move" title="移動" aria-label="移動"><span>✥</span></button>
-        <button class="tool" data-tool="resize" title="縮放" aria-label="縮放"><span>⌗</span></button>
-        <button class="tool" data-tool="rotate" title="旋轉" aria-label="旋轉"><span>⟳</span></button>
+        <button class="tool active" data-tool="move" title="移動" aria-label="移動"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 184.79 163.37"><g><rect x="80.59" y="38.45" width="23.61" height="66.89"/><path d="M101.73,5.91l24.36,51.3c3.26,6.86-1.75,14.77-9.34,14.77h-48.71c-7.59,0-12.6-7.91-9.34-14.77L83.05,5.91c3.74-7.87,14.94-7.87,18.68,0Z"/></g><g><rect x="30.22" y="110.45" width="66.89" height="23.61" transform="translate(-52.6 48.21) rotate(-30)"/><path d="M1.85,147.16l32.25-46.75c4.31-6.25,13.67-5.87,17.46.7l24.36,42.19c3.8,6.58-.55,14.87-8.12,15.48l-56.61,4.56c-8.69.7-14.29-9-9.34-16.18Z"/></g><g><rect x="109.31" y="88.81" width="23.61" height="66.89" transform="translate(-45.32 166.02) rotate(-60)"/><path d="M182.93,147.16l-32.25-46.75c-4.31-6.25-13.67-5.87-17.46.7l-24.36,42.19c-3.8,6.58.55,14.87,8.12,15.48l56.61,4.56c8.69.7,14.29-9,9.34-16.18Z"/></g></svg></button>
+        <button class="tool" data-tool="resize" title="縮放" aria-label="縮放"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 173.35 173.35"><g><g><rect x="0" y="0" width="94.73" height="27.97" rx="4.43" ry="4.43"/><rect x="-33.38" y="33.38" width="94.73" height="27.97" rx="4.43" ry="4.43" transform="translate(-33.38 61.35) rotate(-90)"/></g><g><rect x="78.62" y="145.38" width="94.73" height="27.97" rx="4.43" ry="4.43" transform="translate(251.97 318.73) rotate(-180)"/><rect x="112" y="112" width="94.73" height="27.97" rx="4.43" ry="4.43" transform="translate(285.35 -33.38) rotate(90)"/></g></g><rect x="39.95" y="39.95" width="93.45" height="93.45" rx="11.85" ry="11.85"/></svg></button>
+        <button class="tool" data-tool="rotate" title="旋轉" aria-label="旋轉"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 179.65 181.52"><path d="M89.83,1.87c-13.71,0-26.69,3.08-38.32,8.57v25.55c10.89-7.51,24.09-11.91,38.32-11.91,37.35,0,67.62,30.28,67.62,67.62s-30.28,67.62-67.62,67.62S22.2,129.04,22.2,91.69h0c0-6.19-5.02-11.2-11.2-11.2-5.41,0-9.92,3.83-10.97,8.93-.02.75-.03,1.51-.03,2.27,0,49.61,40.22,89.83,89.83,89.83s89.83-40.22,89.83-89.83S139.44,1.87,89.83,1.87Z"/><path d="M13.99,41.69L39.69,3.79c3.39-5,10.74-5.06,14.21-.11l18.71,26.72c3.47,4.95.9,11.84-4.96,13.32l-44.41,11.19c-7.69,1.94-13.7-6.65-9.25-13.21Z"/></svg></button>
+        <button class="tool" data-tool="pivot" title="移動樞軸" aria-label="移動樞軸"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 186.02 186.02"><circle cx="93.01" cy="93.01" r="40.99"/><rect x="80.61" width="24.8" height="186.02" rx="6.05" ry="6.05"/><rect x="80.61" width="24.8" height="186.02" rx="6.05" ry="6.05" transform="translate(186.02 0) rotate(90)"/><g><path d="M110.96,43.39c14.7,5.32,26.36,16.97,31.67,31.67h25.35c-6.72-28.15-28.87-50.31-57.02-57.02v25.35Z"/><path d="M75.06,43.39v-25.35c-28.15,6.72-50.3,28.87-57.02,57.02h25.35c5.32-14.7,16.98-26.35,31.67-31.67Z"/></g><g><path d="M75.06,142.63c-14.7-5.32-26.36-16.97-31.67-31.67h-25.35c6.72,28.15,28.87,50.31,57.02,57.02v-25.35Z"/><path d="M110.96,142.63v25.35c28.15-6.72,50.3-28.87,57.02-57.02h-25.35c-5.32,14.7-16.98,26.35-31.67,31.67Z"/></g></svg></button>
+        <button class="tool" data-tool="vertexSnap" title="頂點捕捉" aria-label="頂點捕捉"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 183.19 158.67"><circle cx="26.74" cy="56.55" r="26.74"/><path d="M40.44,27.39c-1.29-9.15,34.51-34.36,67-25.55,23.87,6.47,43.2,30.55,38.83,40.85-3.77,8.89-27.14,12.09-32.4,4.89-.75-1.03-.8-1.81-1.26-3.27-3.13-9.81-14.12-15.05-15.91-15.9-16.32-7.78-40.82.17-46.81,4.02-.59.38-2.54,1.71-4.63,1.21-2.94-.71-4.61-4.7-4.83-6.24Z"/><path d="M133.67,89.17l-30.71-32.38c-3.57-3.76-1.57-9.97,3.52-10.95l47.18-9.1c5.09-.98,9.25,4.05,7.34,8.86l-16.47,41.48c-1.77,4.45-7.56,5.57-10.86,2.09Z"/><path d="M153.39,75.77l-7.78,19.59c-1.77,4.45-7.56,5.57-10.86,2.09l-16.33-17.21c-12.03,7.48-20.04,20.81-20.04,36.02,0,23.42,18.98,42.4,42.4,42.4s42.4-18.98,42.4-42.4c0-19.03-12.53-35.13-29.8-40.49Z"/></svg></button>
+        <button class="tool" data-tool="knife" title="刀具切割" aria-label="刀具切割"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 186.43 167.88"><rect x="108.09" y="-1.84" width="50.7" height="113.72" rx="9.86" ry="9.86" transform="translate(71.97 -75.57) rotate(42.39)"/><path d="M81.17,88.28c-3.74-3.41-9.53-3.15-12.94.59L0,163.62c25.67,9.52,66.11,3.06,104.54-19.13,6.34-3.66,12.34-7.59,17.95-11.71.89-3.22-.02-6.8-2.65-9.2l-38.68-35.3Z"/></svg></button>
         <i class="lane-divider" aria-hidden="true"></i>
         <button class="tool" data-tool="cube" title="新增方塊" aria-label="新增方塊"><span>⬡</span></button>
         <button class="tool" data-tool="shape" title="新增形狀" aria-label="新增形狀"><span>◉</span></button>
+        <button class="tool" data-tool="locator" title="新增 Locator" aria-label="新增 Locator"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 197.49 189.08"><path d="M98.74,144.52c-38.86,0-72.06-19.5-85.3-46.99-1.11,4.43-1.7,9-1.7,13.69,0,38.28,38.95,69.32,87,69.32s87-31.03,87-69.32c0-4.69-.59-9.26-1.7-13.69-13.24,27.49-46.44,46.99-85.3,46.99Z"/><rect x="81.01" y="56.54" width="35.47" height="96.98"/><rect x="59.53" y="77.83" width="78.43" height="25.75" rx="7.93" ry="7.93"/><path d="M98.74,0c-18.89,0-34.21,15.31-34.21,34.21s15.31,34.21,34.21,34.21,34.21-15.31,34.21-34.21S117.63,0,98.74,0ZM98.74,49.2c-8.28,0-14.99-6.71-14.99-14.99s6.71-14.99,14.99-14.99,14.99,6.71,14.99,14.99-6.71,14.99-14.99,14.99Z"/><path d="M26.73,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66H5.18c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M179.83,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66h-34.03c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M97.08,188.46l-18.84-16.15c-1.8-1.55-.71-4.5,1.67-4.5h37.68c2.38,0,3.47,2.96,1.67,4.5l-18.84,16.15c-.96.82-2.37.82-3.33,0Z"/></svg></button>
         <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆" aria-label="畫筆"><span>◍</span></button>
       </div>
       <div class="toolbar-lane tool-options-lane" id="toolOptionsLane" aria-label="目前工具參數" hidden>
@@ -50,10 +55,28 @@
           <button type="button" data-transform-space="parent" title="父級坐標系">父級</button>
           <button type="button" data-transform-space="self" title="自身坐標系">自身</button>
         </div>
+        <div class="toolbar-segment" id="rotationModeControl" role="group" aria-label="自身旋轉模式" hidden>
+          <button type="button" data-rotation-mode="pose" title="姿態模式：沿物件目前姿態的局部軸旋轉">姿態</button>
+          <button type="button" data-rotation-mode="euler" title="歐拉角模式：按 Z → Y → X 層級直接調整歐拉角">歐拉角</button>
+        </div>
         <div class="toolbar-segment" id="scaleHandleModeControl" role="group" aria-label="縮放手柄長度" hidden>
           <button type="button" data-scale-handle-mode="bounds" title="手柄貼合物體幾何範圍">貼合</button>
           <button type="button" data-scale-handle-mode="fixed" title="手柄使用和移動工具相同的固定視覺長度">固定</button>
         </div>
+        <div class="toolbar-segment" id="vertexSnapModeControl" role="group" aria-label="頂點捕捉模式" hidden>
+          <button type="button" class="active" data-vertex-snap-mode="move" title="移動捕捉">移動</button>
+          <button type="button" data-vertex-snap-mode="scale" title="縮放捕捉">縮放</button>
+          <button type="button" data-vertex-snap-mode="rotate" title="旋轉捕捉">旋轉</button>
+        </div>
+        <div class="toolbar-segment" id="vertexSnapRotationControl" role="group" aria-label="頂點旋轉模式" hidden>
+          <button type="button" data-vertex-rotation-mode="x" title="繞 X 軸">X</button>
+          <button type="button" data-vertex-rotation-mode="y" title="繞 Y 軸">Y</button>
+          <button type="button" data-vertex-rotation-mode="z" title="繞 Z 軸">Z</button>
+          <button type="button" data-vertex-rotation-mode="longest" title="沿最長軸">最長軸</button>
+          <button type="button" class="active" data-vertex-rotation-mode="pivot" title="繞樞軸點自由對齊">樞軸點</button>
+        </div>
+        <span class="tool-status" id="vertexSnapStatus" hidden>先選來源頂點</span>
+        <span class="tool-status" id="knifeStatus" hidden>選擇切割點</span>
         <button class="toolbar-option" id="snapButton" data-action="cycleSnap" title="切換吸附精度">吸附 1.0</button>
       </div>
       <div class="toolbar-lane global-options-lane" aria-label="全局選項">
@@ -68,33 +91,15 @@
       <aside class="dock-zone dock-zone-left" data-dock-zone="left" aria-label="左側停靠區">
       <section class="dock-panel texture-panel" data-panel="texture">
         <div class="panel-heading texture-heading panel-drag-handle">
-          <div><span class="eyebrow">TEXTURES</span><strong>貼圖與圖層</strong></div>
-          <div><button data-action="addTexture" title="導入貼圖">＋</button><button data-action="more">•••</button></div>
+          <div><span class="eyebrow">TEXTURES</span><strong>貼圖</strong></div>
+          <div><button data-action="addTexture" title="導入貼圖">＋</button></div>
         </div>
         <div class="texture-preview" id="texturePreview">
           <div class="checkerboard"></div>
-          <canvas id="textureCanvas" width="160" height="160"></canvas>
-          <span>64 × 64</span>
+          <canvas id="textureCanvas" width="1" height="1"></canvas>
+          <span>無貼圖</span>
         </div>
-        <div class="texture-list" id="textureList">
-          <button class="texture-item active">
-            <span class="texture-thumb moss-texture"></span>
-            <span><strong>moss_golem.png</strong><small>64 × 64 · PNG</small></span>
-            <i>◉</i>
-          </button>
-          <button class="texture-item">
-            <span class="texture-thumb mask-texture"></span>
-            <span><strong>detail_mask</strong><small>圖層 · 正片疊底</small></span>
-            <i>◉</i>
-          </button>
-        </div>
-        <div class="layer-heading"><strong>圖層</strong><button data-action="addLayer">＋</button></div>
-        <div class="layer-list">
-          <button class="layer-item active"><span class="layer-dot light"></span><span>高光</span><small>100%</small></button>
-          <button class="layer-item"><span class="layer-dot mid"></span><span>苔痕</span><small>82%</small></button>
-          <button class="layer-item"><span class="layer-dot dark"></span><span>基底</span><small>100%</small></button>
-        </div>
-        <div class="texture-footer"><button data-action="openUv">▦ UV</button><button data-action="openColorMap">色階映射</button></div>
+        <div class="texture-list" id="textureList"></div>
       </section>
       </aside>
 
@@ -119,6 +124,7 @@
         </div>
         <div class="viewport" id="viewport">
           <canvas id="sceneCanvas"></canvas>
+          <svg class="locator-overlay" id="locatorOverlay" aria-label="Locator 標記" hidden></svg>
           <svg class="transform-gizmo" id="transformGizmo" aria-label="變換手柄" hidden></svg>
           <div class="transform-tooltip" id="transformTooltip" role="status" hidden></div>
           <div class="viewport-render-menu" id="viewportRenderMenu">
@@ -237,7 +243,7 @@
               <label class="range-label">圓角 <output id="radiusOutput">10px</output><input type="range" min="0" max="22" value="10" data-theme-var="--radius" data-unit="px" /></label>
               <label class="range-label">介面縮放 <output id="scaleOutput">100%</output><input type="range" min="85" max="120" value="100" data-theme-var="--ui-scale" data-unit="%" /></label>
             </div>
-            <div class="preset-row"><button type="button" data-preset="moss">苔原</button><button type="button" data-preset="ember">熔岩</button><button type="button" data-preset="slate">深海</button></div>
+            <div class="preset-row"><button type="button" data-preset="moss">苔原</button><button type="button" data-preset="amber">琥珀</button><button type="button" data-preset="ember">熔岩</button><button type="button" data-preset="slate">深海</button></div>
           </section>
         </div>
       </div>
@@ -245,6 +251,7 @@
     </form>
   </dialog>
 
+  <div class="context-menu" id="contextMenu" role="menu" hidden></div>
   <div class="toast" id="toast" role="status"></div>
   <input type="file" id="fileInput" accept=".cbmodel,.bbmodel,.json" hidden />
   <input type="file" id="textureInput" accept="image/png,image/jpeg,image/webp" hidden />

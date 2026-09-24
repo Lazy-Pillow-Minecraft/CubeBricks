@@ -14,6 +14,7 @@ export const ConfigScope = Object.freeze({
 
 const VALID_TYPES = new Set(Object.values(ConfigType));
 const VALID_SCOPES = new Set(Object.values(ConfigScope));
+const CONFIG_STORAGE_VERSION = 2;
 
 export class ConfigRegistry {
   constructor({ storage = null, storageKey = 'cubebricks.config' } = {}) {
@@ -172,7 +173,7 @@ export class ConfigRegistry {
   persist() {
     if (!this.storage) return;
     const values = this.exportValues({ scope: ConfigScope.APPLICATION });
-    try { this.storage.setItem(this.storageKey, JSON.stringify({ version: 1, values })); }
+    try { this.storage.setItem(this.storageKey, JSON.stringify({ version: CONFIG_STORAGE_VERSION, values })); }
     catch (error) { console.warn('CubeBricks config persistence failed:', error); }
   }
 }

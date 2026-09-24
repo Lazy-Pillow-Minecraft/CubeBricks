@@ -1,6 +1,7 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
+const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform === 'win32' ? 'shortcut-icon.ico' : 'shortcut-icon.png');
 
 app.commandLine.appendSwitch('disable-features', 'WinUseBrowserSpellChecker');
 
@@ -18,6 +19,7 @@ const createWindow = () => {
     height: 920,
     minWidth: 1080,
     minHeight: 700,
+    icon: appIcon,
     backgroundColor: '#11130f',
     titleBarStyle: 'hiddenInset',
     titleBarOverlay: process.platform === 'win32' ? {
@@ -102,6 +104,7 @@ ipcMain.handle('project:save', async (_event, payload) => {
 });
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') app.setAppUserModelId('com.cubebricks.desktop');
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

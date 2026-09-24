@@ -2,6 +2,7 @@
   "name": "cubebricks",
   "version": "0.1.0",
   "description": "A modular Minecraft modelling workspace built around cubes and procedural shapes.",
+  "productName": "CubeBricks",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -16,5 +17,20 @@
   },
   "devDependencies": {
     "electron": "^38.2.0"
+  },
+  "build": {
+    "appId": "com.cubebricks.desktop",
+    "directories": {
+      "buildResources": "src/assets"
+    },
+    "win": {
+      "icon": "src/assets/shortcut-icon.ico"
+    },
+    "mac": {
+      "icon": "src/assets/shortcut-icon.png"
+    },
+    "linux": {
+      "icon": "src/assets/shortcut-icon.png"
+    }
   }
 }

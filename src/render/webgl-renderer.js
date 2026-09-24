@@ -332,6 +332,15 @@ export class WebGLSceneRenderer {
         depthWrite: false, cull: false, renderMode: 0
       });
     }
+    if (camera.editorOverlayLines?.length) {
+      const overlay = [];
+      for (const line of camera.editorOverlayLines) {
+        const color = line.color || [1, 1, 1, 1];
+        pushVertex(overlay, line.start, color);
+        pushVertex(overlay, line.end, color);
+      }
+      this.drawVertices(overlay, gl.LINES, viewProjection, { depthWrite: false, cull: false, renderMode: 0 });
+    }
   }
 
   render(project, selectedUid, camera) {
@@ -431,40 +440,84 @@ export class WebGLSceneRenderer {
   }
 
   pick(project, screenX, screenY, geometryOnly = false) {
+    return this.pickDetailed(project, screenX, screenY, geometryOnly)?.uid || null;
+  }
+
+  pickDetailed(project, screenX, screenY, geometryOnly = false) {
     if (!this.lastCameraState || !this.lastCameraInput) return null;
     const ray = screenRay(screenX, screenY, this.lastViewport, this.lastCameraState, this.lastCameraInput);
-    let closestUid = null;
+    let closest = null;
     let closestDistance = Infinity;
+    let locatorHit = null;
+    let locatorDistance = Infinity;
     for (const [uid, points] of this.lastOwnerPoints) {
       const node = project.getNode(uid);
       if (!node || (geometryOnly && node.type === 'locator')) continue;
       if (node.type === 'locator') {
-        const distance = raySphereDistance(ray.origin, ray.direction, points[0], 1);
-        if (distance !== null && distance < closestDistance) {
-          closestDistance = distance; closestUid = uid;
-        }
-        continue;
-      }
-      for (let offset = 0; offset + 7 < points.length; offset += 8) {
-        const corners = points.slice(offset, offset + 8);
-        for (const quadIndices of Object.values(FACE_LAYOUTS)) {
-          const indices = FACE_TRIANGLE_SLOTS.map(slot => quadIndices[slot]);
-          for (let triangle = 0; triangle < 2; triangle++) {
-            const base = triangle * 3;
-            const distance = rayTriangleDistance(ray.origin, ray.direction,
-              corners[indices[base]], corners[indices[base + 1]], corners[indices[base + 2]]);
-            if (distance !== null && distance < closestDistance) {
-              closestDistance = distance; closestUid = uid;
-            }
-          }
+        const projected = projectScreenPoint(points[0], this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
+        const distance = dot(subtract(points[0], ray.origin), ray.direction);
+        if (!projected.behind && projected.depth >= -1 && projected.depth <= 1
+          && Math.hypot(projected.x - screenX, projected.y - screenY) <= 12 && distance > 0 && distance < locatorDistance) {
+          locatorDistance = distance;
+          locatorHit = { uid, distance, point: [...points[0]], faceName: null };
         }
       }
     }
-    return closestUid;
+    // Locator is a fixed-size editor overlay. Clicking its visible 17px icon
+    // therefore takes priority over model geometry drawn beneath it.
+    if (locatorHit) return locatorHit;
+    const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
+    const faces = [
+      ...(this.staticCache?.faces || []).filter(face => !dynamicUids.has(face.uid)),
+      ...(this.selectedCache?.faces || [])
+    ];
+    for (const face of faces) {
+      if (geometryOnly && project.getNode(face.uid)?.type === 'locator') continue;
+      const indices = FACE_TRIANGLE_SLOTS;
+      for (let triangle = 0; triangle < 2; triangle++) {
+        const base = triangle * 3;
+        const distance = rayTriangleDistance(ray.origin, ray.direction,
+          face.quad[indices[base]], face.quad[indices[base + 1]], face.quad[indices[base + 2]]);
+        if (distance !== null && distance < closestDistance) {
+          closestDistance = distance;
+          closest = {
+            uid: face.uid,
+            distance,
+            faceName: face.faceName,
+            facePoints: face.quad.map(point => [...point]),
+            point: ray.origin.map((value, axis) => value + ray.direction[axis] * distance)
+          };
+        }
+      }
+    }
+    return closest;
+  }
+
+  getWorldVertices(project, uid) {
+    const node = project.getNode(uid);
+    if (!node) return [];
+    const uids = node.type === 'group' ? project.getDescendantElementUids(uid) : [uid];
+    const seen = new Set();
+    const vertices = [];
+    for (const elementUid of uids) {
+      for (const point of this.lastOwnerPoints.get(elementUid) || []) {
+        const key = point.map(value => Math.round(value * 1e5)).join(',');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        vertices.push({ uid: elementUid, point: [...point] });
+      }
+    }
+    return vertices;
   }
 
   projectPoint(point) {
     return projectScreenPoint(point, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
+  }
+
+  getScreenRay(screenX, screenY) {
+    if (!this.lastCameraState || !this.lastCameraInput) return null;
+    const ray = screenRay(screenX, screenY, this.lastViewport, this.lastCameraState, this.lastCameraInput);
+    return { origin: [...ray.origin], direction: [...ray.direction] };
   }
 
   getCameraFrame() {
@@ -503,7 +556,7 @@ export class WebGLSceneRenderer {
     gl.useProgram(this.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.uniformMatrix4fv(this.matrixLocation, false, matrix);
-    // Matches the two directional diffuse lights used by Java entity rendering.
+    // Vanilla Java entity diffuse-light directions (Lighting/RenderSystem).
     gl.uniform3fv(this.light0Location, normalize([.2, 1, -.7]));
     gl.uniform3fv(this.light1Location, normalize([-.2, 1, .7]));
     gl.uniform1i(this.previewShadeLocation, this.previewShade ? 1 : 0);
@@ -618,7 +671,7 @@ function buildElementGeometry(project, elements, selectedUid, selectionOutline =
     if (groupChain.some(group => !group.visible)) { finishRanges(); continue; }
     const selectedByGroup = groupChain.some(group => group.uid === selectedUid);
     if (element.type === 'locator') {
-      const geometry = locatorGeometry(element, groupChain, element.uid === selectedUid || selectedByGroup);
+      const geometry = locatorGeometry(element, groupChain);
       helpers.push(...geometry.lines);
       ownerPoints.set(element.uid, geometry.points);
       finishRanges();
@@ -641,25 +694,10 @@ function buildElementGeometry(project, elements, selectedUid, selectionOutline =
   return { triangles, faces, edges, helpers, ownerPoints, triangleRanges, edgeRanges, helperRanges };
 }
 
-function locatorGeometry(locator, groupChain, selected) {
+function locatorGeometry(locator, groupChain) {
   const origin = locator.position || [0, 0, 0];
-  const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-  const colors = selected
-    ? [[1, .58, .48, 1], [.55, 1, .58, 1], [.45, .72, 1, 1]]
-    : [[.82, .34, .3, .9], [.34, .75, .38, .9], [.3, .52, .88, .9]];
   const points = [applyGroupTransforms(origin, groupChain)];
-  const lines = [];
-  axes.forEach((axis, index) => {
-    const ends = [-1, 1].map(sign => {
-      const local = origin.map((value, component) => value + axis[component] * sign * .9);
-      const rotated = rotatePoint(local, origin, locator.rotation || [0, 0, 0]);
-      return applyGroupTransforms(rotated, groupChain);
-    });
-    points.push(...ends);
-    pushVertex(lines, ends[0], colors[index]);
-    pushVertex(lines, ends[1], colors[index]);
-  });
-  return { lines, points };
+  return { lines: [], points };
 }
 
 function mergeOwnerPoints(staticPoints, dynamicPoints) {
@@ -669,17 +707,21 @@ function mergeOwnerPoints(staticPoints, dynamicPoints) {
   return merged;
 }
 
+export function createSignedCubeCorners(position, size, inflate = 0) {
+  const direction = size.map(value => value < 0 ? -1 : 1);
+  const from = position.map((value, axis) => value - direction[axis] * inflate);
+  const to = position.map((value, axis) => value + size[axis] + direction[axis] * inflate);
+  return [
+    [from[0], from[1], from[2]], [to[0], from[1], from[2]], [to[0], to[1], from[2]], [from[0], to[1], from[2]],
+    [from[0], from[1], to[2]], [to[0], from[1], to[2]], [to[0], to[1], to[2]], [from[0], to[1], to[2]]
+  ];
+}
+
 function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1]) {
   const { cube, offset, ownerRotation, ownerOrigin, groupChain, textureSize, shade } = entry;
   const inflate = cube.inflate || 0;
   const start = cube.position.map((value, axis) => value + offset[axis]);
-  const end = cube.position.map((value, axis) => value + cube.size[axis] + offset[axis]);
-  const f = start.map((value, axis) => Math.min(value, end[axis]) - inflate);
-  const t = start.map((value, axis) => Math.max(value, end[axis]) + inflate);
-  const baseCorners = [
-    [f[0], f[1], f[2]], [t[0], f[1], f[2]], [t[0], t[1], f[2]], [f[0], t[1], f[2]],
-    [f[0], f[1], t[2]], [t[0], f[1], t[2]], [t[0], t[1], t[2]], [f[0], t[1], t[2]]
-  ];
+  const baseCorners = createSignedCubeCorners(start, cube.size, inflate);
   let corners = baseCorners.map(point => [...point]);
   const cubePivot = cube.pivot.map((value, axis) => value + offset[axis]);
   corners = corners.map(point => rotatePoint(point, cubePivot, cube.rotation || [0, 0, 0]));
@@ -700,7 +742,8 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1]) {
     const faceVertices = [];
     indices.forEach((index, vertexIndex) => pushVertex(faceVertices, corners[index], [...faceColor, selected ? 2 : 1], shade === false ? [0, 0, 0] : normal, faceUv[vertexIndex]));
     triangles.push(...faceVertices);
-    faceBatches.push({ vertices: faceVertices, center: averagePoints(quadIndices.map(index => corners[index])) });
+    const quad = quadIndices.map(index => corners[index]);
+    faceBatches.push({ faceName, quad, vertices: faceVertices, center: averagePoints(quad) });
   }
   const edges = [], edgeColor = selected ? [...selectionOutline, 1] : [.46, .56, .4, 1];
   for (const [a, b] of [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]) {
@@ -824,18 +867,6 @@ function rayTriangleDistance(origin, direction, a, b, c) {
   return distance > epsilon ? distance : null;
 }
 
-function raySphereDistance(origin, direction, center, radius) {
-  const offset = subtract(origin, center);
-  const b = dot(offset, direction);
-  const c = dot(offset, offset) - radius * radius;
-  const discriminant = b * b - c;
-  if (discriminant < 0) return null;
-  const near = -b - Math.sqrt(discriminant);
-  const far = -b + Math.sqrt(discriminant);
-  if (near > 0) return near;
-  return far > 0 ? far : null;
-}
-
 function screenBounds(points, matrix, width, height) {
   const projected = points.map(point => projectScreenPoint(point, matrix, width, height)).filter(point => !point.behind);
   if (!projected.length) return { x1: -1, y1: -1, x2: -1, y2: -1 };
@@ -894,7 +925,7 @@ export function createBlockbenchFaceUvs(rectangle, textureSize = [64, 64], rotat
 
 export function getBlockbenchBoxUv(cube, faceName) {
   const [u, v] = cube.uv || [0, 0];
-  const [x, y, z] = cube.size;
+  const [x, y, z] = cube.size.map(Math.abs);
   const rectangles = {
     east: [u, v + z, u + z, v + z + y],
     north: [u + z, v + z, u + z + x, v + z + y],
@@ -1008,9 +1039,11 @@ const VERTEX_SHADER = `
     float diffuse = 1.0;
     if (uPreviewShade == 1 && normalLength > 0.1) {
       vec3 normal = normalize(aNormal);
-      float light0 = max(0.0, dot(normal, normalize(uLight0Direction)));
-      float light1 = max(0.0, dot(normal, normalize(uLight1Direction)));
-      diffuse = min(1.0, 0.35 + light0 * 0.45 + light1 * 0.35);
+      float light0 = max(0.0, dot(uLight0Direction, normal));
+      float light1 = max(0.0, dot(uLight1Direction, normal));
+      // Exact vanilla minecraft_mix_light constants: ambient 0.4 and
+      // equal 0.6-power contribution from both directional lights.
+      diffuse = min(1.0, (light0 + light1) * 0.6 + 0.4);
     }
     // Textured mode keeps the source texture chroma. Vertex color is only used
     // by solid mode; diffuse light remains available when shade is enabled.
