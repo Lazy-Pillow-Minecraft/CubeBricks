@@ -6,10 +6,21 @@ import { DockManager } from './ui/dock-manager.js';
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const LOCATOR_ICON_SHAPES = '<path d="M98.74,144.52c-38.86,0-72.06-19.5-85.3-46.99-1.11,4.43-1.7,9-1.7,13.69,0,38.28,38.95,69.32,87,69.32s87-31.03,87-69.32c0-4.69-.59-9.26-1.7-13.69-13.24,27.49-46.44,46.99-85.3,46.99Z"/><rect x="81.01" y="56.54" width="35.47" height="96.98"/><rect x="59.53" y="77.83" width="78.43" height="25.75" rx="7.93" ry="7.93"/><path d="M98.74,0c-18.89,0-34.21,15.31-34.21,34.21s15.31,34.21,34.21,34.21,34.21-15.31,34.21-34.21S117.63,0,98.74,0ZM98.74,49.2c-8.28,0-14.99-6.71-14.99-14.99s6.71-14.99,14.99-14.99,14.99,6.71,14.99,14.99-6.71,14.99-14.99,14.99Z"/><path d="M26.73,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66H5.18c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M179.83,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66h-34.03c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M97.08,188.46l-18.84-16.15c-1.8-1.55-.71-4.5,1.67-4.5h37.68c2.38,0,3.47,2.96,1.67,4.5l-18.84,16.15c-.96.82-2.37.82-3.33,0Z"/>';
+const TOOL_REGISTRY = Object.freeze({
+  move: { modes: ['edit', 'animate'] },
+  resize: { modes: ['edit', 'animate'] },
+  rotate: { modes: ['edit', 'animate'] },
+  pivot: { modes: ['edit'] },
+  vertexSnap: { modes: ['edit'] },
+  knife: { modes: ['edit'] },
+  brush: { modes: ['paint'] }
+});
 
 const state = {
   project: new CubeBricksProject({ name: 'untitled' }),
   selectedUid: null,
+  selectedUids: new Set(),
+  selectionAnchorUid: null,
   mode: 'edit',
   tool: 'move',
   filePath: null,
@@ -51,6 +62,8 @@ const state = {
   outlinerCollapsed: false,
   collapsedGroups: new Set(),
   textureAssets: [],
+  textureGroups: [],
+  activeTextureUid: null,
   timelinePlaying: false,
   timelineFrame: 0,
   layoutResizing: false
@@ -64,6 +77,7 @@ const DOCK_PANEL_DEFINITIONS = Object.freeze([
 ]);
 
 state.selectedUid = state.project.elements[0]?.uid;
+if (state.selectedUid) state.selectedUids.add(state.selectedUid);
 
 const sceneCanvas = $('#sceneCanvas');
 const sceneRenderer = new WebGLSceneRenderer(sceneCanvas);
@@ -78,6 +92,7 @@ const fileInput = $('#fileInput');
 const textureInput = $('#textureInput');
 let toastTimer;
 let outlinerFrame = null;
+let outlinerDragGhost = null;
 let dockManager = null;
 let cameraFocusFrame = null;
 
@@ -96,6 +111,8 @@ function restore(serialized) {
   if (!state.project.getNode(state.selectedUid)) {
     state.selectedUid = state.project.elements[0]?.uid || null;
   }
+  state.selectedUids = new Set(state.selectedUid ? [state.selectedUid] : []);
+  state.selectionAnchorUid = state.selectedUid;
   markDirty(true);
   renderAll();
 }
@@ -143,7 +160,7 @@ function renderAll(geometryScope = 'all') {
 function updateSelectionLabels() {
   const item = selected();
   $('#selectionType').textContent = item?.type || 'Scene';
-  $('#selectionName').textContent = item?.name || state.project.name;
+  $('#selectionName').textContent = state.selectedUids.size > 1 ? `已選 ${state.selectedUids.size} 項` : item?.name || state.project.name;
   $('#uidChip').textContent = item?.uid || '—';
 }
 
@@ -186,7 +203,7 @@ function renderOutlinerWindow() {
   const windowNode = $('.outliner-virtual-window', outliner);
   if (!windowNode) return;
   windowNode.style.transform = `translateY(${start * rowHeight}px)`;
-  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, group, collapsed }) => `<button class="outliner-item ${node.uid === state.selectedUid ? 'active' : ''}" data-uid="${node.uid}" style="padding-left:${5 + depth * 13}px">
+  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, group, collapsed }) => `<button class="outliner-item ${state.selectedUids.has(node.uid) ? 'active' : ''}" data-uid="${node.uid}" draggable="true" style="padding-left:${5 + depth * 13}px">
       <span data-disclosure="${group ? node.uid : ''}">${group ? (collapsed ? '›' : '⌄') : ''}</span>
       <span class="kind">${outlinerKindMarkup(node)}</span>
       <span class="item-name">${escapeHtml(node.name)}</span><span class="eye" data-toggle-visible="${node.uid}">${node.visible ? '◉' : '○'}</span>
@@ -266,6 +283,13 @@ function parameterField(label, key, value, step) {
   return `<div class="option-row"><span>${label}</span><div class="number-wrap" style="width:68px"><input type="number" min="${key === 'sides' ? 3 : .1}" step="${step}" data-parameter="${key}" value="${value}" /></div></div>`;
 }
 
+function setNodeVisibility(node, visible, cascadeGroup = true) {
+  if (!node) return;
+  node.visible = visible;
+  if (node.type !== 'group' || !cascadeGroup) return;
+  for (const childUid of node.children) setNodeVisibility(state.project.getNode(childUid), visible, true);
+}
+
 function bindInspector() {
   const item = selected();
   if (!item) return;
@@ -274,7 +298,8 @@ function bindInspector() {
     input.addEventListener(eventName, () => {
       snapshot();
       const key = input.dataset.field;
-      item[key] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+      if (key === 'visible') setNodeVisibility(item, input.checked);
+      else item[key] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
       markDirty();
       renderAll('selection');
     });
@@ -342,35 +367,66 @@ function revealOutlinerItem(uid) {
   const rowBottom = rowTop + rowHeight;
   const visibleTop = outliner.scrollTop;
   const visibleBottom = visibleTop + outliner.clientHeight;
-  if (rowTop < visibleTop) outliner.scrollTop = rowTop;
-  else if (rowBottom > visibleBottom) outliner.scrollTop = Math.max(0, rowBottom - outliner.clientHeight);
+  let target = null;
+  if (rowTop < visibleTop) target = rowTop;
+  else if (rowBottom > visibleBottom) target = Math.max(0, rowBottom - outliner.clientHeight);
+  if (target !== null) outliner.scrollTo({ top: target, behavior: 'smooth' });
+  else {
+    state.outlinerWindowStart = -1;
+    state.outlinerWindowEnd = -1;
+    renderOutlinerWindow();
+  }
+}
+
+function refreshSelectionUi() {
   state.outlinerWindowStart = -1;
   state.outlinerWindowEnd = -1;
   renderOutlinerWindow();
+  sceneRenderer.invalidateSelectionGeometry();
+  renderInspector();
+  renderScene();
+  updateSelectionLabels();
 }
 
-function selectItem(uid, { revealInOutliner = false } = {}) {
-  if (uid === state.selectedUid) {
-    if (revealInOutliner) revealOutlinerItem(uid);
-    return;
-  }
+function clearSelection() {
+  if (!state.selectedUids.size && !state.selectedUid) return;
   sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
-  const previous = outliner.querySelector('.outliner-item.active');
-  previous?.classList.remove('active');
-  state.selectedUid = uid;
+  state.selectedUids.clear();
+  state.selectedUid = null;
+  state.selectionAnchorUid = null;
+  state.vertexSnapSource = null;
+  if (state.tool === 'knife') cancelKnifeSelection(false);
+  refreshSelectionUi();
+}
+
+function selectItem(uid, { revealInOutliner = false, toggle = false, range = false } = {}) {
+  if (!state.project.getNode(uid)) return;
+  sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
+  if (range && state.selectionAnchorUid) {
+    const rows = state.outlinerRows || [];
+    const start = rows.findIndex(row => row.node.uid === state.selectionAnchorUid);
+    const end = rows.findIndex(row => row.node.uid === uid);
+    if (start >= 0 && end >= 0) {
+      state.selectedUids = new Set(rows.slice(Math.min(start, end), Math.max(start, end) + 1).map(row => row.node.uid));
+    } else state.selectedUids = new Set([uid]);
+  } else if (toggle) {
+    if (state.selectedUids.has(uid)) state.selectedUids.delete(uid);
+    else state.selectedUids.add(uid);
+    state.selectionAnchorUid = uid;
+  } else {
+    state.selectedUids = new Set([uid]);
+    state.selectionAnchorUid = uid;
+  }
+  state.selectedUid = state.selectedUids.has(uid) ? uid : [...state.selectedUids].at(-1) || null;
   if (state.tool !== 'vertexSnap') state.vertexSnapSource = null;
-  if (state.tool === 'knife' && state.knifeSelection?.uid !== uid) {
+  if (state.tool === 'knife' && state.knifeSelection?.uid !== state.selectedUid) {
     state.knifeSelection = null;
     state.knifeHover = null;
     state.knifePointer = null;
     updateToolOptions();
   }
-  if (revealInOutliner) revealOutlinerItem(uid);
-  outliner.querySelector(`[data-uid="${uid}"]`)?.classList.add('active');
-  sceneRenderer.invalidateSelectionGeometry();
-  renderInspector();
-  renderScene();
-  updateSelectionLabels();
+  if (revealInOutliner && state.selectedUid) revealOutlinerItem(state.selectedUid);
+  refreshSelectionUi();
 }
 
 function syncInspectorValues(item) {
@@ -387,20 +443,61 @@ function syncInspectorValues(item) {
   });
 }
 
+function selectedNodeUids() {
+  return [...state.selectedUids].filter(uidValue => state.project.getNode(uidValue));
+}
+
+function topLevelSelectedUids() {
+  const chosen = new Set(selectedNodeUids());
+  return [...chosen].filter(uidValue => !state.project.getGroupChain(uidValue).some(group => chosen.has(group.uid)));
+}
+
+function nodeContainer(uidValue) {
+  const parent = state.project.getParentGroup(uidValue);
+  return { parent, items: parent ? parent.children : state.project.outliner };
+}
+
+function insertNewNodeUid(uidValue) {
+  const selectedIds = selectedNodeUids();
+  const reference = state.project.getNode(state.selectedUid);
+  if (!reference) {
+    state.project.outliner.push(uidValue);
+    return;
+  }
+  // A single selected group is an insertion target. In a multi-selection it is
+  // treated like any other row, so creation follows the last selected row.
+  if (selectedIds.length === 1 && reference.type === 'group') {
+    reference.children.push(uidValue);
+    state.collapsedGroups.delete(reference.uid);
+    return;
+  }
+  const { items } = nodeContainer(reference.uid);
+  const index = items.indexOf(reference.uid);
+  items.splice(index < 0 ? items.length : index + 1, 0, uidValue);
+}
+
+function selectCreatedNode(uidValue) {
+  state.selectedUid = uidValue;
+  state.selectedUids = new Set([uidValue]);
+  state.selectionAnchorUid = uidValue;
+}
+
 function addCube() {
   snapshot();
   const count = state.project.elements.filter(item => item.type === 'cube').length + 1;
   const cube = new Cube({ name: `cube_${count}`, position: [-3, 1, -3], size: [6, 6, 6], pivot: [0, 4, 0], color: '#a7d352' });
-  state.project.addElement(cube, selected()?.type === 'group' ? selected().uid : null);
-  state.selectedUid = cube.uid;
+  state.project.elements.push(cube);
+  insertNewNodeUid(cube.uid);
+  selectCreatedNode(cube.uid);
   markDirty(); renderAll(); toast('已新增 Cube');
 }
 
 function addShape() {
   snapshot();
   const shape = new Shape({ name: 'cylinder_shape', origin: [0, 2, 0] });
-  state.project.addElement(shape, selected()?.type === 'group' ? selected().uid : null);
-  state.selectedUid = shape.uid;
+  state.project.elements.push(shape);
+  insertNewNodeUid(shape.uid);
+  selectCreatedNode(shape.uid);
   markDirty(); renderAll(); toast('已新增程序化 Shape');
 }
 
@@ -408,33 +505,163 @@ function addLocator() {
   snapshot();
   const count = state.project.elements.filter(item => item.type === 'locator').length + 1;
   const locator = new Locator({ name: `locator_${count}`, position: [0, 4, 0] });
-  state.project.addElement(locator, selected()?.type === 'group' ? selected().uid : null);
-  state.selectedUid = locator.uid;
+  state.project.elements.push(locator);
+  insertNewNodeUid(locator.uid);
+  selectCreatedNode(locator.uid);
   markDirty(); renderAll(); toast('已新增 Locator');
 }
 
 function addGroup() {
+  const previousRowPositions = captureOutlinerRowPositions();
   snapshot();
-  const current = selected();
-  const parent = current?.type === 'group' ? current : state.project.getParentGroup(current?.uid);
   const group = new Group({ name: `group_${state.project.groups.length + 1}`, children: [] });
-  state.project.addGroup(group, parent?.uid || null);
-  if (current && current.type !== 'group') {
-    const container = parent ? parent.children : state.project.outliner;
-    const oldIndex = container.indexOf(current.uid);
-    if (oldIndex >= 0) container.splice(oldIndex, 1);
-    group.children.push(current.uid);
+  const hadMultipleSelection = selectedNodeUids().length > 1;
+  const selectedIds = topLevelSelectedUids();
+  state.project.groups.push(group);
+  if (hadMultipleSelection && selectedIds.length) {
+    const sourceContainers = selectedIds.map(uidValue => nodeContainer(uidValue));
+    const sharedContainer = sourceContainers.every(container => container.items === sourceContainers[0].items)
+      ? sourceContainers[0]
+      : null;
+    // When every selected row is already in the same directory, keep the new
+    // group exactly where those rows lived. This makes grouping an in-place
+    // wrap instead of unexpectedly sending the selection to the directory end.
+    const sharedInsertionIndex = sharedContainer
+      ? Math.min(...selectedIds.map(uidValue => sharedContainer.items.indexOf(uidValue)).filter(index => index >= 0))
+      : -1;
+    const chains = selectedIds.map(uidValue => state.project.getGroupChain(uidValue));
+    let commonParent = null;
+    const shortest = Math.min(...chains.map(chain => chain.length));
+    for (let index = 0; index < shortest; index++) {
+      const candidate = chains[0][index];
+      if (chains.every(chain => chain[index]?.uid === candidate.uid)) commonParent = candidate;
+      else break;
+    }
+    const order = new Map((state.outlinerRows || []).map((row, index) => [row.node.uid, index]));
+    selectedIds.sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity));
+    for (const uidValue of selectedIds) {
+      const { items } = nodeContainer(uidValue);
+      const index = items.indexOf(uidValue);
+      if (index >= 0) items.splice(index, 1);
+    }
+    group.children.push(...selectedIds);
+    if (sharedContainer && sharedInsertionIndex >= 0) {
+      sharedContainer.items.splice(sharedInsertionIndex, 0, group.uid);
+    } else {
+      (commonParent ? commonParent.children : state.project.outliner).push(group.uid);
+    }
+    state.collapsedGroups.delete(group.uid);
+  } else {
+    insertNewNodeUid(group.uid);
   }
-  state.selectedUid = group.uid;
-  markDirty(); renderAll(); toast('已新增組');
+  selectCreatedNode(group.uid);
+  markDirty(); renderAll(); animateOutlinerReorder(previousRowPositions); toast('已新增組');
 }
 
 function deleteSelected() {
-  if (!selected()) return;
+  const selectedIds = topLevelSelectedUids();
+  if (!selectedIds.length) return;
   snapshot();
-  state.project.removeNode(state.selectedUid);
-  state.selectedUid = state.project.outliner[0] || state.project.elements[0]?.uid || null;
-  markDirty(); renderAll(); toast('物件已刪除');
+  selectedIds.forEach(uidValue => state.project.removeNode(uidValue));
+  state.selectedUid = null;
+  state.selectedUids.clear();
+  state.selectionAnchorUid = null;
+  markDirty(); renderAll(); toast(selectedIds.length > 1 ? `已刪除 ${selectedIds.length} 項` : '物件已刪除');
+}
+
+function clearOutlinerDropState({ keepDragging = false } = {}) {
+  outliner.querySelectorAll('.drop-before, .drop-after, .drop-inside').forEach(item =>
+    item.classList.remove('drop-before', 'drop-after', 'drop-inside'));
+  if (!keepDragging) outliner.querySelectorAll('.is-dragging').forEach(item => item.classList.remove('is-dragging'));
+}
+
+function captureOutlinerRowPositions() {
+  return new Map($$('.outliner-item[data-uid]', outliner).map(item => [item.dataset.uid, item.getBoundingClientRect().top]));
+}
+
+function animateOutlinerReorder(previousPositions) {
+  requestAnimationFrame(() => {
+    $$('.outliner-item[data-uid]', outliner).forEach(item => {
+      const previousTop = previousPositions.get(item.dataset.uid);
+      if (previousTop === undefined) return;
+      const delta = previousTop - item.getBoundingClientRect().top;
+      if (Math.abs(delta) < 1) return;
+      item.animate([
+        { transform: `translateY(${delta}px)` },
+        { transform: 'translateY(0)' }
+      ], { duration: 170, easing: 'cubic-bezier(.2,.75,.25,1)' });
+    });
+  });
+}
+
+function removeOutlinerDragGhost() {
+  outlinerDragGhost?.remove();
+  outlinerDragGhost = null;
+}
+
+function createOutlinerDragGhost(uids) {
+  removeOutlinerDragGhost();
+  const nodes = uids.map(uidValue => state.project.getNode(uidValue)).filter(Boolean);
+  const shown = nodes.slice(0, 4);
+  const ghost = document.createElement('div');
+  ghost.className = 'outliner-drag-ghost';
+  ghost.style.width = `${Math.max(150, Math.min(280, outliner.clientWidth - 14))}px`;
+  ghost.innerHTML = shown.map(node => `<div class="outliner-drag-ghost-row ${node.type === 'group' ? 'group' : ''}">
+      <span class="kind">${outlinerKindMarkup(node)}</span>
+      <span class="item-name">${escapeHtml(node.name)}</span>
+    </div>`).join('')
+    + (nodes.length > shown.length ? `<div class="outliner-drag-ghost-more">＋${nodes.length - shown.length}</div>` : '')
+    + (nodes.length > 1 ? `<div class="outliner-drag-ghost-count">${nodes.length}</div>` : '');
+  document.body.append(ghost);
+  outlinerDragGhost = ghost;
+  return ghost;
+}
+
+function moveSelectedNodes(targetUid = null, zone = 'after') {
+  const moving = topLevelSelectedUids();
+  if (!moving.length) return;
+  const movingSet = new Set(moving);
+  const target = targetUid && state.project.getNode(targetUid);
+  if (target && movingSet.has(target.uid)) return;
+  let destinationParent = null;
+  let destination;
+  let insertionIndex;
+  if (target?.type === 'group' && zone === 'inside') {
+    destinationParent = target;
+    destination = target.children;
+    insertionIndex = destination.length;
+  } else if (target) {
+    const container = nodeContainer(target.uid);
+    destinationParent = container.parent;
+    destination = container.items;
+    const targetIndex = destination.indexOf(target.uid);
+    insertionIndex = targetIndex + (zone === 'after' ? 1 : 0);
+  } else {
+    destination = state.project.outliner;
+    insertionIndex = destination.length;
+  }
+  // A group can never be reparented into itself or one of its descendants.
+  if (destinationParent && moving.some(uidValue => {
+    const node = state.project.getNode(uidValue);
+    return node?.type === 'group' && (destinationParent.uid === uidValue
+      || state.project.getGroupChain(destinationParent.uid).some(group => group.uid === uidValue));
+  })) return toast('不能把組拖進它自己的子級');
+
+  const previousRowPositions = captureOutlinerRowPositions();
+  snapshot();
+  const order = new Map((state.outlinerRows || []).map((row, index) => [row.node.uid, index]));
+  moving.sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity));
+  for (const uidValue of moving) {
+    const container = nodeContainer(uidValue).items;
+    const index = container.indexOf(uidValue);
+    if (container === destination && index >= 0 && index < insertionIndex) insertionIndex--;
+    if (index >= 0) container.splice(index, 1);
+  }
+  destination.splice(Math.max(0, insertionIndex), 0, ...moving);
+  if (destinationParent) state.collapsedGroups.delete(destinationParent.uid);
+  markDirty();
+  renderAll();
+  animateOutlinerReorder(previousRowPositions);
 }
 
 function renderScene() {
@@ -463,11 +690,11 @@ function updateLocatorOverlay() {
       const point = sceneRenderer.projectPoint(world);
       if (!point || point.behind || point.depth < -1 || point.depth > 1
         || point.x < -9 || point.y < -9 || point.x > width + 9 || point.y > height + 9) return [];
-      return [{ element, point }];
+      return [{ element, point, size: sceneRenderer.getLocatorScreenSize(world) }];
     })
     .sort((left, right) => right.point.depth - left.point.depth);
-  overlay.innerHTML = icons.map(({ element, point }) => `<svg class="locator-screen-icon ${element.uid === state.selectedUid ? 'selected' : ''}"
-      data-locator-uid="${element.uid}" x="${point.x - 8.5}" y="${point.y - 8.5}" width="17" height="17"
+  overlay.innerHTML = icons.map(({ element, point, size }) => `<svg class="locator-screen-icon ${state.selectedUids.has(element.uid) ? 'selected' : ''}"
+      data-locator-uid="${element.uid}" x="${point.x - size / 2}" y="${point.y - size / 2}" width="${size}" height="${size}"
       viewBox="0 0 197.49 189.08" preserveAspectRatio="xMidYMid meet" aria-label="${escapeHtml(element.name)}">${LOCATOR_ICON_SHAPES}</svg>`).join('');
   overlay.toggleAttribute('hidden', icons.length === 0);
 }
@@ -1211,6 +1438,40 @@ function cycleSnap() {
   toast(`吸附精度 ${next}（${formatNumber(16 / next)} px）`);
 }
 
+function textureUid(asset = {}) {
+  return asset._uid || asset.uuid || asset.id || `texture_${crypto.randomUUID()}`;
+}
+
+function textureItemMarkup(asset, index) {
+  return `<button class="texture-item ${asset._uid === state.activeTextureUid ? 'active' : ''}" draggable="true"
+      data-texture-uid="${escapeAttribute(asset._uid)}" data-texture-index="${index}">
+    <span class="texture-thumb" style="background-image:url(&quot;${escapeAttribute(asset.source || '')}&quot;);background-size:cover;image-rendering:pixelated"></span>
+    <span><strong>${escapeHtml(asset.name || `texture_${index + 1}.png`)}</strong><small>${asset.uvWidth || '?'} × ${asset.uvHeight || '?'} · ${asset.kind || 'IMAGE'}</small></span><i>◉</i>
+  </button>`;
+}
+
+function renderTextureList() {
+  const list = $('#textureList');
+  const ungrouped = state.textureAssets.filter(asset => !asset.groupId);
+  const groups = state.textureGroups.map(group => {
+    const assets = state.textureAssets.filter(asset => asset.groupId === group.id);
+    return `<section class="texture-group" data-texture-group="${group.id}" draggable="true">
+      <button class="texture-group-header" data-texture-group-toggle="${group.id}"><span>${group.collapsed ? '›' : '⌄'}</span><strong>${escapeHtml(group.name)}</strong><small>${assets.length}</small></button>
+      <div class="texture-group-items" ${group.collapsed ? 'hidden' : ''}>${assets.map(asset => textureItemMarkup(asset, state.textureAssets.indexOf(asset))).join('')}</div>
+    </section>`;
+  }).join('');
+  list.innerHTML = ungrouped.map(asset => textureItemMarkup(asset, state.textureAssets.indexOf(asset))).join('') + groups;
+}
+
+function addTextureGroup() {
+  const group = { id: `texture_group_${crypto.randomUUID()}`, name: `貼圖組 ${state.textureGroups.length + 1}`, collapsed: false };
+  state.textureGroups.push(group);
+  const active = state.textureAssets.find(asset => asset._uid === state.activeTextureUid);
+  if (active) active.groupId = group.id;
+  renderTextureList();
+  toast('已新增貼圖組');
+}
+
 function importTexture(file) {
   if (!file) return;
   const url = URL.createObjectURL(file);
@@ -1224,11 +1485,11 @@ function importTexture(file) {
     sceneRenderer.setTexture(textureCanvas);
     renderScene();
     updateTexturePreviewFrame(image.naturalWidth, image.naturalHeight);
-    $$('.texture-item').forEach(item => item.classList.remove('active'));
-    const button = document.createElement('button');
-    button.className = 'texture-item active';
-    button.innerHTML = `<span class="texture-thumb" style="background-image:url('${url}');background-size:cover;image-rendering:pixelated"></span><span><strong>${escapeHtml(file.name)}</strong><small>${image.naturalWidth} × ${image.naturalHeight} · ${file.type.split('/')[1]?.toUpperCase() || 'IMAGE'}</small></span><i>◉</i>`;
-    $('#textureList').prepend(button);
+    const asset = { _uid: textureUid(), name: file.name, source: url, uvWidth: image.naturalWidth, uvHeight: image.naturalHeight,
+      kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null };
+    state.textureAssets.unshift(asset);
+    state.activeTextureUid = asset._uid;
+    renderTextureList();
     toast(`已導入貼圖 ${file.name}`);
   };
   image.onerror = () => { URL.revokeObjectURL(url); toast('無法讀取這張圖片'); };
@@ -1253,33 +1514,25 @@ function loadTextureSource(source, name) {
 }
 
 function installProjectTextures(assets) {
-  state.textureAssets = assets;
-  const list = $('#textureList');
-  list.innerHTML = '';
+  state.textureGroups = [];
+  state.textureAssets = assets.map(asset => ({ ...asset, _uid: textureUid(asset), groupId: asset.groupId || null }));
+  state.activeTextureUid = null;
   if (!assets.length) {
+    renderTextureList();
     renderTexture();
     renderScene();
     return;
   }
-  assets.forEach((asset, index) => {
-    const button = document.createElement('button');
-    button.className = 'texture-item';
-    button.dataset.textureIndex = String(index);
-    button.innerHTML = `<span class="texture-thumb"></span><span><strong>${escapeHtml(asset.name || `texture_${index + 1}.png`)}</strong><small>${asset.uvWidth || '?'} × ${asset.uvHeight || '?'} · BBMODEL</small></span><i>◉</i>`;
-    const thumbnail = button.querySelector('.texture-thumb');
-    thumbnail.style.backgroundImage = `url("${asset.source}")`;
-    thumbnail.style.backgroundSize = 'cover';
-    thumbnail.style.imageRendering = 'pixelated';
-    list.append(button);
-  });
-  const defaultIndex = assets.findIndex(asset => asset.useAsDefault);
+  renderTextureList();
+  const defaultIndex = state.textureAssets.findIndex(asset => asset.useAsDefault);
   activateProjectTexture(defaultIndex >= 0 ? defaultIndex : 0);
 }
 
 function activateProjectTexture(index) {
   const asset = state.textureAssets[index];
   if (!asset) return;
-  $$('.texture-item').forEach(item => item.classList.toggle('active', Number(item.dataset.textureIndex) === index));
+  state.activeTextureUid = asset._uid;
+  $$('.texture-item').forEach(item => item.classList.toggle('active', item.dataset.textureUid === asset._uid));
   loadTextureSource(asset.source, asset.name);
 }
 
@@ -1288,23 +1541,29 @@ function setMode(mode) {
   if (mode !== 'animate' && state.timelinePlaying) stopTimeline();
   dockManager?.setMode(mode);
   $$('.mode-tab').forEach(button => button.classList.toggle('active', button.dataset.mode === mode));
-  $('.paint-tool').style.display = mode === 'paint' ? '' : 'none';
+  updateToolVisibility();
+  if (!TOOL_REGISTRY[state.tool]?.modes.includes(mode)) setTool(mode === 'paint' ? 'brush' : 'move');
   $('#viewLabel').textContent = mode === 'paint' ? '貼圖預覽' : mode === 'animate' ? '動畫預覽' : '實體著色';
   if (mode === 'paint') activateDock('palette');
   if (mode === 'animate') activateDock('timeline');
   toast({ edit: '編輯模式', paint: '繪畫模式', animate: '動畫模式' }[mode]);
 }
 
+function updateToolVisibility() {
+  $$('.tool[data-tool]').forEach(button => {
+    const definition = TOOL_REGISTRY[button.dataset.tool];
+    button.hidden = !definition || !definition.modes.includes(state.mode);
+  });
+}
+
 function setTool(tool) {
+  if (!TOOL_REGISTRY[tool]?.modes.includes(state.mode)) return;
   if (tool !== 'vertexSnap') state.vertexSnapSource = null;
   if (tool !== 'knife') cancelKnifeSelection(false);
   state.tool = tool;
   sceneCanvas.classList.toggle('is-knife', tool === 'knife');
   $$('.tool').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
   updateToolOptions();
-  if (tool === 'cube') { addCube(); setTool('move'); }
-  if (tool === 'shape') { addShape(); setTool('move'); }
-  if (tool === 'locator') { addLocator(); setTool('move'); }
   renderScene();
 }
 
@@ -1369,6 +1628,8 @@ function loadProjectContent(content, filePath = '', resolvedTextures = []) {
   state.project = filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format ? importBlockbench(data) : new CubeBricksProject(data);
   state.filePath = filePath.toLowerCase().endsWith('.cbmodel') ? filePath : null;
   state.selectedUid = state.project.elements[0]?.uid || null;
+  state.selectedUids = new Set(state.selectedUid ? [state.selectedUid] : []);
+  state.selectionAnchorUid = state.selectedUid;
   state.history.length = 0; state.future.length = 0;
   const embeddedTextures = (data.textures || []).filter(texture => typeof texture.source === 'string' && texture.source.startsWith('data:image/')).map(texture => ({
     uuid: texture.uuid, id: texture.id, name: texture.name || 'embedded_texture.png', source: texture.source,
@@ -1403,7 +1664,8 @@ function download(content, name, type) {
 
 function newProject() {
   state.project = new CubeBricksProject({ name: 'untitled' });
-  state.selectedUid = null; state.filePath = null; state.history.length = 0; state.future.length = 0;
+  state.selectedUid = null; state.selectedUids.clear(); state.selectionAnchorUid = null;
+  state.filePath = null; state.history.length = 0; state.future.length = 0;
   installProjectTextures([]);
   markDirty(); renderAll(); toast('已建立新項目');
 }
@@ -1590,8 +1852,37 @@ function showContextMenu(event, { title = '', source = null, items = [] } = {}) 
 
 function setActiveTextureItem(item) {
   if (!item) return;
-  $$('.texture-item').forEach(entry => entry.classList.toggle('active', entry === item));
-  if (item.dataset.textureIndex !== undefined) activateProjectTexture(Number(item.dataset.textureIndex));
+  const index = state.textureAssets.findIndex(asset => asset._uid === item.dataset.textureUid);
+  if (index >= 0) activateProjectTexture(index);
+}
+
+function showElementContextMenu(event, uidValue, source = null) {
+  if (!state.project.getNode(uidValue)) return;
+  if (!state.selectedUids.has(uidValue)) selectItem(uidValue);
+  const node = state.project.getNode(uidValue);
+  const selectedNodes = selectedNodeUids().map(id => state.project.getNode(id)).filter(Boolean);
+  const allVisible = selectedNodes.every(entry => entry.visible);
+  showContextMenu(event, {
+    title: selectedNodes.length > 1 ? `已選 ${selectedNodes.length} 項` : node.name,
+    source,
+    items: [
+      { icon: '⌖', label: '聚焦此物件', action: focusSelected },
+      { icon: allVisible ? '○' : '◉', label: allVisible ? '隱藏選中項' : '顯示選中項', action: () => {
+        snapshot(); selectedNodes.forEach(entry => setNodeVisibility(entry, !allVisible)); markDirty(); renderAll();
+      } },
+      ...(node.type === 'group' ? [{
+        icon: state.collapsedGroups.has(node.uid) ? '›' : '⌄',
+        label: state.collapsedGroups.has(node.uid) ? '展開組' : '折疊組',
+        action: () => {
+          state.collapsedGroups.has(node.uid) ? state.collapsedGroups.delete(node.uid) : state.collapsedGroups.add(node.uid);
+          renderOutliner();
+        }
+      }] : []),
+      ...(selectedNodes.length > 1 ? [{ icon: '▰', label: '將選中項建立為組', action: addGroup }] : []),
+      { separator: true },
+      { icon: '×', label: '刪除選中項', danger: true, action: deleteSelected }
+    ]
+  });
 }
 
 function bindContextMenus() {
@@ -1611,6 +1902,12 @@ function bindContextMenus() {
       toast('已取消來源頂點');
       return;
     }
+    const rect = sceneCanvas.getBoundingClientRect();
+    const hitUid = sceneRenderer.pick(state.project, event.clientX - rect.left, event.clientY - rect.top, state.geometryOnly);
+    if (hitUid) {
+      showElementContextMenu(event, hitUid);
+      return;
+    }
     showContextMenu(event, {
       title: selected()?.name || state.project.name,
       items: [
@@ -1624,31 +1921,39 @@ function bindContextMenus() {
   });
   outliner.addEventListener('contextmenu', event => {
     const item = event.target.closest('.outliner-item');
-    if (!item) return showContextMenu(event, { title: '場景層級', items: [
-      { icon: '◇', label: '新增方塊', action: addCube },
-      { icon: '⌖', label: '新增 Locator', action: addLocator },
-      { icon: '▰', label: '新增組', action: addGroup }
-    ] });
+    if (!item) { event.preventDefault(); event.stopPropagation(); return; }
     const uidValue = item.dataset.uid;
-    selectItem(uidValue);
-    const node = state.project.getNode(uidValue);
     const source = outliner.querySelector(`[data-uid="${uidValue}"]`);
-    showContextMenu(event, { title: node.name, source, items: [
-      { icon: '⌖', label: '聚焦此物件', action: focusSelected },
-      { icon: node.visible ? '◉' : '○', label: node.visible ? '隱藏' : '顯示', action: () => { node.visible = !node.visible; markDirty(); renderAll(); } },
-      ...(node.type === 'group' ? [{ icon: state.collapsedGroups.has(node.uid) ? '›' : '⌄', label: state.collapsedGroups.has(node.uid) ? '展開組' : '折疊組', action: () => {
-        state.collapsedGroups.has(node.uid) ? state.collapsedGroups.delete(node.uid) : state.collapsedGroups.add(node.uid); renderOutliner();
-      } }] : [])
-    ] });
+    showElementContextMenu(event, uidValue, source);
   });
   $('#textureList').addEventListener('contextmenu', event => {
     const item = event.target.closest('.texture-item');
+    const groupNode = event.target.closest('.texture-group');
     if (item) setActiveTextureItem(item);
-    const name = item?.querySelector('strong')?.textContent || '貼圖';
-    showContextMenu(event, { title: name, source: item, items: [
-      ...(item ? [{ icon: '◉', label: '設為目前貼圖', action: () => setActiveTextureItem(item) }, { icon: '◒', label: '在繪畫模式打開', action: () => setMode('paint') }, { separator: true }] : []),
-      { icon: '＋', label: '導入新貼圖', action: () => textureInput.click() }
-    ] });
+    if (item) {
+      const asset = state.textureAssets.find(entry => entry._uid === item.dataset.textureUid);
+      return showContextMenu(event, { title: asset?.name || '貼圖', source: item, items: [
+        { icon: '◉', label: '設為目前貼圖', action: () => setActiveTextureItem(item) },
+        { icon: '▰', label: '移到新貼圖組', action: addTextureGroup },
+        { separator: true },
+        { icon: '×', label: '刪除貼圖', danger: true, action: () => {
+          state.textureAssets = state.textureAssets.filter(entry => entry._uid !== asset?._uid);
+          if (state.activeTextureUid === asset?._uid) state.activeTextureUid = null;
+          renderTextureList(); renderTexture(); renderScene();
+        } }
+      ] });
+    }
+    if (groupNode) {
+      const group = state.textureGroups.find(entry => entry.id === groupNode.dataset.textureGroup);
+      return showContextMenu(event, { title: group?.name || '貼圖組', source: groupNode, items: [
+        { icon: '⌄', label: group?.collapsed ? '展開組' : '折疊組', action: () => { group.collapsed = !group.collapsed; renderTextureList(); } },
+        { icon: '×', label: '解散貼圖組', action: () => {
+          state.textureAssets.forEach(asset => { if (asset.groupId === group.id) asset.groupId = null; });
+          state.textureGroups = state.textureGroups.filter(entry => entry.id !== group.id); renderTextureList();
+        } }
+      ] });
+    }
+    event.preventDefault();
   });
   $('#texturePreview').addEventListener('contextmenu', event => showContextMenu(event, { title: '貼圖預覽', source: $('#texturePreview'), items: [
     { icon: '◒', label: '在繪畫模式打開', action: () => setMode('paint') },
@@ -1670,15 +1975,14 @@ function bindContextMenus() {
     if (!item) return;
     showContextMenu(event, { title: item.name, source: event.target.closest('.field-section'), items: [
       { icon: '⌖', label: '聚焦此物件', action: focusSelected },
-      { icon: item.visible ? '◉' : '○', label: item.visible ? '隱藏' : '顯示', action: () => { item.visible = !item.visible; markDirty(); renderAll(); } }
+      { icon: item.visible ? '◉' : '○', label: item.visible ? '隱藏' : '顯示', action: () => { snapshot(); setNodeVisibility(item, !item.visible); markDirty(); renderAll(); } }
     ] });
   });
   $('.workspace').addEventListener('contextmenu', event => {
     if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
     showContextMenu(event, { title: 'CubeBricks', items: [
       { icon: '⌖', label: '聚焦選中物件', action: focusSelected },
-      { icon: '◇', label: '新增方塊', action: addCube },
-      { icon: '▰', label: '新增組', action: addGroup }
+      { icon: '◎', label: '回到場景中心', action: focusSceneOrigin }
     ] });
   });
   document.addEventListener('pointerdown', event => { if (!event.target.closest('#contextMenu')) closeContextMenu(); });
@@ -1700,7 +2004,10 @@ function bindEvents() {
   $$('.tool').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
   $$('.dock-tab').forEach(button => button.addEventListener('click', () => activateDock(button.dataset.dock)));
   $('[data-action="addCube"]').addEventListener('click', addCube);
+  $('[data-action="addShape"]').addEventListener('click', addShape);
+  $('[data-action="addLocator"]').addEventListener('click', addLocator);
   $('[data-action="addGroup"]').addEventListener('click', addGroup);
+  $('.outliner-create-actions [data-action="deleteSelected"]').addEventListener('click', deleteSelected);
   $('[data-action="new"]').addEventListener('click', newProject);
   $('[data-action="open"]').addEventListener('click', openProject);
   $('[data-action="save"]').addEventListener('click', () => saveProject(false));
@@ -1788,11 +2095,11 @@ function bindEvents() {
   outliner.addEventListener('scroll', scheduleOutlinerWindow, { passive: true });
   outliner.addEventListener('click', event => {
     const button = event.target.closest('[data-uid]');
-    if (!button) return;
+    if (!button) { clearSelection(); return; }
     const visibility = event.target.closest('[data-toggle-visible]');
     if (visibility) {
       const node = state.project.getNode(visibility.dataset.toggleVisible);
-      node.visible = !node.visible; markDirty(); renderAll(); return;
+      snapshot(); setNodeVisibility(node, !node.visible); markDirty(); renderAll(); return;
     }
     const disclosure = event.target.closest('[data-disclosure]');
     if (disclosure?.dataset.disclosure) {
@@ -1800,7 +2107,58 @@ function bindEvents() {
       state.collapsedGroups.has(uidValue) ? state.collapsedGroups.delete(uidValue) : state.collapsedGroups.add(uidValue);
       renderOutliner(); return;
     }
-    selectItem(button.dataset.uid);
+    selectItem(button.dataset.uid, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey });
+  });
+  outliner.addEventListener('dragstart', event => {
+    const item = event.target.closest('.outliner-item');
+    if (!item) return;
+    if (!state.selectedUids.has(item.dataset.uid)) {
+      sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
+      state.selectedUid = item.dataset.uid;
+      state.selectedUids = new Set([item.dataset.uid]);
+      state.selectionAnchorUid = item.dataset.uid;
+      outliner.querySelectorAll('.outliner-item.active').forEach(row => row.classList.remove('active'));
+      item.classList.add('active');
+      sceneRenderer.invalidateSelectionGeometry();
+      renderInspector(); renderScene(); updateSelectionLabels();
+    }
+    state.outlinerDragUids = topLevelSelectedUids();
+    state.outlinerDragUids.forEach(uidValue =>
+      outliner.querySelector(`.outliner-item[data-uid="${CSS.escape(uidValue)}"]`)?.classList.add('is-dragging'));
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/x-cubebricks-outliner', state.outlinerDragUids.join(','));
+    const ghost = createOutlinerDragGhost(state.outlinerDragUids);
+    event.dataTransfer.setDragImage(ghost, 24, 17);
+  });
+  outliner.addEventListener('dragover', event => {
+    if (!state.outlinerDragUids?.length) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    clearOutlinerDropState({ keepDragging: true });
+    const item = event.target.closest('.outliner-item');
+    if (!item) return;
+    const node = state.project.getNode(item.dataset.uid);
+    const rect = item.getBoundingClientRect();
+    const ratio = (event.clientY - rect.top) / rect.height;
+    const zone = node?.type === 'group' && ratio > .27 && ratio < .73 ? 'inside' : ratio < .5 ? 'before' : 'after';
+    item.classList.add(`drop-${zone}`);
+    item.dataset.dropZone = zone;
+  });
+  outliner.addEventListener('drop', event => {
+    if (!state.outlinerDragUids?.length) return;
+    event.preventDefault();
+    const item = event.target.closest('.outliner-item');
+    const targetUid = item?.dataset.uid || null;
+    const zone = item?.dataset.dropZone || 'after';
+    clearOutlinerDropState();
+    removeOutlinerDragGhost();
+    moveSelectedNodes(targetUid, zone);
+    state.outlinerDragUids = null;
+  });
+  outliner.addEventListener('dragend', () => {
+    clearOutlinerDropState();
+    removeOutlinerDragGhost();
+    state.outlinerDragUids = null;
   });
   $$('[data-theme-var]').forEach(input => input.addEventListener('input', () => setThemeVar(input.dataset.themeVar, `${input.value}${input.dataset.unit || ''}`)));
   $$('[data-preset]').forEach(button => button.addEventListener('click', () => applyPreset(button.dataset.preset)));
@@ -1818,11 +2176,62 @@ function bindEvents() {
     importTexture(textureInput.files[0]);
     textureInput.value = '';
   });
+  $('[data-action="addTextureGroup"]').addEventListener('click', addTextureGroup);
   $('#textureList').addEventListener('click', event => {
+    const groupToggle = event.target.closest('[data-texture-group-toggle]');
+    if (groupToggle) {
+      const group = state.textureGroups.find(entry => entry.id === groupToggle.dataset.textureGroupToggle);
+      if (group) { group.collapsed = !group.collapsed; renderTextureList(); }
+      return;
+    }
     const item = event.target.closest('.texture-item'); if (!item) return;
-    $$('.texture-item').forEach(entry => entry.classList.toggle('active', entry === item));
-    if (item.dataset.textureIndex !== undefined) activateProjectTexture(Number(item.dataset.textureIndex));
+    setActiveTextureItem(item);
   });
+  $('#textureList').addEventListener('dragstart', event => {
+    const item = event.target.closest('.texture-item');
+    const group = !item && event.target.closest('.texture-group');
+    if (!item && !group) return;
+    state.textureDrag = item ? { type: 'asset', id: item.dataset.textureUid } : { type: 'group', id: group.dataset.textureGroup };
+    (item || group).classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/x-cubebricks-texture', `${state.textureDrag.type}:${state.textureDrag.id}`);
+  });
+  $('#textureList').addEventListener('dragover', event => {
+    if (!state.textureDrag) return;
+    event.preventDefault();
+    $('#textureList').querySelectorAll('.drop-before,.drop-after,.drop-inside').forEach(node => node.classList.remove('drop-before', 'drop-after', 'drop-inside'));
+    const item = event.target.closest('.texture-item');
+    const group = !item && event.target.closest('.texture-group');
+    if (item && state.textureDrag.type === 'asset') {
+      const zone = event.clientY < item.getBoundingClientRect().top + item.offsetHeight / 2 ? 'before' : 'after';
+      item.classList.add(`drop-${zone}`); item.dataset.dropZone = zone;
+    } else if (group) group.classList.add('drop-inside');
+  });
+  $('#textureList').addEventListener('drop', event => {
+    if (!state.textureDrag) return;
+    event.preventDefault();
+    const item = event.target.closest('.texture-item');
+    const groupNode = !item && event.target.closest('.texture-group');
+    if (state.textureDrag.type === 'asset') {
+      const asset = state.textureAssets.find(entry => entry._uid === state.textureDrag.id);
+      if (asset && item && item.dataset.textureUid !== asset._uid) {
+        const target = state.textureAssets.find(entry => entry._uid === item.dataset.textureUid);
+        state.textureAssets = state.textureAssets.filter(entry => entry !== asset);
+        const targetIndex = state.textureAssets.indexOf(target);
+        state.textureAssets.splice(targetIndex + (item.dataset.dropZone === 'after' ? 1 : 0), 0, asset);
+        asset.groupId = target.groupId || null;
+      } else if (asset && groupNode) asset.groupId = groupNode.dataset.textureGroup;
+      else if (asset) asset.groupId = null;
+    } else if (state.textureDrag.type === 'group' && groupNode && groupNode.dataset.textureGroup !== state.textureDrag.id) {
+      const moving = state.textureGroups.find(entry => entry.id === state.textureDrag.id);
+      const target = state.textureGroups.find(entry => entry.id === groupNode.dataset.textureGroup);
+      state.textureGroups = state.textureGroups.filter(entry => entry !== moving);
+      state.textureGroups.splice(state.textureGroups.indexOf(target) + 1, 0, moving);
+    }
+    state.textureDrag = null;
+    renderTextureList();
+  });
+  $('#textureList').addEventListener('dragend', () => { state.textureDrag = null; renderTextureList(); });
   $$('[data-view-axis]').forEach(button => button.addEventListener('click', () => {
     cancelCameraFocus();
     const axis = button.dataset.viewAxis;
@@ -1941,7 +2350,12 @@ function onPointerDown(event) {
     return;
   }
   const hitUid = sceneRenderer.pick(state.project, x, y, state.geometryOnly);
-  if (hitUid) selectItem(hitUid, { revealInOutliner: true });
+  if (hitUid) selectItem(hitUid, {
+    revealInOutliner: true,
+    toggle: event.ctrlKey || event.metaKey,
+    range: event.shiftKey
+  });
+  else clearSelection();
 }
 
 function startCameraDrag(event, captureTarget) {
@@ -2754,5 +3168,6 @@ sceneRenderer.setSelectionOutline(getComputedStyle(document.documentElement).get
 renderTexture();
 renderPalette();
 bindEvents();
+updateToolVisibility();
 renderAll();
 markDirty(false);

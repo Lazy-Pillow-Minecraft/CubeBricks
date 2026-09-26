@@ -1,5 +1,6 @@
 const DOCKS = new Set(['left', 'right', 'bottom', 'floating']);
 const STORAGE_KEY = 'cubebricks.dock-layout.v1';
+const ZONE_STORAGE_KEY = 'cubebricks.dock-zones.v1';
 const MIN_WIDTH = 180;
 const MIN_HEIGHT = 90;
 
@@ -35,6 +36,7 @@ export class DockManager {
     this.onLayoutChange = onLayoutChange;
     this.onInteraction = onInteraction;
     this.zones = new Map([...root.querySelectorAll('[data-dock-zone]')].map(zone => [zone.dataset.dockZone, zone]));
+    this.zoneState = { left: false, right: false, bottom: false, ...readSavedZones() };
     this.panels = new Map();
     this.mode = 'edit';
     this.previewZone = null;
@@ -42,6 +44,8 @@ export class DockManager {
     this.placeholder = document.createElement('div');
     this.placeholder.className = 'dock-drop-placeholder';
     const saved = readSavedLayout();
+
+    for (const [dock, zone] of this.zones) this.installZoneControl(dock, zone);
 
     definitions.forEach(definition => {
       const element = root.querySelector(`[data-panel="${definition.id}"]`);
@@ -82,7 +86,46 @@ export class DockManager {
 
   expand(id) {
     const panel = this.get(id);
-    if (panel?.state.collapsed) this.setCollapsed(panel, false);
+    if (!panel) return;
+    if (panel.state.dock !== 'floating' && this.zoneState[panel.state.dock]) this.setZoneCollapsed(panel.state.dock, false);
+    if (panel.state.collapsed) this.setCollapsed(panel, false);
+  }
+
+  installZoneControl(dock, zone) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'dock-zone-toggle';
+    toggle.dataset.dockZoneToggle = dock;
+    toggle.setAttribute('aria-label', `折疊${dock === 'left' ? '左側' : dock === 'right' ? '右側' : '底部'}停靠區`);
+    toggle.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.setZoneCollapsed(dock, !this.zoneState[dock]);
+    });
+    this.root.append(toggle);
+    this.updateZoneControl(dock);
+  }
+
+  updateZoneControl(dock) {
+    const zone = this.zones.get(dock);
+    const toggle = this.root.querySelector(`[data-dock-zone-toggle="${dock}"]`);
+    if (!zone || !toggle) return;
+    const collapsed = Boolean(this.zoneState[dock]);
+    zone.classList.toggle('is-zone-collapsed', collapsed);
+    toggle.textContent = dock === 'left' ? (collapsed ? '›' : '‹')
+      : dock === 'right' ? (collapsed ? '‹' : '›')
+        : collapsed ? '⌃' : '⌄';
+    toggle.title = collapsed ? '展開停靠區' : '折疊停靠區';
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+  }
+
+  setZoneCollapsed(dock, collapsed) {
+    if (!this.zones.has(dock)) return;
+    this.zoneState[dock] = Boolean(collapsed);
+    this.updateZoneControl(dock);
+    this.refreshZones();
+    this.persist();
+    this.onLayoutChange();
   }
 
   restoreLayout() {
@@ -95,7 +138,7 @@ export class DockManager {
 
   installPanelControls(panel) {
     panel.element.querySelectorAll('.panel-resizer').forEach(node => node.remove());
-    for (const edge of ['left', 'right', 'top', 'bottom']) {
+    for (const edge of ['left', 'right', 'top', 'bottom', 'top-left', 'top-right', 'bottom-left', 'bottom-right']) {
       const handle = document.createElement('div');
       handle.className = `dock-resizer dock-resizer-${edge}`;
       handle.dataset.resizeEdge = edge;
@@ -157,9 +200,13 @@ export class DockManager {
     return panel.handle?.classList.contains('dock-tabs') ? 34 : 52;
   }
 
-  placeInZone(panel, dock, index = null) {
+  placeInZone(panel, dock, index = null, { expandZone = false } = {}) {
     const zone = this.zones.get(dock);
     if (!zone) return;
+    if (expandZone) {
+      this.zoneState[dock] = false;
+      this.updateZoneControl(dock);
+    }
     const siblings = this.zonePanels(dock, panel);
     const inheritedWidth = this.isSideDock(dock) && siblings.length
       ? siblings[0].state.width
@@ -243,7 +290,7 @@ export class DockManager {
 
     const end = endEvent => {
       if (endEvent.pointerId !== event.pointerId) return;
-      if (active && this.previewZone) this.placeInZone(panel, this.previewZone.dataset.dockZone, this.previewIndex);
+      if (active && this.previewZone) this.placeInZone(panel, this.previewZone.dataset.dockZone, this.previewIndex, { expandZone: true });
       this.clearDockPreview();
       panel.element.classList.remove('is-dragging');
       window.removeEventListener('pointermove', move, true);
@@ -327,14 +374,18 @@ export class DockManager {
     const move = moveEvent => {
       const dx = moveEvent.clientX - start.x, dy = moveEvent.clientY - start.y;
       if (panel.state.dock === 'floating') {
-        if (edge === 'left') {
-          panel.state.width = Math.max(MIN_WIDTH, start.rect.width - dx);
+        if (edge.includes('left')) {
+          panel.state.width = clamp(start.rect.width - dx, MIN_WIDTH, start.rect.right);
           panel.state.x = start.rect.right - panel.state.width;
-        } else if (edge === 'right') panel.state.width = Math.max(MIN_WIDTH, start.rect.width + dx);
-        if (edge === 'top') {
-          panel.state.height = Math.max(MIN_HEIGHT, start.rect.height - dy);
+        } else if (edge.includes('right')) {
+          panel.state.width = clamp(start.rect.width + dx, MIN_WIDTH, innerWidth - start.rect.left);
+        }
+        if (edge.includes('top')) {
+          panel.state.height = clamp(start.rect.height - dy, MIN_HEIGHT, start.rect.bottom - 38);
           panel.state.y = start.rect.bottom - panel.state.height;
-        } else if (edge === 'bottom') panel.state.height = Math.max(MIN_HEIGHT, start.rect.height + dy);
+        } else if (edge.includes('bottom')) {
+          panel.state.height = clamp(start.rect.height + dy, MIN_HEIGHT, innerHeight - start.rect.top);
+        }
       } else if (panel.state.dock === 'left' && edge === 'right') {
         this.setZoneWidth('left', start.state.width + dx);
       } else if (panel.state.dock === 'right' && edge === 'left') {
@@ -369,13 +420,19 @@ export class DockManager {
     this.zones.get('left')?.classList.toggle('is-empty', !left.length);
     this.zones.get('right')?.classList.toggle('is-empty', !right.length);
     this.zones.get('bottom')?.classList.toggle('is-empty', !bottom.length);
+    for (const dock of ['left', 'right', 'bottom']) {
+      const panels = dock === 'left' ? left : dock === 'right' ? right : bottom;
+      const toggle = this.root.querySelector(`[data-dock-zone-toggle="${dock}"]`);
+      if (toggle) toggle.hidden = !panels.length;
+      this.updateZoneControl(dock);
+    }
     const sharedWidth = panels => panels[0]?.state.width || 0;
     const bottomHeight = bottom.length
       ? Math.min(480, bottom.reduce((sum, panel) => sum + (panel.state.collapsed ? this.headerHeight(panel) : panel.state.height), 0))
       : 0;
-    document.documentElement.style.setProperty('--left-panel-width', `${sharedWidth(left)}px`);
-    document.documentElement.style.setProperty('--right-panel-width', `${sharedWidth(right)}px`);
-    document.documentElement.style.setProperty('--bottom-panel-height', `${bottomHeight}px`);
+    document.documentElement.style.setProperty('--left-panel-width', `${left.length ? (this.zoneState.left ? 18 : sharedWidth(left)) : 0}px`);
+    document.documentElement.style.setProperty('--right-panel-width', `${right.length ? (this.zoneState.right ? 18 : sharedWidth(right)) : 0}px`);
+    document.documentElement.style.setProperty('--bottom-panel-height', `${bottom.length ? (this.zoneState.bottom ? 18 : bottomHeight) : 0}px`);
   }
 
   clampFloatingPanels() {
@@ -390,12 +447,23 @@ export class DockManager {
   persist() {
     const layout = Object.fromEntries([...this.panels].map(([id, panel]) => [id, panel.serialize()]));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+    localStorage.setItem(ZONE_STORAGE_KEY, JSON.stringify(this.zoneState));
   }
 }
 
 function readSavedLayout() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
   catch { localStorage.removeItem(STORAGE_KEY); return {}; }
+}
+
+function readSavedZones() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ZONE_STORAGE_KEY) || '{}');
+    return Object.fromEntries(['left', 'right', 'bottom'].map(dock => [dock, Boolean(saved[dock])]));
+  } catch {
+    localStorage.removeItem(ZONE_STORAGE_KEY);
+    return {};
+  }
 }
 
 function normalizeState(state, defaults) {

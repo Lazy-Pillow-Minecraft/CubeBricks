@@ -40,8 +40,8 @@ The current version includes an interactive workspace, Cube/Shape/Group/Locator 
 
 - 移動、縮放、旋轉、樞軸、頂點捕捉、刀具與 Locator 已換用正式 SVG 圖標，統一置中並繼承目前主題的工具欄顏色。  
   Move, Scale, Rotate, Pivot, Vertex Snap, Knife, and Locator now use finalized SVG icons, consistently centered and inheriting the current theme's toolbar color.
-- Locator 不再以三軸十字線代替：視口會把正式 Locator SVG 投影到其三維座標，透視與正交各自使用正確的攝像機投影，同時維持與工具欄一致的固定 `17 × 17` 圖標尺寸；選中狀態與場景層級圖標也會套用主題色。  
-  Locator is no longer represented by a three-axis crosshair: the viewport projects the finalized Locator SVG onto its 3D coordinates using the correct camera projection for perspective and orthographic views, while keeping a fixed `17 × 17` icon size consistent with the toolbar; selected-state and scene-hierarchy icons also inherit the theme color.
+- Locator 不再以三軸十字線代替：視口會把正式 Locator SVG 投影到其三維座標，透視與正交各自使用正確的攝像機投影。圖標通常維持與工具欄一致的 `17 × 17` 尺寸；透視攝像機進入距離 `24` 以內後才隨接近程度放大，正交模式則始終保持固定尺寸。選中狀態與場景層級圖標也會套用主題色。<br>
+  Locator is no longer represented by a three-axis crosshair: the viewport projects the finalized Locator SVG onto its 3D coordinates using the correct camera projection for perspective and orthographic views. The icon normally remains `17 × 17`, matching the toolbar; only when the perspective camera comes within a distance of `24` does it grow as the camera approaches, while orthographic mode always keeps it fixed. Selected-state and scene-hierarchy icons also inherit the theme color.
 - 從主視口選中物件時，場景層級會自動展開其父組；若該項位於目前列表可視範圍之外，列表會以最短距離捲動到該項，不會重建或跳動整份列表。  
   When an object is selected from the main viewport, the scene hierarchy automatically expands its parent groups; if the item is outside the currently visible list area, the list scrolls the shortest distance necessary to reveal it without rebuilding or jumping the entire list.
 - 新增樞軸移動、頂點捕捉與刀具切割工具。樞軸工具支援全局、父級與自身座標參考；無論拖動手柄或在屬性面板輸入數值，都會同步補償 Cube 位置或組內子項，確保幾何外觀完全不動。  
@@ -58,6 +58,12 @@ The current version includes an interactive workspace, Cube/Shape/Group/Locator 
   The left texture manager has been simplified to the selected-texture preview and texture list, removing placeholder layer, UV, and tonal-mapping entries that did not yet form a complete workflow.
 - 停靠面板改為標準化物件，可直接拖離並靠近左、右、底部自動吸附；拖離過程即使面板重新掛載也不會丟失游標捕獲。  
   Dock panels are now standardized objects that can be dragged out directly and automatically snapped when brought near the left, right, or bottom docking areas; cursor capture is preserved even if a panel is remounted during detachment.
+- 工具欄工具已註冊可見模式；編輯工具只在編輯／動畫所需模式出現，繪畫模式只保留繪畫工具。Cube、Shape、Locator 與組的建立入口已移到場景層級頂部，貼圖導入與貼圖組建立入口則位於貼圖列表頂部。<br>
+  Toolbar tools now register their visible modes; editing tools only appear where required for Edit/Animation, while Paint mode keeps only painting tools. Cube, Shape, Locator, and Group creation has moved above the scene hierarchy, while texture import and texture-group creation live above the texture list.
+- 場景層級支援 Ctrl／Shift 多選、拖動重排與拖入組；拖動時顯示選中項懸浮預覽、插入位置及落下後的短位移動畫。同目錄多選建立組會在第一個選中項的原位置直接包裹，保留原排列順序。<br>
+  The scene hierarchy supports Ctrl/Shift multi-selection, drag reordering, and dropping into groups. Dragging shows a floating preview of the selected rows, a clear insertion target, and a short settling animation after drop. Grouping multiple items from the same directory wraps them in place at the first selected row while preserving their order.
+- 刪除項目後保持空選；點擊視口或層級列表空白也會清空選擇。組可見性切換只在當下同步全部後代，之後仍可獨立重新顯示個別子項。<br>
+  Deleting items leaves the selection empty, and clicking blank space in either the viewport or hierarchy also clears selection. Toggling group visibility synchronizes all descendants at that moment, while individual children may still be shown again independently afterward.
 - 左右停靠區採用列表共用欄寬，同欄任意面板的內側邊都能調整整欄；新吸附的外來面板會繼承目標欄寬，不會反向覆蓋現有佈局。  
   The left and right docking areas use a shared column width per list; dragging the inner edge of any panel adjusts the entire column, and newly docked external panels inherit the target column width instead of overwriting the existing layout.
 - Mipped 改用 1.5 倍高解析度離屏超採樣，只處理紋理模型表面；模型貼圖仍使用 `NEAREST`，不會被濾糊。  
@@ -91,12 +97,14 @@ Texture preview provides Solid, Cutout, Translucent, and Mipped anti-aliased var
 
 - 左側貼圖、右側物件屬性、右側場景層級及底部色卡／時間軸均為統一的停靠物件；直接拖動標題即可取下，靠近左、右或底部停靠區後鬆手會自動吸附，不需要切換按鈕。底部工作區只在繪畫與動畫模式存在，編輯模式會把空間完整交還視口。  
   The left texture panel, right object-properties panel, right scene hierarchy, and bottom palette/timeline are all unified dock objects. Drag a title directly to detach it; releasing near the left, right, or bottom docking area automatically snaps it into place without requiring a toggle button. The bottom workspace exists only in Paint and Animation modes, while Edit mode returns the entire area to the viewport.
-- 左、右、底部都是可縱向堆疊任意數量面板的列表，拖放位置決定排列順序；左右列表中的面板共用欄寬，拖動任一面板的內側邊都會調整整欄，新吸附面板會繼承現有欄寬。面板可折疊、調整尺寸，停靠區、順序、浮動位置、共用欄寬、個別高度及折疊狀態會自動保存。  
-  The left, right, and bottom areas are lists that can vertically stack any number of panels, with drop position determining order. Panels in the left and right lists share a column width; dragging the inner edge of any panel resizes the entire column, and newly docked panels inherit the existing width. Panels can be collapsed and resized, and docking area, order, floating position, shared column width, individual height, and collapsed state are saved automatically.
+- 左、右、底部都是可縱向堆疊任意數量面板的列表，拖放位置決定排列順序；左右列表中的面板共用欄寬，拖動任一面板的內側邊都會調整整欄，新吸附面板會繼承現有欄寬。每條停靠邊可整欄折疊，只在朝向主視圖的外沿留下小三角；即使該邊目前沒有面板，拖近時仍會顯示停靠預覽。<br>
+  The left, right, and bottom areas are lists that can vertically stack any number of panels, with drop position determining order. Panels in the left and right lists share a column width; dragging the inner edge of any panel resizes the entire column, and newly docked panels inherit the existing width. Each docking edge can collapse as a whole, leaving only a small triangle on the outer edge facing the viewport; even an empty edge still displays a docking preview when a panel approaches.
+- 每個窗口題頭均有獨立背景與分隔線，個別面板仍可自行折疊。浮動窗口除四邊外亦提供四角雙軸縮放；停靠區、順序、浮動位置、尺寸、共用欄寬、個別折疊及整欄折疊狀態都會自動保存。<br>
+  Every window header has its own background and divider, and each panel can still be collapsed individually. Floating windows support two-axis resizing from all four corners in addition to edge resizing. Docking area, order, floating position, size, shared column width, individual collapse, and whole-edge collapse states are saved automatically.
 - 每個停靠物件都有穩定 ID、數字索引、可見模式及預設佈局資料；目前索引可由 `CubeBricks.docks.list()` 查詢。  
   Every dock object has a stable ID, numeric index, visibility modes, and default-layout data; current indices can be queried with `CubeBricks.docks.list()`.
-- 場景層級的 `▰＋` 可建立組；選中物件時會用新組包住該物件，組的樞軸與歐拉角可直接編輯。  
-  The `▰＋` control in the scene hierarchy creates a group; when an object is selected, the new group wraps that object, and the group's pivot and Euler angles can be edited directly.
+- 場景層級的 `▰＋` 可建立組。單選元素時在同目錄緊接其後建立；單選組時建立在組內尾部；多選同目錄項目時於原位置包裹；跨目錄多選則在最深共同父級下建立。選中的組本身也可作為元素被移入新組，組樞軸與歐拉角可直接編輯。<br>
+  The `▰＋` control in the scene hierarchy creates a group. With one element selected, it is created immediately after that element in the same directory; with one group selected, it is appended inside that group; multiple items in one directory are wrapped in place; and selections across directories are grouped under their deepest common parent. Selected groups themselves can also be moved into the new group, and group pivots and Euler angles remain directly editable.
 - 匯入 `.bbmodel` 時會保留巢狀 outliner 組、組樞軸、組旋轉與組可見性，渲染時按父子順序套用變換。  
   Importing `.bbmodel` preserves nested outliner groups, group pivots, group rotations, and group visibility, with transforms applied in parent-child order during rendering.
 
@@ -116,8 +124,8 @@ Texture preview provides Solid, Cutout, Translucent, and Mipped anti-aliased var
   Rotation snaps to `2.5°` by default; holding Shift uses `0.5°`, Ctrl uses `15°`, and Shift+Ctrl uses `0.05°`.
 - 移動與縮放手柄提供三個半透明平面方片，可在指定平面內移動或同時縮放兩軸；方片使用其平面法線軸的顏色，縮放方片外側的 L 形直角可讓平面內四個方向等距伸縮並保持中心。縮放中央方塊可用上下拖動等比縮放三軸，平面操作期間會延長對應的兩條軸線作為指示。  
   Move and Scale gizmos provide three translucent plane squares for moving within a specified plane or scaling two axes simultaneously. Each square uses the color of its plane-normal axis. The L-shaped corner outside a scale square expands or contracts all four directions within the plane equally while preserving the center. Dragging the central scale cube vertically performs uniform three-axis scaling, and the two corresponding axis lines extend as visual guides during plane operations.
-- 貼圖面板只保留貼圖列表與目前選中貼圖的比例預覽；視口、場景層級、貼圖、色卡與物件屬性均提供一致的右鍵選單與選中反饋。  
-  The texture panel retains only the texture list and an aspect-ratio preview of the currently selected texture; the viewport, scene hierarchy, textures, palettes, and object properties all provide consistent context menus and selection feedback.
+- 貼圖面板只保留貼圖列表與目前選中貼圖的比例預覽；貼圖可拖動排序、放入貼圖組或從右鍵選單建立新組。視口中的模型物件與場景層級中的同一物件共用完全相同的右鍵菜單，空白視口則保留場景級操作。<br>
+  The texture panel retains only the texture list and an aspect-ratio preview of the currently selected texture. Textures can be reordered by dragging, dropped into texture groups, or placed into a new group from the context menu. A model object in the viewport uses exactly the same context menu as the same object in the scene hierarchy, while blank viewport space retains scene-level actions.
 - 場景使用穩定的基礎 Mesh 與獨立選中 Mesh；場景層級只建立可見行，拖動面板時不會重建整份列表。  
   The scene uses stable base Meshes and separate selection Meshes; the scene hierarchy creates only visible rows and does not rebuild the entire list while panels are being dragged.
 - 視口選取使用透視／正交攝像機射線與三角面深度判定，不依賴螢幕矩形範圍。Locator 使用與畫面固定圖標一致的命中區；從視口選中任何項目後，場景層級會自動捲動並顯示該項。  

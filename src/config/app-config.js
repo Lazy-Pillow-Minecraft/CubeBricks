@@ -136,7 +136,7 @@ const ENGLISH_UI = Object.freeze({
   '只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件': 'Show only cubes and shapes; temporarily hide helpers such as locators',
   '沿 X 軸對稱編輯': 'Mirror edits across the X axis', '繪畫時鎖定透明度': 'Preserve alpha while painting',
   '左側停靠區': 'Left dock', '右側停靠區': 'Right dock', '底部停靠區': 'Bottom dock',
-  '貼圖': 'Textures', '導入貼圖': 'Import texture', '折疊或展開面板': 'Collapse or expand panel', '折疊／展開': 'Collapse / expand',
+  '貼圖': 'Textures', '導入貼圖': 'Import texture', '新增貼圖組': 'Add texture group', '貼圖組': 'Texture group', '折疊或展開面板': 'Collapse or expand panel', '折疊／展開': 'Collapse / expand',
   '視圖模式': 'View mode', '透視': 'Perspective', '正交': 'Orthographic', '實體著色': 'Entity shading', '貼圖預覽': 'Texture preview', '動畫預覽': 'Animation preview',
   '聚焦': 'Focus', '網格': 'Grid', '邊界線框': 'Bounds wireframe', '實心': 'Solid', '實心 Mipped': 'Solid Mipped',
   '半透明': 'Translucent', '半透明 Mipped': 'Translucent Mipped', '背面剔除': 'Back-face culling', '剔除': 'Cull',
@@ -167,7 +167,11 @@ const ENGLISH_UI = Object.freeze({
   '隱藏邊界線框': 'Hide bounds wireframe', '顯示邊界線框': 'Show bounds wireframe', '設為目前貼圖': 'Set as current texture',
   '在繪畫模式打開': 'Open in Paint mode', '導入新貼圖': 'Import new texture', '新增色卡行': 'Add palette row',
   '改用離散色卡': 'Use discrete palette', '啟用連續漸變': 'Enable continuous gradient', '隱藏': 'Hide', '顯示': 'Show',
-  '展開組': 'Expand group', '折疊組': 'Collapse group', '刪除': 'Delete', '角度': 'Angle', '距離': 'Distance'
+  '展開組': 'Expand group', '折疊組': 'Collapse group', '刪除': 'Delete', '刪除選中項': 'Delete selection',
+  '隱藏選中項': 'Hide selection', '顯示選中項': 'Show selection', '將選中項建立為組': 'Group selection',
+  '移到新貼圖組': 'Move to new texture group', '解散貼圖組': 'Ungroup textures', '刪除貼圖': 'Delete texture',
+  '已新增貼圖組': 'Texture group added', '不能把組拖進它自己的子級': 'A group cannot be moved into its own descendant',
+  '角度': 'Angle', '距離': 'Distance'
 });
 
 const SIMPLIFIED_PHRASES = Object.freeze({

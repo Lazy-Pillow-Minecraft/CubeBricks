@@ -1,5 +1,8 @@
 const DEG = Math.PI / 180;
 const MIPPED_SUPERSAMPLE = 1.5;
+const LOCATOR_ICON_PIXELS = 17;
+const LOCATOR_NEAR_DISTANCE = 24;
+const LOCATOR_MAX_PIXELS = 96;
 
 // Minecraft-like pass order: opaque geometry writes depth first, then overlays.
 // Cutout/translucent passes are reserved here so textures can join the same pipeline.
@@ -456,15 +459,16 @@ export class WebGLSceneRenderer {
       if (node.type === 'locator') {
         const projected = projectScreenPoint(points[0], this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
         const distance = dot(subtract(points[0], ray.origin), ray.direction);
+        const iconSize = locatorScreenSize(points[0], this.lastCameraState);
         if (!projected.behind && projected.depth >= -1 && projected.depth <= 1
-          && Math.hypot(projected.x - screenX, projected.y - screenY) <= 12 && distance > 0 && distance < locatorDistance) {
+          && Math.hypot(projected.x - screenX, projected.y - screenY) <= iconSize * .72 && distance > 0 && distance < locatorDistance) {
           locatorDistance = distance;
           locatorHit = { uid, distance, point: [...points[0]], faceName: null };
         }
       }
     }
-    // Locator is a fixed-size editor overlay. Clicking its visible 17px icon
-    // therefore takes priority over model geometry drawn beneath it.
+    // Locator is an editor overlay whose visible icon takes priority over
+    // model geometry drawn beneath it, including its near-camera enlargement.
     if (locatorHit) return locatorHit;
     const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
     const faces = [
@@ -512,6 +516,10 @@ export class WebGLSceneRenderer {
 
   projectPoint(point) {
     return projectScreenPoint(point, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
+  }
+
+  getLocatorScreenSize(point) {
+    return locatorScreenSize(point, this.lastCameraState);
   }
 
   getScreenRay(screenX, screenY) {
@@ -668,7 +676,6 @@ function buildElementGeometry(project, elements, selectedUid, selectionOutline =
     };
     if (!element.visible) { finishRanges(); continue; }
     const groupChain = project.getGroupChain(element.uid);
-    if (groupChain.some(group => !group.visible)) { finishRanges(); continue; }
     const selectedByGroup = groupChain.some(group => group.uid === selectedUid);
     if (element.type === 'locator') {
       const geometry = locatorGeometry(element, groupChain);
@@ -942,6 +949,12 @@ export function getBlockbenchBoxUv(cube, faceName) {
 }
 function averagePoints(points) { return points.reduce((sum, point) => add(sum, point), [0, 0, 0]).map(value => value / (points.length || 1)); }
 function cameraDepth(point, cameraState) { return dot(subtract(point, cameraState.eye), cameraState.forward); }
+function locatorScreenSize(point, cameraState) {
+  if (!cameraState || cameraState.projection !== 'perspective') return LOCATOR_ICON_PIXELS;
+  const distance = Math.max(.05, cameraDepth(point, cameraState));
+  if (distance >= LOCATOR_NEAR_DISTANCE) return LOCATOR_ICON_PIXELS;
+  return Math.min(LOCATOR_MAX_PIXELS, LOCATOR_ICON_PIXELS * LOCATOR_NEAR_DISTANCE / distance);
+}
 function hexToRgb(hex) { const n = parseInt(hex.replace('#', ''), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
 function add(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
 function subtract(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
