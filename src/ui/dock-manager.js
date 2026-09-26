@@ -3,6 +3,7 @@ const STORAGE_KEY = 'cubebricks.dock-layout.v1';
 const ZONE_STORAGE_KEY = 'cubebricks.dock-zones.v1';
 const MIN_WIDTH = 180;
 const MIN_HEIGHT = 90;
+const OPEN_ICON_MARKUP = '<svg class="open-icon" aria-hidden="true"><use href="#icon-open"></use></svg>';
 
 export class DockPanelObject {
   constructor(definition, element, savedState = {}) {
@@ -94,7 +95,8 @@ export class DockManager {
   installZoneControl(dock, zone) {
     const toggle = document.createElement('button');
     toggle.type = 'button';
-    toggle.className = 'dock-zone-toggle';
+    toggle.className = 'dock-zone-toggle open-icon-button';
+    toggle.innerHTML = OPEN_ICON_MARKUP;
     toggle.dataset.dockZoneToggle = dock;
     toggle.setAttribute('aria-label', `折疊${dock === 'left' ? '左側' : dock === 'right' ? '右側' : '底部'}停靠區`);
     toggle.addEventListener('click', event => {
@@ -112,9 +114,9 @@ export class DockManager {
     if (!zone || !toggle) return;
     const collapsed = Boolean(this.zoneState[dock]);
     zone.classList.toggle('is-zone-collapsed', collapsed);
-    toggle.textContent = dock === 'left' ? (collapsed ? '›' : '‹')
-      : dock === 'right' ? (collapsed ? '‹' : '›')
-        : collapsed ? '⌃' : '⌄';
+    toggle.dataset.iconDirection = dock === 'left' ? (collapsed ? 'right' : 'left')
+      : dock === 'right' ? (collapsed ? 'left' : 'right')
+        : collapsed ? 'up' : 'down';
     toggle.title = collapsed ? '展開停靠區' : '折疊停靠區';
     toggle.setAttribute('aria-expanded', String(!collapsed));
   }
@@ -148,7 +150,8 @@ export class DockManager {
 
     const collapse = document.createElement('button');
     collapse.type = 'button';
-    collapse.className = 'dock-collapse';
+    collapse.className = 'dock-collapse open-icon-button';
+    collapse.innerHTML = OPEN_ICON_MARKUP;
     collapse.title = '折疊／展開';
     collapse.setAttribute('aria-label', '折疊或展開面板');
     collapse.addEventListener('click', event => {
@@ -176,8 +179,10 @@ export class DockManager {
     element.classList.toggle('detached', state.dock === 'floating');
     element.classList.toggle('is-collapsed', state.collapsed);
     const collapse = element.querySelector('.dock-collapse');
-    if (collapse) collapse.textContent = state.collapsed ? '⌄' : '⌃';
-    element.style.setProperty('--dock-panel-height', `${state.collapsed ? 34 : state.height}px`);
+    if (collapse) {
+      collapse.dataset.iconDirection = state.collapsed ? 'down' : 'up';
+    }
+    element.style.setProperty('--dock-panel-height', `${state.collapsed ? this.headerHeight(panel) : state.height}px`);
     element.style.setProperty('--dock-panel-width', `${state.width}px`);
     if (state.dock === 'floating') {
       element.style.left = `${state.x}px`;
@@ -197,7 +202,9 @@ export class DockManager {
   }
 
   headerHeight(panel) {
-    return panel.handle?.classList.contains('dock-tabs') ? 34 : 52;
+    const measured = panel.handle?.getBoundingClientRect().height || panel.handle?.scrollHeight || 0;
+    const fallback = panel.handle?.classList.contains('dock-tabs') ? 34 : 52;
+    return Math.max(fallback, Math.ceil(measured));
   }
 
   placeInZone(panel, dock, index = null, { expandZone = false } = {}) {

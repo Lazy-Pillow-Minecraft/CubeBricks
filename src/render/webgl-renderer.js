@@ -1,7 +1,7 @@
 const DEG = Math.PI / 180;
 const MIPPED_SUPERSAMPLE = 1.5;
 const LOCATOR_ICON_PIXELS = 17;
-const LOCATOR_NEAR_DISTANCE = 24;
+const LOCATOR_NEAR_DISTANCE = 72;
 const LOCATOR_MAX_PIXELS = 96;
 
 // Minecraft-like pass order: opaque geometry writes depth first, then overlays.
@@ -217,9 +217,9 @@ export class WebGLSceneRenderer {
     this.ghostWireCount = 0;
   }
 
-  commitSelectionGeometry(project, selectedUid) {
-    if (!this.staticCache || this.staticCache.project !== project || !selectedUid) return false;
-    const dynamicUids = getDynamicElementUids(project, selectedUid);
+  commitSelectionGeometry(project, selection) {
+    if (!this.staticCache || this.staticCache.project !== project || !selection) return false;
+    const dynamicUids = getDynamicElementUids(project, selection);
     if (!dynamicUids.size) return false;
     const elements = project.elements.filter(element => dynamicUids.has(element.uid));
     const geometry = buildElementGeometry(project, elements, null);
@@ -387,7 +387,9 @@ export class WebGLSceneRenderer {
     this.lastCameraState = cameraState;
     this.lastCameraInput = { ...camera };
 
-    const dynamicUids = getDynamicElementUids(project, selectedUid);
+    const selectedUids = normalizeSelectedNodeUids(camera.selectedUids?.size ? camera.selectedUids : selectedUid);
+    const selectedKey = [...selectedUids].sort().join('|');
+    const dynamicUids = getDynamicElementUids(project, selectedUids);
     if (!this.staticCache
       || this.staticCache.project !== project
       || this.staticCache.revision !== this.geometryRevision) {
@@ -400,10 +402,10 @@ export class WebGLSceneRenderer {
     if (!this.selectedCache
       || this.selectedCache.project !== project
       || this.selectedCache.revision !== this.selectionRevision
-      || this.selectedCache.selectedUid !== selectedUid) {
+      || this.selectedCache.selectedKey !== selectedKey) {
       const selectedElements = project.elements.filter(element => dynamicUids.has(element.uid));
-      const geometry = buildElementGeometry(project, selectedElements, selectedUid, this.selectionOutline);
-      this.selectedCache = { project, revision: this.selectionRevision, selectedUid, ...geometry };
+      const geometry = buildElementGeometry(project, selectedElements, selectedUids, this.selectionOutline);
+      this.selectedCache = { project, revision: this.selectionRevision, selectedKey, ...geometry };
       this.uploadBuffer(this.selectedTriangleBuffer, geometry.triangles, gl.DYNAMIC_DRAW);
       this.uploadBuffer(this.selectedWireBuffer, geometry.edges, gl.DYNAMIC_DRAW);
     }
@@ -638,25 +640,26 @@ function collectVertexRanges(vertices, ranges) {
   return output;
 }
 
-function getDynamicElementUids(project, selectedUid) {
+function normalizeSelectedNodeUids(selection) {
+  if (!selection) return new Set();
+  if (typeof selection === 'string') return new Set([selection]);
+  return new Set(selection);
+}
+
+function getDynamicElementUids(project, selection) {
   const dynamic = new Set();
-  const selected = project.getNode(selectedUid);
-  if (!selected) return dynamic;
-  if (selected.type !== 'group') {
-    dynamic.add(selected.uid);
-    return dynamic;
-  }
   const visit = uid => {
     const node = project.getNode(uid);
     if (!node) return;
     if (node.type === 'group') node.children.forEach(visit);
     else dynamic.add(node.uid);
   };
-  selected.children.forEach(visit);
+  normalizeSelectedNodeUids(selection).forEach(visit);
   return dynamic;
 }
 
-function buildElementGeometry(project, elements, selectedUid, selectionOutline = [1, 1, 1]) {
+function buildElementGeometry(project, elements, selection, selectionOutline = [1, 1, 1]) {
+  const selectedUids = normalizeSelectedNodeUids(selection);
   const triangles = [];
   const faces = [];
   const edges = [];
@@ -676,7 +679,7 @@ function buildElementGeometry(project, elements, selectedUid, selectionOutline =
     };
     if (!element.visible) { finishRanges(); continue; }
     const groupChain = project.getGroupChain(element.uid);
-    const selectedByGroup = groupChain.some(group => group.uid === selectedUid);
+    const selectedByGroup = groupChain.some(group => selectedUids.has(group.uid));
     if (element.type === 'locator') {
       const geometry = locatorGeometry(element, groupChain);
       helpers.push(...geometry.lines);
@@ -689,7 +692,7 @@ function buildElementGeometry(project, elements, selectedUid, selectionOutline =
       : [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
 
     for (const entry of cubes) {
-      const geometry = cubeGeometry(entry, element.color, element.uid === selectedUid || selectedByGroup, selectionOutline);
+      const geometry = cubeGeometry(entry, element.color, selectedUids.has(element.uid) || selectedByGroup, selectionOutline);
       triangles.push(...geometry.triangles);
       faces.push(...geometry.faces.map(face => ({ ...face, uid: element.uid })));
       edges.push(...geometry.edges);

@@ -29,6 +29,7 @@ const state = {
   wire: configRegistry.get(ConfigKey.SHOW_WIREFRAME),
   renderMode: 'textured',
   transformSpace: 'global',
+  multiTransformMode: 'unified',
   rotationMode: 'pose',
   scaleHandleMode: 'fixed',
   knifeSelection: null,
@@ -162,6 +163,9 @@ function updateSelectionLabels() {
   $('#selectionType').textContent = item?.type || 'Scene';
   $('#selectionName').textContent = state.selectedUids.size > 1 ? `已選 ${state.selectedUids.size} 項` : item?.name || state.project.name;
   $('#uidChip').textContent = item?.uid || '—';
+  const selectedCount = selectedElementUids().length;
+  const counter = $('#outlinerSelectionCount');
+  if (counter) counter.textContent = `${selectedCount}/${state.project.elements.length}`;
 }
 
 function renderOutliner() {
@@ -204,15 +208,19 @@ function renderOutlinerWindow() {
   if (!windowNode) return;
   windowNode.style.transform = `translateY(${start * rowHeight}px)`;
   windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, group, collapsed }) => `<button class="outliner-item ${state.selectedUids.has(node.uid) ? 'active' : ''}" data-uid="${node.uid}" draggable="true" style="padding-left:${5 + depth * 13}px">
-      <span data-disclosure="${group ? node.uid : ''}">${group ? (collapsed ? '›' : '⌄') : ''}</span>
+      ${group ? openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure', `data-disclosure="${node.uid}"`) : '<span></span>'}
       <span class="kind">${outlinerKindMarkup(node)}</span>
       <span class="item-name">${escapeHtml(node.name)}</span><span class="eye" data-toggle-visible="${node.uid}">${node.visible ? '◉' : '○'}</span>
     </button>`).join('');
 }
 
 function outlinerKindMarkup(node) {
-  if (node.type !== 'locator') return node.type === 'group' ? '▰' : node.type === 'shape' ? '◉' : '◇';
+  if (node.type !== 'locator') return `<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-${node.type}"></use></svg>`;
   return `<svg class="outliner-kind-icon" aria-hidden="true" viewBox="0 0 197.49 189.08">${LOCATOR_ICON_SHAPES}</svg>`;
+}
+
+function openIconMarkup(direction = 'down', className = '', attributes = '') {
+  return `<svg class="open-icon ${className}" data-icon-direction="${direction}" ${attributes} aria-hidden="true"><use href="#icon-open"></use></svg>`;
 }
 
 function scheduleOutlinerWindow() {
@@ -237,7 +245,7 @@ function renderInspector() {
       ${vectorField('尺寸', 'size', item.size)}
       ${vectorField('樞軸', 'pivot', item.pivot)}
       ${vectorField('旋轉', 'rotation', rotation)}
-      <div class="vector-field scalar-field"><span>膨脹</span><label class="number-wrap"><input type="number" step="0.1" data-field="inflate" value="${item.inflate}" /></label></div>
+      <div class="vector-field scalar-field"><span>膨脹</span><label class="number-wrap"><input type="number" step="0.1" data-field="inflate" value="${round(item.inflate)}" /></label></div>
       <div class="option-row"><span>UV 模式</span><select data-field="uvMode"><option value="box" ${item.uvMode === 'box' ? 'selected' : ''}>箱型 UV</option><option value="face" ${item.uvMode === 'face' ? 'selected' : ''}>逐面 UV</option></select></div>`
     : item.type === 'shape' ? `
       <div class="field-title"><span>形狀參數</span><span>${item.shapeType}</span></div>
@@ -276,11 +284,11 @@ function renderInspector() {
 }
 
 function vectorField(label, field, values) {
-  return `<div class="vector-field"><span>${label}</span>${values.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="0.25" data-vector="${field}" data-axis="${index}" value="${round(value)}" /></label>`).join('')}</div>`;
+  return `<div class="vector-field"><span>${label}</span>${values.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="0.0001" data-vector="${field}" data-axis="${index}" value="${round(value)}" /></label>`).join('')}</div>`;
 }
 
 function parameterField(label, key, value, step) {
-  return `<div class="option-row"><span>${label}</span><div class="number-wrap" style="width:68px"><input type="number" min="${key === 'sides' ? 3 : .1}" step="${step}" data-parameter="${key}" value="${value}" /></div></div>`;
+  return `<div class="option-row"><span>${label}</span><div class="number-wrap" style="width:68px"><input type="number" min="${key === 'sides' ? 3 : .1}" step="${step}" data-parameter="${key}" value="${round(value)}" /></div></div>`;
 }
 
 function setNodeVisibility(node, visible, cascadeGroup = true) {
@@ -383,6 +391,7 @@ function refreshSelectionUi() {
   state.outlinerWindowEnd = -1;
   renderOutlinerWindow();
   sceneRenderer.invalidateSelectionGeometry();
+  updateToolOptions();
   renderInspector();
   renderScene();
   updateSelectionLabels();
@@ -390,7 +399,7 @@ function refreshSelectionUi() {
 
 function clearSelection() {
   if (!state.selectedUids.size && !state.selectedUid) return;
-  sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
+  sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
   state.selectedUids.clear();
   state.selectedUid = null;
   state.selectionAnchorUid = null;
@@ -401,14 +410,16 @@ function clearSelection() {
 
 function selectItem(uid, { revealInOutliner = false, toggle = false, range = false } = {}) {
   if (!state.project.getNode(uid)) return;
-  sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
+  sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
   if (range && state.selectionAnchorUid) {
     const rows = state.outlinerRows || [];
     const start = rows.findIndex(row => row.node.uid === state.selectionAnchorUid);
     const end = rows.findIndex(row => row.node.uid === uid);
     if (start >= 0 && end >= 0) {
-      state.selectedUids = new Set(rows.slice(Math.min(start, end), Math.max(start, end) + 1).map(row => row.node.uid));
-    } else state.selectedUids = new Set([uid]);
+      const extended = new Set(state.selectedUids);
+      rows.slice(Math.min(start, end), Math.max(start, end) + 1).forEach(row => extended.add(row.node.uid));
+      state.selectedUids = extended;
+    } else state.selectedUids.add(uid);
   } else if (toggle) {
     if (state.selectedUids.has(uid)) state.selectedUids.delete(uid);
     else state.selectedUids.add(uid);
@@ -445,6 +456,36 @@ function syncInspectorValues(item) {
 
 function selectedNodeUids() {
   return [...state.selectedUids].filter(uidValue => state.project.getNode(uidValue));
+}
+
+function selectedElementUids() {
+  const elements = new Set();
+  for (const uidValue of selectedNodeUids()) {
+    const node = state.project.getNode(uidValue);
+    if (node?.type === 'group') state.project.getDescendantElementUids(uidValue).forEach(childUid => elements.add(childUid));
+    else if (node) elements.add(node.uid);
+  }
+  return [...elements];
+}
+
+function selectedTopLevelNodes() {
+  return topLevelSelectedUids().map(uidValue => state.project.getNode(uidValue)).filter(Boolean);
+}
+
+function deepestCommonSelectionGroup() {
+  const paths = selectedTopLevelNodes().map(node => [
+    ...state.project.getGroupChain(node.uid),
+    ...(node.type === 'group' ? [node] : [])
+  ]);
+  if (!paths.length) return null;
+  const shortest = Math.min(...paths.map(path => path.length));
+  let common = null;
+  for (let index = 0; index < shortest; index++) {
+    const candidate = paths[0][index];
+    if (!paths.every(path => path[index]?.uid === candidate.uid)) break;
+    common = candidate;
+  }
+  return common;
 }
 
 function topLevelSelectedUids() {
@@ -673,6 +714,7 @@ function renderScene() {
 
 function updateLocatorOverlay() {
   const overlay = $('#locatorOverlay');
+  const selectedElements = new Set(selectedElementUids());
   const rect = sceneCanvas.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
@@ -693,7 +735,7 @@ function updateLocatorOverlay() {
       return [{ element, point, size: sceneRenderer.getLocatorScreenSize(world) }];
     })
     .sort((left, right) => right.point.depth - left.point.depth);
-  overlay.innerHTML = icons.map(({ element, point, size }) => `<svg class="locator-screen-icon ${state.selectedUids.has(element.uid) ? 'selected' : ''}"
+  overlay.innerHTML = icons.map(({ element, point, size }) => `<svg class="locator-screen-icon ${selectedElements.has(element.uid) ? 'selected' : ''}"
       data-locator-uid="${element.uid}" x="${point.x - size / 2}" y="${point.y - size / 2}" width="${size}" height="${size}"
       viewBox="0 0 197.49 189.08" preserveAspectRatio="xMidYMid meet" aria-label="${escapeHtml(element.name)}">${LOCATOR_ICON_SHAPES}</svg>`).join('');
   overlay.toggleAttribute('hidden', icons.length === 0);
@@ -788,6 +830,14 @@ function updateScaleHandleModeButtons() {
   });
 }
 
+function updateMultiTransformModeButtons() {
+  $$('[data-multi-transform-mode]').forEach(button => {
+    const active = button.dataset.multiTransformMode === state.multiTransformMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+
 function rotateVector(vector, rotation) {
   let [x, y, z] = vector;
   const [rx, ry, rz] = rotation.map(value => value * Math.PI / 180);
@@ -835,6 +885,44 @@ function getTransformPivot(item) {
   return applyGroupTransforms(local, state.project.getGroupChain(item.uid));
 }
 
+function inverseApplyGroupTransforms(point, groupChain = []) {
+  let transformed = [...point];
+  for (const group of groupChain) {
+    const offset = transformed.map((value, axis) => value - group.pivot[axis]);
+    const rotated = inverseRotateVector(offset, group.rotation || [0, 0, 0]);
+    transformed = rotated.map((value, axis) => value + group.pivot[axis]);
+  }
+  return transformed;
+}
+
+function selectedWorldPoints() {
+  return selectedElementUids().flatMap(uidValue => sceneRenderer.getWorldVertices(state.project, uidValue).map(entry => entry.point));
+}
+
+function selectionGeometryCenter() {
+  let points = selectedWorldPoints();
+  if (!points.length) points = selectedTopLevelNodes().map(getTransformPivot).filter(Boolean);
+  if (!points.length) return null;
+  return [0, 1, 2].map(axis => {
+    const values = points.map(point => point[axis]);
+    return (Math.min(...values) + Math.max(...values)) / 2;
+  });
+}
+
+function getSelectionTransformContext() {
+  const nodes = selectedTopLevelNodes();
+  const multiple = nodes.length > 1;
+  const commonGroup = multiple ? deepestCommonSelectionGroup() : null;
+  const center = multiple ? selectionGeometryCenter() : null;
+  return {
+    nodes,
+    multiple,
+    commonGroup,
+    center,
+    pivot: multiple ? (commonGroup ? getTransformPivot(commonGroup) : center) : null
+  };
+}
+
 function getTransformAxes(item) {
   const chain = state.project.getGroupChain(item.uid);
   const parentRotation = vector => applyGroupTransforms(vector, chain.map(group => ({ pivot: [0, 0, 0], rotation: group.rotation })));
@@ -857,6 +945,12 @@ function getTransformAxes(item) {
     }
     return normalize3(direction);
   });
+}
+
+function getSelectionTransformAxes(context, fallbackItem) {
+  if (!context.multiple) return getTransformAxes(fallbackItem);
+  if (context.commonGroup) return getTransformAxes(context.commonGroup);
+  return [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 }
 
 function addScaled3(point, direction, amount) {
@@ -1240,8 +1334,9 @@ function renderVertexSnapGizmo(gizmo, width, height) {
 function updateTransformGizmo() {
   const gizmo = $('#transformGizmo');
   const item = selected();
+  const selectionContext = getSelectionTransformContext();
   if (!item || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)
-    || (state.tool === 'resize' && !['cube', 'shape'].includes(item.type))) {
+    || (state.tool === 'resize' && !selectionContext.multiple && !['cube', 'shape'].includes(item.type))) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null; return;
   }
   const rect = sceneCanvas.getBoundingClientRect();
@@ -1250,16 +1345,22 @@ function updateTransformGizmo() {
     renderVertexSnapGizmo(gizmo, width, height);
     return;
   }
-  if (state.tool === 'pivot' && !['cube', 'group'].includes(item.type)) {
+  if (state.tool === 'pivot' && selectionContext.multiple && !selectionContext.commonGroup) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
   }
-  const pivot = getTransformPivot(item);
-  const geometryCenter = sceneRenderer.getGeometryCenter(state.project, item.uid) || pivot;
+  const transformItem = state.tool === 'pivot' && selectionContext.multiple ? selectionContext.commonGroup : item;
+  if (state.tool === 'pivot' && !['cube', 'group'].includes(transformItem?.type)) {
+    gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
+  }
+  const pivot = selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item);
+  const geometryCenter = selectionContext.multiple
+    ? selectionContext.center || pivot
+    : sceneRenderer.getGeometryCenter(state.project, item.uid) || pivot;
   const gizmoOrigin = ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
   const center = projectViewportPoint(gizmoOrigin);
   state.gizmoCenter = { x: center.x, y: center.y };
   state.gizmoOrigin = [...gizmoOrigin];
-  const axes = getTransformAxes(item);
+  const axes = getSelectionTransformAxes(selectionContext, item);
   const classes = ['x', 'y', 'z'];
   const cameraFrame = sceneRenderer.getCameraFrame();
   const pixelSample = projectViewportPoint(addScaled3(gizmoOrigin, cameraFrame.right, 1));
@@ -1274,7 +1375,11 @@ function updateTransformGizmo() {
       : index === 1 ? [0, 1, 0] : [1, 0, 0];
     let positiveDistance = relativeAxisLength, negativeDistance = relativeAxisLength;
     if (state.tool === 'resize' && state.scaleHandleMode === 'bounds') {
-      const extent = item.type === 'cube'
+      let extent;
+      if (selectionContext.multiple) {
+        const projections = selectedWorldPoints().map(point => dot3(point.map((value, axis) => value - gizmoOrigin[axis]), axis));
+        extent = projections.length ? Math.max(...projections.map(Math.abs)) : 0;
+      } else extent = item.type === 'cube'
         ? Math.abs(item.size[index]) / 2
         : index === 1 ? Math.abs(item.parameters.height) / 2 : Math.abs(item.parameters.radius);
       positiveDistance = extent + pixelWorld * GIZMO_HEAD_GAP_PIXELS;
@@ -1456,7 +1561,7 @@ function renderTextureList() {
   const groups = state.textureGroups.map(group => {
     const assets = state.textureAssets.filter(asset => asset.groupId === group.id);
     return `<section class="texture-group" data-texture-group="${group.id}" draggable="true">
-      <button class="texture-group-header" data-texture-group-toggle="${group.id}"><span>${group.collapsed ? '›' : '⌄'}</span><strong>${escapeHtml(group.name)}</strong><small>${assets.length}</small></button>
+      <button class="texture-group-header" data-texture-group-toggle="${group.id}">${openIconMarkup(group.collapsed ? 'right' : 'down', 'texture-disclosure')}<strong>${escapeHtml(group.name)}</strong><small>${assets.length}</small></button>
       <div class="texture-group-items" ${group.collapsed ? 'hidden' : ''}>${assets.map(asset => textureItemMarkup(asset, state.textureAssets.indexOf(asset))).join('')}</div>
     </section>`;
   }).join('');
@@ -1573,6 +1678,7 @@ function updateToolOptions() {
   lane.hidden = !labels[state.tool];
   $('#transformSpaceControl').hidden = !['move', 'rotate', 'pivot'].includes(state.tool);
   $('#rotationModeControl').hidden = state.tool !== 'rotate' || state.transformSpace !== 'self';
+  $('#multiTransformModeControl').hidden = selectedTopLevelNodes().length < 2 || !['move', 'rotate'].includes(state.tool);
   $('#scaleHandleModeControl').hidden = state.tool !== 'resize';
   $('#vertexSnapModeControl').hidden = state.tool !== 'vertexSnap';
   $('#vertexSnapRotationControl').hidden = state.tool !== 'vertexSnap' || state.vertexSnapMode !== 'rotate';
@@ -1585,6 +1691,7 @@ function updateToolOptions() {
   updateTransformSpaceButtons();
   updateRotationModeButtons();
   updateScaleHandleModeButtons();
+  updateMultiTransformModeButtons();
   $$('[data-vertex-snap-mode]').forEach(button => button.classList.toggle('active', button.dataset.vertexSnapMode === state.vertexSnapMode));
   $$('[data-vertex-rotation-mode]').forEach(button => button.classList.toggle('active', button.dataset.vertexRotationMode === state.vertexSnapRotationMode));
 }
@@ -1871,7 +1978,7 @@ function showElementContextMenu(event, uidValue, source = null) {
         snapshot(); selectedNodes.forEach(entry => setNodeVisibility(entry, !allVisible)); markDirty(); renderAll();
       } },
       ...(node.type === 'group' ? [{
-        icon: state.collapsedGroups.has(node.uid) ? '›' : '⌄',
+        icon: openIconMarkup(state.collapsedGroups.has(node.uid) ? 'down' : 'up', 'context-open-icon'),
         label: state.collapsedGroups.has(node.uid) ? '展開組' : '折疊組',
         action: () => {
           state.collapsedGroups.has(node.uid) ? state.collapsedGroups.delete(node.uid) : state.collapsedGroups.add(node.uid);
@@ -1946,7 +2053,7 @@ function bindContextMenus() {
     if (groupNode) {
       const group = state.textureGroups.find(entry => entry.id === groupNode.dataset.textureGroup);
       return showContextMenu(event, { title: group?.name || '貼圖組', source: groupNode, items: [
-        { icon: '⌄', label: group?.collapsed ? '展開組' : '折疊組', action: () => { group.collapsed = !group.collapsed; renderTextureList(); } },
+        { icon: openIconMarkup(group?.collapsed ? 'down' : 'up', 'context-open-icon'), label: group?.collapsed ? '展開組' : '折疊組', action: () => { group.collapsed = !group.collapsed; renderTextureList(); } },
         { icon: '×', label: '解散貼圖組', action: () => {
           state.textureAssets.forEach(asset => { if (asset.groupId === group.id) asset.groupId = null; });
           state.textureGroups = state.textureGroups.filter(entry => entry.id !== group.id); renderTextureList();
@@ -2037,6 +2144,11 @@ function bindEvents() {
     updateRotationModeButtons();
     renderScene();
   }));
+  $$('[data-multi-transform-mode]').forEach(button => button.addEventListener('click', () => {
+    state.multiTransformMode = button.dataset.multiTransformMode;
+    updateMultiTransformModeButtons();
+    renderScene();
+  }));
   $$('[data-scale-handle-mode]').forEach(button => button.addEventListener('click', () => {
     state.scaleHandleMode = button.dataset.scaleHandleMode;
     updateScaleHandleModeButtons();
@@ -2113,7 +2225,7 @@ function bindEvents() {
     const item = event.target.closest('.outliner-item');
     if (!item) return;
     if (!state.selectedUids.has(item.dataset.uid)) {
-      sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
+      sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
       state.selectedUid = item.dataset.uid;
       state.selectedUids = new Set([item.dataset.uid]);
       state.selectionAnchorUid = item.dataset.uid;
@@ -2732,11 +2844,100 @@ function buildKnifeOverlayLines() {
   return lines;
 }
 
+function nodeTransformAnchor(node) {
+  if (node.type === 'cube' || node.type === 'group') return node.pivot;
+  if (node.type === 'shape') return node.origin;
+  return node.position;
+}
+
+function captureTransformTarget(node) {
+  return {
+    node,
+    chain: state.project.getGroupChain(node.uid),
+    anchor: [...nodeTransformAnchor(node)],
+    position: node.position ? [...node.position] : node.origin ? [...node.origin] : node.pivot ? [...node.pivot] : [0, 0, 0],
+    pivot: node.pivot ? [...node.pivot] : null,
+    rotation: [...(node.rotation || [0, 0, 0])],
+    size: node.size ? [...node.size] : null,
+    radius: node.parameters?.radius,
+    height: node.parameters?.height,
+    groupMembers: node.type === 'group' ? captureGroupMembers(node) : []
+  };
+}
+
+function translateCapturedTarget(target, delta) {
+  const { node } = target;
+  if (node.type === 'cube') {
+    node.position = target.position.map((value, axis) => value + delta[axis]);
+    node.pivot = target.pivot.map((value, axis) => value + delta[axis]);
+  } else if (node.type === 'shape') node.origin = target.position.map((value, axis) => value + delta[axis]);
+  else if (node.type === 'locator') node.position = target.position.map((value, axis) => value + delta[axis]);
+  else if (node.type === 'group') {
+    node.pivot = target.position.map((value, axis) => value + delta[axis]);
+    target.groupMembers.forEach(member => {
+      if (member.node.type === 'cube') {
+        member.node.position = member.position.map((value, axis) => value + delta[axis]);
+        member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
+      } else if (member.node.type === 'shape') member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+      else if (member.node.type === 'locator') member.node.position = member.position.map((value, axis) => value + delta[axis]);
+      else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
+    });
+  }
+}
+
+function localDirectionFromWorld(direction, chain) {
+  let local = [...direction];
+  chain.forEach(group => { local = inverseRotateVector(local, group.rotation || [0, 0, 0]); });
+  return normalize3(local);
+}
+
+function localDeltaFromWorld(target, worldDelta) {
+  const worldAnchor = applyGroupTransforms(target.anchor, target.chain);
+  const nextWorld = worldAnchor.map((value, axis) => value + worldDelta[axis]);
+  const nextLocal = inverseApplyGroupTransforms(nextWorld, target.chain);
+  return nextLocal.map((value, axis) => value - target.anchor[axis]);
+}
+
+function rotatePointAroundAxis(point, pivot, axis, degrees) {
+  const direction = normalize3(axis);
+  const radians = degrees * Math.PI / 180;
+  const cosine = Math.cos(radians), sine = Math.sin(radians);
+  const offset = point.map((value, index) => value - pivot[index]);
+  const crossed = cross3(direction, offset);
+  const aligned = dot3(direction, offset) * (1 - cosine);
+  return offset.map((value, index) => pivot[index] + value * cosine + crossed[index] * sine + direction[index] * aligned);
+}
+
+function applyTargetRotation(target, worldAxis, degrees, { separate = false, selfRelative = false, axisIndex = null, euler = false } = {}) {
+  const { node } = target;
+  if (euler && separate && axisIndex !== null) {
+    node.rotation = [...target.rotation];
+    node.rotation[axisIndex] = target.rotation[axisIndex] + degrees;
+    return;
+  }
+  const localAxis = selfRelative && axisIndex !== null
+    ? [0, 1, 2].map(index => index === axisIndex ? 1 : 0)
+    : localDirectionFromWorld(worldAxis, target.chain);
+  const turn = quaternionFromAxisAngle(localAxis, degrees);
+  const current = quaternionFromEuler(target.rotation);
+  node.rotation = eulerFromQuaternion(separate && selfRelative
+    ? quaternionMultiply(current, turn)
+    : quaternionMultiply(turn, current));
+}
+
 function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign = 1, handleElement = null,
   axisKey = axisIndex === null ? 'free' : String(axisIndex), axisIndices = axisIndex === null ? [] : [axisIndex], axisSigns = [sign]) {
   if (event.button !== 0) return;
-  const item = selected();
+  const selectionContext = getSelectionTransformContext();
+  let item = selected();
+  if (state.tool === 'pivot' && selectionContext.multiple) item = selectionContext.commonGroup;
   if (!item || !['move', 'resize', 'rotate', 'pivot'].includes(state.tool)) return;
+  const targetNodes = state.tool === 'resize'
+    ? selectedElementUids().map(uidValue => state.project.getNode(uidValue)).filter(Boolean)
+    : selectionContext.nodes;
+  const targets = selectionContext.multiple && ['move', 'rotate', 'resize'].includes(state.tool)
+    ? targetNodes.map(captureTransformTarget)
+    : [captureTransformTarget(item)];
   const rect = sceneCanvas.getBoundingClientRect();
   let handle = axisIndex === null ? null : state.gizmoAxes?.[axisIndex];
   const referenceHandle = handle || state.gizmoAxes?.[axisIndices[0]] || null;
@@ -2808,7 +3009,7 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
     kind, sign, rotationAxis, rotationScreenSign, handleElement, gizmoCenter: handle ? gizmoCenter : null,
     rotationMode: state.transformSpace === 'self' ? state.rotationMode : 'pose',
     startAngle: kind.startsWith('rotate') && handle ? Math.atan2(event.clientY - (handle.centerY + rect.top), event.clientX - (handle.centerX + rect.left)) : 0,
-    rect, storedAxis, chain,
+    rect, storedAxis, chain, selectionContext, targets, multiTransformMode: state.multiTransformMode,
     position: item.position ? [...item.position] : item.origin ? [...item.origin] : item.pivot ? [...item.pivot] : [0, 0, 0],
     pivot: item.pivot ? [...item.pivot] : null,
     size: item.size ? [...item.size] : null,
@@ -2837,8 +3038,8 @@ function onPointerMove(event) {
       snapshot();
       state.dragging.snapshotTaken = true;
     }
-    if (state.dragging.tool === 'resize' && state.dragging.item.type === 'cube' && !state.dragging.uvFrozen) {
-      freezeCubeUvs(state.dragging.item);
+    if (state.dragging.tool === 'resize' && !state.dragging.uvFrozen) {
+      state.dragging.targets.filter(target => target.node.type === 'cube').forEach(target => freezeCubeUvs(target.node));
       state.dragging.uvFrozen = true;
     }
     applyTransformDrag(state.dragging, dx, dy, event);
@@ -2868,7 +3069,7 @@ function endPointerDrag(event) {
   if (captureTarget.hasPointerCapture?.(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
   state.dragging = null;
   if (finishedDrag.type === 'transform' && finishedDrag.snapshotTaken) {
-    sceneRenderer.commitSelectionGeometry(state.project, state.selectedUid);
+    sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
   }
   sceneRenderer.endTransformGhost();
   $('#transformTooltip').hidden = true;
@@ -2961,6 +3162,52 @@ function applyTransformDrag(drag, dx, dy, event) {
     setPivotPreservingGeometry(state.project, item, nextPivot);
     drag.tooltipText = `樞軸 ${nextPivot.map(formatNumber).join(' / ')}`;
   }
+  if (drag.tool === 'move' && drag.targets.length > 1) {
+    let distances = [];
+    let commonWorldDelta;
+    if (drag.kind === 'plane') {
+      distances = getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event));
+      commonWorldDelta = [0, 0, 0];
+      drag.planeAxes.forEach((axis, index) => {
+        commonWorldDelta = commonWorldDelta.map((value, component) => value + axis.worldAxis[component] * distances[index]);
+      });
+      drag.tooltipText = `距離 ${drag.axisIndices.map(index => 'XYZ'[index]).join('')} ${distances.map(formatSigned).join(' / ')} px`;
+    } else if (drag.axis) {
+      distances = [snapValue(axisDelta, event)];
+      const direction = drag.axis.vector.map(value => value * drag.sign);
+      commonWorldDelta = direction.map(value => value * distances[0]);
+      drag.tooltipText = `距離 ${formatSigned(distances[0])} px`;
+    } else {
+      const frame = sceneRenderer.getCameraFrame();
+      const pointer = intersectRayPlane(
+        sceneRenderer.getScreenRay(event.clientX - drag.rect.left, event.clientY - drag.rect.top),
+        drag.freeMovePlane.point,
+        drag.freeMovePlane.normal
+      );
+      commonWorldDelta = pointer && drag.freeMoveStart
+        ? pointer.map((value, axis) => value - drag.freeMoveStart[axis])
+        : [0, 1, 2].map(axis => frame.right[axis] * dx * fallbackScale + frame.up[axis] * -dy * fallbackScale);
+      commonWorldDelta = commonWorldDelta.map(value => snapValue(value, event));
+      drag.tooltipText = `距離 ${formatSigned(Math.hypot(...commonWorldDelta))} px`;
+    }
+    for (const target of drag.targets) {
+      let worldDelta = commonWorldDelta;
+      if (drag.multiTransformMode === 'separate' && drag.axis) {
+        const targetAxes = getTransformAxes(target.node);
+        if (drag.kind === 'plane') {
+          worldDelta = [0, 0, 0];
+          drag.axisIndices.forEach((axisIndex, index) => {
+            const signValue = drag.axisSigns[index] || 1;
+            worldDelta = worldDelta.map((value, component) => value + targetAxes[axisIndex][component] * signValue * distances[index]);
+          });
+        } else {
+          worldDelta = targetAxes[drag.axisIndex].map(value => value * drag.sign * distances[0]);
+        }
+      }
+      translateCapturedTarget(target, localDeltaFromWorld(target, worldDelta));
+    }
+    return;
+  }
   if (drag.tool === 'move') {
     let delta;
     if (drag.kind === 'plane') {
@@ -3009,6 +3256,67 @@ function applyTransformDrag(drag, dx, dy, event) {
         else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
       });
     }
+  }
+  if (drag.tool === 'resize' && drag.selectionContext.multiple) {
+    const planeDistances = drag.kind === 'plane'
+      ? getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event))
+      : [];
+    for (const target of drag.targets) {
+      const targetItem = target.node;
+      if (targetItem.type === 'cube') {
+        const size = [...target.size];
+        const position = [...target.position];
+        if (drag.kind === 'plane-uniform') {
+          const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
+          for (const targetAxis of drag.axisIndices) {
+            const proposed = target.size[targetAxis] + distance * 2;
+            size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
+            position[targetAxis] = target.position[targetAxis] - (size[targetAxis] - target.size[targetAxis]) / 2;
+          }
+        } else if (drag.kind === 'uniform') {
+          const factor = 1 - dy * .01;
+          for (let axis = 0; axis < 3; axis++) {
+            const proposed = snapValue(target.size[axis] * factor, event);
+            size[axis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
+            position[axis] = target.position[axis] - (size[axis] - target.size[axis]) / 2;
+          }
+        } else if (drag.kind === 'plane') {
+          drag.axisIndices.forEach((targetAxis, index) => {
+            const proposed = target.size[targetAxis] + planeDistances[index];
+            size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
+            if ((drag.axisSigns[index] || 1) < 0) position[targetAxis] = target.position[targetAxis] + size[targetAxis] - target.size[targetAxis];
+          });
+        } else {
+          const targetAxis = drag.axis ? drag.axisIndex : 0;
+          const requestedChange = drag.axis ? snapValue(axisDelta, event) : snapValue(dx * fallbackScale, event);
+          const proposed = target.size[targetAxis] + requestedChange;
+          size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
+          if (drag.axis && drag.sign < 0) position[targetAxis] = target.position[targetAxis] + size[targetAxis] - target.size[targetAxis];
+        }
+        targetItem.position = position;
+        targetItem.size = size;
+      } else if (targetItem.type === 'shape') {
+        if (drag.kind === 'plane-uniform') {
+          const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
+          if (drag.axisIndices.includes(1)) targetItem.parameters.height = Math.max(0, snapValue(target.height + distance * 2, event));
+          if (drag.axisIndices.some(index => index !== 1)) targetItem.parameters.radius = Math.max(0, snapValue(target.radius + distance, event));
+        } else if (drag.kind === 'uniform') {
+          const factor = Math.max(0, 1 - dy * .01);
+          targetItem.parameters.radius = Math.max(0, snapValue(target.radius * factor, event));
+          targetItem.parameters.height = Math.max(0, snapValue(target.height * factor, event));
+        } else if (drag.kind === 'plane') {
+          const radialChanges = [];
+          drag.axisIndices.forEach((targetAxis, index) => {
+            if (targetAxis === 1) targetItem.parameters.height = Math.max(0, snapValue(target.height + planeDistances[index], event));
+            else radialChanges.push(planeDistances[index]);
+          });
+          if (radialChanges.length) targetItem.parameters.radius = Math.max(0, snapValue(target.radius + radialChanges.reduce((sum, value) => sum + value, 0) / radialChanges.length, event));
+        } else if (drag.axisIndex === 1) targetItem.parameters.height = Math.max(0, snapValue(target.height + axisDelta, event));
+        else targetItem.parameters.radius = Math.max(0, snapValue(target.radius + (axisDelta ?? dx * fallbackScale), event));
+      }
+    }
+    drag.tooltipText = drag.kind === 'uniform' ? `等比縮放 ${drag.targets.length} 項` : `縮放 ${drag.targets.length} 項`;
+    return;
   }
   if (drag.tool === 'resize') {
     if (item.type === 'cube') {
@@ -3084,6 +3392,35 @@ function applyTransformDrag(drag, dx, dy, event) {
       }
     }
   }
+  if (drag.tool === 'rotate' && drag.targets.length > 1) {
+    const angleStep = getAngleSnapStep(event);
+    const angle = drag.axis ? axisDelta : (dx - dy) * .4;
+    const snappedDelta = snapAngle(angle, angleStep);
+    const commonAxis = drag.axis
+      ? drag.axis.vector.map(value => value * drag.sign)
+      : [0, 1, 0];
+    const commonPivot = drag.selectionContext.pivot || drag.selectionContext.center || state.gizmoOrigin;
+    for (const target of drag.targets) {
+      const separate = drag.multiTransformMode === 'separate';
+      const targetAxis = separate && drag.kind === 'rotate'
+        ? getTransformAxes(target.node)[drag.axisIndex]
+        : commonAxis;
+      if (!separate) {
+        const worldAnchor = applyGroupTransforms(target.anchor, target.chain);
+        const nextWorldAnchor = rotatePointAroundAxis(worldAnchor, commonPivot, targetAxis, snappedDelta);
+        const nextLocalAnchor = inverseApplyGroupTransforms(nextWorldAnchor, target.chain);
+        translateCapturedTarget(target, nextLocalAnchor.map((value, axis) => value - target.anchor[axis]));
+      }
+      applyTargetRotation(target, targetAxis, snappedDelta, {
+        separate,
+        selfRelative: separate && drag.kind === 'rotate' && state.transformSpace === 'self',
+        axisIndex: drag.axisIndex,
+        euler: separate && drag.rotationMode === 'euler' && drag.kind === 'rotate'
+      });
+    }
+    drag.tooltipText = `角度 ${formatSigned(snappedDelta)}°`;
+    return;
+  }
   if (drag.tool === 'rotate') {
     const angleStep = getAngleSnapStep(event);
     const angle = drag.axis ? axisDelta : (dx - dy) * .4;
@@ -3158,7 +3495,7 @@ function formatSigned(value) { const rounded = formatNumber(value); return value
 
 function escapeHtml(value) { const div = document.createElement('div'); div.textContent = value; return div.innerHTML; }
 function escapeAttribute(value) { return escapeHtml(value).replaceAll('"', '&quot;'); }
-function round(value) { return Math.round(value * 100) / 100; }
+function round(value) { return Math.round(value * 10000) / 10000; }
 function hexToRgb(hex) { const n = parseInt(hex.replace('#', ''), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
 
 initializeDockSystem();
