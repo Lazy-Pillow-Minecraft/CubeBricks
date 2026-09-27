@@ -1,5 +1,6 @@
 import { Cube, Group, Locator, Shape, CubeBricksProject, chooseKnifeCutAxis, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
 import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
+import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
 import { WebGLSceneRenderer, applyGroupTransforms, getBlockbenchBoxUv } from './render/webgl-renderer.js';
 import { DockManager } from './ui/dock-manager.js';
 
@@ -41,7 +42,7 @@ const state = {
   projection: configRegistry.get(ConfigKey.PROJECTION),
   previewShade: configRegistry.get(ConfigKey.PREVIEW_SHADE),
   geometryOnly: configRegistry.get(ConfigKey.SHOW_GEOMETRY_ONLY),
-  snap: configRegistry.get(ConfigKey.SNAP),
+  settingsSnap: configRegistry.get(ConfigKey.SNAP),
   allowNegativeSize: configRegistry.get(ConfigKey.ALLOW_NEGATIVE_SIZE),
   modifierSnap: {
     shift: { mode: configRegistry.get(ConfigKey.SHIFT_SNAP_MODE), value: configRegistry.get(ConfigKey.SHIFT_SNAP_VALUE) },
@@ -50,12 +51,19 @@ const state = {
   },
   symmetry: configRegistry.get(ConfigKey.SYMMETRY),
   alphaLock: configRegistry.get(ConfigKey.ALPHA_LOCK),
+  lockedDefaultAlpha: configRegistry.get(ConfigKey.LOCKED_DEFAULT_ALPHA),
+  lockedHoverFade: configRegistry.get(ConfigKey.LOCKED_HOVER_FADE),
+  lockedHoverAlpha: configRegistry.get(ConfigKey.LOCKED_HOVER_ALPHA),
+  lockedHoverRadius: configRegistry.get(ConfigKey.LOCKED_HOVER_RADIUS),
+  lockedHoverPoint: null,
+  lockedHoverStrength: 0,
+  outlinerDetailed: true,
   zoom: 1,
   panX: 0,
   panY: 0,
-  yaw: -0.72,
-  pitch: 0.38,
-  target: [0, 9, 0],
+  yaw: -Math.PI * 3 / 4,
+  pitch: Math.PI / 6,
+  target: [0, 0, 0],
   history: [],
   future: [],
   hitAreas: [],
@@ -65,6 +73,11 @@ const state = {
   textureAssets: [],
   textureGroups: [],
   activeTextureUid: null,
+  uvPreviewEnabled: true,
+  uvPreviewAutoRotate: false,
+  uvPreviewFaceColors: false,
+  uvPreviewYaw: -Math.PI / 4,
+  uvPreviewPitch: Math.PI / 7,
   timelinePlaying: false,
   timelineFrame: 0,
   layoutResizing: false
@@ -72,21 +85,30 @@ const state = {
 
 const DOCK_PANEL_DEFINITIONS = Object.freeze([
   { id: 'texture', index: 0, modes: ['edit', 'paint'], defaultDock: 'left', defaultOrder: 0, defaultPosition: { x: 24, y: 104 }, defaultSize: { width: 236, height: 620 }, defaultCollapsed: false },
-  { id: 'inspector', index: 1, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 0, defaultPosition: { x: 920, y: 104 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
-  { id: 'outliner', index: 2, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 1, defaultPosition: { x: 920, y: 460 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
-  { id: 'bottom', index: 3, modes: ['paint', 'animate'], defaultDock: 'bottom', defaultOrder: 0, defaultPosition: { x: 280, y: 620 }, defaultSize: { width: 720, height: 176 }, defaultCollapsed: false }
+  { id: 'uvPreview', index: 1, modes: ['edit', 'paint', 'animate'], defaultDock: 'left', defaultOrder: 1, defaultPosition: { x: 24, y: 520 }, defaultSize: { width: 236, height: 260 }, defaultCollapsed: false },
+  { id: 'inspector', index: 2, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 0, defaultPosition: { x: 920, y: 104 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
+  { id: 'outliner', index: 3, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 1, defaultPosition: { x: 920, y: 460 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
+  { id: 'bottom', index: 4, modes: ['paint', 'animate'], defaultDock: 'bottom', defaultOrder: 0, defaultPosition: { x: 280, y: 620 }, defaultSize: { width: 720, height: 176 }, defaultCollapsed: false }
 ]);
 
 state.selectedUid = state.project.elements[0]?.uid;
 if (state.selectedUid) state.selectedUids.add(state.selectedUid);
 
 const sceneCanvas = $('#sceneCanvas');
+const viewport = $('#viewport');
+const selectionMarquee = $('#selectionMarquee');
 const sceneRenderer = new WebGLSceneRenderer(sceneCanvas);
+const uvPreviewCanvas = $('#uvPreviewCanvas');
+const uvPreviewViewport = $('#uvPreviewViewport');
+const uvPreviewRenderer = new WebGLSceneRenderer(uvPreviewCanvas);
 const textureCanvas = $('#textureCanvas');
 const textureCtx = textureCanvas.getContext('2d');
 const outliner = $('#outliner');
 const inspector = $('#inspector');
 const projectState = $('#projectState');
+const projectTabsNode = $('#projectTabs');
+const newProjectDialog = $('#newProjectDialog');
+const projectInfoDialog = $('#projectInfoDialog');
 const themeDialog = $('#themeDialog');
 const languageSelect = $('#languageSelect');
 const fileInput = $('#fileInput');
@@ -96,6 +118,260 @@ let outlinerFrame = null;
 let outlinerDragGhost = null;
 let dockManager = null;
 let cameraFocusFrame = null;
+let lockedHoverFrame = null;
+let lockedHoverPickFrame = null;
+let lockedHoverPointer = null;
+let sceneRenderFrame = null;
+let transformUpdateFrame = null;
+let uvPreviewAnimationFrame = null;
+let uvPreviewLastFrame = 0;
+let uvPreviewProjectCache = null;
+let uvPreviewDrag = null;
+let uvPreviewTextureDirty = true;
+let projectTabs = [];
+let activeProjectTabId = null;
+let editingProjectTabId = null;
+let draggingProjectTabId = null;
+let draggingProjectTabInsertIndex = null;
+let selectionExpansionCache = null;
+
+const PROJECT_SESSION_KEYS = Object.freeze([
+  'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'filePath', 'dirty', 'history', 'future',
+  'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
+  'target', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'timelineFrame'
+]);
+
+function projectTabById(tabId) {
+  return projectTabs.find(tab => tab.id === tabId) || null;
+}
+
+function createProjectSession(project, options = {}) {
+  const selectedUid = options.selectedUid ?? project.elements[0]?.uid ?? null;
+  const textureAssets = (options.textureAssets || []).map(asset => ({
+    ...asset,
+    _uid: textureUid(asset),
+    groupId: asset.groupId || null
+  }));
+  const preferredTexture = textureAssets.find(asset => asset.useAsDefault) || textureAssets[0] || null;
+  return {
+    project,
+    selectedUid,
+    selectedUids: new Set(selectedUid ? [selectedUid] : []),
+    selectionAnchorUid: selectedUid,
+    filePath: options.filePath || null,
+    dirty: options.dirty ?? false,
+    history: [],
+    future: [],
+    knifeSelection: null,
+    knifeHover: null,
+    knifePointer: null,
+    vertexSnapSource: null,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    yaw: -Math.PI * 3 / 4,
+    pitch: Math.PI / 6,
+    target: [0, 0, 0],
+    collapsedGroups: new Set(),
+    textureAssets,
+    textureGroups: [],
+    activeTextureUid: preferredTexture?._uid || null,
+    timelineFrame: 0
+  };
+}
+
+function captureProjectSession() {
+  return Object.fromEntries(PROJECT_SESSION_KEYS.map(key => [key, state[key]]));
+}
+
+function syncActiveProjectTab() {
+  const tab = projectTabById(activeProjectTabId);
+  if (tab) tab.session = captureProjectSession();
+  return tab;
+}
+
+function projectTabLabel(tab) {
+  if (tab.displayName) return tab.displayName;
+  const filePath = tab.session.filePath;
+  return filePath ? filePath.split(/[\\/]/).pop() : tab.session.project.name || 'untitled';
+}
+
+function renderProjectTabs() {
+  if (!projectTabsNode) return;
+  projectTabsNode.innerHTML = projectTabs.map(tab => {
+    const active = tab.id === activeProjectTabId;
+    const label = projectTabLabel(tab);
+    const format = modelFormatRegistry.get(tab.session.project.formatId);
+    const title = [label, format?.name, tab.session.filePath].filter(Boolean).join(' · ');
+    return `<div class="project-tab ${active ? 'active' : ''} ${tab.session.dirty ? 'dirty' : ''}" role="tab"
+        aria-selected="${active}" tabindex="${active ? '0' : '-1'}" draggable="true" data-project-tab="${tab.id}" title="${escapeAttribute(title)}">
+      <span class="project-tab-status" aria-hidden="true"></span>
+      <span class="project-tab-name">${escapeHtml(label)}</span>
+      <button class="project-tab-close" type="button" data-close-project-tab="${tab.id}" title="關閉項目" aria-label="關閉 ${escapeAttribute(label)}">×</button>
+    </div>`;
+  }).join('');
+  projectTabsNode.querySelector('.project-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function updateProjectStateLabel() {
+  const fileName = state.filePath ? state.filePath.split(/[\\/]/).pop() : `${state.project.name}.cbmodel`;
+  const label = `${state.dirty ? '● ' : ''}${fileName}`;
+  const title = `${state.dirty ? '● ' : ''}${projectTabLabel(projectTabById(activeProjectTabId) || { session: captureProjectSession() })} — CubeBricks`;
+  if (projectState.textContent !== label) projectState.textContent = label;
+  const color = state.dirty ? 'var(--accent)' : '';
+  if (projectState.style.color !== color) projectState.style.color = color;
+  if (document.title !== title) document.title = title;
+}
+
+function restoreProjectTextureView() {
+  renderTextureList();
+  if (!state.textureAssets.length) {
+    renderTexture();
+    return;
+  }
+  let index = state.textureAssets.findIndex(asset => asset._uid === state.activeTextureUid);
+  if (index < 0) index = Math.max(0, state.textureAssets.findIndex(asset => asset.useAsDefault));
+  activateProjectTexture(index);
+}
+
+function activateProjectTab(tabId, { render = true } = {}) {
+  const tab = projectTabById(tabId);
+  if (!tab) return false;
+  if (tabId !== activeProjectTabId) syncActiveProjectTab();
+  activeProjectTabId = tabId;
+  for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
+  state.dragging = null;
+  state.hitAreas = [];
+  state.lockedHoverPoint = null;
+  state.lockedHoverStrength = 0;
+  if (cameraFocusFrame) cancelAnimationFrame(cameraFocusFrame);
+  cameraFocusFrame = null;
+  sceneRenderer.invalidateLockState();
+  restoreProjectTextureView();
+  updateProjectStateLabel();
+  renderProjectTabs();
+  if (render) renderAll();
+  return true;
+}
+
+function addProjectTab(project, options = {}) {
+  syncActiveProjectTab();
+  const tab = {
+    id: `project_${crypto.randomUUID()}`,
+    displayName: options.displayName || null,
+    session: createProjectSession(project, options)
+  };
+  projectTabs.push(tab);
+  activateProjectTab(tab.id, { render: options.render !== false });
+  return tab;
+}
+
+function disposeProjectTab(tab) {
+  for (const asset of tab.session.textureAssets || []) {
+    if (typeof asset.source === 'string' && asset.source.startsWith('blob:')) URL.revokeObjectURL(asset.source);
+  }
+}
+
+function closeProjectTab(tabId) {
+  syncActiveProjectTab();
+  const index = projectTabs.findIndex(tab => tab.id === tabId);
+  if (index < 0) return;
+  const tab = projectTabs[index];
+  if (tab.session.dirty && !window.confirm(`「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？`)) return;
+  disposeProjectTab(tab);
+  projectTabs.splice(index, 1);
+  if (!projectTabs.length) {
+    const project = new CubeBricksProject({ name: 'untitled', ...createModelProjectData('java_block_item', { name: 'untitled' }) });
+    const replacement = { id: `project_${crypto.randomUUID()}`, displayName: null, session: createProjectSession(project) };
+    projectTabs.push(replacement);
+    activeProjectTabId = null;
+    activateProjectTab(replacement.id);
+    return;
+  }
+  if (tabId === activeProjectTabId) {
+    activeProjectTabId = null;
+    activateProjectTab(projectTabs[Math.min(index, projectTabs.length - 1)].id);
+  } else renderProjectTabs();
+}
+
+function projectTabInsertionIndex(clientX, sourceId = draggingProjectTabId) {
+  const candidates = [...projectTabsNode.querySelectorAll('[data-project-tab]')]
+    .filter(node => node.dataset.projectTab !== sourceId);
+  const index = candidates.findIndex(node => clientX < node.getBoundingClientRect().left + node.offsetWidth / 2);
+  return index < 0 ? candidates.length : index;
+}
+
+function previewProjectTabInsertion(index, sourceId = draggingProjectTabId) {
+  const candidates = [...projectTabsNode.querySelectorAll('[data-project-tab]')]
+    .filter(node => node.dataset.projectTab !== sourceId);
+  projectTabsNode.querySelectorAll('.drop-before,.drop-after').forEach(node => node.classList.remove('drop-before', 'drop-after'));
+  if (!candidates.length) return;
+  if (index >= candidates.length) candidates.at(-1).classList.add('drop-after');
+  else candidates[Math.max(0, index)].classList.add('drop-before');
+}
+
+function moveProjectTabToIndex(sourceId, insertionIndex) {
+  if (!sourceId || insertionIndex === null) return;
+  const sourceIndex = projectTabs.findIndex(tab => tab.id === sourceId);
+  if (sourceIndex < 0) return;
+  const [source] = projectTabs.splice(sourceIndex, 1);
+  projectTabs.splice(Math.max(0, Math.min(projectTabs.length, insertionIndex)), 0, source);
+  renderProjectTabs();
+}
+
+function openProjectInfo(tabId) {
+  syncActiveProjectTab();
+  const tab = projectTabById(tabId);
+  if (!tab) return;
+  editingProjectTabId = tabId;
+  const project = tab.session.project;
+  $('#projectInfoName').value = project.name || '';
+  $('#projectInfoFormat').textContent = modelFormatRegistry.get(project.formatId)?.name || project.formatId;
+  $('#projectInfoTextureWidth').value = project.textureSize?.[0] || 16;
+  $('#projectInfoTextureHeight').value = project.textureSize?.[1] || 16;
+  $('#projectInfoSnap').value = project.snap?.subdivisions || state.settingsSnap;
+  $('#projectInfoDescription').value = project.formatData?.projectDescription || '';
+  projectInfoDialog.showModal();
+  requestAnimationFrame(() => $('#projectInfoName').focus());
+}
+
+function applyProjectInfo() {
+  const tab = projectTabById(editingProjectTabId);
+  if (!tab) return;
+  const name = $('#projectInfoName').value.trim();
+  const width = Math.max(1, Math.round(Number($('#projectInfoTextureWidth').value)));
+  const height = Math.max(1, Math.round(Number($('#projectInfoTextureHeight').value)));
+  const snap = Number($('#projectInfoSnap').value);
+  if (!name || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(snap) || snap <= 0) return;
+  tab.session.history.push(tab.session.project.serialize());
+  if (tab.session.history.length > 60) tab.session.history.shift();
+  tab.session.future.length = 0;
+  tab.session.project.name = name;
+  tab.session.project.textureSize = [width, height];
+  tab.session.project.snap = { subdivisions: snap };
+  tab.session.project.formatData = {
+    ...(tab.session.project.formatData || {}),
+    projectDescription: $('#projectInfoDescription').value.trim()
+  };
+  tab.displayName = null;
+  tab.session.dirty = true;
+  projectInfoDialog.close();
+  editingProjectTabId = null;
+  if (tab.id === activeProjectTabId) {
+    for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
+    markDirty(true);
+    renderAll();
+  } else renderProjectTabs();
+  toast('項目信息已更新');
+}
+
+function initializeProjectTabs() {
+  const tab = { id: `project_${crypto.randomUUID()}`, displayName: null, session: captureProjectSession() };
+  projectTabs = [tab];
+  activeProjectTabId = tab.id;
+  renderProjectTabs();
+  updateProjectStateLabel();
+}
 
 function selected() {
   return state.project.getNode(state.selectedUid);
@@ -108,12 +384,19 @@ function snapshot() {
 }
 
 function restore(serialized) {
+  const previousSelectedUids = new Set(state.selectedUids);
+  const previousSelectedUid = state.selectedUid;
+  const previousSelectionAnchorUid = state.selectionAnchorUid;
   state.project = new CubeBricksProject(JSON.parse(serialized));
-  if (!state.project.getNode(state.selectedUid)) {
-    state.selectedUid = state.project.elements[0]?.uid || null;
-  }
-  state.selectedUids = new Set(state.selectedUid ? [state.selectedUid] : []);
-  state.selectionAnchorUid = state.selectedUid;
+  state.selectedUids = new Set([...previousSelectedUids].filter(uidValue => state.project.getNode(uidValue)));
+  state.selectedUid = previousSelectedUid && state.selectedUids.has(previousSelectedUid)
+    ? previousSelectedUid
+    : [...state.selectedUids].at(-1) || null;
+  state.selectionAnchorUid = previousSelectionAnchorUid && state.project.getNode(previousSelectionAnchorUid)
+    ? previousSelectionAnchorUid
+    : state.selectedUid;
+  if (state.vertexSnapSource && !state.project.getNode(state.vertexSnapSource.rootUid)) state.vertexSnapSource = null;
+  if (state.knifeSelection && !state.project.getNode(state.knifeSelection.uid)) cancelKnifeSelection(false);
   markDirty(true);
   renderAll();
 }
@@ -131,10 +414,14 @@ function redo() {
 }
 
 function markDirty(value = true) {
+  const activeTab = projectTabById(activeProjectTabId);
+  const previousDirty = activeTab?.session.dirty;
+  const previousLabel = activeTab ? projectTabLabel(activeTab) : '';
   state.dirty = value;
-  const fileName = state.filePath ? state.filePath.split(/[\\/]/).pop() : `${state.project.name}.cbmodel`;
-  projectState.textContent = `${value ? '● ' : ''}${fileName}`;
-  projectState.style.color = value ? 'var(--accent)' : '';
+  const tab = syncActiveProjectTab();
+  if (tab) tab.session.dirty = value;
+  updateProjectStateLabel();
+  if (!tab || previousDirty !== value || previousLabel !== projectTabLabel(tab)) renderProjectTabs();
 }
 
 function toast(message) {
@@ -146,10 +433,11 @@ function toast(message) {
 }
 
 function renderAll(geometryScope = 'all') {
-  if (geometryScope === 'selection') sceneRenderer.invalidateSelectionGeometry();
-  else sceneRenderer.invalidateGeometry();
+  if (geometryScope === 'selection') invalidateSelectionRenderGeometry();
+  else invalidateAllRenderGeometry();
   $('#minecraftRenderType').value = state.project.renderType;
   $('#cullFaces').checked = state.project.cullFaces;
+  updateSnapButton();
   updateRenderModeControl();
   updateToolOptions();
   renderOutliner();
@@ -158,9 +446,24 @@ function renderAll(geometryScope = 'all') {
   updateSelectionLabels();
 }
 
+function invalidateAllRenderGeometry() {
+  sceneRenderer.invalidateGeometry();
+  uvPreviewRenderer.invalidateGeometry();
+  if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
+}
+
+function invalidateSelectionRenderGeometry(geometryChanged = true) {
+  sceneRenderer.invalidateSelectionGeometry(geometryChanged);
+  if (geometryChanged) {
+    uvPreviewRenderer.invalidateGeometry();
+    if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
+  }
+}
+
 function updateSelectionLabels() {
   const item = selected();
-  $('#selectionType').textContent = item?.type || 'Scene';
+  const format = modelFormatRegistry.get(state.project.formatId);
+  $('#selectionType').textContent = item?.type || format?.name || 'Scene';
   $('#selectionName').textContent = state.selectedUids.size > 1 ? `已選 ${state.selectedUids.size} 項` : item?.name || state.project.name;
   $('#uidChip').textContent = item?.uid || '—';
   const selectedCount = selectedElementUids().length;
@@ -207,11 +510,44 @@ function renderOutlinerWindow() {
   const windowNode = $('.outliner-virtual-window', outliner);
   if (!windowNode) return;
   windowNode.style.transform = `translateY(${start * rowHeight}px)`;
-  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, group, collapsed }) => `<button class="outliner-item ${state.selectedUids.has(node.uid) ? 'active' : ''}" data-uid="${node.uid}" draggable="true" style="padding-left:${5 + depth * 13}px">
+  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, group, collapsed }) => `<button class="outliner-item ${state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) ? 'active' : ''}" data-uid="${node.uid}" draggable="true" style="padding-left:${5 + depth * 13}px">
       ${group ? openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure', `data-disclosure="${node.uid}"`) : '<span></span>'}
       <span class="kind">${outlinerKindMarkup(node)}</span>
-      <span class="item-name">${escapeHtml(node.name)}</span><span class="eye" data-toggle-visible="${node.uid}">${node.visible ? '◉' : '○'}</span>
+      <span class="item-name">${escapeHtml(node.name)}</span>${outlinerStateMarkup(node)}
     </button>`).join('');
+}
+
+function stateIconMarkup(id) {
+  return `<svg class="outliner-state-icon" aria-hidden="true"><use href="#${id}"></use></svg>`;
+}
+
+function nodeAutoUvEnabled(node) {
+  if (node.type === 'group') {
+    const cubes = state.project.getDescendantElementUids(node.uid)
+      .map(uidValue => state.project.getNode(uidValue))
+      .filter(child => child?.type === 'cube');
+    return cubes.length ? cubes.every(cube => cube.autoUv !== false) : node.autoUv !== false;
+  }
+  return node.autoUv !== false;
+}
+
+function outlinerFlag(node, key, enabled, onIcon, offIcon, onTitle, offTitle, available = true) {
+  return `<span class="outliner-flag ${enabled ? '' : 'is-off'} ${available ? '' : 'unavailable'}" role="button"
+      data-node-toggle="${key}" data-node-uid="${node.uid}" title="${enabled ? onTitle : offTitle}">
+    ${stateIconMarkup(enabled ? onIcon : offIcon)}
+  </span>`;
+}
+
+function outlinerStateMarkup(node) {
+  const visible = outlinerFlag(node, 'visible', node.visible !== false, 'icon-show', 'icon-unshow', '可見', '隱藏');
+  if (!state.outlinerDetailed) return visible;
+  const autoUvAvailable = ['cube', 'shape', 'group'].includes(node.type);
+  return [
+    outlinerFlag(node, 'autoUv', nodeAutoUvEnabled(node), 'icon-uv-update', 'icon-unuv-update', '自動 UV', '不自動更新 UV', autoUvAvailable),
+    outlinerFlag(node, 'exported', node.exported !== false, 'icon-save', 'icon-unsave', '參與後續格式轉換', '不參與後續格式轉換'),
+    outlinerFlag(node, 'locked', node.locked === true, 'icon-locked', 'icon-unlocked', '鎖定', '解鎖'),
+    visible
+  ].join('');
 }
 
 function outlinerKindMarkup(node) {
@@ -298,6 +634,34 @@ function setNodeVisibility(node, visible, cascadeGroup = true) {
   for (const childUid of node.children) setNodeVisibility(state.project.getNode(childUid), visible, true);
 }
 
+function setNodeAutoUv(node, enabled) {
+  if (!node) return;
+  node.autoUv = enabled;
+  if (node.type === 'cube') {
+    if (enabled) {
+      for (const face of Object.values(node.faces || {})) delete face.uv;
+    } else freezeCubeUvs(node);
+    return;
+  }
+  if (node.type === 'group') {
+    for (const uidValue of state.project.getDescendantElementUids(node.uid)) {
+      const child = state.project.getNode(uidValue);
+      if (child?.type === 'cube') setNodeAutoUv(child, enabled);
+      else if (child?.type === 'shape') child.autoUv = enabled;
+    }
+  }
+}
+
+function setNodeFlag(node, key, value) {
+  if (!node) return;
+  if (key === 'visible') return setNodeVisibility(node, value);
+  if (key === 'autoUv') return setNodeAutoUv(node, value);
+  node[key] = value;
+  if (node.type === 'group') {
+    for (const childUid of node.children) setNodeFlag(state.project.getNode(childUid), key, value);
+  }
+}
+
 function bindInspector() {
   const item = selected();
   if (!item) return;
@@ -333,7 +697,7 @@ function bindInspector() {
         nextPivot[axis] = nextValue;
         setPivotPreservingGeometry(state.project, item, nextPivot);
       } else item[field][axis] = nextValue;
-      markDirty(); sceneRenderer.invalidateSelectionGeometry(); syncInspectorValues(item); renderScene();
+      markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(item); renderScene();
     };
     input.addEventListener('input', apply);
     input.addEventListener('change', apply);
@@ -347,7 +711,7 @@ function bindInspector() {
       if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
       const key = input.dataset.parameter;
       item.parameters[key] = key === 'sides' ? Math.max(3, Math.round(value)) : Math.max(.1, value);
-      markDirty(); sceneRenderer.invalidateSelectionGeometry(); renderScene();
+      markDirty(); invalidateSelectionRenderGeometry(); renderScene();
     };
     input.addEventListener('input', apply);
     input.addEventListener('change', apply);
@@ -390,7 +754,7 @@ function refreshSelectionUi() {
   state.outlinerWindowStart = -1;
   state.outlinerWindowEnd = -1;
   renderOutlinerWindow();
-  sceneRenderer.invalidateSelectionGeometry();
+  sceneRenderer.invalidateSelectionGeometry(false);
   updateToolOptions();
   renderInspector();
   renderScene();
@@ -400,7 +764,7 @@ function refreshSelectionUi() {
 function clearSelection() {
   if (!state.selectedUids.size && !state.selectedUid) return;
   sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
-  state.selectedUids.clear();
+  state.selectedUids = new Set();
   state.selectedUid = null;
   state.selectionAnchorUid = null;
   state.vertexSnapSource = null;
@@ -419,10 +783,12 @@ function selectItem(uid, { revealInOutliner = false, toggle = false, range = fal
       const extended = new Set(state.selectedUids);
       rows.slice(Math.min(start, end), Math.max(start, end) + 1).forEach(row => extended.add(row.node.uid));
       state.selectedUids = extended;
-    } else state.selectedUids.add(uid);
+    } else state.selectedUids = new Set([...state.selectedUids, uid]);
   } else if (toggle) {
-    if (state.selectedUids.has(uid)) state.selectedUids.delete(uid);
-    else state.selectedUids.add(uid);
+    const toggled = new Set(state.selectedUids);
+    if (toggled.has(uid)) toggled.delete(uid);
+    else toggled.add(uid);
+    state.selectedUids = toggled;
     state.selectionAnchorUid = uid;
   } else {
     state.selectedUids = new Set([uid]);
@@ -454,18 +820,36 @@ function syncInspectorValues(item) {
   });
 }
 
-function selectedNodeUids() {
-  return [...state.selectedUids].filter(uidValue => state.project.getNode(uidValue));
-}
-
-function selectedElementUids() {
+function getSelectionExpansion() {
+  if (selectionExpansionCache?.project === state.project
+    && selectionExpansionCache.selection === state.selectedUids
+    && selectionExpansionCache.size === state.selectedUids.size
+    && selectionExpansionCache.hierarchyRevision === state.project.hierarchyRevision) return selectionExpansionCache;
+  const nodeUids = [...state.selectedUids].filter(uidValue => state.project.getNode(uidValue));
   const elements = new Set();
-  for (const uidValue of selectedNodeUids()) {
+  for (const uidValue of nodeUids) {
     const node = state.project.getNode(uidValue);
     if (node?.type === 'group') state.project.getDescendantElementUids(uidValue).forEach(childUid => elements.add(childUid));
     else if (node) elements.add(node.uid);
   }
-  return [...elements];
+  selectionExpansionCache = {
+    project: state.project,
+    selection: state.selectedUids,
+    size: state.selectedUids.size,
+    hierarchyRevision: state.project.hierarchyRevision,
+    nodeUids,
+    elementUids: [...elements],
+    elementSet: elements
+  };
+  return selectionExpansionCache;
+}
+
+function selectedNodeUids() {
+  return getSelectionExpansion().nodeUids;
+}
+
+function selectedElementUids() {
+  return getSelectionExpansion().elementUids;
 }
 
 function selectedTopLevelNodes() {
@@ -503,6 +887,7 @@ function insertNewNodeUid(uidValue) {
   const reference = state.project.getNode(state.selectedUid);
   if (!reference) {
     state.project.outliner.push(uidValue);
+    state.project.invalidateHierarchyIndex();
     return;
   }
   // A single selected group is an insertion target. In a multi-selection it is
@@ -510,11 +895,13 @@ function insertNewNodeUid(uidValue) {
   if (selectedIds.length === 1 && reference.type === 'group') {
     reference.children.push(uidValue);
     state.collapsedGroups.delete(reference.uid);
+    state.project.invalidateHierarchyIndex();
     return;
   }
   const { items } = nodeContainer(reference.uid);
   const index = items.indexOf(reference.uid);
   items.splice(index < 0 ? items.length : index + 1, 0, uidValue);
+  state.project.invalidateHierarchyIndex();
 }
 
 function selectCreatedNode(uidValue) {
@@ -559,6 +946,7 @@ function addGroup() {
   const hadMultipleSelection = selectedNodeUids().length > 1;
   const selectedIds = topLevelSelectedUids();
   state.project.groups.push(group);
+  state.project.invalidateHierarchyIndex();
   if (hadMultipleSelection && selectedIds.length) {
     const sourceContainers = selectedIds.map(uidValue => nodeContainer(uidValue));
     const sharedContainer = sourceContainers.every(container => container.items === sourceContainers[0].items)
@@ -595,6 +983,7 @@ function addGroup() {
   } else {
     insertNewNodeUid(group.uid);
   }
+  state.project.invalidateHierarchyIndex();
   selectCreatedNode(group.uid);
   markDirty(); renderAll(); animateOutlinerReorder(previousRowPositions); toast('已新增組');
 }
@@ -605,7 +994,7 @@ function deleteSelected() {
   snapshot();
   selectedIds.forEach(uidValue => state.project.removeNode(uidValue));
   state.selectedUid = null;
-  state.selectedUids.clear();
+  state.selectedUids = new Set();
   state.selectionAnchorUid = null;
   markDirty(); renderAll(); toast(selectedIds.length > 1 ? `已刪除 ${selectedIds.length} 項` : '物件已刪除');
 }
@@ -699,22 +1088,198 @@ function moveSelectedNodes(targetUid = null, zone = 'after') {
     if (index >= 0) container.splice(index, 1);
   }
   destination.splice(Math.max(0, insertionIndex), 0, ...moving);
+  state.project.invalidateHierarchyIndex();
   if (destinationParent) state.collapsedGroups.delete(destinationParent.uid);
   markDirty();
   renderAll();
   animateOutlinerReorder(previousRowPositions);
 }
 
+function uvPreviewIsActive() {
+  const panel = dockManager?.get('uvPreview');
+  if (document.hidden || !state.uvPreviewEnabled || !panel || panel.element.hidden || panel.state.collapsed || state.layoutResizing) return false;
+  if (panel.state.dock !== 'floating' && dockManager.zoneState?.[panel.state.dock]) return false;
+  const rect = uvPreviewViewport.getBoundingClientRect();
+  return rect.width >= 2 && rect.height >= 2;
+}
+
+function uvPreviewElements() {
+  return selectedElementUids()
+    .map(uidValue => state.project.getNode(uidValue))
+    .filter(element => element && (element.type === 'cube' || element.type === 'shape'));
+}
+
+function getUvPreviewProject() {
+  const sourceElements = uvPreviewElements();
+  const key = sourceElements.map(element => element.uid).sort().join('|');
+  if (uvPreviewProjectCache?.source === state.project
+    && uvPreviewProjectCache.key === key
+    && uvPreviewProjectCache.hierarchyRevision === state.project.hierarchyRevision) return uvPreviewProjectCache;
+
+  // Visibility and locking are editor concerns. This isolated preview always
+  // shows the selected geometry while inheriting its real transform and UVs.
+  const elements = sourceElements.map(element => Object.assign(Object.create(element), {
+    visible: true,
+    locked: false
+  }));
+  const groups = state.project.groups.map(group => Object.assign(Object.create(group), { locked: false }));
+  const project = {
+    elements,
+    groups,
+    outliner: elements.map(element => element.uid),
+    textureSize: state.project.textureSize,
+    renderType: state.uvPreviewFaceColors ? 'solid' : state.project.renderType,
+    cullFaces: state.project.cullFaces,
+    getNode: uidValue => state.project.getNode(uidValue),
+    getGroupChain: uidValue => state.project.getGroupChain(uidValue),
+    getDescendantElementUids: uidValue => state.project.getDescendantElementUids(uidValue)
+  };
+  uvPreviewProjectCache = {
+    source: state.project,
+    key,
+    hierarchyRevision: state.project.hierarchyRevision,
+    elements,
+    project,
+    fit: null
+  };
+  uvPreviewRenderer.invalidateGeometry();
+  return uvPreviewProjectCache;
+}
+
+function uvPreviewFit(cache) {
+  if (cache.fit) return cache.fit;
+  const bounds = sceneRenderer.getSelectionBounds(state.project, state.selectedUids);
+  let center = bounds?.center;
+  let span = bounds ? bounds.max.map((value, axis) => Math.abs(value - bounds.min[axis])) : null;
+  if (!center || !span) {
+    const positions = cache.elements.map(element => element.pivot || element.origin || element.position).filter(Boolean);
+    center = positions.length
+      ? [0, 1, 2].map(axis => positions.reduce((sum, point) => sum + Number(point[axis] || 0), 0) / positions.length)
+      : [0, 0, 0];
+    span = [16, 16, 16];
+  }
+  const radius = Math.max(.25, Math.hypot(...span) / 2);
+  cache.fit = {
+    target: [...center],
+    zoom: Math.max(.025, Math.min(20, 42 * Math.tan(Math.PI / 8) / (radius * 1.28)))
+  };
+  return cache.fit;
+}
+
+function setUvPreviewPlaceholder(message, visible) {
+  const empty = $('#uvPreviewEmpty');
+  empty.textContent = message;
+  empty.hidden = !visible;
+  uvPreviewCanvas.hidden = visible;
+  $('[data-panel="uvPreview"]')?.classList.toggle('preview-disabled', !state.uvPreviewEnabled);
+}
+
+function renderUvPreview() {
+  if (!state.uvPreviewEnabled) {
+    setUvPreviewPlaceholder('預覽已關閉', true);
+    return false;
+  }
+  if (!uvPreviewIsActive()) {
+    return false;
+  }
+  const cache = getUvPreviewProject();
+  if (!cache.elements.length) {
+    setUvPreviewPlaceholder('選擇 Cube 或 Shape', true);
+    return false;
+  }
+  setUvPreviewPlaceholder('', false);
+  if (uvPreviewTextureDirty) {
+    uvPreviewRenderer.setTexture(textureCanvas);
+    uvPreviewTextureDirty = false;
+  }
+  cache.project.textureSize = state.project.textureSize;
+  cache.project.renderType = state.uvPreviewFaceColors ? 'solid' : state.project.renderType;
+  cache.project.cullFaces = state.project.cullFaces;
+  const fit = uvPreviewFit(cache);
+  uvPreviewRenderer.render(cache.project, null, {
+    projection: 'perspective',
+    zoom: fit.zoom,
+    panX: 0,
+    panY: 0,
+    yaw: state.uvPreviewYaw,
+    pitch: state.uvPreviewPitch,
+    target: fit.target,
+    selectedUids: new Set(),
+    renderMode: state.uvPreviewFaceColors ? 'solid' : 'textured',
+    previewShade: true,
+    grid: false,
+    wire: false,
+    geometryOnly: true,
+    snap: state.settingsSnap,
+    faceDistinct: state.uvPreviewFaceColors,
+    lockedDefaultAlpha: 100,
+    lockedHoverFade: false,
+    editorOverlayLines: []
+  });
+  return true;
+}
+
+function stopUvPreviewAnimation() {
+  if (uvPreviewAnimationFrame !== null) cancelAnimationFrame(uvPreviewAnimationFrame);
+  uvPreviewAnimationFrame = null;
+  uvPreviewLastFrame = 0;
+}
+
+function scheduleUvPreviewAnimation() {
+  if (!uvPreviewIsActive() || !state.uvPreviewAutoRotate || !uvPreviewElements().length) {
+    stopUvPreviewAnimation();
+    return;
+  }
+  if (uvPreviewAnimationFrame !== null) return;
+  const tick = now => {
+    uvPreviewAnimationFrame = null;
+    if (!uvPreviewIsActive() || !state.uvPreviewAutoRotate) {
+      stopUvPreviewAnimation();
+      return;
+    }
+    if (!uvPreviewLastFrame) uvPreviewLastFrame = now;
+    const elapsed = Math.min(80, now - uvPreviewLastFrame);
+    if (elapsed >= 30) {
+      state.uvPreviewYaw += elapsed * .00018;
+      uvPreviewLastFrame = now;
+      renderUvPreview();
+    }
+    uvPreviewAnimationFrame = requestAnimationFrame(tick);
+  };
+  uvPreviewAnimationFrame = requestAnimationFrame(tick);
+}
+
+function refreshUvPreview() {
+  renderUvPreview();
+  scheduleUvPreviewAnimation();
+}
+
 function renderScene() {
+  if (sceneRenderFrame !== null) cancelAnimationFrame(sceneRenderFrame);
+  sceneRenderFrame = null;
   sceneRenderer.render(state.project, state.selectedUid, { ...state, editorOverlayLines: buildKnifeOverlayLines() });
   updateLocatorOverlay();
   updateTransformGizmo();
   updateAxisWidget();
+  refreshUvPreview();
+}
+
+function scheduleSceneRender() {
+  if (sceneRenderFrame !== null) return;
+  sceneRenderFrame = requestAnimationFrame(() => {
+    sceneRenderFrame = null;
+    renderScene();
+  });
+}
+
+function renderLockedHoverFrame() {
+  sceneRenderer.redrawLockedOverlay({ ...state, editorOverlayLines: buildKnifeOverlayLines() });
+  updateLocatorHoverOpacity();
 }
 
 function updateLocatorOverlay() {
   const overlay = $('#locatorOverlay');
-  const selectedElements = new Set(selectedElementUids());
+  const selectedElements = getSelectionExpansion().elementSet;
   const rect = sceneCanvas.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
@@ -725,20 +1290,99 @@ function updateLocatorOverlay() {
     return;
   }
   const icons = state.project.elements
-    .filter(element => element.type === 'locator')
+    .filter(element => element.type === 'locator' && element.visible !== false)
     .flatMap(element => {
-      const world = sceneRenderer.getWorldVertices(state.project, element.uid)[0]?.point;
+      let world = getTransformPivot(element);
+      if (selectedElements.has(element.uid)) world = sceneRenderer.transformSelectionPreviewPoint(world);
       if (!world) return [];
       const point = sceneRenderer.projectPoint(world);
       if (!point || point.behind || point.depth < -1 || point.depth > 1
         || point.x < -9 || point.y < -9 || point.x > width + 9 || point.y > height + 9) return [];
-      return [{ element, point, size: sceneRenderer.getLocatorScreenSize(world) }];
+      return [{ element, point, size: sceneRenderer.getLocatorScreenSize(world), opacity: lockedObjectOpacity(element.uid, point) }];
     })
     .sort((left, right) => right.point.depth - left.point.depth);
-  overlay.innerHTML = icons.map(({ element, point, size }) => `<svg class="locator-screen-icon ${selectedElements.has(element.uid) ? 'selected' : ''}"
+  overlay.innerHTML = icons.map(({ element, point, size, opacity }) => `<svg class="locator-screen-icon ${selectedElements.has(element.uid) ? 'selected' : ''}"
       data-locator-uid="${element.uid}" x="${point.x - size / 2}" y="${point.y - size / 2}" width="${size}" height="${size}"
-      viewBox="0 0 197.49 189.08" preserveAspectRatio="xMidYMid meet" aria-label="${escapeHtml(element.name)}">${LOCATOR_ICON_SHAPES}</svg>`).join('');
+      opacity="${opacity}" viewBox="0 0 197.49 189.08" preserveAspectRatio="xMidYMid meet" aria-label="${escapeHtml(element.name)}">${LOCATOR_ICON_SHAPES}</svg>`).join('');
   overlay.toggleAttribute('hidden', icons.length === 0);
+}
+
+function isEffectivelyLocked(uidValue) {
+  return sceneRenderer.isLocked(uidValue);
+}
+
+function lockedObjectOpacity(uidValue, screenPoint) {
+  if (!isEffectivelyLocked(uidValue)) return 1;
+  const base = state.lockedDefaultAlpha / 100;
+  const hover = state.lockedHoverAlpha / 100;
+  if (!state.lockedHoverFade || !state.lockedHoverPoint || !screenPoint || state.lockedHoverStrength <= 0) return base;
+  const distance = Math.hypot(screenPoint.x - state.lockedHoverPoint[0], screenPoint.y - state.lockedHoverPoint[1]);
+  const ratio = Math.min(1, distance / Math.max(1, state.lockedHoverRadius));
+  const smooth = ratio * ratio * (3 - 2 * ratio);
+  const radialOpacity = hover + (base - hover) * smooth;
+  return base + (radialOpacity - base) * state.lockedHoverStrength;
+}
+
+function updateLocatorHoverOpacity() {
+  $$('#locatorOverlay [data-locator-uid]').forEach(icon => {
+    const width = Number(icon.getAttribute('width')) || 0;
+    const height = Number(icon.getAttribute('height')) || 0;
+    const point = {
+      x: (Number(icon.getAttribute('x')) || 0) + width / 2,
+      y: (Number(icon.getAttribute('y')) || 0) + height / 2
+    };
+    icon.setAttribute('opacity', lockedObjectOpacity(icon.dataset.locatorUid, point));
+  });
+}
+
+function animateLockedHoverStrength(target) {
+  target = target ? 1 : 0;
+  if (Math.abs(state.lockedHoverStrength - target) < .001) {
+    state.lockedHoverStrength = target;
+    if (!target) state.lockedHoverPoint = null;
+    return;
+  }
+  if (lockedHoverFrame !== null) cancelAnimationFrame(lockedHoverFrame);
+  const from = state.lockedHoverStrength;
+  const start = performance.now();
+  const tick = now => {
+    const progress = Math.min(1, (now - start) / 200);
+    const eased = progress * progress * (3 - 2 * progress);
+    state.lockedHoverStrength = from + (target - from) * eased;
+    renderLockedHoverFrame();
+    if (progress < 1) lockedHoverFrame = requestAnimationFrame(tick);
+    else {
+      lockedHoverFrame = null;
+      state.lockedHoverStrength = target;
+      if (!target) state.lockedHoverPoint = null;
+    }
+  };
+  lockedHoverFrame = requestAnimationFrame(tick);
+}
+
+function updateLockedHover(event) {
+  if (!state.lockedHoverFade || !sceneRenderer.hasLockedObjects()) {
+    animateLockedHoverStrength(false);
+    return;
+  }
+  const rect = sceneCanvas.getBoundingClientRect();
+  state.lockedHoverPoint = [event.clientX - rect.left, event.clientY - rect.top];
+  if (state.lockedHoverStrength < .999) animateLockedHoverStrength(true);
+  else renderLockedHoverFrame();
+}
+
+function scheduleLockedHover(event) {
+  if (!state.lockedHoverFade || !sceneRenderer.hasLockedObjects()) {
+    lockedHoverPointer = null;
+    if (state.lockedHoverStrength > 0) animateLockedHoverStrength(false);
+    return;
+  }
+  lockedHoverPointer = { clientX: event.clientX, clientY: event.clientY };
+  if (lockedHoverPickFrame !== null) return;
+  lockedHoverPickFrame = requestAnimationFrame(() => {
+    lockedHoverPickFrame = null;
+    if (lockedHoverPointer) updateLockedHover(lockedHoverPointer);
+  });
 }
 
 function bakeCameraPan() {
@@ -900,6 +1544,8 @@ function selectedWorldPoints() {
 }
 
 function selectionGeometryCenter() {
+  const cachedBounds = sceneRenderer.getSelectionBounds(state.project, state.selectedUids);
+  if (cachedBounds) return cachedBounds.center;
   let points = selectedWorldPoints();
   if (!points.length) points = selectedTopLevelNodes().map(getTransformPivot).filter(Boolean);
   if (!points.length) return null;
@@ -910,6 +1556,7 @@ function selectionGeometryCenter() {
 }
 
 function getSelectionTransformContext() {
+  if (state.dragging?.type === 'transform' && state.dragging.batchPreview) return state.dragging.selectionContext;
   const nodes = selectedTopLevelNodes();
   const multiple = nodes.length > 1;
   const commonGroup = multiple ? deepestCommonSelectionGroup() : null;
@@ -1097,6 +1744,9 @@ function updateGizmoDepthHover(event) {
 
 const GIZMO_AXIS_PIXELS = 93;
 const GIZMO_HEAD_GAP_PIXELS = 25;
+// Rz * Ry * Rx is presented as the Z -> Y -> X Euler hierarchy. Keep that
+// application order legible by nesting the corresponding rings outside-in.
+const EULER_RING_RADIUS_SCALES = Object.freeze([.775, .87, .965]);
 
 function coneMarkup(handle, origin, axisClass, pixelWorld) {
   const baseWorld = addScaled3(origin, handle.vector, handle.positiveDistance);
@@ -1245,7 +1895,66 @@ function frontRingGeometry(origin, axis, radius, cameraFrame) {
     drawing = true;
   }
   if (group.length) groups.push(group);
-  return { path: path.trim(), groups };
+  if (groups.length > 1) {
+    const first = groups[0];
+    const last = groups[groups.length - 1];
+    const firstPoint = first[0], lastPoint = last[last.length - 1];
+    if (Math.hypot(firstPoint.x - lastPoint.x, firstPoint.y - lastPoint.y) < 1) {
+      groups = [[...last.slice(0, -1), ...first], ...groups.slice(1, -1)];
+    }
+  }
+  path = groups.map(pointsPath).join(' ');
+  const mainArc = [...groups].sort((left, right) => right.length - left.length)[0] || [];
+  const handleIndex = Math.floor(mainArc.length / 2);
+  const handlePoint = mainArc[handleIndex] || null;
+  let handle = null;
+  if (handlePoint) {
+    const previous = mainArc[Math.max(0, handleIndex - 1)] || handlePoint;
+    const next = mainArc[Math.min(mainArc.length - 1, handleIndex + 1)] || handlePoint;
+    const tangentX = next.x - previous.x;
+    const tangentY = next.y - previous.y;
+    const tangentLength = Math.max(.0001, Math.hypot(tangentX, tangentY));
+    handle = {
+      ...handlePoint,
+      tangentX: tangentX / tangentLength,
+      tangentY: tangentY / tangentLength
+    };
+  }
+  return { path: path.trim(), groups, handle };
+}
+
+function taperedRingPath(points) {
+  if (points.length < 2) return '';
+  const sides = points.map((point, index) => {
+    const previous = points[Math.max(0, index - 1)];
+    const next = points[Math.min(points.length - 1, index + 1)];
+    const dx = next.x - previous.x, dy = next.y - previous.y;
+    const length = Math.max(.0001, Math.hypot(dx, dy));
+    const progress = index / Math.max(1, points.length - 1);
+    const width = .8 + 3.2 * Math.pow(Math.sin(progress * Math.PI), .7);
+    const normalX = -dy / length * width / 2;
+    const normalY = dx / length * width / 2;
+    return {
+      left: { x: point.x + normalX, y: point.y + normalY },
+      right: { x: point.x - normalX, y: point.y - normalY }
+    };
+  });
+  return pointsPath([...sides.map(entry => entry.left), ...sides.map(entry => entry.right).reverse()], true);
+}
+
+function taperedRingMarkup(ring) {
+  const arcs = ring.groups.map(group => `<path class="gizmo-visible rotate-ring" d="${taperedRingPath(group)}"/>`).join('');
+  if (!ring.handle) return arcs;
+  const tangent = [ring.handle.tangentX, ring.handle.tangentY];
+  const normal = [-tangent[1], tangent[0]];
+  const diamond = [
+    { x: ring.handle.x - tangent[0] * 15, y: ring.handle.y - tangent[1] * 15 },
+    { x: ring.handle.x + normal[0] * 5, y: ring.handle.y + normal[1] * 5 },
+    { x: ring.handle.x + tangent[0] * 15, y: ring.handle.y + tangent[1] * 15 },
+    { x: ring.handle.x - normal[0] * 5, y: ring.handle.y - normal[1] * 5 }
+  ];
+  return `${arcs}<path class="gizmo-visible rotate-handle" d="${pointsPath(diamond, true)}"/>
+    <circle class="gizmo-hit-point rotate-handle-hit" cx="${ring.handle.x}" cy="${ring.handle.y}" r="18"/>`;
 }
 
 function cameraRingGeometry(origin, radius, cameraFrame) {
@@ -1335,7 +2044,7 @@ function updateTransformGizmo() {
   const gizmo = $('#transformGizmo');
   const item = selected();
   const selectionContext = getSelectionTransformContext();
-  if (!item || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)
+  if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)
     || (state.tool === 'resize' && !selectionContext.multiple && !['cube', 'shape'].includes(item.type))) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null; return;
   }
@@ -1355,7 +2064,9 @@ function updateTransformGizmo() {
   const pivot = selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item);
   const geometryCenter = selectionContext.multiple
     ? selectionContext.center || pivot
-    : sceneRenderer.getGeometryCenter(state.project, item.uid) || pivot;
+    : sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center
+      || sceneRenderer.getGeometryCenter(state.project, item.uid)
+      || pivot;
   const gizmoOrigin = ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
   const center = projectViewportPoint(gizmoOrigin);
   state.gizmoCenter = { x: center.x, y: center.y };
@@ -1377,8 +2088,7 @@ function updateTransformGizmo() {
     if (state.tool === 'resize' && state.scaleHandleMode === 'bounds') {
       let extent;
       if (selectionContext.multiple) {
-        const projections = selectedWorldPoints().map(point => dot3(point.map((value, axis) => value - gizmoOrigin[axis]), axis));
-        extent = projections.length ? Math.max(...projections.map(Math.abs)) : 0;
+        extent = sceneRenderer.getSelectionProjectionExtent(state.project, state.selectedUids, gizmoOrigin, axis) ?? 0;
       } else extent = item.type === 'cube'
         ? Math.abs(item.size[index]) / 2
         : index === 1 ? Math.abs(item.parameters.height) / 2 : Math.abs(item.parameters.radius);
@@ -1395,10 +2105,12 @@ function updateTransformGizmo() {
     const pixelsPerUnit = 1 / pixelWorld;
     const radius = 87 / pixelsPerUnit;
     const sphere = cameraRingGeometry(gizmoOrigin, radius, cameraFrame);
+    const layeredEulerRings = state.transformSpace === 'self' && state.rotationMode === 'euler';
     const rings = handles.map(handle => {
-      const ring = frontRingGeometry(gizmoOrigin, handle.vector, radius * .965, cameraFrame);
+      const ringScale = layeredEulerRings ? EULER_RING_RADIUS_SCALES[handle.axis] : .965;
+      const ring = frontRingGeometry(gizmoOrigin, handle.vector, radius * ringScale, cameraFrame);
       return `<g class="gizmo-control axis-${classes[handle.axis]}" data-axis="${handle.axis}" data-kind="rotate" ${gizmoDepthAttributes('polyline', ring.groups)}>
-        <path class="gizmo-hit rotate-hit" d="${ring.path}"/><path class="gizmo-visible rotate-ring" d="${ring.path}"/>
+        <path class="gizmo-hit rotate-hit" d="${ring.path}"/>${taperedRingMarkup(ring)}
       </g>`;
     }).join('');
     gizmo.innerHTML = `<g class="gizmo-control sphere-control" data-axis="view" data-kind="rotate-view" ${gizmoDepthAttributes('polyline', sphere.points)}>
@@ -1447,13 +2159,22 @@ function updateTexturePreviewFrame(width, height) {
   $('.texture-preview > span').textContent = `${safeWidth} × ${safeHeight}`;
 }
 
+function syncRendererTexture(source) {
+  sceneRenderer.setTexture(source);
+  uvPreviewTextureDirty = true;
+  if (uvPreviewIsActive()) {
+    uvPreviewRenderer.setTexture(source);
+    uvPreviewTextureDirty = false;
+  }
+}
+
 function renderTexture() {
   textureCanvas.width = 1;
   textureCanvas.height = 1;
   textureCtx.imageSmoothingEnabled = false;
   textureCtx.fillStyle = '#fff';
   textureCtx.fillRect(0, 0, 1, 1);
-  sceneRenderer.setTexture(textureCanvas);
+  syncRendererTexture(textureCanvas);
   textureCtx.clearRect(0, 0, 1, 1);
   $('#texturePreview').style.setProperty('--texture-aspect', '1 / 1');
   $('.texture-preview > span').textContent = '無貼圖';
@@ -1536,10 +2257,27 @@ function applyPaletteColor(color, notify = true) {
   if (notify) toast(`已套用 ${color}`);
 }
 
-function cycleSnap() {
+function activeSnapSubdivisions() {
+  const projectValue = Number(state.project.snap?.subdivisions);
+  return Number.isFinite(projectValue) && projectValue > 0 ? projectValue : state.settingsSnap;
+}
+
+function updateSnapButton() {
+  const value = activeSnapSubdivisions();
+  $('#snapButton').textContent = `吸附 ${formatNumber(value)} · ${formatNumber(16 / value)}px`;
+}
+
+function cycleSnap(direction = 1) {
   const values = [4, 8, 16, 32, 64];
-  const next = values[(values.indexOf(state.snap) + 1) % values.length];
-  configRegistry.set(ConfigKey.SNAP, next, { source: 'toolbar' });
+  const currentIndex = values.indexOf(activeSnapSubdivisions());
+  const nextIndex = currentIndex < 0
+    ? direction < 0 ? values.length - 1 : 0
+    : (currentIndex + direction + values.length) % values.length;
+  const next = values[nextIndex];
+  if (!state.project.snap) state.project.snap = {};
+  state.project.snap.subdivisions = next;
+  updateSnapButton();
+  markDirty();
   toast(`吸附精度 ${next}（${formatNumber(16 / next)} px）`);
 }
 
@@ -1587,7 +2325,7 @@ function importTexture(file) {
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, image.naturalWidth, image.naturalHeight);
     textureCtx.drawImage(image, 0, 0);
-    sceneRenderer.setTexture(textureCanvas);
+    syncRendererTexture(textureCanvas);
     renderScene();
     updateTexturePreviewFrame(image.naturalWidth, image.naturalHeight);
     const asset = { _uid: textureUid(), name: file.name, source: url, uvWidth: image.naturalWidth, uvHeight: image.naturalHeight,
@@ -1609,7 +2347,7 @@ function loadTextureSource(source, name) {
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, image.naturalWidth, image.naturalHeight);
     textureCtx.drawImage(image, 0, 0);
-    sceneRenderer.setTexture(textureCanvas);
+    syncRendererTexture(textureCanvas);
     updateTexturePreviewFrame(image.naturalWidth, image.naturalHeight);
     const activeName = $('.texture-item.active strong');
     if (activeName) activeName.textContent = name;
@@ -1731,19 +2469,20 @@ async function openProject() {
 
 function loadProjectContent(content, filePath = '', resolvedTextures = []) {
   const data = JSON.parse(content);
-  snapshot();
-  state.project = filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format ? importBlockbench(data) : new CubeBricksProject(data);
-  state.filePath = filePath.toLowerCase().endsWith('.cbmodel') ? filePath : null;
-  state.selectedUid = state.project.elements[0]?.uid || null;
-  state.selectedUids = new Set(state.selectedUid ? [state.selectedUid] : []);
-  state.selectionAnchorUid = state.selectedUid;
-  state.history.length = 0; state.future.length = 0;
+  const project = filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format ? importBlockbench(data) : new CubeBricksProject(data);
+  const savedPath = filePath.toLowerCase().endsWith('.cbmodel') ? filePath : null;
   const embeddedTextures = (data.textures || []).filter(texture => typeof texture.source === 'string' && texture.source.startsWith('data:image/')).map(texture => ({
     uuid: texture.uuid, id: texture.id, name: texture.name || 'embedded_texture.png', source: texture.source,
     uvWidth: texture.uv_width, uvHeight: texture.uv_height, useAsDefault: texture.use_as_default === true
   }));
-  installProjectTextures(resolvedTextures.length ? resolvedTextures : embeddedTextures);
-  markDirty(!state.filePath); renderAll(); toast(`已打開 ${state.project.name}`);
+  addProjectTab(project, {
+    filePath: savedPath,
+    displayName: filePath ? filePath.split(/[\\/]/).pop() : null,
+    textureAssets: resolvedTextures.length ? resolvedTextures : embeddedTextures,
+    dirty: !savedPath
+  });
+  markDirty(!savedPath);
+  toast(`已打開 ${project.name}`);
 }
 
 async function saveProject(saveAs = false) {
@@ -1753,6 +2492,8 @@ async function saveProject(saveAs = false) {
       const result = await window.cubeBricksDesktop.saveProject({ filePath: saveAs ? null : state.filePath, name: state.project.name, content });
       if (!result) return;
       state.filePath = result.filePath;
+      const tab = projectTabById(activeProjectTabId);
+      if (tab) tab.displayName = null;
     } else download(content, `${state.project.name}.cbmodel`, 'application/json');
     markDirty(false); toast('項目已保存');
   } catch (error) { toast(`保存失敗：${error.message}`); }
@@ -1769,12 +2510,62 @@ function download(content, name, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 500);
 }
 
-function newProject() {
-  state.project = new CubeBricksProject({ name: 'untitled' });
-  state.selectedUid = null; state.selectedUids.clear(); state.selectionAnchorUid = null;
-  state.filePath = null; state.history.length = 0; state.future.length = 0;
-  installProjectTextures([]);
-  markDirty(); renderAll(); toast('已建立新項目');
+const MODEL_FORMAT_ICONS = Object.freeze({
+  generic: '<path d="M4 12 12 8l8 4-8 4-8-4Z" stroke="none"/>',
+  image: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5" fill="none" stroke-width="1.8"/><circle cx="8.3" cy="9" r="1.7" stroke="none"/><path d="m5.5 17 4.4-4.4 3.1 3 2.5-2.4 3 3.8" fill="none" stroke-width="1.8"/>',
+  'java-block': '<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Zm0 9 8-4.5M12 12 4 7.5M12 12v9" fill="none" stroke-width="1.8"/>',
+  'bedrock-entity': '<path d="m12 3 5 2.8v5.7L12 14l-5-2.5V5.8L12 3Z" stroke="none"/><path d="M5 18.5h14M8 14.5v4m8-4v4" fill="none" stroke-width="1.8"/>',
+  'bedrock-block': '<path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5v-9Zm7 1v7m-7-8 7 3.5 7-3.5" fill="none" stroke-width="1.8"/><path d="M8 9v5l4 2" fill="none" stroke-width="1.8"/>',
+  'modded-entity': '<path d="M7 8h10v9a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4V8Zm10 2h2a2 2 0 0 1 0 4h-2M9 5h6" fill="none" stroke-width="1.8"/>',
+  skin: '<circle cx="12" cy="5.3" r="2.8" stroke="none"/><path d="M9.2 9h5.6l1.2 5-2 1v6h-1.5l-.5-5-.5 5H10v-6l-2-1 1.2-5Z" stroke="none"/>',
+  geckolib: '<path d="m12 3.5 7.5 4.2v8.6L12 20.5l-7.5-4.2V7.7L12 3.5Z" fill="none" stroke-width="1.7" stroke-dasharray="3 2"/><path d="M8 8.5h8v7H8z" fill="none" stroke-width="1.7"/>'
+});
+
+function modelFormatIconMarkup(icon) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${MODEL_FORMAT_ICONS[icon] || MODEL_FORMAT_ICONS.generic}</svg>`;
+}
+
+function renderModelFormatPicker() {
+  const container = $('#modelFormatList');
+  if (!container) return;
+  const categories = new Map();
+  for (const format of modelFormatRegistry.list()) {
+    if (!categories.has(format.category)) categories.set(format.category, []);
+    categories.get(format.category).push(format);
+  }
+  const categoryLabels = { general: '通用', minecraft: 'Minecraft' };
+  container.innerHTML = [...categories].map(([category, formats]) => `<section class="model-format-category">
+    <h3>${escapeHtml(categoryLabels[category] || category)}</h3>
+    <div class="model-format-grid">${formats.map(format => {
+      const placeholder = format.status === 'placeholder';
+      const snap = Number(format.snap?.subdivisions);
+      const details = [format.description, Number.isFinite(snap) ? `標準吸附 ${formatNumber(snap)} · ${formatNumber(16 / snap)}px` : ''].filter(Boolean).join(' · ');
+      return `<button type="button" class="model-format-card ${placeholder ? 'is-placeholder' : ''}" data-model-format="${escapeAttribute(format.id)}" aria-disabled="${placeholder}">
+        <span class="model-format-card-icon">${modelFormatIconMarkup(format.icon)}</span>
+        <span class="model-format-card-copy"><strong>${escapeHtml(format.name)}</strong><small>${escapeHtml(details)}</small></span>
+        ${placeholder ? `<span class="model-format-placeholder">佔位</span>` : ''}
+      </button>`;
+    }).join('')}</div>
+  </section>`).join('');
+}
+
+function openNewProjectDialog() {
+  renderModelFormatPicker();
+  newProjectDialog.showModal();
+}
+
+function newProject(formatId) {
+  const format = modelFormatRegistry.get(formatId);
+  if (!format) return toast('未知模型格式');
+  if (format.status === 'placeholder') return toast(format.placeholderReason || '這個格式尚未實現');
+  const initialData = createModelProjectData(format.id, {
+    name: 'untitled',
+    language: configRegistry.get(ConfigKey.LANGUAGE)
+  });
+  const project = new CubeBricksProject({ name: 'untitled', ...initialData });
+  addProjectTab(project, { dirty: true, textureAssets: [] });
+  newProjectDialog.close();
+  markDirty(); toast(`已建立 ${format.name}`);
 }
 
 const themePresets = {
@@ -1843,6 +2634,13 @@ function initializeConfigRegistry() {
     docks: Object.freeze({
       list: () => dockManager?.getIndex() || [],
       get: id => dockManager?.getIndex().find(panel => panel.id === id) || null
+    }),
+    formats: Object.freeze({
+      list: () => modelFormatRegistry.list(),
+      get: id => modelFormatRegistry.get(id),
+      current: () => modelFormatRegistry.get(state.project.formatId),
+      register: definition => modelFormatRegistry.register(definition),
+      subscribe: listener => modelFormatRegistry.subscribe(listener)
     })
   });
 }
@@ -1856,8 +2654,8 @@ function applyRegisteredConfig(id, value, notify = false) {
     if (notify) toast(`介面語言：${getLanguageLabel(value)}`);
   }
   if (id === ConfigKey.SNAP) {
-    state.snap = value;
-    $('#snapButton').textContent = `吸附 ${formatNumber(value)} · ${formatNumber(16 / value)}px`;
+    state.settingsSnap = value;
+    updateSnapButton();
   }
   if (id === ConfigKey.ALLOW_NEGATIVE_SIZE) state.allowNegativeSize = value;
   if (id === ConfigKey.SHIFT_SNAP_MODE) state.modifierSnap.shift.mode = value;
@@ -1879,6 +2677,13 @@ function applyRegisteredConfig(id, value, notify = false) {
   }
   if (id === ConfigKey.SHOW_GRID) state.grid = value;
   if (id === ConfigKey.SHOW_WIREFRAME) state.wire = value;
+  if (id === ConfigKey.LOCKED_DEFAULT_ALPHA) state.lockedDefaultAlpha = value;
+  if (id === ConfigKey.LOCKED_HOVER_FADE) {
+    state.lockedHoverFade = value;
+    if (!value) animateLockedHoverStrength(false);
+  }
+  if (id === ConfigKey.LOCKED_HOVER_ALPHA) state.lockedHoverAlpha = value;
+  if (id === ConfigKey.LOCKED_HOVER_RADIUS) state.lockedHoverRadius = value;
   if (notify && id !== ConfigKey.LANGUAGE) renderScene();
 }
 
@@ -1909,7 +2714,11 @@ function initializeDockSystem() {
   dockManager = new DockManager({
     root: $('.workspace'),
     definitions: DOCK_PANEL_DEFINITIONS,
-    onInteraction: active => { state.layoutResizing = active; },
+    onInteraction: active => {
+      state.layoutResizing = active;
+      if (active) stopUvPreviewAnimation();
+      else requestAnimationFrame(refreshUvPreview);
+    },
     onLayoutChange: () => {
       scheduleOutlinerWindow();
       requestAnimationFrame(renderScene);
@@ -2107,6 +2916,77 @@ function bindEvents() {
     document.body.classList.remove('keyboard-navigation');
   }, true);
   bindContextMenus();
+  projectTabsNode.addEventListener('click', event => {
+    const close = event.target.closest('[data-close-project-tab]');
+    if (close) {
+      event.stopPropagation();
+      closeProjectTab(close.dataset.closeProjectTab);
+      return;
+    }
+    const tab = event.target.closest('[data-project-tab]');
+    if (tab) activateProjectTab(tab.dataset.projectTab);
+  });
+  projectTabsNode.addEventListener('auxclick', event => {
+    if (event.button !== 1) return;
+    const tab = event.target.closest('[data-project-tab]');
+    if (!tab) return;
+    event.preventDefault();
+    closeProjectTab(tab.dataset.projectTab);
+  });
+  projectTabsNode.addEventListener('contextmenu', event => {
+    const tab = event.target.closest('[data-project-tab]');
+    if (!tab) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openProjectInfo(tab.dataset.projectTab);
+  });
+  projectTabsNode.addEventListener('keydown', event => {
+    const tab = event.target.closest('[data-project-tab]');
+    if (tab && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      activateProjectTab(tab.dataset.projectTab);
+    }
+  });
+  projectTabsNode.addEventListener('dragstart', event => {
+    const tab = event.target.closest('[data-project-tab]');
+    if (!tab || event.target.closest('[data-close-project-tab]')) { event.preventDefault(); return; }
+    draggingProjectTabId = tab.dataset.projectTab;
+    draggingProjectTabInsertIndex = projectTabInsertionIndex(event.clientX, draggingProjectTabId);
+    tab.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/x-cubebricks-project-tab', draggingProjectTabId);
+  });
+  projectTabsNode.addEventListener('dragover', event => {
+    if (!draggingProjectTabId) return;
+    event.preventDefault();
+    draggingProjectTabInsertIndex = projectTabInsertionIndex(event.clientX);
+    previewProjectTabInsertion(draggingProjectTabInsertIndex);
+  });
+  projectTabsNode.addEventListener('drop', event => {
+    if (!draggingProjectTabId) return;
+    event.preventDefault();
+    draggingProjectTabInsertIndex = projectTabInsertionIndex(event.clientX);
+    moveProjectTabToIndex(draggingProjectTabId, draggingProjectTabInsertIndex);
+    draggingProjectTabId = null;
+    draggingProjectTabInsertIndex = null;
+  });
+  projectTabsNode.addEventListener('dragend', event => {
+    if (draggingProjectTabId) {
+      moveProjectTabToIndex(draggingProjectTabId, projectTabInsertionIndex(event.clientX));
+    }
+    draggingProjectTabId = null;
+    draggingProjectTabInsertIndex = null;
+    projectTabsNode.querySelectorAll('.is-dragging,.drop-before,.drop-after').forEach(node => node.classList.remove('is-dragging', 'drop-before', 'drop-after'));
+  });
+  $('#newProjectTab').addEventListener('click', openNewProjectDialog);
+  $('#projectInfoForm').addEventListener('submit', event => {
+    event.preventDefault();
+    applyProjectInfo();
+  });
+  $$('[data-action="closeProjectInfo"]').forEach(button => button.addEventListener('click', () => {
+    projectInfoDialog.close();
+    editingProjectTabId = null;
+  }));
   $$('.mode-tab').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
   $$('.tool').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
   $$('.dock-tab').forEach(button => button.addEventListener('click', () => activateDock(button.dataset.dock)));
@@ -2115,7 +2995,11 @@ function bindEvents() {
   $('[data-action="addLocator"]').addEventListener('click', addLocator);
   $('[data-action="addGroup"]').addEventListener('click', addGroup);
   $('.outliner-create-actions [data-action="deleteSelected"]').addEventListener('click', deleteSelected);
-  $('[data-action="new"]').addEventListener('click', newProject);
+  $('[data-action="new"]').addEventListener('click', openNewProjectDialog);
+  $('#modelFormatList').addEventListener('click', event => {
+    const card = event.target.closest('[data-model-format]');
+    if (card) newProject(card.dataset.modelFormat);
+  });
   $('[data-action="open"]').addEventListener('click', openProject);
   $('[data-action="save"]').addEventListener('click', () => saveProject(false));
   $('[data-action="export"]').addEventListener('click', exportProject);
@@ -2129,10 +3013,55 @@ function bindEvents() {
   languageSelect.addEventListener('change', event => {
     configRegistry.set(ConfigKey.LANGUAGE, event.target.value, { source: 'appearance-dialog' });
   });
-  $$('[data-config-key]').forEach(control => control.addEventListener('change', () => setConfigFromControl(control)));
+  $$('[data-config-key]').forEach(control => {
+    control.addEventListener('change', () => setConfigFromControl(control));
+    if (control.type === 'number') control.addEventListener('input', () => {
+      if (control.value !== '') setConfigFromControl(control);
+    });
+  });
   $('#symmetryToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SYMMETRY, event.target.checked, { source: 'toolbar' }));
   $('#alphaLockToggle').addEventListener('change', event => configRegistry.set(ConfigKey.ALPHA_LOCK, event.target.checked, { source: 'toolbar' }));
   $('#previewShadeToggle').addEventListener('change', event => configRegistry.set(ConfigKey.PREVIEW_SHADE, event.target.checked, { source: 'toolbar' }));
+  $('#uvPreviewEnabled').addEventListener('change', event => {
+    state.uvPreviewEnabled = event.target.checked;
+    if (!state.uvPreviewEnabled) stopUvPreviewAnimation();
+    refreshUvPreview();
+  });
+  $('#uvPreviewAutoRotate').addEventListener('change', event => {
+    state.uvPreviewAutoRotate = event.target.checked;
+    if (!state.uvPreviewAutoRotate) stopUvPreviewAnimation();
+    refreshUvPreview();
+  });
+  $('#uvPreviewFaceColors').addEventListener('change', event => {
+    state.uvPreviewFaceColors = event.target.checked;
+    uvPreviewRenderer.invalidateGeometry();
+    renderUvPreview();
+  });
+  uvPreviewViewport.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || !uvPreviewIsActive() || !uvPreviewElements().length) return;
+    event.preventDefault();
+    uvPreviewDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    uvPreviewViewport.classList.add('is-rotating');
+    uvPreviewViewport.setPointerCapture(event.pointerId);
+  });
+  uvPreviewViewport.addEventListener('pointermove', event => {
+    if (!uvPreviewDrag || uvPreviewDrag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - uvPreviewDrag.x;
+    const dy = event.clientY - uvPreviewDrag.y;
+    uvPreviewDrag.x = event.clientX;
+    uvPreviewDrag.y = event.clientY;
+    state.uvPreviewYaw += dx * .01;
+    state.uvPreviewPitch = Math.max(-Math.PI / 2 + .02, Math.min(Math.PI / 2 - .02, state.uvPreviewPitch + dy * .01));
+    renderUvPreview();
+  });
+  const endUvPreviewDrag = event => {
+    if (!uvPreviewDrag || uvPreviewDrag.pointerId !== event.pointerId) return;
+    uvPreviewViewport.releasePointerCapture?.(event.pointerId);
+    uvPreviewViewport.classList.remove('is-rotating');
+    uvPreviewDrag = null;
+  };
+  uvPreviewViewport.addEventListener('pointerup', endUvPreviewDrag);
+  uvPreviewViewport.addEventListener('pointercancel', endUvPreviewDrag);
   $('#geometryOnlyToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SHOW_GEOMETRY_ONLY, event.target.checked, { source: 'toolbar' }));
   $$('[data-transform-space]').forEach(button => button.addEventListener('click', () => {
     state.transformSpace = button.dataset.transformSpace;
@@ -2168,7 +3097,13 @@ function bindEvents() {
   }));
   $('[data-action="grid"]').addEventListener('click', () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-toolbar' }));
   $('[data-action="wire"]').addEventListener('click', () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-toolbar' }));
-  $('[data-action="cycleSnap"]').addEventListener('click', cycleSnap);
+  const snapButton = $('[data-action="cycleSnap"]');
+  snapButton.addEventListener('click', () => cycleSnap(1));
+  snapButton.addEventListener('contextmenu', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    cycleSnap(-1);
+  });
   $('[data-action="frame"]').addEventListener('click', focusSelected);
   $$('[data-projection]').forEach(button => button.addEventListener('click', () => {
     configRegistry.set(ConfigKey.PROJECTION, button.dataset.projection, { source: 'viewport-toolbar' });
@@ -2204,14 +3139,35 @@ function bindEvents() {
   $('[data-action="stopTimeline"]').addEventListener('click', stopTimeline);
   $('[data-action="addPaletteRow"]').addEventListener('click', addPaletteRow);
   $('#outlinerSearch').addEventListener('input', renderOutliner);
+  $('#outlinerDetailsToggle').addEventListener('change', event => {
+    state.outlinerDetailed = event.target.checked;
+    state.outlinerWindowStart = -1;
+    renderOutlinerWindow();
+  });
   outliner.addEventListener('scroll', scheduleOutlinerWindow, { passive: true });
   outliner.addEventListener('click', event => {
     const button = event.target.closest('[data-uid]');
     if (!button) { clearSelection(); return; }
-    const visibility = event.target.closest('[data-toggle-visible]');
-    if (visibility) {
-      const node = state.project.getNode(visibility.dataset.toggleVisible);
-      snapshot(); setNodeVisibility(node, !node.visible); markDirty(); renderAll(); return;
+    const flag = event.target.closest('[data-node-toggle]');
+    if (flag && !flag.classList.contains('unavailable')) {
+      event.preventDefault();
+      event.stopPropagation();
+      const node = state.project.getNode(flag.dataset.nodeUid);
+      const key = flag.dataset.nodeToggle;
+      const current = key === 'autoUv' ? nodeAutoUvEnabled(node)
+        : key === 'locked' ? node.locked === true
+        : node[key] !== false;
+      snapshot();
+      setNodeFlag(node, key, !current);
+      markDirty();
+      if (key === 'locked') sceneRenderer.invalidateLockState();
+      if (key === 'visible' || key === 'autoUv') renderAll();
+      else {
+        state.outlinerWindowStart = -1;
+        renderOutlinerWindow();
+        if (key === 'locked') renderScene();
+      }
+      return;
     }
     const disclosure = event.target.closest('[data-disclosure]');
     if (disclosure?.dataset.disclosure) {
@@ -2222,6 +3178,7 @@ function bindEvents() {
     selectItem(button.dataset.uid, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey });
   });
   outliner.addEventListener('dragstart', event => {
+    if (event.target.closest('[data-node-toggle]')) { event.preventDefault(); return; }
     const item = event.target.closest('.outliner-item');
     if (!item) return;
     if (!state.selectedUids.has(item.dataset.uid)) {
@@ -2231,7 +3188,7 @@ function bindEvents() {
       state.selectionAnchorUid = item.dataset.uid;
       outliner.querySelectorAll('.outliner-item.active').forEach(row => row.classList.remove('active'));
       item.classList.add('active');
-      sceneRenderer.invalidateSelectionGeometry();
+      sceneRenderer.invalidateSelectionGeometry(false);
       renderInspector(); renderScene(); updateSelectionLabels();
     }
     state.outlinerDragUids = topLevelSelectedUids();
@@ -2385,7 +3342,12 @@ function bindEvents() {
   $('#transformGizmo').addEventListener('pointercancel', endPointerDrag);
   sceneCanvas.addEventListener('pointerdown', onPointerDown);
   sceneCanvas.addEventListener('pointermove', onPointerMove);
-  sceneCanvas.addEventListener('pointerleave', () => {
+  viewport.addEventListener('pointermove', scheduleLockedHover);
+  viewport.addEventListener('pointerleave', () => {
+    lockedHoverPointer = null;
+    if (lockedHoverPickFrame !== null) cancelAnimationFrame(lockedHoverPickFrame);
+    lockedHoverPickFrame = null;
+    animateLockedHoverStrength(false);
     if (state.tool !== 'knife' || state.dragging) return;
     state.knifeHover = null;
     renderScene();
@@ -2395,6 +3357,7 @@ function bindEvents() {
   sceneCanvas.addEventListener('auxclick', event => { if (event.button === 1) event.preventDefault(); });
   sceneCanvas.addEventListener('wheel', event => { event.preventDefault(); cancelCameraFocus(); state.zoom = Math.max(.002, Math.min(100, state.zoom * (event.deltaY > 0 ? .9 : 1.1))); renderScene(); }, { passive: false });
   window.addEventListener('resize', renderScene);
+  document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
     if (event.target.matches('input,select')) return;
     if (event.key === 'Escape') setRenderModeMenu(false);
@@ -2462,12 +3425,57 @@ function onPointerDown(event) {
     return;
   }
   const hitUid = sceneRenderer.pick(state.project, x, y, state.geometryOnly);
-  if (hitUid) selectItem(hitUid, {
-    revealInOutliner: true,
-    toggle: event.ctrlKey || event.metaKey,
-    range: event.shiftKey
-  });
-  else clearSelection();
+  event.preventDefault();
+  sceneCanvas.setPointerCapture(event.pointerId);
+  state.dragging = {
+    type: 'selection-box', pointerId: event.pointerId,
+    x: event.clientX, y: event.clientY, startX: x, startY: y,
+    currentX: x, currentY: y, moved: false, hitUid,
+    selection: new Set(state.selectedUids),
+    mode: viewportSelectionMode(event)
+  };
+}
+
+function viewportSelectionMode(event) {
+  if (event.ctrlKey || event.metaKey) return 'remove';
+  if (event.shiftKey) return 'add';
+  return 'replace';
+}
+
+function updateSelectionMarquee(drag) {
+  const x1 = Math.min(drag.startX, drag.currentX);
+  const y1 = Math.min(drag.startY, drag.currentY);
+  const x2 = Math.max(drag.startX, drag.currentX);
+  const y2 = Math.max(drag.startY, drag.currentY);
+  selectionMarquee.hidden = false;
+  selectionMarquee.classList.toggle('is-add', drag.mode === 'add');
+  selectionMarquee.classList.toggle('is-remove', drag.mode === 'remove');
+  selectionMarquee.style.left = `${x1}px`;
+  selectionMarquee.style.top = `${y1}px`;
+  selectionMarquee.style.width = `${x2 - x1}px`;
+  selectionMarquee.style.height = `${y2 - y1}px`;
+}
+
+function applyViewportBoxSelection(hitUids, drag) {
+  sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
+  const next = drag.mode === 'replace' ? new Set() : new Set(drag.selection);
+  if (drag.mode === 'remove') {
+    const hits = new Set(hitUids);
+    for (const uidValue of [...next]) {
+      const node = state.project.getNode(uidValue);
+      if (hits.has(uidValue)
+        || (node?.type === 'group' && state.project.getDescendantElementUids(uidValue).some(uid => hits.has(uid)))) {
+        next.delete(uidValue);
+      }
+    }
+  } else hitUids.forEach(uidValue => next.add(uidValue));
+  state.selectedUids = next;
+  const lastHit = [...hitUids].reverse().find(uidValue => next.has(uidValue));
+  state.selectedUid = lastHit || (next.has(state.selectedUid) ? state.selectedUid : [...next].at(-1) || null);
+  state.selectionAnchorUid = state.selectedUid;
+  state.vertexSnapSource = null;
+  refreshSelectionUi();
+  if (state.selectedUid) revealOutlinerItem(state.selectedUid);
 }
 
 function startCameraDrag(event, captureTarget) {
@@ -2487,7 +3495,7 @@ function startCameraDrag(event, captureTarget) {
 
 const CUBE_FACE_NAMES = ['north', 'east', 'south', 'west', 'up', 'down'];
 
-function freezeCubeUvs(cube) {
+function freezeCubeUvs(cube, disableAutoUv = false) {
   const existing = cube.faces || {};
   cube.faces = Object.fromEntries(CUBE_FACE_NAMES.map(faceName => {
     const face = { ...(existing[faceName] || {}) };
@@ -2496,6 +3504,7 @@ function freezeCubeUvs(cube) {
       : [...getBlockbenchBoxUv(cube, faceName)];
     return [faceName, face];
   }));
+  if (disableAutoUv) cube.autoUv = false;
 }
 
 function translateItemByLocalDelta(item, delta) {
@@ -2593,7 +3602,7 @@ function useVertexSnapPoint(pointEntry) {
       translateItemByLocalDelta(sourceItem, worldVectorToParentLocal(sourceItem, worldDelta));
     }
   } else if (state.vertexSnapMode === 'scale') {
-    freezeCubeUvs(sourceItem);
+    if (sourceItem.autoUv === false) freezeCubeUvs(sourceItem);
     const sourcePoint = worldPointToCubeLocal(sourceItem, state.vertexSnapSource.point);
     const targetPoint = worldPointToCubeLocal(sourceItem, pointEntry.point);
     const nextPosition = [...sourceItem.position], nextSize = [...sourceItem.size];
@@ -2629,7 +3638,7 @@ function useVertexSnapPoint(pointEntry) {
   const movedPivotOnly = completedMode === 'move' && state.vertexSnapSource.pointType === 'pivot';
   state.vertexSnapSource = null;
   markDirty();
-  sceneRenderer.invalidateGeometry();
+  invalidateAllRenderGeometry();
   renderAll();
   toast(movedPivotOnly ? '已將樞軸移至目標頂點（幾何保持不動）'
     : { move: '已移動至目標頂點', scale: '已縮放至目標頂點', rotate: '已旋轉對齊目標頂點' }[completedMode]);
@@ -2709,7 +3718,7 @@ function cancelKnifeSelection(notify = true) {
 
 function completeKnifeCut(cube, axis, coordinate) {
   snapshot();
-  freezeCubeUvs(cube);
+  freezeCubeUvs(cube, true);
   const second = splitCubeAt(cube, axis, coordinate);
   if (!second) {
     state.history.pop();
@@ -2720,6 +3729,7 @@ function completeKnifeCut(cube, axis, coordinate) {
   const container = parent ? parent.children : state.project.outliner;
   const index = container.indexOf(cube.uid);
   container.splice(index < 0 ? container.length : index + 1, 0, second.uid);
+  state.project.invalidateHierarchyIndex();
   const cutLabel = getKnifePreviewLabel(axis);
   state.knifeSelection = null;
   state.knifeHover = null;
@@ -2851,10 +3861,20 @@ function nodeTransformAnchor(node) {
 }
 
 function captureTransformTarget(node) {
+  const chain = state.project.getGroupChain(node.uid);
+  const worldToLocalAxes = [0, 1, 2].map(worldAxis => {
+    let local = [0, 1, 2].map(axis => axis === worldAxis ? 1 : 0);
+    chain.forEach(group => { local = inverseRotateVector(local, group.rotation || [0, 0, 0]); });
+    return local;
+  });
+  const anchor = [...nodeTransformAnchor(node)];
   return {
     node,
-    chain: state.project.getGroupChain(node.uid),
-    anchor: [...nodeTransformAnchor(node)],
+    chain,
+    anchor,
+    worldAnchor: applyGroupTransforms(anchor, chain),
+    worldToLocalAxes,
+    transformAxes: getTransformAxes(node).map(axis => [...axis]),
     position: node.position ? [...node.position] : node.origin ? [...node.origin] : node.pivot ? [...node.pivot] : [0, 0, 0],
     pivot: node.pivot ? [...node.pivot] : null,
     rotation: [...(node.rotation || [0, 0, 0])],
@@ -2892,10 +3912,8 @@ function localDirectionFromWorld(direction, chain) {
 }
 
 function localDeltaFromWorld(target, worldDelta) {
-  const worldAnchor = applyGroupTransforms(target.anchor, target.chain);
-  const nextWorld = worldAnchor.map((value, axis) => value + worldDelta[axis]);
-  const nextLocal = inverseApplyGroupTransforms(nextWorld, target.chain);
-  return nextLocal.map((value, axis) => value - target.anchor[axis]);
+  return [0, 1, 2].map(component => worldDelta.reduce((sum, value, worldAxis) =>
+    sum + value * target.worldToLocalAxes[worldAxis][component], 0));
 }
 
 function rotatePointAroundAxis(point, pivot, axis, degrees) {
@@ -2908,6 +3926,41 @@ function rotatePointAroundAxis(point, pivot, axis, degrees) {
   return offset.map((value, index) => pivot[index] + value * cosine + crossed[index] * sine + direction[index] * aligned);
 }
 
+function translationMatrix(delta) {
+  return [
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    delta[0], delta[1], delta[2], 1
+  ];
+}
+
+function rotationMatrixAroundAxis(axis, degrees, pivot) {
+  const [x, y, z] = normalize3(axis);
+  const radians = degrees * Math.PI / 180;
+  const cosine = Math.cos(radians), sine = Math.sin(radians), turn = 1 - cosine;
+  const r00 = turn * x * x + cosine;
+  const r01 = turn * x * y - sine * z;
+  const r02 = turn * x * z + sine * y;
+  const r10 = turn * x * y + sine * z;
+  const r11 = turn * y * y + cosine;
+  const r12 = turn * y * z - sine * x;
+  const r20 = turn * x * z - sine * y;
+  const r21 = turn * y * z + sine * x;
+  const r22 = turn * z * z + cosine;
+  const rotatedPivot = [
+    r00 * pivot[0] + r01 * pivot[1] + r02 * pivot[2],
+    r10 * pivot[0] + r11 * pivot[1] + r12 * pivot[2],
+    r20 * pivot[0] + r21 * pivot[1] + r22 * pivot[2]
+  ];
+  return [
+    r00, r10, r20, 0,
+    r01, r11, r21, 0,
+    r02, r12, r22, 0,
+    pivot[0] - rotatedPivot[0], pivot[1] - rotatedPivot[1], pivot[2] - rotatedPivot[2], 1
+  ];
+}
+
 function applyTargetRotation(target, worldAxis, degrees, { separate = false, selfRelative = false, axisIndex = null, euler = false } = {}) {
   const { node } = target;
   if (euler && separate && axisIndex !== null) {
@@ -2917,7 +3970,7 @@ function applyTargetRotation(target, worldAxis, degrees, { separate = false, sel
   }
   const localAxis = selfRelative && axisIndex !== null
     ? [0, 1, 2].map(index => index === axisIndex ? 1 : 0)
-    : localDirectionFromWorld(worldAxis, target.chain);
+    : normalize3(localDeltaFromWorld(target, worldAxis));
   const turn = quaternionFromAxisAngle(localAxis, degrees);
   const current = quaternionFromEuler(target.rotation);
   node.rotation = eulerFromQuaternion(separate && selfRelative
@@ -2996,6 +4049,7 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   }
   captureTarget.setPointerCapture(event.pointerId);
   handleElement?.classList.add('active');
+  sceneRenderer.clearSelectionPreviewTransform();
   const gizmoCenter = referenceHandle
     ? { x: referenceHandle.centerX + rect.left, y: referenceHandle.centerY + rect.top }
     : { x: state.gizmoCenter.x + rect.left, y: state.gizmoCenter.y + rect.top };
@@ -3010,6 +4064,10 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
     rotationMode: state.transformSpace === 'self' ? state.rotationMode : 'pose',
     startAngle: kind.startsWith('rotate') && handle ? Math.atan2(event.clientY - (handle.centerY + rect.top), event.clientX - (handle.centerX + rect.left)) : 0,
     rect, storedAxis, chain, selectionContext, targets, multiTransformMode: state.multiTransformMode,
+    batchPreview: selectionContext.multiple && state.multiTransformMode === 'unified'
+      && ['move', 'rotate'].includes(state.tool),
+    baseSelectionCenter: selectionContext.center ? [...selectionContext.center] : null,
+    baseSelectionPivot: selectionContext.pivot ? [...selectionContext.pivot] : null,
     position: item.position ? [...item.position] : item.origin ? [...item.origin] : item.pivot ? [...item.pivot] : [0, 0, 0],
     pivot: item.pivot ? [...item.pivot] : null,
     size: item.size ? [...item.size] : null,
@@ -3032,6 +4090,16 @@ function onPointerMove(event) {
   if (!state.dragging) return;
   const dx = event.clientX - state.dragging.x;
   const dy = event.clientY - state.dragging.y;
+  if (state.dragging.type === 'selection-box') {
+    const rect = sceneCanvas.getBoundingClientRect();
+    state.dragging.currentX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    state.dragging.currentY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    state.dragging.mode = viewportSelectionMode(event);
+    if (!state.dragging.moved && Math.hypot(dx, dy) < 4) return;
+    state.dragging.moved = true;
+    updateSelectionMarquee(state.dragging);
+    return;
+  }
   if (state.dragging.type === 'transform') {
     if (Math.hypot(dx, dy) < .5) return;
     if (!state.dragging.snapshotTaken) {
@@ -3039,15 +4107,23 @@ function onPointerMove(event) {
       state.dragging.snapshotTaken = true;
     }
     if (state.dragging.tool === 'resize' && !state.dragging.uvFrozen) {
-      state.dragging.targets.filter(target => target.node.type === 'cube').forEach(target => freezeCubeUvs(target.node));
+      state.dragging.targets.filter(target => target.node.type === 'cube' && target.node.autoUv === false)
+        .forEach(target => freezeCubeUvs(target.node));
       state.dragging.uvFrozen = true;
     }
-    applyTransformDrag(state.dragging, dx, dy, event);
-    updateTransformTooltip(event, state.dragging);
-    sceneRenderer.invalidateSelectionGeometry();
-    markDirty();
-    syncInspectorValues(state.dragging.item);
-    renderScene();
+    state.dragging.pendingTransform = {
+      dx,
+      dy,
+      event: {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        altKey: event.altKey
+      }
+    };
+    scheduleTransformUpdate(state.dragging);
     return;
   } else if (state.dragging.type === 'pan') {
     state.target = [0, 1, 2].map(axis => state.dragging.target[axis]
@@ -3061,15 +4137,86 @@ function onPointerMove(event) {
   renderScene();
 }
 
+function applyPendingTransform(drag) {
+  const pending = drag?.pendingTransform;
+  if (!pending) return false;
+  drag.pendingTransform = null;
+  applyTransformDrag(drag, pending.dx, pending.dy, pending.event);
+  updateTransformTooltip(pending.event, drag);
+  if (!drag.batchPreview) invalidateSelectionRenderGeometry();
+  if (!state.dirty) markDirty();
+  if (!drag.selectionContext.multiple) syncInspectorValues(drag.item);
+  return true;
+}
+
+function commitBatchTransform(drag) {
+  const preview = drag.previewCommit;
+  if (!drag.batchPreview || !preview) {
+    sceneRenderer.clearSelectionPreviewTransform();
+    return false;
+  }
+  if (preview.type === 'move') {
+    for (const target of drag.targets) {
+      translateCapturedTarget(target, localDeltaFromWorld(target, preview.worldDelta));
+    }
+  } else if (preview.type === 'rotate') {
+    for (const target of drag.targets) {
+      const nextWorldAnchor = rotatePointAroundAxis(target.worldAnchor, preview.pivot, preview.axis, preview.degrees);
+      const worldDelta = nextWorldAnchor.map((value, axis) => value - target.worldAnchor[axis]);
+      translateCapturedTarget(target, localDeltaFromWorld(target, worldDelta));
+      applyTargetRotation(target, preview.axis, preview.degrees);
+    }
+  }
+  sceneRenderer.clearSelectionPreviewTransform();
+  invalidateSelectionRenderGeometry();
+  return true;
+}
+
+function scheduleTransformUpdate(drag) {
+  if (transformUpdateFrame !== null) return;
+  transformUpdateFrame = requestAnimationFrame(() => {
+    transformUpdateFrame = null;
+    if (state.dragging !== drag || !applyPendingTransform(drag)) return;
+    renderScene();
+  });
+}
+
 function endPointerDrag(event) {
   if (!state.dragging) return;
   const finishedDrag = state.dragging;
+  if (finishedDrag.type === 'transform') {
+    if (transformUpdateFrame !== null) cancelAnimationFrame(transformUpdateFrame);
+    transformUpdateFrame = null;
+    applyPendingTransform(finishedDrag);
+    commitBatchTransform(finishedDrag);
+  }
   state.dragging.handleElement?.classList.remove('active');
   const captureTarget = event.currentTarget;
   if (captureTarget.hasPointerCapture?.(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
   state.dragging = null;
+  if (finishedDrag.type === 'selection-box') {
+    selectionMarquee.hidden = true;
+    selectionMarquee.classList.remove('is-add', 'is-remove');
+    finishedDrag.mode = viewportSelectionMode(event);
+    if (event.type !== 'pointercancel' && finishedDrag.moved) {
+      const hitUids = sceneRenderer.selectInScreenRect(state.project, {
+        x1: finishedDrag.startX, y1: finishedDrag.startY,
+        x2: finishedDrag.currentX, y2: finishedDrag.currentY
+      }, state.geometryOnly);
+      applyViewportBoxSelection(hitUids, finishedDrag);
+    } else if (event.type !== 'pointercancel') {
+      if (finishedDrag.hitUid) selectItem(finishedDrag.hitUid, {
+        revealInOutliner: true,
+        toggle: event.ctrlKey || event.metaKey,
+        range: event.shiftKey
+      });
+      else clearSelection();
+    }
+    return;
+  }
   if (finishedDrag.type === 'transform' && finishedDrag.snapshotTaken) {
     sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
+    syncInspectorValues(finishedDrag.item);
   }
   sceneRenderer.endTransformGhost();
   $('#transformTooltip').hidden = true;
@@ -3190,10 +4337,17 @@ function applyTransformDrag(drag, dx, dy, event) {
       commonWorldDelta = commonWorldDelta.map(value => snapValue(value, event));
       drag.tooltipText = `距離 ${formatSigned(Math.hypot(...commonWorldDelta))} px`;
     }
+    if (drag.batchPreview) {
+      drag.previewCommit = { type: 'move', worldDelta: [...commonWorldDelta] };
+      sceneRenderer.setSelectionPreviewTransform(translationMatrix(commonWorldDelta));
+      if (drag.baseSelectionCenter) drag.selectionContext.center = drag.baseSelectionCenter
+        .map((value, axis) => value + commonWorldDelta[axis]);
+      return;
+    }
     for (const target of drag.targets) {
       let worldDelta = commonWorldDelta;
       if (drag.multiTransformMode === 'separate' && drag.axis) {
-        const targetAxes = getTransformAxes(target.node);
+        const targetAxes = target.transformAxes;
         if (drag.kind === 'plane') {
           worldDelta = [0, 0, 0];
           drag.axisIndices.forEach((axisIndex, index) => {
@@ -3400,16 +4554,25 @@ function applyTransformDrag(drag, dx, dy, event) {
       ? drag.axis.vector.map(value => value * drag.sign)
       : [0, 1, 0];
     const commonPivot = drag.selectionContext.pivot || drag.selectionContext.center || state.gizmoOrigin;
+    if (drag.batchPreview) {
+      drag.previewCommit = {
+        type: 'rotate', axis: [...commonAxis], pivot: [...commonPivot], degrees: snappedDelta,
+        axisIndex: drag.axisIndex, kind: drag.kind
+      };
+      sceneRenderer.setSelectionPreviewTransform(rotationMatrixAroundAxis(commonAxis, snappedDelta, commonPivot));
+      if (drag.baseSelectionCenter) drag.selectionContext.center = rotatePointAroundAxis(
+        drag.baseSelectionCenter, commonPivot, commonAxis, snappedDelta);
+      return;
+    }
     for (const target of drag.targets) {
       const separate = drag.multiTransformMode === 'separate';
       const targetAxis = separate && drag.kind === 'rotate'
-        ? getTransformAxes(target.node)[drag.axisIndex]
+        ? target.transformAxes[drag.axisIndex]
         : commonAxis;
       if (!separate) {
-        const worldAnchor = applyGroupTransforms(target.anchor, target.chain);
-        const nextWorldAnchor = rotatePointAroundAxis(worldAnchor, commonPivot, targetAxis, snappedDelta);
-        const nextLocalAnchor = inverseApplyGroupTransforms(nextWorldAnchor, target.chain);
-        translateCapturedTarget(target, nextLocalAnchor.map((value, axis) => value - target.anchor[axis]));
+        const nextWorldAnchor = rotatePointAroundAxis(target.worldAnchor, commonPivot, targetAxis, snappedDelta);
+        const worldDelta = nextWorldAnchor.map((value, axis) => value - target.worldAnchor[axis]);
+        translateCapturedTarget(target, localDeltaFromWorld(target, worldDelta));
       }
       applyTargetRotation(target, targetAxis, snappedDelta, {
         separate,
@@ -3469,6 +4632,7 @@ function captureGroupMembers(group) {
 }
 
 function getSnapSubdivisions(event = {}) {
+  const standard = activeSnapSubdivisions();
   const modifier = event.shiftKey && event.ctrlKey
     ? state.modifierSnap.shiftCtrl
     : event.shiftKey
@@ -3476,8 +4640,8 @@ function getSnapSubdivisions(event = {}) {
       : event.ctrlKey
         ? state.modifierSnap.ctrl
         : null;
-  if (!modifier) return state.snap;
-  return modifier.mode === 'multiplier' ? state.snap * modifier.value : modifier.value;
+  if (!modifier) return standard;
+  return modifier.mode === 'multiplier' ? standard * modifier.value : modifier.value;
 }
 
 function getSnapStep(event = {}) { return 16 / Math.max(.0001, getSnapSubdivisions(event)); }
@@ -3500,10 +4664,16 @@ function hexToRgb(hex) { const n = parseInt(hex.replace('#', ''), 16); return [n
 
 initializeDockSystem();
 initializeConfigRegistry();
+modelFormatRegistry.subscribe(() => {
+  renderModelFormatPicker();
+  updateSelectionLabels();
+});
 loadTheme();
 sceneRenderer.setSelectionOutline(getComputedStyle(document.documentElement).getPropertyValue('--selection-outline').trim());
+initializeProjectTabs();
 renderTexture();
 renderPalette();
+renderModelFormatPicker();
 bindEvents();
 updateToolVisibility();
 renderAll();

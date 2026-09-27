@@ -22,7 +22,11 @@ export const ConfigKey = Object.freeze({
   PREVIEW_SHADE: 'viewport.preview-shade',
   SHOW_GEOMETRY_ONLY: 'viewport.show-geometry-only',
   SHOW_GRID: 'viewport.show-grid',
-  SHOW_WIREFRAME: 'viewport.show-wireframe'
+  SHOW_WIREFRAME: 'viewport.show-wireframe',
+  LOCKED_DEFAULT_ALPHA: 'viewport.locked-default-alpha',
+  LOCKED_HOVER_FADE: 'viewport.locked-hover-fade',
+  LOCKED_HOVER_ALPHA: 'viewport.locked-hover-alpha',
+  LOCKED_HOVER_RADIUS: 'viewport.locked-hover-radius'
 });
 
 export const LANGUAGE_OPTIONS = Object.freeze([
@@ -33,24 +37,32 @@ export const LANGUAGE_OPTIONS = Object.freeze([
 
 const storage = typeof window !== 'undefined' ? window.localStorage : null;
 
-function migrateSnapModifierDefaults(targetStorage) {
+export function migrateConfigDefaults(targetStorage) {
   if (!targetStorage) return;
   try {
     const key = 'cubebricks.config';
     const persisted = JSON.parse(targetStorage.getItem(key) || '{}');
-    if (Number(persisted.version || 0) >= 2) return;
+    const version = Number(persisted.version || 0);
+    if (version >= 3) return;
     const values = persisted.values && typeof persisted.values === 'object' ? persisted.values : {};
-    values[ConfigKey.SHIFT_SNAP_MODE] = 'multiplier';
-    values[ConfigKey.CTRL_SNAP_MODE] = 'multiplier';
-    values[ConfigKey.SHIFT_CTRL_SNAP_MODE] = 'multiplier';
-    targetStorage.setItem(key, JSON.stringify({ ...persisted, version: 2, values }));
+    if (version < 2) {
+      values[ConfigKey.SHIFT_SNAP_MODE] = 'multiplier';
+      values[ConfigKey.CTRL_SNAP_MODE] = 'multiplier';
+      values[ConfigKey.SHIFT_CTRL_SNAP_MODE] = 'multiplier';
+    }
+    // Version 2 shipped 25 as the hover-fade default. Only migrate that exact
+    // former default so an explicitly chosen percentage is otherwise retained.
+    if (version < 3 && values[ConfigKey.LOCKED_HOVER_ALPHA] === 25) {
+      values[ConfigKey.LOCKED_HOVER_ALPHA] = 50;
+    }
+    targetStorage.setItem(key, JSON.stringify({ ...persisted, version: 3, values }));
   } catch {
     // Invalid persisted data is ignored by the registry and replaced on the
     // next successful settings change.
   }
 }
 
-migrateSnapModifierDefaults(storage);
+migrateConfigDefaults(storage);
 
 export const configRegistry = new ConfigRegistry({ storage });
 
@@ -92,7 +104,11 @@ configRegistry.registerMany([
   { id: ConfigKey.PREVIEW_SHADE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Enable face shading in the viewport when the element also allows shading.' },
   { id: ConfigKey.SHOW_GEOMETRY_ONLY, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Hide helper objects such as locators without changing their individual visibility.' },
   { id: ConfigKey.SHOW_GRID, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Show the viewport floor grid.' },
-  { id: ConfigKey.SHOW_WIREFRAME, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Show model wireframe bounds.' }
+  { id: ConfigKey.SHOW_WIREFRAME, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Show model wireframe bounds.' },
+  { id: ConfigKey.LOCKED_DEFAULT_ALPHA, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 100, validate: value => value >= 0 && value <= 100, description: 'Opacity percentage used for locked viewport objects.' },
+  { id: ConfigKey.LOCKED_HOVER_FADE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Fade a locked object while the pointer is over it.' },
+  { id: ConfigKey.LOCKED_HOVER_ALPHA, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 50, validate: value => value >= 0 && value <= 100, description: 'Opacity percentage at the center of the pointer fade region.' },
+  { id: ConfigKey.LOCKED_HOVER_RADIUS, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 120, validate: value => value >= 8 && value <= 2048, description: 'Screen-space radius in pixels for the locked-object pointer fade region.' }
 ]);
 
 export function getLanguageLabel(language = configRegistry.get(ConfigKey.LANGUAGE)) {
@@ -141,6 +157,9 @@ const ENGLISH_UI = Object.freeze({
   '沿 X 軸對稱編輯': 'Mirror edits across the X axis', '繪畫時鎖定透明度': 'Preserve alpha while painting',
   '左側停靠區': 'Left dock', '右側停靠區': 'Right dock', '底部停靠區': 'Bottom dock',
   '貼圖': 'Textures', '導入貼圖': 'Import texture', '新增貼圖組': 'Add texture group', '貼圖組': 'Texture group', '折疊或展開面板': 'Collapse or expand panel', '折疊／展開': 'Collapse / expand',
+  'UV 預覽': 'UV Preview', '選中部分 UV 預覽': 'Selected-part UV preview', '啟用預覽': 'Enable preview', '自動旋轉': 'Auto rotate', '面區分': 'Face colors',
+  '完全開啟或關閉預覽渲染': 'Completely enable or disable preview rendering', '僅在此預覽中讓模型慢速轉動': 'Slowly rotate the model in this preview only',
+  '用不同顏色區分六個面': 'Color each of the six faces differently', '選擇 Cube 或 Shape': 'Select a Cube or Shape', '預覽已關閉': 'Preview disabled',
   '視圖模式': 'View mode', '透視': 'Perspective', '正交': 'Orthographic', '實體著色': 'Entity shading', '貼圖預覽': 'Texture preview', '動畫預覽': 'Animation preview',
   '聚焦': 'Focus', '網格': 'Grid', '邊界線框': 'Bounds wireframe', '實心': 'Solid', '實心 Mipped': 'Solid Mipped',
   '半透明': 'Translucent', '半透明 Mipped': 'Translucent Mipped', '背面剔除': 'Back-face culling', '剔除': 'Cull',
@@ -157,8 +176,13 @@ const ENGLISH_UI = Object.freeze({
   '組變換': 'Group transform', '直接子項': 'Direct children', '外觀': 'Appearance', '預覽色': 'Preview color', '材質色': 'Material color',
   '刪除物件': 'Delete object', '刪除組及其內容': 'Delete group and contents', '選擇一個 Cube、Shape 或組來編輯。': 'Select a cube, shape, or group to edit.',
   '選擇一個 Cube、Shape、Locator 或組來編輯。': 'Select a cube, shape, locator, or group to edit.', '已新增 Locator': 'Locator added',
-  '一般': 'General', '所有選項即時生效，並通過配置註冊表保存在這台電腦上。': 'All options apply immediately and are saved on this computer through the configuration registry.',
+  '一般': 'General', '視圖': 'View', '所有選項即時生效，並通過配置註冊表保存在這台電腦上。': 'All options apply immediately and are saved on this computer through the configuration registry.',
   '設定分類': 'Settings categories', '介面、視口與編輯行為': 'Interface, viewport, and editing behavior', '介面語言': 'Interface language',
+  '視口顯示與鎖定物體虛化': 'Viewport display and locked-object fading', '鎖定物體默認虛化 Alpha': 'Default locked-object alpha',
+  '開啟鼠標虛化': 'Enable pointer hover fading', '鼠標虛化 Alpha': 'Pointer hover alpha', '鼠標虛化半徑': 'Pointer fade radius',
+  '顯示詳細資訊': 'Show detailed information', '詳': 'Details', '自動 UV': 'Auto UV', '不自動更新 UV': 'Do not update UV automatically',
+  '參與後續格式轉換': 'Include in future format conversion', '不參與後續格式轉換': 'Exclude from future format conversion',
+  '鎖定': 'Locked', '解鎖': 'Unlocked',
   '視口投影': 'Viewport projection', '顯示網格': 'Show grid', '線框邊界': 'Wireframe bounds', '僅顯示幾何': 'Show geometry only',
   '面陰影預覽': 'Shading preview', '對稱編輯': 'Symmetry editing', '鎖定透明度': 'Lock alpha',
   '吸附步長為 16 ÷ 精度；16 = 1px，32 = 0.5px': 'Snap step is 16 ÷ precision; 16 = 1px, 32 = 0.5px',
@@ -175,7 +199,21 @@ const ENGLISH_UI = Object.freeze({
   '隱藏選中項': 'Hide selection', '顯示選中項': 'Show selection', '將選中項建立為組': 'Group selection',
   '移到新貼圖組': 'Move to new texture group', '解散貼圖組': 'Ungroup textures', '刪除貼圖': 'Delete texture',
   '已新增貼圖組': 'Texture group added', '不能把組拖進它自己的子級': 'A group cannot be moved into its own descendant',
-  '角度': 'Angle', '距離': 'Distance'
+  '角度': 'Angle', '距離': 'Distance',
+  '新建項目': 'New Project', '選擇模型格式；格式會提供工程初始資料、能力與標準吸附參數。': 'Choose a model format. Formats provide initial project data, capabilities, and standard snapping.',
+  '項目分頁': 'Project tabs', '關閉項目': 'Close project', '項目信息': 'Project Information',
+  '這些設定屬於目前分頁中的工程，會跟隨工程保存。': 'These settings belong to the project in this tab and are saved with it.',
+  '項目名稱': 'Project name', '模型格式': 'Model format', '貼圖寬度': 'Texture width', '貼圖高度': 'Texture height',
+  '標準吸附精度': 'Standard snap precision', '16 ÷ 精度 = 像素步長': '16 ÷ precision = pixel step', '項目描述': 'Project description',
+  '取消': 'Cancel', '套用': 'Apply', '項目信息已更新': 'Project information updated',
+  '通用': 'General', '通用模型': 'Generic Model', '圖像': 'Image', '自由建模與多面體編輯': 'Free modelling and polygon editing',
+  '建立或編輯二維圖像': 'Create or edit a 2D image', '多面體編輯尚未實現': 'Polygon editing is not implemented yet', '圖像編輯尚未實現': 'Image editing is not implemented yet',
+  'Java 版方塊/物品': 'Java Block/Item', 'Minecraft Java 方塊與物品模型': 'Minecraft Java block and item model',
+  'Bedrock 版實體': 'Bedrock Entity', 'Minecraft Bedrock 實體幾何': 'Minecraft Bedrock entity geometry',
+  'Bedrock 版方塊': 'Bedrock Block', 'Minecraft Bedrock 方塊幾何': 'Minecraft Bedrock block geometry',
+  '模組版實體': 'Modded Entity', 'Minecraft Java 模組實體模型': 'Minecraft Java modded entity model',
+  'Minecraft 皮膚': 'Minecraft Skin', 'Minecraft 玩家皮膚模型': 'Minecraft player skin model',
+  'GeckoLib 動畫實體模型': 'GeckoLib animated entity model', '佔位': 'Placeholder', '未知模型格式': 'Unknown model format'
 });
 
 const SIMPLIFIED_PHRASES = Object.freeze({
@@ -186,7 +224,8 @@ const SIMPLIFIED_PHRASES = Object.freeze({
 
 const SIMPLIFIED_CHARS = Object.freeze({
   '體':'体','開':'开','關':'关','閉':'闭','陰':'阴','顯':'显','圖':'图','層':'层','編':'编','輯':'辑','繪':'绘','畫':'画','動':'动','導':'导','檔':'档','儲':'储','復':'复','設':'设','覽':'览','縮':'缩','態':'态','級':'级','軸':'轴','長':'长','圍':'围','線':'线','僅':'仅','鎖':'锁','稱':'称','變':'变','換':'换','擇':'择','組':'组','場':'场','間':'间','輸':'输','項':'项','參':'参','數':'数','塊':'块','刪':'删','除':'除','見':'见','幾':'几','樞':'枢','脹':'胀','狀':'状','徑':'径','邊':'边','質':'质','預':'预','選':'选','語':'语','網':'网','負':'负','許':'许','顔':'颜','顏':'颜','圓':'圆','強':'强','調':'调','熔':'熔','還':'还','應':'应','過':'过','這':'这','臺':'台','電':'电','腦':'脑','獨':'独','當':'当','與':'与','後':'后','會':'会','啟':'启','連':'连','續':'续','離':'离','內':'内','實':'实','視':'视','點':'点','擊':'击','進':'进','階':'阶','構':'构','則':'则','個':'个','處':'处','從':'从','標':'标','記':'记','題':'题','樣':'样','細':'细','節':'节','類':'类','別':'别','載':'载','務':'务','優':'优','勢':'势','據':'据','墊':'垫','疊':'叠','寬':'宽','釋':'释','權':'权','傳':'传','統':'统','築':'筑','擁':'拥','護':'护','隱':'隐','響':'响','極':'极','遠':'远','習':'习','萬':'万','屬':'属','為':'为','時':'时','種':'种','並':'并','註':'注','冊':'册','觀':'观','對':'对','滾':'滚','輪':'轮','鍵':'键','頂':'顶','單':'单','銷':'销','欄':'栏','轉':'转','筆':'笔','蓋':'盖','暫':'暂','輔':'辅','側':'侧','區':'区','紋':'纹','帶':'带','巢':'巢','匯':'汇','總':'总',
-  '來':'来','歐':'欧','貼':'贴','範':'范','覺':'觉','緒':'绪','沒':'没','漸':'渐','無':'无','讀':'读','張':'张','敗':'败','認':'认','義':'义','請':'请','須':'须','於':'于','繞':'绕','齊':'齐','適':'适','豎':'竖','橫':'横','執':'执'
+  '來':'来','歐':'欧','貼':'贴','範':'范','覺':'觉','緒':'绪','沒':'没','漸':'渐','無':'无','讀':'读','張':'张','敗':'败','認':'认','義':'义','請':'请','須':'须','於':'于','繞':'绕','齊':'齐','適':'适','豎':'竖','橫':'横','執':'执','讓':'让',
+  '詳':'详','資':'资','訊':'讯','虛':'虚','準':'准','維':'维','佔':'占','膚':'肤','頁':'页','隨':'随'
 });
 
 function toSimplified(source) {
@@ -205,6 +244,10 @@ export function translateUiText(source, language = configRegistry.get(ConfigKey.
   if (match) return `${match[1]} rows · configured independently`;
   match = text.match(/^吸附 (.+) · (.+)px$/);
   if (match) return `Snap ${match[1]} · ${match[2]}px`;
+  match = text.match(/^標準吸附 (.+) · (.+)px$/);
+  if (match) return `Standard snap ${match[1]} · ${match[2]}px`;
+  match = text.match(/^關閉 (.+)$/);
+  if (match) return `Close ${match[1]}`;
   match = text.match(/^介面語言：(.*)$/);
   if (match) return `Interface language: ${match[1]}`;
   match = text.match(/^已沿 ([XYZ]) 軸切割 (.+)$/);

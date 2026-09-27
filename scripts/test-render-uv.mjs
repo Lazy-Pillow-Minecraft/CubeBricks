@@ -5,8 +5,19 @@ import {
   getBlockbenchBoxUv,
   getMinecraftRenderType,
   MinecraftRenderType,
-  RenderPass
+  RenderPass,
+  screenPolygonIntersectsRect
 } from '../src/render/webgl-renderer.js';
+
+assert.equal(screenPolygonIntersectsRect([
+  { x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }
+], { x1: 20, y1: 20, x2: 40, y2: 40 }), true, 'selection rectangle intersects a projected face');
+assert.equal(screenPolygonIntersectsRect([
+  { x: 0, y: 18 }, { x: 50, y: 18 }, { x: 50, y: 22 }, { x: 0, y: 22 }
+], { x1: 20, y1: 10, x2: 30, y2: 30 }), true, 'selection rectangle inside a projected face is detected');
+assert.equal(screenPolygonIntersectsRect([
+  { x: 0, y: 0 }, { x: 8, y: 0 }, { x: 8, y: 8 }, { x: 0, y: 8 }
+], { x1: 20, y1: 20, x2: 40, y2: 40 }), false, 'separate projected geometry is not selected');
 
 const rectangle = [0, 0, 16, 16];
 assert.deepEqual(createBlockbenchFaceUvs(rectangle, [16, 16]), [

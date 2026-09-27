@@ -14,7 +14,7 @@ export const ConfigScope = Object.freeze({
 
 const VALID_TYPES = new Set(Object.values(ConfigType));
 const VALID_SCOPES = new Set(Object.values(ConfigScope));
-const CONFIG_STORAGE_VERSION = 2;
+const CONFIG_STORAGE_VERSION = 3;
 
 export class ConfigRegistry {
   constructor({ storage = null, storageKey = 'cubebricks.config' } = {}) {

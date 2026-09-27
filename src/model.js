@@ -1,3 +1,5 @@
+import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './config/model-formats.js';
+
 const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
 
 function normalizeRenderType(value) {
@@ -8,6 +10,20 @@ function normalizeRenderType(value) {
     translucent: 'translucent', translucent_mipped: 'translucent_smooth', translucent_smooth: 'translucent_smooth'
   };
   return aliases[id] || null;
+}
+
+function hasAssignedTexture(faces) {
+  return Boolean(faces && Object.values(faces).some(face => face && face.texture !== null && face.texture !== undefined));
+}
+
+function booleanProperty(value, fallback) {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'false' || normalized === '0' || normalized === '') return false;
+    if (normalized === 'true' || normalized === '1') return true;
+  }
+  return Boolean(value);
 }
 
 export class Cube {
@@ -26,8 +42,11 @@ export class Cube {
     this.uv = data.uv || [0, 0];
     this.mirrorUv = data.mirrorUv ?? data.mirror_uv ?? false;
     this.faces = data.faces || null;
+    this.autoUv = booleanProperty(data.autoUv ?? data.autouv, !hasAssignedTexture(this.faces));
+    this.exported = booleanProperty(data.exported ?? data.export, true);
+    this.locked = booleanProperty(data.locked, false);
     this.shade = data.shade ?? true;
-    this.visible = data.visible ?? true;
+    this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.color = data.color || '#9ac24d';
   }
 }
@@ -41,8 +60,11 @@ export class Shape {
     this.parameters = { radius: 4, height: 8, sides: 8, ...(data.parameters || {}) };
     this.origin = data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
+    this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
+    this.exported = booleanProperty(data.exported ?? data.export, true);
+    this.locked = booleanProperty(data.locked, false);
     this.shade = data.shade ?? true;
-    this.visible = data.visible ?? true;
+    this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.color = data.color || '#d6b35b';
   }
 
@@ -58,6 +80,9 @@ export class Shape {
         size: [2.5, height, 2.5],
         pivot: [0, height / 2, 0],
         rotation: [0, -(i / sides) * 360, 0],
+        autoUv: this.autoUv,
+        exported: this.exported,
+        locked: this.locked,
         color: this.color
       });
     });
@@ -71,7 +96,9 @@ export class Locator {
     this.name = data.name || 'locator';
     this.position = data.position || data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
-    this.visible = data.visible ?? data.visibility ?? true;
+    this.exported = booleanProperty(data.exported ?? data.export, true);
+    this.locked = booleanProperty(data.locked, false);
+    this.visible = booleanProperty(data.visible ?? data.visibility, true);
   }
 }
 
@@ -82,7 +109,10 @@ export class Group {
     this.name = data.name || 'group';
     this.pivot = data.pivot || data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
-    this.visible = data.visible ?? true;
+    this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
+    this.exported = booleanProperty(data.exported ?? data.export, true);
+    this.locked = booleanProperty(data.locked, false);
+    this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.children = [...(data.children || [])];
   }
 }
@@ -271,13 +301,19 @@ export function chooseKnifeCutAxis(firstPoint, secondPoint, faceName, cube = nul
 
 export class CubeBricksProject {
   constructor(data = {}) {
-    this.formatVersion = Math.max(2, data.formatVersion || 0);
+    this.formatVersion = Math.max(3, data.formatVersion || 0);
+    this.formatId = resolveModelFormatId(data.formatId || data.modelType || ModelFormatId.JAVA_BLOCK_ITEM);
+    const format = modelFormatRegistry.get(this.formatId);
+    const defaults = format?.defaults || {};
     this.name = data.name || 'moss_golem';
-    this.modelType = data.modelType || 'java_block';
-    this.uvMode = data.uvMode || 'box';
-    this.textureSize = data.textureSize || [64, 64];
-    this.renderType = normalizeRenderType(data.renderType || data.render_type) || 'cutout';
-    this.cullFaces = data.cullFaces ?? data.cull_faces ?? this.modelType.includes('block');
+    this.modelType = data.modelType || format?.blockbenchFormat || 'java_block';
+    this.uvMode = data.uvMode || defaults.uvMode || 'box';
+    this.textureSize = data.textureSize || defaults.textureSize || [64, 64];
+    this.renderType = normalizeRenderType(data.renderType || data.render_type || defaults.renderType) || 'cutout';
+    this.cullFaces = data.cullFaces ?? data.cull_faces ?? defaults.cullFaces ?? this.modelType.includes('block');
+    const snapSubdivisions = Number(data.snap?.subdivisions ?? data.snapSubdivisions ?? format?.snap?.subdivisions);
+    this.snap = { subdivisions: Number.isFinite(snapSubdivisions) && snapSubdivisions > 0 ? snapSubdivisions : null };
+    this.formatData = structuredClone(data.formatData || {});
     this.elements = (data.elements || []).map(item => {
       if (item.type === 'shape') return new Shape(item);
       if (item.type === 'locator') return new Locator(item);
@@ -285,6 +321,15 @@ export class CubeBricksProject {
     });
     this.groups = (data.groups || []).map(group => new Group(group));
     this.outliner = [...(data.outliner || [])];
+    Object.defineProperties(this, {
+      _nodeIndex: { value: null, writable: true },
+      _nodeIndexElements: { value: null, writable: true },
+      _nodeIndexGroups: { value: null, writable: true },
+      _nodeIndexElementCount: { value: -1, writable: true },
+      _nodeIndexGroupCount: { value: -1, writable: true },
+      _parentIndex: { value: null, writable: true },
+      _hierarchyRevision: { value: 0, writable: true }
+    });
     this.normalizeHierarchy();
     this.meta = { createdWith: 'CubeBricks', modifiedAt: new Date().toISOString(), ...(data.meta || {}) };
   }
@@ -296,14 +341,45 @@ export class CubeBricksProject {
     const referenced = new Set([...this.outliner, ...this.groups.flatMap(group => group.children)]);
     for (const group of this.groups) if (!referenced.has(group.uid)) this.outliner.push(group.uid);
     for (const element of this.elements) if (!referenced.has(element.uid)) this.outliner.push(element.uid);
+    this.invalidateHierarchyIndex();
+  }
+
+  invalidateHierarchyIndex() {
+    this._parentIndex = null;
+    this._hierarchyRevision += 1;
+  }
+
+  get hierarchyRevision() { return this._hierarchyRevision; }
+
+  ensureNodeIndex() {
+    if (this._nodeIndex
+      && this._nodeIndexElements === this.elements
+      && this._nodeIndexGroups === this.groups
+      && this._nodeIndexElementCount === this.elements.length
+      && this._nodeIndexGroupCount === this.groups.length) return this._nodeIndex;
+    this._nodeIndex = new Map([...this.elements, ...this.groups].map(node => [node.uid, node]));
+    this._nodeIndexElements = this.elements;
+    this._nodeIndexGroups = this.groups;
+    this._nodeIndexElementCount = this.elements.length;
+    this._nodeIndexGroupCount = this.groups.length;
+    return this._nodeIndex;
+  }
+
+  ensureParentIndex() {
+    if (this._parentIndex) return this._parentIndex;
+    this._parentIndex = new Map();
+    for (const group of this.groups) {
+      for (const childUid of group.children) this._parentIndex.set(childUid, group);
+    }
+    return this._parentIndex;
   }
 
   getNode(uidValue) {
-    return this.elements.find(item => item.uid === uidValue) || this.groups.find(group => group.uid === uidValue) || null;
+    return this.ensureNodeIndex().get(uidValue) || null;
   }
 
   getParentGroup(uidValue) {
-    return this.groups.find(group => group.children.includes(uidValue)) || null;
+    return this.ensureParentIndex().get(uidValue) || null;
   }
 
   getGroupChain(uidValue) {
@@ -330,14 +406,16 @@ export class CubeBricksProject {
 
   addElement(element, parentUid = null) {
     this.elements.push(element);
-    const parent = parentUid && this.groups.find(group => group.uid === parentUid);
+    const parent = parentUid && this.getNode(parentUid);
     (parent ? parent.children : this.outliner).push(element.uid);
+    this.invalidateHierarchyIndex();
   }
 
   addGroup(group, parentUid = null) {
     this.groups.push(group);
-    const parent = parentUid && this.groups.find(item => item.uid === parentUid);
+    const parent = parentUid && this.getNode(parentUid);
     (parent ? parent.children : this.outliner).push(group.uid);
+    this.invalidateHierarchyIndex();
   }
 
   removeNode(uidValue) {
@@ -354,6 +432,8 @@ export class CubeBricksProject {
     this.groups = this.groups.filter(item => !removal.has(item.uid));
     this.outliner = this.outliner.filter(child => !removal.has(child));
     this.groups.forEach(item => item.children = item.children.filter(child => !removal.has(child)));
+    this._nodeIndex = null;
+    this.invalidateHierarchyIndex();
   }
 
   serialize() {
@@ -385,7 +465,9 @@ export function importBlockbench(data) {
       name: item.name,
       position: item.position || item.origin,
       rotation: item.rotation,
-      visible: item.visibility
+      exported: booleanProperty(item.export, true),
+      locked: booleanProperty(item.locked, false),
+      visible: booleanProperty(item.visibility ?? item.visible, true)
     });
     if (item.type && item.type !== 'cube') return null;
     return new Cube({
@@ -400,8 +482,11 @@ export function importBlockbench(data) {
       uv: item.uv_offset,
       mirrorUv: item.mirror_uv,
       faces: item.faces,
+      autoUv: booleanProperty(item.autouv, false),
+      exported: booleanProperty(item.export, true),
+      locked: booleanProperty(item.locked, false),
       shade: item.shade,
-      visible: item.visibility
+      visible: booleanProperty(item.visibility ?? item.visible, true)
     });
   }).filter(Boolean);
   const elementIds = new Set(elements.map(element => element.uid));
@@ -432,7 +517,10 @@ export function importBlockbench(data) {
       name: node.name ?? saved.name,
       origin: node.origin ?? saved.origin,
       rotation: node.rotation ?? saved.rotation,
-      visible: node.visibility ?? saved.visibility,
+      autoUv: booleanProperty(node.autouv ?? saved.autouv, false),
+      exported: booleanProperty(node.export ?? saved.export, true),
+      locked: booleanProperty(node.locked ?? saved.locked, false),
+      visible: booleanProperty(node.visibility ?? node.visible ?? saved.visibility ?? saved.visible, true),
       children: []
     });
     groupInstances.set(group.uid, group);
@@ -444,12 +532,13 @@ export function importBlockbench(data) {
 
   return new CubeBricksProject({
     name: data.name || 'imported_model',
+    formatId: resolveModelFormatId(data.meta?.model_format || 'free'),
     modelType: data.meta?.model_format || 'free',
     textureSize: data.resolution ? [data.resolution.width, data.resolution.height] : [64, 64],
     renderType: data.render_type,
     elements,
     groups,
     outliner,
-    meta: { importedFrom: 'bbmodel' }
+    meta: { importedFrom: 'bbmodel', sourceModelFormat: data.meta?.model_format || 'free' }
   });
 }

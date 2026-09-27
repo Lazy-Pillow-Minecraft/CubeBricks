@@ -1,6 +1,42 @@
 import assert from 'node:assert/strict';
 import { Cube, Group, CubeBricksProject, chooseKnifeCutAxis, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
 import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
+import { ModelFormatRegistry } from '../src/core/model-format-registry.js';
+import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/config/model-formats.js';
+
+assert.equal(modelFormatRegistry.list().length, 8, 'built-in model formats are registered');
+assert.deepEqual(modelFormatRegistry.list().filter(format => format.status === 'placeholder').map(format => format.id),
+  [ModelFormatId.GENERIC, ModelFormatId.IMAGE], 'generic mesh and image editors remain explicit placeholders');
+assert.equal(modelFormatRegistry.resolve('java_block').id, ModelFormatId.JAVA_BLOCK_ITEM);
+assert.equal(modelFormatRegistry.resolve('geckolib_model').id, ModelFormatId.GECKOLIB);
+const javaInitial = createModelProjectData(ModelFormatId.JAVA_BLOCK_ITEM);
+assert.equal(javaInitial.formatId, ModelFormatId.JAVA_BLOCK_ITEM);
+assert.deepEqual(javaInitial.snap, { subdivisions: 16 });
+assert.deepEqual(javaInitial.textureSize, [16, 16]);
+const bedrockInitial = createModelProjectData(ModelFormatId.BEDROCK_ENTITY);
+const bedrockProject = new CubeBricksProject(bedrockInitial);
+assert.equal(bedrockProject.formatId, ModelFormatId.BEDROCK_ENTITY);
+assert.deepEqual(bedrockProject.textureSize, [64, 64]);
+assert.equal(bedrockProject.uvMode, 'box');
+assert.equal(bedrockProject.cullFaces, false);
+assert.deepEqual(bedrockProject.snap, { subdivisions: 16 });
+const bedrockRoundTrip = new CubeBricksProject(JSON.parse(bedrockProject.serialize()));
+assert.equal(bedrockRoundTrip.formatId, ModelFormatId.BEDROCK_ENTITY, 'project format survives a cbmodel round trip');
+assert.deepEqual(bedrockRoundTrip.snap, { subdivisions: 16 }, 'project standard snap survives a cbmodel round trip');
+
+const customFormats = new ModelFormatRegistry();
+let registeredCustom = null;
+customFormats.subscribe(event => { registeredCustom = event.format.id; });
+customFormats.register({
+  id: 'custom_voxel', name: 'Custom Voxel', blockbenchFormat: 'custom_voxel', snap: { subdivisions: 32 },
+  defaults: { textureSize: [32, 32] },
+  createProject: context => ({ name: context.name, formatData: { customSeed: 7 } })
+});
+assert.equal(registeredCustom, 'custom_voxel', 'custom format registration is observable by creation UIs');
+assert.deepEqual(customFormats.createDefaults('custom_voxel', { name: 'factory_project' }), {
+  textureSize: [32, 32], name: 'factory_project', formatData: { customSeed: 7 },
+  formatId: 'custom_voxel', modelType: 'custom_voxel', snap: { subdivisions: 32 }
+}, 'format factories can inject arbitrary initial project data');
 
 const project = importBlockbench({
   name: 'nested_test',
@@ -32,6 +68,8 @@ const project = importBlockbench({
 assert.deepEqual(project.textureSize, [32, 64]);
 assert.equal(project.renderType, 'cutout');
 assert.equal(project.cullFaces, false);
+assert.equal(project.formatId, ModelFormatId.GENERIC);
+assert.deepEqual(project.snap, { subdivisions: 16 });
 assert.deepEqual(project.outliner, ['root-group']);
 assert.deepEqual(project.getNode('cube-a').position, [1, 2, 3]);
 assert.deepEqual(project.getNode('cube-a').size, [4, 6, 7]);
@@ -39,6 +77,57 @@ assert.equal(project.getNode('cube-a').shade, false);
 assert.equal(project.getNode('cube-a').mirrorUv, true);
 assert.deepEqual(project.getGroupChain('cube-a').map(group => group.uid), ['root-group', 'child-group']);
 assert.deepEqual(project.getDescendantElementUids('root-group'), ['cube-a']);
+
+const indexedProject = new CubeBricksProject({
+  elements: [new Cube({ uid: 'indexed-a' }), new Cube({ uid: 'indexed-b' })],
+  groups: [new Group({ uid: 'indexed-group', children: ['indexed-a'] })],
+  outliner: ['indexed-group', 'indexed-b']
+});
+assert.equal(indexedProject.getNode('indexed-b').uid, 'indexed-b', 'node index resolves flat multi-selection entries');
+indexedProject.elements.push(new Cube({ uid: 'indexed-c' }));
+assert.equal(indexedProject.getNode('indexed-c').uid, 'indexed-c', 'node index refreshes after direct additions');
+indexedProject.getNode('indexed-group').children.push('indexed-b');
+indexedProject.outliner = indexedProject.outliner.filter(uid => uid !== 'indexed-b');
+indexedProject.invalidateHierarchyIndex();
+assert.equal(indexedProject.getParentGroup('indexed-b').uid, 'indexed-group', 'parent index refreshes after reparenting');
+assert.deepEqual(Object.keys(JSON.parse(indexedProject.serialize())).filter(key => key.startsWith('_')), [],
+  'runtime indexes are never serialized');
+
+const freshFlags = new Cube();
+assert.equal(freshFlags.autoUv, true, 'new cubes enable auto UV');
+assert.equal(freshFlags.exported, true, 'new cubes participate in future conversions');
+assert.equal(freshFlags.locked, false, 'new cubes are unlocked');
+const texturedFlags = new Cube({ faces: { north: { texture: '#skin' } } });
+assert.equal(texturedFlags.autoUv, false, 'textured cubes disable auto UV on import');
+const excludedCube = new Cube({ exported: false, locked: true });
+const flagProject = new CubeBricksProject({ elements: [excludedCube], outliner: [excludedCube.uid] });
+const flagRoundTrip = new CubeBricksProject(JSON.parse(flagProject.serialize()));
+assert.equal(flagRoundTrip.elements.length, 1, 'conversion export flag never removes elements from cbmodel');
+assert.equal(flagRoundTrip.getNode(excludedCube.uid).exported, false);
+assert.equal(flagRoundTrip.getNode(excludedCube.uid).locked, true);
+
+const importedFlags = importBlockbench({
+  elements: [
+    { type: 'cube', uuid: 'flags-off', from: [0, 0, 0], to: [1, 1, 1], autouv: 0, export: 0, locked: 1, visibility: 0 },
+    { type: 'cube', uuid: 'flags-on', from: [1, 0, 0], to: [2, 1, 1], autouv: 2, export: 1, locked: 0, visibility: 1 }
+  ],
+  outliner: [{ uuid: 'flags-group', autouv: 0, export: 0, locked: 1, visibility: 0, children: ['flags-off', 'flags-on'] }]
+});
+assert.deepEqual(
+  ['autoUv', 'exported', 'locked', 'visible'].map(key => importedFlags.getNode('flags-off')[key]),
+  [false, false, true, false],
+  'numeric Blockbench flags are inherited as booleans'
+);
+assert.deepEqual(
+  ['autoUv', 'exported', 'locked', 'visible'].map(key => importedFlags.getNode('flags-on')[key]),
+  [true, true, false, true],
+  'nonzero Blockbench autouv remains enabled'
+);
+assert.deepEqual(
+  ['autoUv', 'exported', 'locked', 'visible'].map(key => importedFlags.getNode('flags-group')[key]),
+  [false, false, true, false],
+  'Blockbench group flags are inherited directly'
+);
 
 const versionFiveProject = importBlockbench({
   meta: { format_version: '5.0', model_format: 'free' },

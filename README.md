@@ -38,6 +38,10 @@ The current version includes an interactive workspace, Cube/Shape/Group/Locator 
 
 ### 最近更新 / Recent Updates
 
+- 左側新增標準停靠物件「UV 預覽」，只建立並渲染目前選中的 Cube／Shape。預覽可用左鍵獨立旋轉但不能縮放，並提供總開關、慢速自動旋轉與六面方向配色；總開關關閉、面板／停靠欄折疊或頁面進入後台時，動畫與 WebGL 渲染排程會完全停止。<br>
+  A standardized “UV Preview” dock has been added to the bottom of the left column, building and rendering only the currently selected Cubes/Shapes. The preview can be rotated independently with the left mouse button but cannot be zoomed, and includes a master switch, slow auto-rotation, and directional six-face coloring. Animation and WebGL render scheduling stop completely when the master switch is off, the panel/dock is collapsed, or the page is in the background.
+- 多選展開與場景節點查找改用運行時索引及選擇展開快取，不再為每個 UID 反覆線性掃描整份元素／組列表。以 5,000 個元素執行 50,000 次查找的本地基準中，查找時間由約 `1035 ms` 降至約 `6 ms`；索引為非序列化運行時資料，不會污染 `.cbmodel`／`.bbmodel`。<br>
+  Multi-selection expansion and scene-node lookup now use runtime indices plus a cached selection expansion instead of repeatedly scanning the full element/group arrays for every UID. In a local benchmark of 50,000 lookups across 5,000 elements, lookup time fell from roughly `1035 ms` to about `6 ms`. These indices are non-serialized runtime data and do not pollute `.cbmodel` or `.bbmodel` files.
 - 移動、縮放、旋轉、樞軸、頂點捕捉、刀具與 Locator 已換用正式 SVG 圖標，統一置中並繼承目前主題的工具欄顏色。  
   Move, Scale, Rotate, Pivot, Vertex Snap, Knife, and Locator now use finalized SVG icons, consistently centered and inheriting the current theme's toolbar color.
 - Locator 不再以三軸十字線代替：視口會把正式 Locator SVG 投影到其三維座標，透視與正交各自使用正確的攝像機投影。圖標通常維持與工具欄一致的 `17 × 17` 尺寸；透視攝像機進入距離 `24` 以內後才隨接近程度放大，正交模式則始終保持固定尺寸。選中狀態與場景層級圖標也會套用主題色。<br>
@@ -89,14 +93,16 @@ The current version includes an interactive workspace, Cube/Shape/Group/Locator 
   The upper-right corner of the viewport switches between wireframe, solid, and textured rendering modes
 - 地面由九宮格主網格與按吸附精度生成的中央細分網格組成，並標有坐標軸及北向  
   The ground consists of a 3×3 main grid plus a central subdivision grid generated according to snapping precision, with coordinate axes and north direction marked
+- 左側「UV 預覽」只顯示選中幾何；左鍵拖動可旋轉小視口，且不接受滾輪縮放。面區分模式使用六種固定方向色，方便辨認 UV 面向；自動旋轉只影響預覽攝像機，不會修改模型資料。<br>
+  The left-side “UV Preview” displays selected geometry only. Left-button dragging rotates its small viewport, while wheel zoom is intentionally unsupported. Face-color mode uses six fixed directional colors to make UV orientation easier to inspect, and auto-rotation affects only the preview camera without modifying model data.
 
 紋理預覽提供實心、Cutout、半透明及三者的 Mipped 抗鋸齒版本；背面剔除、全局陰影和物件陰影均可獨立控制。透視模式使用對數深度以降低大可視距離下的 Z-fighting，Mipped 只對模型表面作高解析度離屏渲染後縮小；網格、選中框、邊界線和線框模式都繞過 Mipped，在所有模式下使用獨立的原生抗鋸齒。實體面亮度由旋轉後的法線套用 Minecraft Java `minecraft_mix_light` 雙方向光公式。Cube 的原生幾何欄位是 `position`、`size`、`pivot`、`rotation`；舊版 `from/to/origin` 僅在載入時自動遷移。  
 Texture preview provides Solid, Cutout, Translucent, and Mipped anti-aliased variants of all three. Backface culling, global shading, and per-object shading can each be controlled independently. Perspective mode uses logarithmic depth to reduce Z-fighting over large view distances. Mipped rendering only supersamples model surfaces offscreen at high resolution before downscaling; grids, selection boxes, boundary lines, and wireframe mode bypass Mipped and use independent native anti-aliasing in every mode. Solid-face brightness applies Minecraft Java's bidirectional `minecraft_mix_light` formula to the rotated normals. A Cube's native geometry fields are `position`, `size`, `pivot`, and `rotation`; legacy `from/to/origin` fields are migrated automatically only when loading.
 
 ### 面板與組 / Panels and Groups
 
-- 左側貼圖、右側物件屬性、右側場景層級及底部色卡／時間軸均為統一的停靠物件；直接拖動標題即可取下，靠近左、右或底部停靠區後鬆手會自動吸附，不需要切換按鈕。底部工作區只在繪畫與動畫模式存在，編輯模式會把空間完整交還視口。  
-  The left texture panel, right object-properties panel, right scene hierarchy, and bottom palette/timeline are all unified dock objects. Drag a title directly to detach it; releasing near the left, right, or bottom docking area automatically snaps it into place without requiring a toggle button. The bottom workspace exists only in Paint and Animation modes, while Edit mode returns the entire area to the viewport.
+- 左側貼圖與 UV 預覽、右側物件屬性、右側場景層級及底部色卡／時間軸均為統一的停靠物件；直接拖動標題即可取下，靠近左、右或底部停靠區後鬆手會自動吸附，不需要切換按鈕。底部工作區只在繪畫與動畫模式存在，編輯模式會把空間完整交還視口。<br>
+  The left texture and UV-preview panels, right object-properties panel, right scene hierarchy, and bottom palette/timeline are all unified dock objects. Drag a title directly to detach it; releasing near the left, right, or bottom docking area automatically snaps it into place without requiring a toggle button. The bottom workspace exists only in Paint and Animation modes, while Edit mode returns the entire area to the viewport.
 - 左、右、底部都是可縱向堆疊任意數量面板的列表，拖放位置決定排列順序；左右列表中的面板共用欄寬，拖動任一面板的內側邊都會調整整欄，新吸附面板會繼承現有欄寬。每條停靠邊可整欄折疊，只在朝向主視圖的外沿留下小三角；即使該邊目前沒有面板，拖近時仍會顯示停靠預覽。<br>
   The left, right, and bottom areas are lists that can vertically stack any number of panels, with drop position determining order. Panels in the left and right lists share a column width; dragging the inner edge of any panel resizes the entire column, and newly docked panels inherit the existing width. Each docking edge can collapse as a whole, leaving only a small triangle on the outer edge facing the viewport; even an empty edge still displays a docking preview when a panel approaches.
 - 每個窗口題頭均有獨立背景與分隔線，個別面板仍可自行折疊。浮動窗口除四邊外亦提供四角雙軸縮放；停靠區、順序、浮動位置、尺寸、共用欄寬、個別折疊及整欄折疊狀態都會自動保存。<br>
@@ -128,6 +134,8 @@ Texture preview provides Solid, Cutout, Translucent, and Mipped anti-aliased var
   The texture panel retains only the texture list and an aspect-ratio preview of the currently selected texture. Textures can be reordered by dragging, dropped into texture groups, or placed into a new group from the context menu. A model object in the viewport uses exactly the same context menu as the same object in the scene hierarchy, while blank viewport space retains scene-level actions.
 - 場景使用穩定的基礎 Mesh 與獨立選中 Mesh；場景層級只建立可見行，拖動面板時不會重建整份列表。  
   The scene uses stable base Meshes and separate selection Meshes; the scene hierarchy creates only visible rows and does not rebuild the entire list while panels are being dragged.
+- 場景節點及父組關係以惰性運行時 Map 索引查找；多選展開結果會按工程、選擇集合與層級版本快取。直接增刪、重分組及層級正規化都會同步刷新索引，因此大量普通多選不再因 O(n²) UID 查找而與組選產生巨大效能差距。<br>
+  Scene nodes and parent-group relationships are resolved through lazy runtime Map indices, while expanded multi-selection results are cached by project, selection set, and hierarchy revision. Direct additions/removals, regrouping, and hierarchy normalization refresh these indices, preventing large ordinary selections from falling into O(n²) UID lookup behavior compared with group selection.
 - 視口選取使用透視／正交攝像機射線與三角面深度判定，不依賴螢幕矩形範圍。Locator 使用與畫面固定圖標一致的命中區；從視口選中任何項目後，場景層級會自動捲動並顯示該項。  
   Viewport selection uses perspective/orthographic camera rays and triangle-depth testing rather than screen-space rectangle bounds. Locator uses a hit area matching its fixed on-screen icon; after any item is selected from the viewport, the scene hierarchy automatically scrolls to reveal it.
 
