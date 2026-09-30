@@ -1,7 +1,7 @@
-import { Cube, Group, Locator, Shape, CubeBricksProject, chooseKnifeCutAxis, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
+import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
 import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
 import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
-import { WebGLSceneRenderer, applyGroupTransforms, getBlockbenchBoxUv } from './render/webgl-renderer.js';
+import { WebGLSceneRenderer, applyGroupTransforms, getBlockbenchBoxUv, getEffectiveInflate } from './render/webgl-renderer.js';
 import { DockManager } from './ui/dock-manager.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -22,6 +22,7 @@ const state = {
   selectedUid: null,
   selectedUids: new Set(),
   selectionAnchorUid: null,
+  selectedCurveNodeIndex: null,
   mode: 'edit',
   tool: 'move',
   filePath: null,
@@ -136,7 +137,7 @@ let draggingProjectTabInsertIndex = null;
 let selectionExpansionCache = null;
 
 const PROJECT_SESSION_KEYS = Object.freeze([
-  'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'filePath', 'dirty', 'history', 'future',
+  'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
   'target', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'timelineFrame'
 ]);
@@ -158,6 +159,7 @@ function createProjectSession(project, options = {}) {
     selectedUid,
     selectedUids: new Set(selectedUid ? [selectedUid] : []),
     selectionAnchorUid: selectedUid,
+    selectedCurveNodeIndex: null,
     filePath: options.filePath || null,
     dirty: options.dirty ?? false,
     history: [],
@@ -395,6 +397,8 @@ function restore(serialized) {
   state.selectionAnchorUid = previousSelectionAnchorUid && state.project.getNode(previousSelectionAnchorUid)
     ? previousSelectionAnchorUid
     : state.selectedUid;
+  const restoredSelection = state.project.getNode(state.selectedUid);
+  if (!isBezierElement(restoredSelection) || state.selectedCurveNodeIndex >= restoredSelection.nodes.length) state.selectedCurveNodeIndex = null;
   if (state.vertexSnapSource && !state.project.getNode(state.vertexSnapSource.rootUid)) state.vertexSnapSource = null;
   if (state.knifeSelection && !state.project.getNode(state.knifeSelection.uid)) cancelKnifeSelection(false);
   markDirty(true);
@@ -541,7 +545,7 @@ function outlinerFlag(node, key, enabled, onIcon, offIcon, onTitle, offTitle, av
 function outlinerStateMarkup(node) {
   const visible = outlinerFlag(node, 'visible', node.visible !== false, 'icon-show', 'icon-unshow', '可見', '隱藏');
   if (!state.outlinerDetailed) return visible;
-  const autoUvAvailable = ['cube', 'shape', 'group'].includes(node.type);
+  const autoUvAvailable = ['cube', 'shape', 'bezier2d', 'bezier3d', 'group'].includes(node.type);
   return [
     outlinerFlag(node, 'autoUv', nodeAutoUvEnabled(node), 'icon-uv-update', 'icon-unuv-update', '自動 UV', '不自動更新 UV', autoUvAvailable),
     outlinerFlag(node, 'exported', node.exported !== false, 'icon-save', 'icon-unsave', '參與後續格式轉換', '不參與後續格式轉換'),
@@ -551,6 +555,8 @@ function outlinerStateMarkup(node) {
 }
 
 function outlinerKindMarkup(node) {
+  if (node.type === 'node') return '<span class="outliner-curve-kind" aria-hidden="true">●</span>';
+  if (node.type === 'bezier2d' || node.type === 'bezier3d') return `<span class="outliner-curve-kind" aria-hidden="true">⌁${node.type === 'bezier2d' ? '²' : '³'}</span>`;
   if (node.type !== 'locator') return `<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-${node.type}"></use></svg>`;
   return `<svg class="outliner-kind-icon" aria-hidden="true" viewBox="0 0 197.49 189.08">${LOCATOR_ICON_SHAPES}</svg>`;
 }
@@ -567,64 +573,145 @@ function scheduleOutlinerWindow() {
   });
 }
 
+function inspectorBatchNodes() {
+  const nodes = topLevelSelectedUids().map(uidValue => state.project.getNode(uidValue)).filter(Boolean);
+  return nodes.length ? nodes : [selected()].filter(Boolean);
+}
+
+function sharedVectorValues(nodes, field, fallback) {
+  if (nodes.length <= 1) return [...fallback];
+  return [0, 1, 2].map(axis => {
+    const first = nodes[0]?.[field]?.[axis];
+    if (!Number.isFinite(first) || !nodes.every(node => Number.isFinite(node?.[field]?.[axis]) && Math.abs(node[field][axis] - first) < 1e-9)) return null;
+    return first;
+  });
+}
+
+function sharedNumberValue(nodes, field, fallback) {
+  if (nodes.length <= 1) return Number(fallback) || 0;
+  const first = nodes[0]?.[field];
+  if (!Number.isFinite(first) || !nodes.every(node => Number.isFinite(node?.[field]) && Math.abs(node[field] - first) < 1e-9)) return null;
+  return first;
+}
+
+function numberInputAttributes(value) {
+  return value === null
+    ? 'value="" placeholder="-" data-mixed="true"'
+    : `value="${round(value)}"`;
+}
+
+function isBezierElement(item) {
+  return item?.type === 'bezier2d' || item?.type === 'bezier3d';
+}
+
+function curveNodeEditorMarkup(item) {
+  return `<div class="curve-node-list">${item.nodes.map((node, index) => {
+    const displayedRotation = node.autoTangent ? item.resolvedNodeState(index).rotation : node.rotation;
+    return `
+    <section class="curve-node-card ${state.selectedCurveNodeIndex === index ? 'active' : ''}" data-curve-node-card="${index}">
+      <button type="button" class="curve-node-title" data-select-curve-node="${index}">節點 ${index + 1}</button>
+      ${vectorField('位置', `curve-node:${index}:position`, node.position)}
+      ${vectorField('旋轉', `curve-node:${index}:rotation`, displayedRotation)}
+      <div class="option-row"><span>自動切線</span><label class="switch"><input type="checkbox" data-curve-node-auto="${index}" ${node.autoTangent ? 'checked' : ''}/><i></i></label></div>
+      ${item.dimension === 3 ? `<div class="option-row"><span>滾動角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-curve-node-roll="${index}" value="${round(node.roll || 0)}" /></div></div>` : ''}
+      <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-curve-node-toggle="${index}" ${node.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
+      ${node.handlesEnabled ? `${vectorField('前手柄', `curve-node:${index}:handleIn`, node.handleIn)}${vectorField('後手柄', `curve-node:${index}:handleOut`, node.handleOut)}` : ''}
+      <button type="button" class="curve-node-remove" data-remove-curve-node="${index}" ${item.nodes.length <= 2 ? 'disabled' : ''}>刪除節點</button>
+    </section>`;
+  }).join('')}</div>`;
+}
+
 function renderInspector() {
   const item = selected();
   if (!item) {
-    inspector.innerHTML = '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、Locator 或組來編輯。</p></div>';
+    inspector.innerHTML = '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。</p></div>';
     return;
   }
+  const items = inspectorBatchNodes();
   const rotation = item.rotation || [0, 0, 0];
-  const typeLabel = item.type === 'shape' ? '程序化形狀' : item.type === 'locator' ? 'Locator' : item.type === 'group' ? '組' : '立方體';
+  const typeLabel = item.type === 'shape' ? '程序化形狀' : item.type === 'locator' ? 'Locator'
+    : item.type === 'node' ? '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
+      : item.type === 'bezier3d' ? '三維貝塞爾' : item.type === 'group' ? '組' : '立方體';
   const details = item.type === 'cube' ? `
       <div class="field-title"><span>幾何</span><button data-action="resetTransform">重置</button></div>
-      ${vectorField('位置', 'position', item.position)}
-      ${vectorField('尺寸', 'size', item.size)}
-      ${vectorField('樞軸', 'pivot', item.pivot)}
-      ${vectorField('旋轉', 'rotation', rotation)}
-      <div class="vector-field scalar-field"><span>膨脹</span><label class="number-wrap"><input type="number" step="0.1" data-field="inflate" value="${round(item.inflate)}" /></label></div>
+      ${vectorField('位置', 'position', item.position, items)}
+      ${vectorField('尺寸', 'size', item.size, items)}
+      ${vectorField('樞軸', 'pivot', item.pivot, items)}
+      ${vectorField('旋轉', 'rotation', rotation, items)}
+      ${scalarField('膨脹', 'inflate', item.inflate, items)}
       <div class="option-row"><span>UV 模式</span><select data-field="uvMode"><option value="box" ${item.uvMode === 'box' ? 'selected' : ''}>箱型 UV</option><option value="face" ${item.uvMode === 'face' ? 'selected' : ''}>逐面 UV</option></select></div>`
     : item.type === 'shape' ? `
       <div class="field-title"><span>形狀參數</span><span>${item.shapeType}</span></div>
-      ${vectorField('位置', 'origin', item.origin)}
-      ${vectorField('旋轉', 'rotation', rotation)}
-      ${parameterField('半徑', 'radius', item.parameters.radius, .1)}
-      ${parameterField('高度', 'height', item.parameters.height, .1)}
-      ${parameterField('邊數', 'sides', item.parameters.sides, 1)}
+      ${vectorField('位置', 'origin', item.origin, items)}
+      ${vectorField('旋轉', 'rotation', rotation, items)}
+      ${parameterField('半徑', 'radius', item.parameters.radius, .1, items)}
+      ${parameterField('高度', 'height', item.parameters.height, .1, items)}
+      ${parameterField('邊數', 'sides', item.parameters.sides, 1, items)}
+      ${parameterField('Cube 邊長', 'cubeSize', item.parameters.cubeSize, .0625, items)}
+      <div class="option-row"><span>柱體吸附</span><select data-shape-snap-mode><option value="cube" ${item.parameters.snapMode === 'cube' ? 'selected' : ''}>按內含 Cube 邊長</option><option value="bounds" ${item.parameters.snapMode === 'bounds' ? 'selected' : ''}>按整體邊長</option></select></div>
       <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
     : item.type === 'locator' ? `
       <div class="field-title"><span>Locator 變換</span><button data-action="resetTransform">重置</button></div>
-      ${vectorField('位置', 'position', item.position)}
-      ${vectorField('旋轉', 'rotation', rotation)}`
+      ${vectorField('位置', 'position', item.position, items)}
+      ${vectorField('旋轉', 'rotation', rotation, items)}`
+    : item.type === 'node' ? `
+      <div class="field-title"><span>節點</span><span>只可移動／旋轉</span></div>
+      ${vectorField('位置', 'position', item.position, items)}
+      ${vectorField('旋轉', 'rotation', rotation, items)}
+      <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-field="handlesEnabled" ${item.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
+      ${item.handlesEnabled ? `${vectorField('前手柄', 'handleIn', item.handleIn, items)}${vectorField('後手柄', 'handleOut', item.handleOut, items)}` : ''}`
+    : isBezierElement(item) ? `
+      <div class="field-title"><span>${item.dimension === 2 ? '二維' : '三維'}貝塞爾</span><span>${item.nodes.length} 節點</span></div>
+      ${vectorField('位置', 'origin', item.origin, items)}
+      ${vectorField('旋轉', 'rotation', rotation, items)}
+      ${parameterField('Cube 柱粗細', 'thickness', item.parameters.thickness, .1, items)}
+      <div class="option-row"><span>分段方式</span><select data-curve-segmentation><option value="distance" ${item.parameters.segmentationMode === 'distance' ? 'selected' : ''}>按距離</option><option value="angle" ${item.parameters.segmentationMode === 'angle' ? 'selected' : ''}>按角度</option></select></div>
+      ${item.parameters.segmentationMode === 'angle'
+        ? parameterField('角度步長', 'angleStep', item.parameters.angleStep, .1, items)
+        : parameterField('距離步長', 'segmentLength', item.parameters.segmentLength, .1, items)}
+      <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>
+      ${curveNodeEditorMarkup(item)}`
     : `
-      <div class="field-title"><span>組變換</span><button data-action="resetTransform">重置</button></div>
-      ${vectorField('樞軸', 'pivot', item.pivot)}
-      ${vectorField('旋轉', 'rotation', rotation)}
+      <div class="field-title"><span>組屬性</span></div>
+      ${vectorField('樞軸', 'pivot', item.pivot, items)}
+      ${scalarField('膨脹', 'inflate', item.inflate, items)}
       <div class="option-row"><span>直接子項</span><strong style="color:var(--accent)">${item.children.length}</strong></div>`;
   inspector.innerHTML = `
     <div class="field-section">
-      <div class="field-title"><span>基本</span><span>${typeLabel}</span></div>
+      <div class="field-title"><span>基本</span><span>${items.length > 1 ? `多選 ${items.length}` : typeLabel}</span></div>
       <input class="name-field" data-field="name" value="${escapeAttribute(item.name)}" aria-label="名稱" />
       <div class="option-row"><span>可見</span><label class="switch"><input type="checkbox" data-field="visible" ${item.visible ? 'checked' : ''}/><i></i></label></div>
     </div>
     <div class="field-section">
       ${details}
     </div>
-    ${item.type === 'cube' || item.type === 'shape' ? `
+    ${item.type === 'cube' || item.type === 'shape' || isBezierElement(item) || item.type === 'group' ? `
     <div class="field-section">
       <div class="field-title"><span>外觀</span><span>預覽色</span></div>
-      <div class="option-row"><span>材質色</span><input type="color" data-field="color" value="${item.color}" /></div>
+      ${item.color ? `<div class="option-row"><span>材質色</span><input type="color" data-field="color" value="${item.color}" /></div>` : ''}
       <div class="option-row"><span>面陰影</span><label class="switch"><input type="checkbox" data-field="shade" ${item.shade !== false ? 'checked' : ''}/><i></i></label></div>
     </div>` : ''}
-    <div class="field-section"><button class="danger-button" data-action="deleteSelected">刪除${item.type === 'group' ? '組及其內容' : '物件'}</button></div>`;
+    <div class="field-section"><button class="danger-button" data-action="deleteSelected">${items.length > 1 ? '刪除選中項' : `刪除${item.type === 'group' ? '組及其內容' : '物件'}`}</button></div>`;
   bindInspector();
 }
 
-function vectorField(label, field, values) {
-  return `<div class="vector-field"><span>${label}</span>${values.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="0.0001" data-vector="${field}" data-axis="${index}" value="${round(value)}" /></label>`).join('')}</div>`;
+function vectorField(label, field, values, nodes = [selected()]) {
+  const displayed = sharedVectorValues(nodes, field, values);
+  return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="0.0001" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} /></label>`).join('')}</div>`;
 }
 
-function parameterField(label, key, value, step) {
-  return `<div class="option-row"><span>${label}</span><div class="number-wrap" style="width:68px"><input type="number" min="${key === 'sides' ? 3 : .1}" step="${step}" data-parameter="${key}" value="${round(value)}" /></div></div>`;
+function scalarField(label, field, value, nodes = [selected()]) {
+  const displayed = sharedNumberValue(nodes, field, value);
+  return `<div class="vector-field scalar-field"><span>${label}</span><label class="number-wrap"><input type="number" step="0.1" data-field="${field}" ${numberInputAttributes(displayed)} /></label></div>`;
+}
+
+function parameterField(label, key, value, step, nodes = [selected()]) {
+  const displayed = nodes.length <= 1 ? value : (() => {
+    const first = nodes[0]?.parameters?.[key];
+    return Number.isFinite(first) && nodes.every(node => Number.isFinite(node?.parameters?.[key]) && Math.abs(node.parameters[key] - first) < 1e-9) ? first : null;
+  })();
+  const minimum = key === 'sides' ? 3 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1;
+  return `<div class="option-row"><span>${label}</span><div class="number-wrap" style="width:68px"><input type="number" min="${minimum}" step="${step}" data-parameter="${key}" ${numberInputAttributes(displayed)} /></div></div>`;
 }
 
 function setNodeVisibility(node, visible, cascadeGroup = true) {
@@ -647,7 +734,7 @@ function setNodeAutoUv(node, enabled) {
     for (const uidValue of state.project.getDescendantElementUids(node.uid)) {
       const child = state.project.getNode(uidValue);
       if (child?.type === 'cube') setNodeAutoUv(child, enabled);
-      else if (child?.type === 'shape') child.autoUv = enabled;
+      else if (child && ['shape', 'bezier2d', 'bezier3d'].includes(child.type)) child.autoUv = enabled;
     }
   }
 }
@@ -656,6 +743,7 @@ function setNodeFlag(node, key, value) {
   if (!node) return;
   if (key === 'visible') return setNodeVisibility(node, value);
   if (key === 'autoUv') return setNodeAutoUv(node, value);
+  if (key === 'shade' && node.type === 'locator') return;
   node[key] = value;
   if (node.type === 'group') {
     for (const childUid of node.children) setNodeFlag(state.project.getNode(childUid), key, value);
@@ -665,13 +753,24 @@ function setNodeFlag(node, key, value) {
 function bindInspector() {
   const item = selected();
   if (!item) return;
+  const items = inspectorBatchNodes();
   $$('[data-field]', inspector).forEach(input => {
-    const eventName = input.type === 'text' ? 'change' : 'change';
-    input.addEventListener(eventName, () => {
-      snapshot();
+    input.addEventListener('change', () => {
       const key = input.dataset.field;
-      if (key === 'visible') setNodeVisibility(item, input.checked);
-      else item[key] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+      if (input.type === 'number' && input.value === '') return;
+      snapshot();
+      const value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+      const targets = key === 'name' ? [item]
+        : key === 'shade' ? items.filter(node => ['cube', 'shape', 'bezier2d', 'bezier3d', 'group'].includes(node.type))
+        : key === 'inflate' ? items.filter(node => ['cube', 'group'].includes(node.type))
+        : key === 'uvMode' ? items.filter(node => node.type === 'cube')
+        : key === 'color' ? items.filter(node => typeof node.color === 'string')
+        : items.filter(node => key in node);
+      for (const target of targets) {
+        if (['visible', 'shade', 'autoUv', 'exported', 'locked'].includes(key)) setNodeFlag(target, key, value);
+        else target[key] = value;
+      }
+      if (key === 'locked') sceneRenderer.invalidateLockState();
       markDirty();
       renderAll('selection');
     });
@@ -682,22 +781,45 @@ function bindInspector() {
       const value = Number(input.value);
       if (!Number.isFinite(value)) return;
       if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      delete input.dataset.mixed;
       const field = input.dataset.vector;
       const axis = Number(input.dataset.axis);
-      const nextValue = item.type === 'cube' && field === 'size' && !state.allowNegativeSize
-        ? Math.max(0, value)
-        : value;
-      if (nextValue !== value) input.value = String(nextValue);
-      if (item.type === 'cube' && field === 'position') {
-        const delta = nextValue - item.position[axis];
-        item.position[axis] = nextValue;
-        item.pivot[axis] += delta;
-      } else if (field === 'pivot' && ['cube', 'group'].includes(item.type)) {
-        const nextPivot = [...item.pivot];
-        nextPivot[axis] = nextValue;
-        setPivotPreservingGeometry(state.project, item, nextPivot);
-      } else item[field][axis] = nextValue;
-      markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(item); renderScene();
+      if (field.startsWith('curve-node:') && isBezierElement(item)) {
+        const [, indexText, property] = field.split(':');
+        const node = item.nodes[Number(indexText)];
+        if (!node || !Array.isArray(node[property])) return;
+        if (property === 'rotation' && node.autoTangent) bakeCurveNodeTangent(item, Number(indexText));
+        const planarVector = property === 'position' || property === 'handleIn' || property === 'handleOut';
+        const lockedPlanarAxis = item.dimension === 2
+          && ((planarVector && axis === 1) || (property === 'rotation' && axis !== 1));
+        node[property][axis] = lockedPlanarAxis ? 0 : value;
+        if (item.dimension === 2 && planarVector) node[property][1] = 0;
+        if (item.dimension === 2 && property === 'rotation') {
+          node.rotation[0] = 0;
+          node.rotation[2] = 0;
+        }
+        if (property === 'rotation') node.autoTangent = false;
+        if (lockedPlanarAxis) input.value = '0';
+        markDirty(); invalidateSelectionRenderGeometry(); renderScene();
+        return;
+      }
+      for (const target of items.filter(node => Array.isArray(node[field]))) {
+        const nextValue = target.type === 'cube' && field === 'size' && !state.allowNegativeSize
+          ? Math.max(0, value)
+          : value;
+        if (target.type === 'cube' && field === 'position') {
+          const delta = nextValue - target.position[axis];
+          target.position[axis] = nextValue;
+          target.pivot[axis] += delta;
+        } else if (field === 'pivot' && ['cube', 'group'].includes(target.type)) {
+          const nextPivot = [...target.pivot];
+          nextPivot[axis] = nextValue;
+          setPivotPreservingGeometry(state.project, target, nextPivot);
+        } else target[field][axis] = nextValue;
+      }
+      const displayedValue = item.type === 'cube' && field === 'size' && !state.allowNegativeSize ? Math.max(0, value) : value;
+      if (displayedValue !== value) input.value = String(displayedValue);
+      markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(); renderScene();
     };
     input.addEventListener('input', apply);
     input.addEventListener('change', apply);
@@ -709,18 +831,74 @@ function bindInspector() {
       const value = Number(input.value);
       if (!Number.isFinite(value)) return;
       if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      delete input.dataset.mixed;
       const key = input.dataset.parameter;
-      item.parameters[key] = key === 'sides' ? Math.max(3, Math.round(value)) : Math.max(.1, value);
+      const nextValue = key === 'sides' ? Math.max(3, Math.round(value))
+        : Math.max(key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1, value);
+      for (const target of items.filter(node => node.parameters && key in node.parameters)) {
+        target.parameters[key] = nextValue;
+      }
+      markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(); renderScene();
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('change', apply);
+    input.addEventListener('blur', () => { snapshotTaken = false; });
+  });
+  $('[data-shape-snap-mode]', inspector)?.addEventListener('change', event => {
+    snapshot();
+    for (const target of items.filter(node => node.type === 'shape')) target.parameters.snapMode = event.target.value;
+    markDirty(); renderAll('selection');
+  });
+  $('[data-curve-segmentation]', inspector)?.addEventListener('change', event => {
+    snapshot();
+    for (const target of items.filter(isBezierElement)) target.parameters.segmentationMode = event.target.value;
+    markDirty(); renderAll('selection');
+  });
+  $$('[data-select-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
+    state.selectedCurveNodeIndex = Number(button.dataset.selectCurveNode);
+    renderInspector(); renderScene();
+  }));
+  $$('[data-curve-node-toggle]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    const node = item.nodes?.[Number(toggle.dataset.curveNodeToggle)];
+    if (!node) return;
+    snapshot(); node.handlesEnabled = toggle.checked; markDirty(); renderAll('selection');
+  }));
+  $$('[data-curve-node-auto]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    const index = Number(toggle.dataset.curveNodeAuto);
+    const node = item.nodes?.[index];
+    if (!node) return;
+    snapshot();
+    if (!toggle.checked && node.autoTangent) bakeCurveNodeTangent(item, index);
+    else node.autoTangent = toggle.checked;
+    markDirty(); renderAll('selection');
+  }));
+  $$('[data-curve-node-roll]', inspector).forEach(input => {
+    let snapshotTaken = false;
+    const apply = () => {
+      const node = item.nodes?.[Number(input.dataset.curveNodeRoll)];
+      const value = Number(input.value);
+      if (!node || !Number.isFinite(value) || item.dimension !== 3) return;
+      if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      node.roll = value;
       markDirty(); invalidateSelectionRenderGeometry(); renderScene();
     };
     input.addEventListener('input', apply);
     input.addEventListener('change', apply);
     input.addEventListener('blur', () => { snapshotTaken = false; });
   });
+  $$('[data-remove-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
+    if (!isBezierElement(item) || item.nodes.length <= 2) return;
+    snapshot();
+    item.nodes.splice(Number(button.dataset.removeCurveNode), 1);
+    state.selectedCurveNodeIndex = Math.min(item.nodes.length - 1, state.selectedCurveNodeIndex ?? 0);
+    markDirty(); renderAll('selection');
+  }));
   $('[data-action="deleteSelected"]', inspector)?.addEventListener('click', deleteSelected);
   $('[data-action="resetTransform"]', inspector)?.addEventListener('click', () => {
     snapshot();
-    item.rotation = [0, 0, 0];
+    for (const target of items) {
+      if (target.type !== 'group' && Array.isArray(target.rotation)) target.rotation = [0, 0, 0];
+    }
     markDirty(); renderAll('selection');
   });
 }
@@ -767,6 +945,7 @@ function clearSelection() {
   state.selectedUids = new Set();
   state.selectedUid = null;
   state.selectionAnchorUid = null;
+  state.selectedCurveNodeIndex = null;
   state.vertexSnapSource = null;
   if (state.tool === 'knife') cancelKnifeSelection(false);
   refreshSelectionUi();
@@ -774,6 +953,7 @@ function clearSelection() {
 
 function selectItem(uid, { revealInOutliner = false, toggle = false, range = false } = {}) {
   if (!state.project.getNode(uid)) return;
+  const previousSelectedUid = state.selectedUid;
   sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
   if (range && state.selectionAnchorUid) {
     const rows = state.outlinerRows || [];
@@ -795,6 +975,10 @@ function selectItem(uid, { revealInOutliner = false, toggle = false, range = fal
     state.selectionAnchorUid = uid;
   }
   state.selectedUid = state.selectedUids.has(uid) ? uid : [...state.selectedUids].at(-1) || null;
+  if (state.selectedUid !== previousSelectedUid) state.selectedCurveNodeIndex = null;
+  if (state.project.getNode(state.selectedUid)?.type !== 'bezier2d' && state.project.getNode(state.selectedUid)?.type !== 'bezier3d') {
+    state.selectedCurveNodeIndex = null;
+  }
   if (state.tool !== 'vertexSnap') state.vertexSnapSource = null;
   if (state.tool === 'knife' && state.knifeSelection?.uid !== state.selectedUid) {
     state.knifeSelection = null;
@@ -806,17 +990,29 @@ function selectItem(uid, { revealInOutliner = false, toggle = false, range = fal
   refreshSelectionUi();
 }
 
-function syncInspectorValues(item) {
+function syncInspectorValues() {
+  const item = selected();
   if (!item) return;
+  const items = inspectorBatchNodes();
   $$('[data-vector]', inspector).forEach(input => {
-    const values = item[input.dataset.vector];
-    if (!values) return;
-    const value = round(values[Number(input.dataset.axis)]);
-    if (document.activeElement !== input) input.value = String(value);
+    if (document.activeElement === input) return;
+    const field = input.dataset.vector;
+    if (field.startsWith('curve-node:')) return;
+    const values = sharedVectorValues(items, field, item[field] || [0, 0, 0]);
+    const value = values[Number(input.dataset.axis)];
+    input.value = value === null ? '' : String(round(value));
+    if (value === null) input.dataset.mixed = 'true';
+    else delete input.dataset.mixed;
   });
   $$('[data-parameter]', inspector).forEach(input => {
-    const value = item.parameters?.[input.dataset.parameter];
-    if (value !== undefined && document.activeElement !== input) input.value = String(round(value));
+    if (document.activeElement === input) return;
+    const key = input.dataset.parameter;
+    const first = items[0]?.parameters?.[key];
+    const value = items.length <= 1 ? first
+      : Number.isFinite(first) && items.every(node => Number.isFinite(node?.parameters?.[key]) && Math.abs(node.parameters[key] - first) < 1e-9) ? first : null;
+    input.value = value === null || value === undefined ? '' : String(round(value));
+    if (value === null || value === undefined) input.dataset.mixed = 'true';
+    else delete input.dataset.mixed;
   });
 }
 
@@ -908,6 +1104,7 @@ function selectCreatedNode(uidValue) {
   state.selectedUid = uidValue;
   state.selectedUids = new Set([uidValue]);
   state.selectionAnchorUid = uidValue;
+  state.selectedCurveNodeIndex = null;
 }
 
 function addCube() {
@@ -937,6 +1134,28 @@ function addLocator() {
   insertNewNodeUid(locator.uid);
   selectCreatedNode(locator.uid);
   markDirty(); renderAll(); toast('已新增 Locator');
+}
+
+function addNodeElement() {
+  snapshot();
+  const count = state.project.elements.filter(item => item.type === 'node').length + 1;
+  const node = new NodeElement({ name: `node_${count}`, position: [0, 4, 0] });
+  state.project.elements.push(node);
+  insertNewNodeUid(node.uid);
+  selectCreatedNode(node.uid);
+  markDirty(); renderAll(); toast('已新增節點');
+}
+
+function addBezierElement(dimension) {
+  snapshot();
+  const type = dimension === 2 ? 'bezier2d' : 'bezier3d';
+  const count = state.project.elements.filter(item => item.type === type).length + 1;
+  const curve = new BezierElement({ name: `${type}_${count}`, origin: [0, 4, 0] }, dimension);
+  state.project.elements.push(curve);
+  insertNewNodeUid(curve.uid);
+  selectCreatedNode(curve.uid);
+  state.selectedCurveNodeIndex = 0;
+  markDirty(); renderAll(); toast(`已新增${dimension === 2 ? '二維' : '三維'}貝塞爾元素`);
 }
 
 function addGroup() {
@@ -996,6 +1215,7 @@ function deleteSelected() {
   state.selectedUid = null;
   state.selectedUids = new Set();
   state.selectionAnchorUid = null;
+  state.selectedCurveNodeIndex = null;
   markDirty(); renderAll(); toast(selectedIds.length > 1 ? `已刪除 ${selectedIds.length} 項` : '物件已刪除');
 }
 
@@ -1106,7 +1326,7 @@ function uvPreviewIsActive() {
 function uvPreviewElements() {
   return selectedElementUids()
     .map(uidValue => state.project.getNode(uidValue))
-    .filter(element => element && (element.type === 'cube' || element.type === 'shape'));
+    .filter(element => element && (element.type === 'cube' || element.type === 'shape' || isBezierElement(element)));
 }
 
 function getUvPreviewProject() {
@@ -1184,7 +1404,7 @@ function renderUvPreview() {
   }
   const cache = getUvPreviewProject();
   if (!cache.elements.length) {
-    setUvPreviewPlaceholder('選擇 Cube 或 Shape', true);
+    setUvPreviewPlaceholder('選擇 Cube、Shape 或貝塞爾', true);
     return false;
   }
   setUvPreviewPlaceholder('', false);
@@ -1525,7 +1745,7 @@ function eulerFromQuaternion(q) {
 }
 
 function getTransformPivot(item) {
-  const local = item.type === 'cube' || item.type === 'group' ? item.pivot : item.type === 'locator' ? item.position : item.origin;
+  const local = item.type === 'cube' || item.type === 'group' ? item.pivot : item.position || item.origin;
   return applyGroupTransforms(local, state.project.getGroupChain(item.uid));
 }
 
@@ -1598,6 +1818,40 @@ function getSelectionTransformAxes(context, fallbackItem) {
   if (!context.multiple) return getTransformAxes(fallbackItem);
   if (context.commonGroup) return getTransformAxes(context.commonGroup);
   return [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+}
+
+function activeCurveNodeContext() {
+  const curve = selected();
+  if (!isBezierElement(curve) || !Number.isInteger(state.selectedCurveNodeIndex)) return null;
+  const node = curve.nodes[state.selectedCurveNodeIndex];
+  return node ? { curve, node, index: state.selectedCurveNodeIndex } : null;
+}
+
+function bakeCurveNodeTangent(curve, index) {
+  const node = curve?.nodes?.[index];
+  if (!node?.autoTangent || !isBezierElement(curve)) return node;
+  const resolved = curve.resolvedNodeState(index);
+  node.rotation = [...resolved.rotation];
+  node.handleIn = [...resolved.localHandleIn];
+  node.handleOut = [...resolved.localHandleOut];
+  node.autoTangent = false;
+  return node;
+}
+
+function getCurveNodeTransformAxes(context) {
+  const chain = [...state.project.getGroupChain(context.curve.uid), { pivot: [0, 0, 0], rotation: context.curve.rotation || [0, 0, 0] }];
+  return [0, 1, 2].map(axis => {
+    const unit = [0, 0, 0]; unit[axis] = 1;
+    if (state.transformSpace === 'global') return unit;
+    let direction = unit;
+    if (state.transformSpace === 'self') {
+      const rotation = context.node.autoTangent
+        ? context.curve.resolvedNodeState(context.index).rotation
+        : context.node.rotation || [0, 0, 0];
+      direction = rotateVector(direction, rotation);
+    }
+    return normalize3(applyGroupTransforms(direction, chain));
+  });
 }
 
 function addScaled3(point, direction, amount) {
@@ -1999,6 +2253,13 @@ function renderVertexSnapGizmo(gizmo, width, height) {
     if (projected.behind || projected.x < -12 || projected.y < -12 || projected.x > width + 12 || projected.y > height + 12) continue;
     points.push({ ...vertex, pointType: 'vertex', projected });
   }
+  if (isBezierElement(item)) {
+    for (const entry of sceneRenderer.getCurveNodeWorldPoints(state.project, item.uid)) {
+      const projected = projectViewportPoint(entry.point);
+      if (projected.behind || projected.x < -12 || projected.y < -12 || projected.x > width + 12 || projected.y > height + 12) continue;
+      points.push({ uid: item.uid, nodeIndex: entry.index, point: entry.point, pointType: 'curveNode', projected });
+    }
+  }
   if (state.vertexSnapMode === 'move' && ['cube', 'group'].includes(item.type)) {
     const pivotPoint = getTransformPivot(item);
     const projected = projectViewportPoint(pivotPoint);
@@ -2012,6 +2273,7 @@ function renderVertexSnapGizmo(gizmo, width, height) {
   const pointMarkup = points.map((entry, index) => {
     const sourceActive = state.vertexSnapSource?.uid === entry.uid
       && state.vertexSnapSource.pointType === entry.pointType
+      && state.vertexSnapSource.nodeIndex === entry.nodeIndex
       && state.vertexSnapSource.point.every((value, axis) => Math.abs(value - entry.point[axis]) < 1e-5);
     const classes = ['gizmo-control', 'vertex-snap-control', 'source-candidate', sourceActive ? 'source-active' : ''].filter(Boolean).join(' ');
     if (entry.pointType === 'pivot') return `<g class="${classes} vertex-snap-pivot-control pivot-marker" data-kind="vertex" data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected], 'front')}>
@@ -2043,9 +2305,10 @@ function renderVertexSnapGizmo(gizmo, width, height) {
 function updateTransformGizmo() {
   const gizmo = $('#transformGizmo');
   const item = selected();
+  const curveNodeContext = activeCurveNodeContext();
   const selectionContext = getSelectionTransformContext();
   if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)
-    || (state.tool === 'resize' && !selectionContext.multiple && !['cube', 'shape'].includes(item.type))) {
+    || (state.tool === 'resize' && (curveNodeContext || (!selectionContext.multiple && !['cube', 'shape'].includes(item.type))))) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null; return;
   }
   const rect = sceneCanvas.getBoundingClientRect();
@@ -2058,20 +2321,22 @@ function updateTransformGizmo() {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
   }
   const transformItem = state.tool === 'pivot' && selectionContext.multiple ? selectionContext.commonGroup : item;
-  if (state.tool === 'pivot' && !['cube', 'group'].includes(transformItem?.type)) {
+  if (state.tool === 'pivot' && !curveNodeContext && !['cube', 'group', 'node'].includes(transformItem?.type)) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
   }
-  const pivot = selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item);
-  const geometryCenter = selectionContext.multiple
+  const pivot = curveNodeContext
+    ? sceneRenderer.getCurveNodeWorldPoints(state.project, item.uid)[curveNodeContext.index]?.point
+    : selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item);
+  const geometryCenter = curveNodeContext ? pivot : selectionContext.multiple
     ? selectionContext.center || pivot
     : sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center
       || sceneRenderer.getGeometryCenter(state.project, item.uid)
       || pivot;
-  const gizmoOrigin = ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
+  const gizmoOrigin = curveNodeContext || item.type === 'node' || ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
   const center = projectViewportPoint(gizmoOrigin);
   state.gizmoCenter = { x: center.x, y: center.y };
   state.gizmoOrigin = [...gizmoOrigin];
-  const axes = getSelectionTransformAxes(selectionContext, item);
+  const axes = curveNodeContext ? getCurveNodeTransformAxes(curveNodeContext) : getSelectionTransformAxes(selectionContext, item);
   const classes = ['x', 'y', 'z'];
   const cameraFrame = sceneRenderer.getCameraFrame();
   const pixelSample = projectViewportPoint(addScaled3(gizmoOrigin, cameraFrame.right, 1));
@@ -2106,21 +2371,25 @@ function updateTransformGizmo() {
     const radius = 87 / pixelsPerUnit;
     const sphere = cameraRingGeometry(gizmoOrigin, radius, cameraFrame);
     const layeredEulerRings = state.transformSpace === 'self' && state.rotationMode === 'euler';
-    const rings = handles.map(handle => {
+    const rotationHandles = curveNodeContext?.curve.dimension === 2
+      ? handles.filter(handle => handle.axis === 1)
+      : handles;
+    const rings = rotationHandles.map(handle => {
       const ringScale = layeredEulerRings ? EULER_RING_RADIUS_SCALES[handle.axis] : .965;
       const ring = frontRingGeometry(gizmoOrigin, handle.vector, radius * ringScale, cameraFrame);
       return `<g class="gizmo-control axis-${classes[handle.axis]}" data-axis="${handle.axis}" data-kind="rotate" ${gizmoDepthAttributes('polyline', ring.groups)}>
         <path class="gizmo-hit rotate-hit" d="${ring.path}"/>${taperedRingMarkup(ring)}
       </g>`;
     }).join('');
-    gizmo.innerHTML = `<g class="gizmo-control sphere-control" data-axis="view" data-kind="rotate-view" ${gizmoDepthAttributes('polyline', sphere.points)}>
+    const viewRing = curveNodeContext?.curve.dimension === 2 ? '' : `<g class="gizmo-control sphere-control" data-axis="view" data-kind="rotate-view" ${gizmoDepthAttributes('polyline', sphere.points)}>
       <path class="gizmo-hit rotate-hit" d="${sphere.path}"/><path class="gizmo-visible rotation-sphere" d="${sphere.path}"/>
-    </g>${rings}<circle class="gizmo-visible rotation-pivot" cx="${center.x}" cy="${center.y}" r="5"/>`;
+    </g>`;
+    gizmo.innerHTML = `${viewRing}${rings}<circle class="gizmo-visible rotation-pivot" cx="${center.x}" cy="${center.y}" r="5"/>`;
   } else if (state.tool === 'move' || state.tool === 'pivot') {
     const planes = GIZMO_PLANES.map(plane => planeMarkup(handles, gizmoOrigin, plane, pixelWorld)).join('');
     gizmo.innerHTML = `${planes}${handles.map(handle => coneMarkup({ ...handle, centerX: center.x, centerY: center.y }, gizmoOrigin, `axis-${classes[handle.axis]}`, pixelWorld)).join('')}
       ${centerCubeMarkup(gizmoOrigin, axes, pixelWorld, { axisKey: 'free', kind: 'free', className: 'center-control' })}
-      ${state.tool === 'pivot' ? pivotMarkerMarkup(gizmoOrigin) : ''}`;
+      ${state.tool === 'pivot' && !curveNodeContext && item.type !== 'node' ? pivotMarkerMarkup(gizmoOrigin) : ''}`;
   } else {
     const toCamera = cameraFrame.projection === 'perspective'
       ? normalize3(cameraFrame.eye.map((value, component) => value - gizmoOrigin[component]))
@@ -2499,9 +2768,25 @@ async function saveProject(saveAs = false) {
   } catch (error) { toast(`保存失敗：${error.message}`); }
 }
 
-function exportProject() {
-  download(state.project.serialize(), `${state.project.name}.cbmodel`, 'application/json');
-  toast('已導出 .cbmodel');
+async function exportProject() {
+  try {
+    const textureAssets = await Promise.all(state.textureAssets.map(async texture => {
+      if (!String(texture.source || '').startsWith('blob:')) return texture;
+      const blob = await fetch(texture.source).then(response => response.blob());
+      const source = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('貼圖轉換失敗'));
+        reader.readAsDataURL(blob);
+      });
+      return { ...texture, source };
+    }));
+    const content = JSON.stringify(exportBlockbench(state.project, textureAssets), null, 2);
+    download(content, `${state.project.name}.bbmodel`, 'application/json');
+    toast('已導出 .bbmodel（程序化物件已轉為 Cube 組）');
+  } catch (error) {
+    toast(`導出失敗：${error.message}`);
+  }
 }
 
 function download(content, name, type) {
@@ -2824,6 +3109,13 @@ function bindContextMenus() {
       showElementContextMenu(event, hitUid);
       return;
     }
+    const activeCurve = selected();
+    if (isBezierElement(activeCurve) && Number.isInteger(state.selectedCurveNodeIndex)) {
+      event.preventDefault();
+      event.stopPropagation();
+      addCurveNodeAtViewportPoint(activeCurve, event, rect);
+      return;
+    }
     showContextMenu(event, {
       title: selected()?.name || state.project.name,
       items: [
@@ -2903,6 +3195,41 @@ function bindContextMenus() {
   });
   document.addEventListener('pointerdown', event => { if (!event.target.closest('#contextMenu')) closeContextMenu(); });
   window.addEventListener('blur', closeContextMenu);
+}
+
+function addCurveNodeAtViewportPoint(curve, event, rect = sceneCanvas.getBoundingClientRect()) {
+  const selectedIndex = Math.max(0, Math.min(curve.nodes.length - 1, state.selectedCurveNodeIndex));
+  const selectedWorld = sceneRenderer.getCurveNodeWorldPoints(state.project, curve.uid)[selectedIndex]?.point;
+  if (!selectedWorld) return;
+  const frame = sceneRenderer.getCameraFrame();
+  const ray = sceneRenderer.getScreenRay(event.clientX - rect.left, event.clientY - rect.top);
+  const plane = curve.dimension === 2 ? getCurveWorldPlane(curve, selectedWorld) : { point: selectedWorld, normal: frame.forward };
+  const intersection = intersectRayPlane(ray, plane.point, plane.normal);
+  if (!intersection) return toast('無法在目前視覺平面建立節點');
+  const local = worldPointToCurveLocal(curve, intersection).map(value => snapValue(value, {}));
+  if (curve.dimension === 2) local[1] = 0;
+  const node = new CurveNode({ position: local }, curve.dimension === 2);
+  const insertionIndex = selectedIndex === 0 ? 0 : selectedIndex + 1;
+  snapshot();
+  curve.nodes.splice(insertionIndex, 0, node);
+  state.selectedCurveNodeIndex = insertionIndex;
+  markDirty(); renderAll('selection'); toast('已建立並連接新節點');
+}
+
+function worldPointToCurveLocal(curve, worldPoint) {
+  const parentPoint = worldPointToParentLocal(curve, worldPoint);
+  return inverseRotateVector(parentPoint.map((value, axis) => value - curve.origin[axis]), curve.rotation || [0, 0, 0]);
+}
+
+function getCurveWorldPlane(curve, planePoint = null) {
+  const chain = state.project.getGroupChain(curve.uid);
+  const originWorld = applyGroupTransforms(curve.origin, chain);
+  const normalParentPoint = curve.origin.map((value, axis) => value + rotateVector([0, 1, 0], curve.rotation || [0, 0, 0])[axis]);
+  const normalWorldPoint = applyGroupTransforms(normalParentPoint, chain);
+  return {
+    point: planePoint ? [...planePoint] : originWorld,
+    normal: normalize3(normalWorldPoint.map((value, axis) => value - originWorld[axis]))
+  };
 }
 
 function bindEvents() {
@@ -2993,6 +3320,9 @@ function bindEvents() {
   $('[data-action="addCube"]').addEventListener('click', addCube);
   $('[data-action="addShape"]').addEventListener('click', addShape);
   $('[data-action="addLocator"]').addEventListener('click', addLocator);
+  $('[data-action="addNode"]').addEventListener('click', addNodeElement);
+  $('[data-action="addBezier2d"]').addEventListener('click', () => addBezierElement(2));
+  $('[data-action="addBezier3d"]').addEventListener('click', () => addBezierElement(3));
   $('[data-action="addGroup"]').addEventListener('click', addGroup);
   $('.outliner-create-actions [data-action="deleteSelected"]').addEventListener('click', deleteSelected);
   $('[data-action="new"]').addEventListener('click', openNewProjectDialog);
@@ -3157,8 +3487,11 @@ function bindEvents() {
       const current = key === 'autoUv' ? nodeAutoUvEnabled(node)
         : key === 'locked' ? node.locked === true
         : node[key] !== false;
+      const targets = state.selectedUids.has(node.uid) && state.selectedUids.size > 1
+        ? inspectorBatchNodes()
+        : [node];
       snapshot();
-      setNodeFlag(node, key, !current);
+      for (const target of targets) setNodeFlag(target, key, !current);
       markDirty();
       if (key === 'locked') sceneRenderer.invalidateLockState();
       if (key === 'visible' || key === 'autoUv') renderAll();
@@ -3344,6 +3677,7 @@ function bindEvents() {
   sceneCanvas.addEventListener('pointermove', onPointerMove);
   viewport.addEventListener('pointermove', scheduleLockedHover);
   viewport.addEventListener('pointerleave', () => {
+    sceneCanvas.classList.remove('is-curve-handle-hover');
     lockedHoverPointer = null;
     if (lockedHoverPickFrame !== null) cancelAnimationFrame(lockedHoverPickFrame);
     lockedHoverPickFrame = null;
@@ -3411,6 +3745,27 @@ function updateTimelineUI() {
   $('#timelineRuler').style.setProperty('--playhead', `${state.timelineFrame / 48 * 100}%`);
 }
 
+function startCurveHandleDrag(event, curve, hit) {
+  event.preventDefault();
+  event.stopPropagation();
+  sceneCanvas.setPointerCapture(event.pointerId);
+  if (isBezierElement(curve)) state.selectedCurveNodeIndex = hit.index;
+  const frame = sceneRenderer.getCameraFrame();
+  const plane = curve.dimension === 2
+    ? getCurveWorldPlane(curve, hit.point)
+    : { point: [...hit.point], normal: [...frame.forward] };
+  state.dragging = {
+    type: 'curve-handle', pointerId: event.pointerId,
+    x: event.clientX, y: event.clientY,
+    rect: sceneCanvas.getBoundingClientRect(),
+    curve, node: curve.type === 'node' ? curve : curve.nodes[hit.index], nodeIndex: hit.index,
+    property: hit.property, plane, snapshotTaken: false
+  };
+  sceneCanvas.classList.add('is-curve-handle');
+  renderInspector();
+  renderScene();
+}
+
 function onPointerDown(event) {
   const rect = sceneCanvas.getBoundingClientRect();
   const x = event.clientX - rect.left, y = event.clientY - rect.top;
@@ -3423,6 +3778,26 @@ function onPointerDown(event) {
     event.preventDefault();
     useKnifePoint(event);
     return;
+  }
+  const activeCurve = selected();
+  const handleOwner = isBezierElement(activeCurve) || activeCurve?.type === 'node' ? activeCurve : null;
+  if (handleOwner && !isEffectivelyLocked(handleOwner.uid)) {
+    const handleHit = sceneRenderer.pickCurveHandle(state.project, handleOwner.uid, x, y, null);
+    if (handleHit) {
+      startCurveHandleDrag(event, handleOwner, handleHit);
+      return;
+    }
+  }
+  if (isBezierElement(activeCurve) && !isEffectivelyLocked(activeCurve.uid)) {
+    const nodeHit = sceneRenderer.pickCurveNode(state.project, activeCurve.uid, x, y);
+    if (nodeHit) {
+      event.preventDefault();
+      state.selectedCurveNodeIndex = nodeHit.index;
+      renderInspector();
+      renderScene();
+      return;
+    }
+    state.selectedCurveNodeIndex = null;
   }
   const hitUid = sceneRenderer.pick(state.project, x, y, state.geometryOnly);
   event.preventDefault();
@@ -3511,8 +3886,8 @@ function translateItemByLocalDelta(item, delta) {
   if (item.type === 'cube') {
     item.position = item.position.map((value, axis) => value + delta[axis]);
     item.pivot = item.pivot.map((value, axis) => value + delta[axis]);
-  } else if (item.type === 'shape') item.origin = item.origin.map((value, axis) => value + delta[axis]);
-  else if (item.type === 'locator') item.position = item.position.map((value, axis) => value + delta[axis]);
+  } else if (item.origin) item.origin = item.origin.map((value, axis) => value + delta[axis]);
+  else if (item.position) item.position = item.position.map((value, axis) => value + delta[axis]);
   else if (item.type === 'group') {
     const members = captureGroupMembers(item);
     item.pivot = item.pivot.map((value, axis) => value + delta[axis]);
@@ -3520,8 +3895,8 @@ function translateItemByLocalDelta(item, delta) {
       if (member.node.type === 'cube') {
         member.node.position = member.position.map((value, axis) => value + delta[axis]);
         member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
-      } else if (member.node.type === 'shape') member.node.origin = member.position.map((value, axis) => value + delta[axis]);
-      else if (member.node.type === 'locator') member.node.position = member.position.map((value, axis) => value + delta[axis]);
+      } else if (member.node.origin) member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+      else if (member.node.position) member.node.position = member.position.map((value, axis) => value + delta[axis]);
       else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
     });
   }
@@ -3580,7 +3955,8 @@ function useVertexSnapPoint(pointEntry) {
   const currentItem = selected();
   if (!currentItem || !pointEntry) return;
   if (!state.vertexSnapSource) {
-    state.vertexSnapSource = { rootUid: currentItem.uid, uid: pointEntry.uid, pointType: pointEntry.pointType, point: [...pointEntry.point] };
+    state.vertexSnapSource = { rootUid: currentItem.uid, uid: pointEntry.uid, pointType: pointEntry.pointType,
+      nodeIndex: pointEntry.nodeIndex, point: [...pointEntry.point] };
     updateToolOptions();
     renderScene();
     return;
@@ -3595,7 +3971,13 @@ function useVertexSnapPoint(pointEntry) {
   if (state.vertexSnapMode === 'rotate' && !sourceItem.rotation) return toast('這個物件不能旋轉捕捉');
   snapshot();
   if (state.vertexSnapMode === 'move') {
-    if (state.vertexSnapSource.pointType === 'pivot' && ['cube', 'group'].includes(sourceItem.type)) {
+    if (state.vertexSnapSource.pointType === 'curveNode' && isBezierElement(sourceItem)) {
+      const node = sourceItem.nodes[state.vertexSnapSource.nodeIndex];
+      const worldDelta = pointEntry.point.map((value, axis) => value - state.vertexSnapSource.point[axis]);
+      let localDelta = worldVectorToParentLocal(sourceItem, worldDelta);
+      localDelta = inverseRotateVector(localDelta, sourceItem.rotation || [0, 0, 0]);
+      node.position = node.position.map((value, axis) => sourceItem.dimension === 2 && axis === 1 ? 0 : value + localDelta[axis]);
+    } else if (state.vertexSnapSource.pointType === 'pivot' && ['cube', 'group'].includes(sourceItem.type)) {
       setPivotPreservingGeometry(state.project, sourceItem, worldPointToParentLocal(sourceItem, pointEntry.point));
     } else {
       const worldDelta = pointEntry.point.map((value, axis) => value - state.vertexSnapSource.point[axis]);
@@ -3739,7 +4121,37 @@ function completeKnifeCut(cube, axis, coordinate) {
   toast(`已${cutLabel || '完成切割'} ${cube.name}（${'XYZ'[axis]} 軸）`);
 }
 
+function splitBezierAtSegment(curve, segmentIndex) {
+  if (!isBezierElement(curve) || segmentIndex < 1 || segmentIndex > curve.nodes.length - 3) {
+    return toast('切割後兩端都必須至少保留兩個節點');
+  }
+  snapshot();
+  const originalNodes = curve.nodes.map(node => new CurveNode(structuredClone(node), curve.dimension === 2));
+  curve.nodes = originalNodes.slice(0, segmentIndex + 1);
+  const second = new BezierElement({
+    name: `${curve.name}_split`,
+    origin: [...curve.origin], rotation: [...curve.rotation],
+    nodes: originalNodes.slice(segmentIndex + 1).map(node => structuredClone(node)),
+    parameters: structuredClone(curve.parameters), autoUv: curve.autoUv,
+    exported: curve.exported, locked: curve.locked, shade: curve.shade,
+    visible: curve.visible, color: curve.color
+  }, curve.dimension);
+  state.project.elements.push(second);
+  const parent = state.project.getParentGroup(curve.uid);
+  const container = parent ? parent.children : state.project.outliner;
+  const index = container.indexOf(curve.uid);
+  container.splice(index < 0 ? container.length : index + 1, 0, second.uid);
+  state.project.invalidateHierarchyIndex();
+  state.selectedCurveNodeIndex = curve.nodes.length - 1;
+  markDirty(); renderAll(); toast('已將貝塞爾元素斷開為兩段');
+}
+
 function useKnifePoint(event) {
+  const rect = sceneCanvas.getBoundingClientRect();
+  const activeCurve = isBezierElement(selected()) ? selected() : null;
+  const curveHit = sceneRenderer.pickCurveSegment(state.project,
+    event.clientX - rect.left, event.clientY - rect.top, activeCurve?.uid || null);
+  if (curveHit) return splitBezierAtSegment(state.project.getNode(curveHit.uid), curveHit.segmentIndex);
   const candidate = getKnifeCandidate(event);
   if (!candidate) return toast(state.knifeSelection ? '第二點必須位於同一個 Cube 面上' : '刀具目前只能切割 Cube');
   const cube = state.project.getNode(candidate.uid);
@@ -3786,7 +4198,7 @@ function pushKnifeLocalLine(lines, cube, faceName, start, end, color) {
 
 function pushKnifeCutLoop(lines, cube, cutAxis, coordinate, color) {
   const [firstAxis, secondAxis] = [0, 1, 2].filter(axis => axis !== cutAxis);
-  const inflate = cube.inflate || 0;
+  const inflate = getEffectiveInflate(cube, state.project.getGroupChain(cube.uid));
   const direction = cube.size.map(value => value < 0 ? -1 : 1);
   const surfaceStart = cube.position.map((value, axis) => value - direction[axis] * inflate);
   const surfaceEnd = cube.position.map((value, axis) => value + cube.size[axis] + direction[axis] * inflate);
@@ -3856,8 +4268,7 @@ function buildKnifeOverlayLines() {
 
 function nodeTransformAnchor(node) {
   if (node.type === 'cube' || node.type === 'group') return node.pivot;
-  if (node.type === 'shape') return node.origin;
-  return node.position;
+  return node.position || node.origin;
 }
 
 function captureTransformTarget(node) {
@@ -3890,16 +4301,16 @@ function translateCapturedTarget(target, delta) {
   if (node.type === 'cube') {
     node.position = target.position.map((value, axis) => value + delta[axis]);
     node.pivot = target.pivot.map((value, axis) => value + delta[axis]);
-  } else if (node.type === 'shape') node.origin = target.position.map((value, axis) => value + delta[axis]);
-  else if (node.type === 'locator') node.position = target.position.map((value, axis) => value + delta[axis]);
+  } else if (node.origin) node.origin = target.position.map((value, axis) => value + delta[axis]);
+  else if (node.position) node.position = target.position.map((value, axis) => value + delta[axis]);
   else if (node.type === 'group') {
     node.pivot = target.position.map((value, axis) => value + delta[axis]);
     target.groupMembers.forEach(member => {
       if (member.node.type === 'cube') {
         member.node.position = member.position.map((value, axis) => value + delta[axis]);
         member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
-      } else if (member.node.type === 'shape') member.node.origin = member.position.map((value, axis) => value + delta[axis]);
-      else if (member.node.type === 'locator') member.node.position = member.position.map((value, axis) => value + delta[axis]);
+      } else if (member.node.origin) member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+      else if (member.node.position) member.node.position = member.position.map((value, axis) => value + delta[axis]);
       else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
     });
   }
@@ -3982,6 +4393,7 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   axisKey = axisIndex === null ? 'free' : String(axisIndex), axisIndices = axisIndex === null ? [] : [axisIndex], axisSigns = [sign]) {
   if (event.button !== 0) return;
   const selectionContext = getSelectionTransformContext();
+  const curveNodeContext = activeCurveNodeContext();
   let item = selected();
   if (state.tool === 'pivot' && selectionContext.multiple) item = selectionContext.commonGroup;
   if (!item || !['move', 'resize', 'rotate', 'pivot'].includes(state.tool)) return;
@@ -4001,7 +4413,9 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
       centerX: state.gizmoCenter.x, centerY: state.gizmoCenter.y
     };
   }
-  const chain = state.project.getGroupChain(item.uid);
+  const chain = curveNodeContext
+    ? [...state.project.getGroupChain(item.uid), { pivot: item.origin, rotation: item.rotation || [0, 0, 0] }]
+    : state.project.getGroupChain(item.uid);
   const cameraFrame = sceneRenderer.getCameraFrame();
   const freeMovePlane = kind === 'free' && ['move', 'pivot'].includes(state.tool)
     ? { point: [...state.gizmoOrigin], normal: [...cameraFrame.forward] }
@@ -4068,14 +4482,22 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
       && ['move', 'rotate'].includes(state.tool),
     baseSelectionCenter: selectionContext.center ? [...selectionContext.center] : null,
     baseSelectionPivot: selectionContext.pivot ? [...selectionContext.pivot] : null,
-    position: item.position ? [...item.position] : item.origin ? [...item.origin] : item.pivot ? [...item.pivot] : [0, 0, 0],
-    pivot: item.pivot ? [...item.pivot] : null,
+    position: curveNodeContext ? [...curveNodeContext.node.position]
+      : item.position ? [...item.position] : item.origin ? [...item.origin] : item.pivot ? [...item.pivot] : [0, 0, 0],
+    pivot: curveNodeContext ? [...curveNodeContext.node.position]
+      : item.pivot ? [...item.pivot] : item.type === 'node' ? [...item.position] : null,
     size: item.size ? [...item.size] : null,
-    rotation: [...(item.rotation || [0, 0, 0])],
+    rotation: [...(curveNodeContext
+      ? curveNodeContext.node.autoTangent
+        ? curveNodeContext.curve.resolvedNodeState(curveNodeContext.index).rotation
+        : curveNodeContext.node.rotation
+      : item.rotation || [0, 0, 0])],
+    nodeRoll: curveNodeContext?.node.roll || 0,
     radius: item.parameters?.radius,
     height: item.parameters?.height,
     uvFrozen: false,
-    groupMembers: item.type === 'group' ? captureGroupMembers(item) : []
+    groupMembers: item.type === 'group' ? captureGroupMembers(item) : [],
+    curveNodeContext
   };
   sceneRenderer.beginTransformGhost();
   $('#transformTooltip').hidden = true;
@@ -4087,9 +4509,45 @@ function onPointerMove(event) {
     updateKnifeHover(event);
     return;
   }
-  if (!state.dragging) return;
+  if (!state.dragging) {
+    const curve = selected();
+    const rect = sceneCanvas.getBoundingClientRect();
+    const handle = (isBezierElement(curve) || curve?.type === 'node') && !isEffectivelyLocked(curve.uid)
+      ? sceneRenderer.pickCurveHandle(state.project, curve.uid, event.clientX - rect.left, event.clientY - rect.top, null)
+      : null;
+    sceneCanvas.classList.toggle('is-curve-handle-hover', Boolean(handle));
+    return;
+  }
   const dx = event.clientX - state.dragging.x;
   const dy = event.clientY - state.dragging.y;
+  if (state.dragging.type === 'curve-handle') {
+    const drag = state.dragging;
+    if (!drag.snapshotTaken && Math.hypot(dx, dy) < .5) return;
+    if (!drag.snapshotTaken) {
+      snapshot();
+      drag.snapshotTaken = true;
+      markDirty();
+    }
+    const ray = sceneRenderer.getScreenRay(event.clientX - drag.rect.left, event.clientY - drag.rect.top);
+    const intersection = intersectRayPlane(ray, drag.plane.point, drag.plane.normal);
+    if (!intersection) return;
+    const curvePoint = drag.curve.type === 'node'
+      ? worldPointToParentLocal(drag.curve, intersection)
+      : worldPointToCurveLocal(drag.curve, intersection);
+    if (isBezierElement(drag.curve) && drag.node.autoTangent) bakeCurveNodeTangent(drag.curve, drag.nodeIndex);
+    let handle = inverseRotateVector(
+      curvePoint.map((value, axis) => value - drag.node.position[axis]),
+      drag.node.rotation || [0, 0, 0]
+    );
+    if (drag.curve.dimension === 2) handle[1] = 0;
+    if (isBezierElement(drag.curve)) drag.node.autoTangent = false;
+    drag.node[drag.property] = handle;
+    drag.tooltipText = `${drag.property === 'handleIn' ? '前' : '後'}手柄 ${formatNumber(Math.hypot(...handle))} px`;
+    invalidateSelectionRenderGeometry();
+    updateTransformTooltip(event, drag);
+    renderScene();
+    return;
+  }
   if (state.dragging.type === 'selection-box') {
     const rect = sceneCanvas.getBoundingClientRect();
     state.dragging.currentX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
@@ -4145,7 +4603,7 @@ function applyPendingTransform(drag) {
   updateTransformTooltip(pending.event, drag);
   if (!drag.batchPreview) invalidateSelectionRenderGeometry();
   if (!state.dirty) markDirty();
-  if (!drag.selectionContext.multiple) syncInspectorValues(drag.item);
+  if (!drag.selectionContext.multiple) syncInspectorValues();
   return true;
 }
 
@@ -4214,9 +4672,16 @@ function endPointerDrag(event) {
     }
     return;
   }
+  if (finishedDrag.type === 'curve-handle') {
+    if (finishedDrag.snapshotTaken) renderInspector();
+    $('#transformTooltip').hidden = true;
+    sceneCanvas.classList.remove('is-curve-handle', 'is-curve-handle-hover');
+    renderScene();
+    return;
+  }
   if (finishedDrag.type === 'transform' && finishedDrag.snapshotTaken) {
     sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
-    syncInspectorValues(finishedDrag.item);
+    syncInspectorValues();
   }
   sceneRenderer.endTransformGhost();
   $('#transformTooltip').hidden = true;
@@ -4306,8 +4771,11 @@ function applyTransformDrag(drag, dx, dy, event) {
     const nextPivot = drag.axis || drag.kind === 'plane'
       ? drag.pivot.map((value, axis) => value + delta[axis])
       : drag.pivot.map((value, axis) => snapValue(value + delta[axis], event));
-    setPivotPreservingGeometry(state.project, item, nextPivot);
-    drag.tooltipText = `樞軸 ${nextPivot.map(formatNumber).join(' / ')}`;
+    if (drag.curveNodeContext) {
+      drag.curveNodeContext.node.position = nextPivot.map((value, axis) => drag.curveNodeContext.curve.dimension === 2 && axis === 1 ? 0 : value);
+    } else if (item.type === 'node') item.position = nextPivot;
+    else setPivotPreservingGeometry(state.project, item, nextPivot);
+    drag.tooltipText = `${drag.curveNodeContext || item.type === 'node' ? '節點' : '樞軸'} ${nextPivot.map(formatNumber).join(' / ')}`;
   }
   if (drag.tool === 'move' && drag.targets.length > 1) {
     let distances = [];
@@ -4392,12 +4860,14 @@ function applyTransformDrag(drag, dx, dy, event) {
       ? drag.position.map((value, axis) => value + delta[axis])
       : drag.position.map((value, axis) => snapValue(value + delta[axis], event));
     if (drag.kind !== 'plane') drag.tooltipText = `距離 ${formatSigned(Math.hypot(...next.map((value, axis) => value - drag.position[axis])))} px`;
-    if (item.type === 'cube') {
+    if (drag.curveNodeContext) {
+      drag.curveNodeContext.node.position = next.map((value, axis) => drag.curveNodeContext.curve.dimension === 2 && axis === 1 ? 0 : value);
+    } else if (item.type === 'cube') {
       const applied = next.map((value, axis) => value - drag.position[axis]);
       item.position = next;
       item.pivot = drag.pivot.map((value, axis) => value + applied[axis]);
-    } else if (item.type === 'locator') item.position = next;
-    else if (item.type === 'shape') item.origin = next;
+    } else if (item.origin) item.origin = next;
+    else if (item.position) item.position = next;
     else if (item.type === 'group') {
       const delta = next.map((value, axis) => value - drag.position[axis]);
       item.pivot = next;
@@ -4405,8 +4875,8 @@ function applyTransformDrag(drag, dx, dy, event) {
         if (member.node.type === 'cube') {
           member.node.position = member.position.map((value, axis) => value + delta[axis]);
           member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
-        } else if (member.node.type === 'shape') member.node.origin = member.position.map((value, axis) => value + delta[axis]);
-        else if (member.node.type === 'locator') member.node.position = member.position.map((value, axis) => value + delta[axis]);
+        } else if (member.node.origin) member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+        else if (member.node.position) member.node.position = member.position.map((value, axis) => value + delta[axis]);
         else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
       });
     }
@@ -4452,21 +4922,21 @@ function applyTransformDrag(drag, dx, dy, event) {
       } else if (targetItem.type === 'shape') {
         if (drag.kind === 'plane-uniform') {
           const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
-          if (drag.axisIndices.includes(1)) targetItem.parameters.height = Math.max(0, snapValue(target.height + distance * 2, event));
-          if (drag.axisIndices.some(index => index !== 1)) targetItem.parameters.radius = Math.max(0, snapValue(target.radius + distance, event));
+          if (drag.axisIndices.includes(1)) targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height + distance * 2, event));
+          if (drag.axisIndices.some(index => index !== 1)) targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + distance, event));
         } else if (drag.kind === 'uniform') {
           const factor = Math.max(0, 1 - dy * .01);
-          targetItem.parameters.radius = Math.max(0, snapValue(target.radius * factor, event));
-          targetItem.parameters.height = Math.max(0, snapValue(target.height * factor, event));
+          targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius * factor, event));
+          targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height * factor, event));
         } else if (drag.kind === 'plane') {
           const radialChanges = [];
           drag.axisIndices.forEach((targetAxis, index) => {
-            if (targetAxis === 1) targetItem.parameters.height = Math.max(0, snapValue(target.height + planeDistances[index], event));
+            if (targetAxis === 1) targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height + planeDistances[index], event));
             else radialChanges.push(planeDistances[index]);
           });
-          if (radialChanges.length) targetItem.parameters.radius = Math.max(0, snapValue(target.radius + radialChanges.reduce((sum, value) => sum + value, 0) / radialChanges.length, event));
-        } else if (drag.axisIndex === 1) targetItem.parameters.height = Math.max(0, snapValue(target.height + axisDelta, event));
-        else targetItem.parameters.radius = Math.max(0, snapValue(target.radius + (axisDelta ?? dx * fallbackScale), event));
+          if (radialChanges.length) targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + radialChanges.reduce((sum, value) => sum + value, 0) / radialChanges.length, event));
+        } else if (drag.axisIndex === 1) targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height + axisDelta, event));
+        else targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + (axisDelta ?? dx * fallbackScale), event));
       }
     }
     drag.tooltipText = drag.kind === 'uniform' ? `等比縮放 ${drag.targets.length} 項` : `縮放 ${drag.targets.length} 項`;
@@ -4522,26 +4992,26 @@ function applyTransformDrag(drag, dx, dy, event) {
     if (item.type === 'shape') {
       if (drag.kind === 'plane-uniform') {
         const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
-        if (drag.axisIndices.includes(1)) item.parameters.height = Math.max(0, snapValue(drag.height + distance * 2, event));
-        if (drag.axisIndices.some(index => index !== 1)) item.parameters.radius = Math.max(0, snapValue(drag.radius + distance, event));
+        if (drag.axisIndices.includes(1)) item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + distance * 2, event));
+        if (drag.axisIndices.some(index => index !== 1)) item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + distance, event));
         drag.tooltipText = `平面等距 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
       } else if (drag.kind === 'uniform') {
         const factor = Math.max(0, 1 - dy * .01);
-        item.parameters.radius = Math.max(0, snapValue(drag.radius * factor, event));
-        item.parameters.height = Math.max(0, snapValue(drag.height * factor, event));
+        item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius * factor, event));
+        item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height * factor, event));
         drag.tooltipText = `等比尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
       } else if (drag.kind === 'plane') {
         const distances = getPlaneDragDistances(drag, dx, dy).map(value => snapValue(value, event));
         const radialChanges = [];
         drag.planeAxes.forEach((planeAxis, index) => {
-          if (planeAxis.index === 1) item.parameters.height = Math.max(0, snapValue(drag.height + distances[index], event));
+          if (planeAxis.index === 1) item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + distances[index], event));
           else radialChanges.push(distances[index]);
         });
-        if (radialChanges.length) item.parameters.radius = Math.max(0, snapValue(drag.radius + radialChanges.reduce((sum, value) => sum + value, 0) / radialChanges.length, event));
+        if (radialChanges.length) item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + radialChanges.reduce((sum, value) => sum + value, 0) / radialChanges.length, event));
         drag.tooltipText = `尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
       } else {
-        if (drag.axisIndex === 1) item.parameters.height = Math.max(0, snapValue(drag.height + axisDelta, event));
-        else item.parameters.radius = Math.max(0, snapValue(drag.radius + (axisDelta ?? dx * fallbackScale), event));
+        if (drag.axisIndex === 1) item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + axisDelta, event));
+        else item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + (axisDelta ?? dx * fallbackScale), event));
         drag.tooltipText = `${drag.axisIndex === 1 ? '高度' : '半徑'} ${formatNumber(drag.axisIndex === 1 ? item.parameters.height : item.parameters.radius)} px`;
       }
     }
@@ -4587,21 +5057,47 @@ function applyTransformDrag(drag, dx, dy, event) {
   if (drag.tool === 'rotate') {
     const angleStep = getAngleSnapStep(event);
     const angle = drag.axis ? axisDelta : (dx - dy) * .4;
+    const editsCurveRoll = drag.curveNodeContext?.curve.dimension === 3
+      && state.transformSpace === 'self'
+      && drag.kind === 'rotate'
+      && drag.axisIndex === 2;
+    if (editsCurveRoll) {
+      const snappedDelta = snapAngle(angle, angleStep);
+      drag.curveNodeContext.node.roll = drag.nodeRoll + snappedDelta;
+      drag.tooltipText = `滾動角 ${formatSigned(drag.curveNodeContext.node.roll)}°`;
+      return;
+    }
+    if (drag.curveNodeContext?.node.autoTangent) {
+      bakeCurveNodeTangent(drag.curveNodeContext.curve, drag.curveNodeContext.index);
+    }
     if (drag.axis) {
       const snappedDelta = snapAngle(angle, angleStep);
       if (drag.rotationMode === 'euler' && drag.kind === 'rotate') {
-        item.rotation = [...drag.rotation];
-        item.rotation[drag.axisIndex] = drag.rotation[drag.axisIndex] + snappedDelta;
+        const target = drag.curveNodeContext?.node || item;
+        target.rotation = [...drag.rotation];
+        target.rotation[drag.axisIndex] = drag.rotation[drag.axisIndex] + snappedDelta;
       } else {
         const turn = quaternionFromAxisAngle(drag.rotationAxis, snappedDelta);
         const current = quaternionFromEuler(drag.rotation);
-        item.rotation = eulerFromQuaternion(state.transformSpace === 'self' && drag.kind !== 'rotate-view'
+        const target = drag.curveNodeContext?.node || item;
+        target.rotation = eulerFromQuaternion(state.transformSpace === 'self' && drag.kind !== 'rotate-view'
           ? quaternionMultiply(current, turn)
           : quaternionMultiply(turn, current));
       }
+      if (drag.curveNodeContext?.curve.dimension === 2) {
+        drag.curveNodeContext.node.rotation[0] = 0;
+        drag.curveNodeContext.node.rotation[2] = 0;
+      }
+      if (drag.curveNodeContext) drag.curveNodeContext.node.autoTangent = false;
       drag.tooltipText = `角度 ${formatSigned(snappedDelta)}°`;
     } else {
-      item.rotation = [snapAngle(drag.rotation[0] - dy * .4, angleStep), snapAngle(drag.rotation[1] + dx * .4, angleStep), drag.rotation[2]];
+      const target = drag.curveNodeContext?.node || item;
+      target.rotation = [snapAngle(drag.rotation[0] - dy * .4, angleStep), snapAngle(drag.rotation[1] + dx * .4, angleStep), drag.rotation[2]];
+      if (drag.curveNodeContext?.curve.dimension === 2) {
+        target.rotation[0] = 0;
+        target.rotation[2] = 0;
+      }
+      if (drag.curveNodeContext) drag.curveNodeContext.node.autoTangent = false;
       drag.tooltipText = `角度 ${formatSigned(Math.hypot(dx, dy) * .4)}°`;
     }
   }
@@ -4624,7 +5120,7 @@ function captureGroupMembers(group) {
       if (node !== group) members.push({ node, position: [...node.pivot] });
       node.children.forEach(visit);
     } else if (node.type === 'cube') members.push({ node, position: [...node.position], pivot: [...node.pivot] });
-    else if (node.type === 'locator') members.push({ node, position: [...node.position] });
+    else if (node.position) members.push({ node, position: [...node.position] });
     else members.push({ node, position: [...node.origin] });
   };
   group.children.forEach(visit);
@@ -4652,6 +5148,23 @@ function getAngleSnapStep(event = {}) {
   if (event.shiftKey) return .5;
   if (ctrl) return 15;
   return 2.5;
+}
+
+function snapShapeDimension(shape, key, value, event = {}) {
+  const mode = shape?.parameters?.snapMode === 'bounds' ? 'bounds' : 'cube';
+  if (mode === 'cube') {
+    const step = Math.max(.0625, Number(shape.parameters.cubeSize) || 1);
+    if (key !== 'radius') return Math.round(value / step) * step;
+    const sides = Math.max(3, Math.round(Number(shape.parameters.sides) || 3));
+    const halfTurn = Math.PI / sides;
+    const outwardOffset = step / (2 * Math.cos(halfTurn));
+    const centerRadius = Math.max(.001, value - outwardOffset);
+    const wallLength = 2 * centerRadius * Math.sin(halfTurn) + step * Math.tan(halfTurn);
+    const snappedLength = Math.max(step, Math.round(wallLength / step) * step);
+    return Math.max(.001,
+      (snappedLength - step * Math.tan(halfTurn)) / (2 * Math.sin(halfTurn))) + outwardOffset;
+  }
+  return key === 'radius' ? snapValue(value * 2, event) / 2 : snapValue(value, event);
 }
 function snapAngle(value, step) { return Math.round(value / step) * step; }
 function formatNumber(value) { return Number(value.toFixed(4)).toString(); }

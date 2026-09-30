@@ -3,6 +3,7 @@ import {
   createSignedCubeCorners,
   createBlockbenchFaceUvs,
   getBlockbenchBoxUv,
+  getEffectiveInflate,
   getMinecraftRenderType,
   MinecraftRenderType,
   RenderPass,
@@ -54,6 +55,8 @@ assert.deepEqual(createSignedCubeCorners([4, 5, 6], [-2, 3, -4], .5), [
   [4.5, 4.5, 6.5], [1.5, 4.5, 6.5], [1.5, 8.5, 6.5], [4.5, 8.5, 6.5],
   [4.5, 4.5, 1.5], [1.5, 4.5, 1.5], [1.5, 8.5, 1.5], [4.5, 8.5, 1.5]
 ], 'negative cube axes retain their signed corner orientation');
+assert.equal(getEffectiveInflate({ inflate: .25 }, [{ inflate: .5 }, { inflate: 1.25 }]), 2,
+  'nested group inflation adds to the element inflation');
 
 const cornerHandedness = corners => {
   const edge = index => corners[index].map((value, axis) => value - corners[0][axis]);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Cube, Group, CubeBricksProject, chooseKnifeCutAxis, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
+import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
 import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
 import { ModelFormatRegistry } from '../src/core/model-format-registry.js';
 import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/config/model-formats.js';
@@ -23,6 +23,76 @@ assert.deepEqual(bedrockProject.snap, { subdivisions: 16 });
 const bedrockRoundTrip = new CubeBricksProject(JSON.parse(bedrockProject.serialize()));
 assert.equal(bedrockRoundTrip.formatId, ModelFormatId.BEDROCK_ENTITY, 'project format survives a cbmodel round trip');
 assert.deepEqual(bedrockRoundTrip.snap, { subdivisions: 16 }, 'project standard snap survives a cbmodel round trip');
+
+const filledPrism = new Shape({ parameters: { radius: 4, height: 8, sides: 8, cubeSize: 1, snapMode: 'cube' } });
+assert.equal(filledPrism.toCubes().length, filledPrism.parameters.sides,
+  'polygon prism uses one elongated cube for each polygon wall instead of voxel filling');
+assert.ok(filledPrism.toCubes().every(cube => cube.size[0] === 1 && cube.size[2] >= 1),
+  'polygon wall cubes preserve their requested thickness and span an entire side');
+assert.ok(filledPrism.toCubes().every(cube => Math.abs(cube.size[2] - Math.round(cube.size[2])) < 1e-9),
+  'cube-edge snapping applies to the generated wall cube length');
+const boundsPrism = new Shape({ parameters: { radius: 4.3, height: 8, sides: 6, cubeSize: 1, snapMode: 'bounds' } });
+assert.equal(boundsPrism.toCubes().length, 6, 'overall-edge snapping still produces one wall cube per side');
+
+const planarCurve = new BezierElement({ nodes: [
+  { position: [-4, 9, 0], handleOut: [2, 7, 0] },
+  { position: [4, -3, 0], handleIn: [-2, -5, 0] }
+] }, 2);
+assert.ok(planarCurve.nodes.every(node => node.position[1] === 0 && node.handleIn[1] === 0 && node.handleOut[1] === 0),
+  '2D bezier nodes and handles remain coplanar');
+assert.ok(planarCurve.toCubes().length > 0, '2D bezier fits cube columns along the sampled curve');
+const rotatedPlanarCurve = new BezierElement({ nodes: [
+  { position: [0, 0, 0], rotation: [25, 90, -35], handleOut: [3, 0, 0] },
+  { position: [6, 0, 0], handlesEnabled: false }
+] }, 2);
+assert.deepEqual(rotatedPlanarCurve.nodes[0].rotation, [0, 90, 0], '2D node rotation stays on the curve plane normal');
+assert.ok(rotatedPlanarCurve.sampleCurve().some(sample => Math.abs(sample.point[2]) > .01),
+  'node rotation turns its local bezier handle and changes the fitted curve');
+const spatialCurve = new BezierElement({ parameters: { segmentationMode: 'angle', angleStep: 5 } }, 3);
+assert.ok(spatialCurve.toCubes().length > 0, '3D bezier supports angle-based cube fitting');
+assert.ok(spatialCurve.nodes.every(node => node.autoTangent), 'new bezier nodes start with pen-style automatic tangents');
+const autoMiddleCurve = new BezierElement({ nodes: [
+  { position: [0, 0, 0] }, { position: [4, 2, 0] }, { position: [8, 0, 0] }
+] }, 3);
+const autoMiddle = autoMiddleCurve.resolvedNodeState(1);
+assert.ok(autoMiddle.handleIn[0] < 0 && autoMiddle.handleOut[0] > 0,
+  'an untouched middle node derives a smooth tangent from its neighbours');
+const rolledCurve = new BezierElement({ nodes: [
+  { position: [0, 0, 0], roll: 0 }, { position: [8, 0, 0], roll: 90 }
+], parameters: { segmentLength: 2 } }, 3);
+const rolledCubes = rolledCurve.toCubes();
+assert.notDeepEqual(rolledCubes[0].rotation.map(value => Math.round(value * 1000)),
+  rolledCubes.at(-1).rotation.map(value => Math.round(value * 1000)),
+  '3D node roll interpolates into the fitted cube-column orientation');
+const cornerCurve = new BezierElement({ nodes: [
+  { position: [0, 0, 0], handlesEnabled: false },
+  { position: [4, 0, 0], handlesEnabled: false },
+  { position: [4, 0, 4], handlesEnabled: false }
+], parameters: { thickness: 2, segmentationMode: 'distance', segmentLength: 4 } }, 3);
+const cornerCubes = cornerCurve.toCubes();
+assert.ok(cornerCubes.some(cube => cube.size[2] > 4),
+  'cube columns extend around a bend to close the outside miter gap');
+const curveNode = new CurveNode({ handlesEnabled: false });
+assert.equal(curveNode.handlesEnabled, false, 'bezier handles are optional per node');
+const nodeElement = new NodeElement({ position: [1, 2, 3], handlesEnabled: true });
+assert.equal('pivot' in nodeElement, false, 'standalone nodes do not expose a pivot');
+assert.equal('size' in nodeElement, false, 'standalone nodes do not expose resize dimensions');
+const curveRoundTrip = new CubeBricksProject({ elements: [planarCurve, spatialCurve, nodeElement] });
+const restoredCurveProject = new CubeBricksProject(JSON.parse(curveRoundTrip.serialize()));
+assert.deepEqual(restoredCurveProject.elements.map(element => element.type), ['bezier2d', 'bezier3d', 'node']);
+assert.equal(restoredCurveProject.elements[0].nodes.length, 2, 'curve nodes survive a cbmodel round trip');
+
+const exportShape = new Shape({ name: 'wall_shape', parameters: { radius: 4, height: 8, sides: 5, cubeSize: 1 } });
+const exportRoot = new Group({ name: 'root', children: [exportShape.uid] });
+const exportProject = new CubeBricksProject({ name: 'bb_export', elements: [exportShape], groups: [exportRoot], outliner: [exportRoot.uid] });
+const exportedBbmodel = exportBlockbench(exportProject);
+assert.equal(exportedBbmodel.meta.format_version, '4.10');
+assert.equal(exportedBbmodel.elements.filter(element => element.type === 'cube').length, 5,
+  'procedural shapes export as generated Blockbench cubes');
+assert.equal(exportedBbmodel.outliner[0].children[0].children.length, 5,
+  'procedural shape cubes are wrapped in a named outliner group');
+assert.equal(importBlockbench(exportedBbmodel).elements.filter(element => element.type === 'cube').length, 5,
+  'exported procedural cube groups can be imported again');
 
 const customFormats = new ModelFormatRegistry();
 let registeredCustom = null;
@@ -139,6 +209,14 @@ const versionFiveProject = importBlockbench({
   ],
   outliner: [{ uuid: 'root-v5', children: [{ uuid: 'child-v5', children: ['cube-v5'] }] }]
 });
+
+const groupAppearance = new Group({ inflate: 1.5, shade: false });
+assert.equal(groupAppearance.inflate, 1.5);
+assert.equal(groupAppearance.shade, false);
+const groupAppearanceProject = new CubeBricksProject({ groups: [groupAppearance], outliner: [groupAppearance.uid] });
+const restoredGroupAppearance = new CubeBricksProject(JSON.parse(groupAppearanceProject.serialize())).groups[0];
+assert.equal(restoredGroupAppearance.inflate, 1.5, 'group inflation survives a cbmodel round trip');
+assert.equal(restoredGroupAppearance.shade, false, 'group shading survives a cbmodel round trip');
 
 assert.deepEqual(versionFiveProject.getNode('root-v5').rotation, [0, 90, 0]);
 assert.equal(versionFiveProject.renderType, 'cutout_smooth');

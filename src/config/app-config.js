@@ -120,6 +120,7 @@ const ENGLISH_UI = Object.freeze({
   '編輯': 'Edit', '繪畫': 'Paint', '動畫': 'Animate', '設定': 'Settings', '導出': 'Export',
   '工具欄': 'Toolbar', '工具': 'Tools', '目前工具參數': 'Current tool options', '工具參數': 'Tool options',
   '移動': 'Move', '縮放': 'Scale', '旋轉': 'Rotate', '新增方塊': 'Add cube', '新增形狀': 'Add shape', '新增 Locator': 'Add locator', '畫筆': 'Brush',
+  '新增節點': 'Add node', '新增二維貝塞爾': 'Add 2D Bezier', '新增三維貝塞爾': 'Add 3D Bezier',
   '移動樞軸': 'Move pivot', '頂點捕捉': 'Vertex snap', '刀具切割': 'Knife', '切割軸': 'Cut axis',
   '沿 X 軸切割': 'Cut along X', '沿 Y 軸切割': 'Cut along Y', '沿 Z 軸切割': 'Cut along Z',
   '先選來源頂點': 'Select source vertex', '再選目標頂點': 'Select target vertex',
@@ -159,7 +160,7 @@ const ENGLISH_UI = Object.freeze({
   '貼圖': 'Textures', '導入貼圖': 'Import texture', '新增貼圖組': 'Add texture group', '貼圖組': 'Texture group', '折疊或展開面板': 'Collapse or expand panel', '折疊／展開': 'Collapse / expand',
   'UV 預覽': 'UV Preview', '選中部分 UV 預覽': 'Selected-part UV preview', '啟用預覽': 'Enable preview', '自動旋轉': 'Auto rotate', '面區分': 'Face colors',
   '完全開啟或關閉預覽渲染': 'Completely enable or disable preview rendering', '僅在此預覽中讓模型慢速轉動': 'Slowly rotate the model in this preview only',
-  '用不同顏色區分六個面': 'Color each of the six faces differently', '選擇 Cube 或 Shape': 'Select a Cube or Shape', '預覽已關閉': 'Preview disabled',
+  '用不同顏色區分六個面': 'Color each of the six faces differently', '選擇 Cube 或 Shape': 'Select a Cube or Shape', '選擇 Cube、Shape 或貝塞爾': 'Select a Cube, Shape, or Bezier element', '預覽已關閉': 'Preview disabled',
   '視圖模式': 'View mode', '透視': 'Perspective', '正交': 'Orthographic', '實體著色': 'Entity shading', '貼圖預覽': 'Texture preview', '動畫預覽': 'Animation preview',
   '聚焦': 'Focus', '網格': 'Grid', '邊界線框': 'Bounds wireframe', '實心': 'Solid', '實心 Mipped': 'Solid Mipped',
   '半透明': 'Translucent', '半透明 Mipped': 'Translucent Mipped', '背面剔除': 'Back-face culling', '剔除': 'Cull',
@@ -173,9 +174,13 @@ const ENGLISH_UI = Object.freeze({
   '幾何': 'Geometry', '重置': 'Reset', '位置': 'Position', '尺寸': 'Size', '樞軸': 'Pivot', '膨脹': 'Inflate',
   'UV 模式': 'UV mode', '箱型 UV': 'Box UV', '逐面 UV': 'Per-face UV', '形狀參數': 'Shape parameters',
   '半徑': 'Radius', '高度': 'Height', '邊數': 'Sides', '生成 Cube': 'Generated cubes', 'Locator 變換': 'Locator transform',
-  '組變換': 'Group transform', '直接子項': 'Direct children', '外觀': 'Appearance', '預覽色': 'Preview color', '材質色': 'Material color',
+  'Cube 邊長': 'Cube edge', '柱體吸附': 'Prism snapping', '按內含 Cube 邊長': 'Contained-cube edge', '按整體邊長': 'Overall edge',
+  '節點': 'Node', '只可移動／旋轉': 'Move / rotate only', '自動切線': 'Automatic tangent', '滾動角': 'Roll angle', '貝塞爾手柄': 'Bezier handles', '前手柄': 'Incoming handle', '後手柄': 'Outgoing handle',
+  '二維貝塞爾': '2D Bezier', '三維貝塞爾': '3D Bezier', 'Cube 柱粗細': 'Cube column thickness', '分段方式': 'Segmentation',
+  '按距離': 'By distance', '按角度': 'By angle', '角度步長': 'Angle step', '距離步長': 'Distance step', '刪除節點': 'Delete node',
+  '組變換': 'Group transform', '組屬性': 'Group properties', '直接子項': 'Direct children', '外觀': 'Appearance', '預覽色': 'Preview color', '材質色': 'Material color',
   '刪除物件': 'Delete object', '刪除組及其內容': 'Delete group and contents', '選擇一個 Cube、Shape 或組來編輯。': 'Select a cube, shape, or group to edit.',
-  '選擇一個 Cube、Shape、Locator 或組來編輯。': 'Select a cube, shape, locator, or group to edit.', '已新增 Locator': 'Locator added',
+  '選擇一個 Cube、Shape、Locator 或組來編輯。': 'Select a cube, shape, locator, or group to edit.', '選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。': 'Select a cube, shape, node, Bezier element, locator, or group to edit.', '已新增 Locator': 'Locator added',
   '一般': 'General', '視圖': 'View', '所有選項即時生效，並通過配置註冊表保存在這台電腦上。': 'All options apply immediately and are saved on this computer through the configuration registry.',
   '設定分類': 'Settings categories', '介面、視口與編輯行為': 'Interface, viewport, and editing behavior', '介面語言': 'Interface language',
   '視口顯示與鎖定物體虛化': 'Viewport display and locked-object fading', '鎖定物體默認虛化 Alpha': 'Default locked-object alpha',
@@ -225,7 +230,7 @@ const SIMPLIFIED_PHRASES = Object.freeze({
 const SIMPLIFIED_CHARS = Object.freeze({
   '體':'体','開':'开','關':'关','閉':'闭','陰':'阴','顯':'显','圖':'图','層':'层','編':'编','輯':'辑','繪':'绘','畫':'画','動':'动','導':'导','檔':'档','儲':'储','復':'复','設':'设','覽':'览','縮':'缩','態':'态','級':'级','軸':'轴','長':'长','圍':'围','線':'线','僅':'仅','鎖':'锁','稱':'称','變':'变','換':'换','擇':'择','組':'组','場':'场','間':'间','輸':'输','項':'项','參':'参','數':'数','塊':'块','刪':'删','除':'除','見':'见','幾':'几','樞':'枢','脹':'胀','狀':'状','徑':'径','邊':'边','質':'质','預':'预','選':'选','語':'语','網':'网','負':'负','許':'许','顔':'颜','顏':'颜','圓':'圆','強':'强','調':'调','熔':'熔','還':'还','應':'应','過':'过','這':'这','臺':'台','電':'电','腦':'脑','獨':'独','當':'当','與':'与','後':'后','會':'会','啟':'启','連':'连','續':'续','離':'离','內':'内','實':'实','視':'视','點':'点','擊':'击','進':'进','階':'阶','構':'构','則':'则','個':'个','處':'处','從':'从','標':'标','記':'记','題':'题','樣':'样','細':'细','節':'节','類':'类','別':'别','載':'载','務':'务','優':'优','勢':'势','據':'据','墊':'垫','疊':'叠','寬':'宽','釋':'释','權':'权','傳':'传','統':'统','築':'筑','擁':'拥','護':'护','隱':'隐','響':'响','極':'极','遠':'远','習':'习','萬':'万','屬':'属','為':'为','時':'时','種':'种','並':'并','註':'注','冊':'册','觀':'观','對':'对','滾':'滚','輪':'轮','鍵':'键','頂':'顶','單':'单','銷':'销','欄':'栏','轉':'转','筆':'笔','蓋':'盖','暫':'暂','輔':'辅','側':'侧','區':'区','紋':'纹','帶':'带','巢':'巢','匯':'汇','總':'总',
   '來':'来','歐':'欧','貼':'贴','範':'范','覺':'觉','緒':'绪','沒':'没','漸':'渐','無':'无','讀':'读','張':'张','敗':'败','認':'认','義':'义','請':'请','須':'须','於':'于','繞':'绕','齊':'齐','適':'适','豎':'竖','橫':'横','執':'执','讓':'让',
-  '詳':'详','資':'资','訊':'讯','虛':'虚','準':'准','維':'维','佔':'占','膚':'肤','頁':'页','隨':'随'
+  '詳':'详','資':'资','訊':'讯','虛':'虚','準':'准','維':'维','佔':'占','膚':'肤','頁':'页','隨':'随','貝':'贝','爾':'尔'
 });
 
 function toSimplified(source) {
@@ -242,6 +247,12 @@ export function translateUiText(source, language = configRegistry.get(ConfigKey.
   if (ENGLISH_UI[text]) return ENGLISH_UI[text];
   let match = text.match(/^(\d+) 行 · 每行獨立設定$/);
   if (match) return `${match[1]} rows · configured independently`;
+  match = text.match(/^多選 (\d+)$/);
+  if (match) return `${match[1]} selected`;
+  match = text.match(/^節點 (\d+)$/);
+  if (match) return `Node ${match[1]}`;
+  match = text.match(/^(\d+) 節點$/);
+  if (match) return `${match[1]} nodes`;
   match = text.match(/^吸附 (.+) · (.+)px$/);
   if (match) return `Snap ${match[1]} · ${match[2]}px`;
   match = text.match(/^標準吸附 (.+) · (.+)px$/);

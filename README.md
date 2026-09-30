@@ -33,10 +33,33 @@ npm run preview
 然後打開 `http://127.0.0.1:8765`。  
 Then open `http://127.0.0.1:8765`.
 
-目前版本包含可互動工作區、Cube／Shape／Group／Locator 資料模型、`.cbmodel` 保存、帶巢狀組、逐面 UV 與貼圖的 `.bbmodel` 匯入、屬性編輯、可增減的獨立漸變色卡，以及可保存的語言、吸附和外觀配置。  
-The current version includes an interactive workspace, Cube/Shape/Group/Locator data models, `.cbmodel` saving, `.bbmodel` importing with nested groups, per-face UVs and textures, property editing, independently manageable gradient palettes, and persistent language, snapping, and appearance settings.
+### Windows 單文件打包 / Windows Portable Build
+
+安裝過 Node.js 後，可直接雙擊專案根目錄的 `build-portable.bat`。工具會自動補齊打包依賴、執行語法檢查與三組測試，再使用 Electron Builder 產生單一免安裝執行文件：
+After installing Node.js, double-click `build-portable.bat` in the project root. The helper installs missing build dependencies, runs syntax checks and all three test suites, then uses Electron Builder to create a single portable executable:
+
+```text
+dist/CubeBricks-<version>-portable.exe
+```
+
+也可在終端直接執行 `npm run dist:portable`。首次打包需要網路以安裝依賴及取得 Electron 打包資源；之後會重用本機快取。Portable 版本不需要安裝，雙擊 `.exe` 即可啟動。
+You can also run `npm run dist:portable` in a terminal. The first build needs network access to install dependencies and obtain Electron packaging resources; later builds reuse the local cache. The portable build requires no installation and starts by double-clicking the `.exe`.
+
+目前版本包含可互動工作區、Cube／Shape／Node／二維與三維 Bezier／Group／Locator 資料模型、`.cbmodel` 保存、`.bbmodel` 匯入與導出、屬性編輯、可增減的獨立漸變色卡，以及可保存的語言、吸附和外觀配置。
+The current version includes an interactive workspace; Cube, Shape, Node, 2D/3D Bezier, Group, and Locator data models; `.cbmodel` saving; `.bbmodel` import/export; property editing; independently manageable gradient palettes; and persistent language, snapping, and appearance settings.
 
 ### 最近更新 / Recent Updates
+
+- 多邊形柱體 Shape 改為沿每條多邊形邊生成一根長方體 Cube，使用斜接延長閉合牆角，不再體素填充截面；可選按構成 Cube 的實際邊長或按整體外輪廓吸附。<br>
+  Polygon-prism Shapes now generate one elongated Cube along each polygon edge, using miter extensions to close wall corners instead of voxel-filling the cross-section. Snapping can follow either the generated Cubes' actual edge lengths or the overall outer bounds.
+- 新增獨立節點、二維／三維 Bezier 元素與 Cube 柱擬合。未手動調整的節點使用鋼筆式平滑切線；手柄可直接拖動，二維節點固定共平面，三維節點則具有沿曲線插值並實際旋轉方形截面的獨立滾動角。<br>
+  Standalone Nodes, 2D/3D Bezier elements, and Cube-column fitting have been added. Untouched nodes use pen-style smooth tangents; handles are directly draggable, 2D nodes remain coplanar, and 3D nodes have independent roll angles interpolated along the curve to rotate the square cross-section physically.
+- 節點只提供移動與旋轉；樞軸工具在節點上等同移動節點自身。頂點捕捉支援節點，右鍵空白可在二維曲線真實平面或三維視覺平面建立相連節點；刀具可單擊合法連線將曲線拆成兩個至少各含兩節點的元素。<br>
+  Nodes support movement and rotation only; the Pivot tool moves the node itself. Vertex snapping supports nodes, right-clicking blank space creates a connected node on the true 2D curve plane or the 3D view plane, and the Knife can split a valid connection into two elements containing at least two nodes each.
+- 「導出」會建立 `.bbmodel`；程序化 Shape 與 Bezier 在導出時展開成以原物件命名的 Cube 組，保留普通 Cube、組層級、Locator、UV、面資料、可見性、旋轉和內嵌貼圖。<br>
+  Export now creates `.bbmodel` files. Procedural Shapes and Bezier elements are expanded into Cube groups named after their source objects, while regular Cubes, hierarchy, Locators, UVs, face data, visibility, rotations, and embedded textures are preserved.
+- 根目錄新增可雙擊的 `build-portable.bat`，會檢查原始碼、執行測試並在 `dist` 生成單一 Windows portable `.exe`。<br>
+  A double-clickable `build-portable.bat` now checks the source, runs tests, and creates a single portable Windows `.exe` in `dist`.
 
 - 左側新增標準停靠物件「UV 預覽」，只建立並渲染目前選中的 Cube／Shape。預覽可用左鍵獨立旋轉但不能縮放，並提供總開關、慢速自動旋轉與六面方向配色；總開關關閉、面板／停靠欄折疊或頁面進入後台時，動畫與 WebGL 渲染排程會完全停止。<br>
   A standardized “UV Preview” dock has been added to the bottom of the left column, building and rendering only the currently selected Cubes/Shapes. The preview can be rotated independently with the left mouse button but cannot be zoomed, and includes a master switch, slow auto-rotation, and directional six-face coloring. Animation and WebGL render scheduling stop completely when the master switch is off, the panel/dock is collapsed, or the page is in the background.

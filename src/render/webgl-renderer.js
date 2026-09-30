@@ -821,7 +821,7 @@ export class WebGLSceneRenderer {
 
   getHitAreas(project, geometryOnly = false) {
     return [...this.lastOwnerPoints.entries()]
-      .filter(([uid]) => !this.lastLockedUids.has(uid) && (!geometryOnly || this.lastNodeByUid.get(uid)?.type !== 'locator'))
+      .filter(([uid]) => !this.lastLockedUids.has(uid) && (!geometryOnly || !['locator', 'node'].includes(this.lastNodeByUid.get(uid)?.type)))
       .map(([uid, points]) => ({ uid, ...screenBounds(points, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height) }));
   }
 
@@ -835,10 +835,10 @@ export class WebGLSceneRenderer {
     const selected = new Set();
     for (const [uid, points] of this.lastOwnerPoints) {
       const node = this.lastNodeByUid.get(uid);
-      if (!node || node.type !== 'locator' || this.lastLockedUids.has(uid) || geometryOnly) continue;
+      if (!node || !['locator', 'node'].includes(node.type) || this.lastLockedUids.has(uid) || geometryOnly) continue;
       const projected = projectScreenPoint(points[0], this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
       if (projected.behind || projected.depth < -1 || projected.depth > 1) continue;
-      const radius = locatorScreenSize(points[0], this.lastCameraState) * .72;
+      const radius = node.type === 'locator' ? locatorScreenSize(points[0], this.lastCameraState) * .72 : 14;
       const closestX = clamp(projected.x, rect.x1, rect.x2);
       const closestY = clamp(projected.y, rect.y1, rect.y2);
       if (Math.hypot(projected.x - closestX, projected.y - closestY) <= radius) selected.add(uid);
@@ -870,11 +870,11 @@ export class WebGLSceneRenderer {
       if (candidateUids && !candidateUids.has(uid)) continue;
       const node = this.lastNodeByUid.get(uid);
       const locked = this.lastLockedUids.has(uid);
-      if (!node || (!includeLocked && locked) || (lockedOnly && !locked) || (geometryOnly && node.type === 'locator')) continue;
-      if (node.type === 'locator') {
+      if (!node || (!includeLocked && locked) || (lockedOnly && !locked) || (geometryOnly && ['locator', 'node'].includes(node.type))) continue;
+      if (['locator', 'node'].includes(node.type)) {
         const projected = projectScreenPoint(points[0], this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
         const distance = dot(subtract(points[0], ray.origin), ray.direction);
-        const iconSize = locatorScreenSize(points[0], this.lastCameraState);
+        const iconSize = node.type === 'locator' ? locatorScreenSize(points[0], this.lastCameraState) : 16;
         if (!projected.behind && projected.depth >= -1 && projected.depth <= 1
           && Math.hypot(projected.x - screenX, projected.y - screenY) <= iconSize * .72 && distance > 0 && distance < locatorDistance) {
           locatorDistance = distance;
@@ -882,8 +882,8 @@ export class WebGLSceneRenderer {
         }
       }
     }
-    // Locator is an editor overlay whose visible icon takes priority over
-    // model geometry drawn beneath it, including its near-camera enlargement.
+    // Helper elements are editor overlays whose visible marks take priority
+    // over model geometry drawn beneath them.
     if (locatorHit) return locatorHit;
     const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
     const faces = [
@@ -893,7 +893,7 @@ export class WebGLSceneRenderer {
     for (const face of faces) {
       if (candidateUids && !candidateUids.has(face.uid)) continue;
       const locked = this.lastLockedUids.has(face.uid);
-      if ((!includeLocked && locked) || (lockedOnly && !locked) || (geometryOnly && project.getNode(face.uid)?.type === 'locator')) continue;
+      if ((!includeLocked && locked) || (lockedOnly && !locked) || (geometryOnly && ['locator', 'node'].includes(project.getNode(face.uid)?.type))) continue;
       const indices = FACE_TRIANGLE_SLOTS;
       for (let triangle = 0; triangle < 2; triangle++) {
         const base = triangle * 3;
@@ -917,6 +917,10 @@ export class WebGLSceneRenderer {
   getWorldVertices(project, uid) {
     const node = project.getNode(uid);
     if (!node) return [];
+    if (node.type === 'node') {
+      const point = applyGroupTransforms(node.position, project.getGroupChain(node.uid));
+      return [{ uid: node.uid, point }];
+    }
     const uids = node.type === 'group' ? project.getDescendantElementUids(uid) : [uid];
     const seen = new Set();
     const vertices = [];
@@ -929,6 +933,102 @@ export class WebGLSceneRenderer {
       }
     }
     return vertices;
+  }
+
+  getCurveNodeWorldPoints(project, uid) {
+    const curve = project.getNode(uid);
+    if (!curve || !['bezier2d', 'bezier3d'].includes(curve.type)) return [];
+    const chain = project.getGroupChain(uid);
+    return curve.nodes.map((node, index) => ({
+      uid,
+      index,
+      point: applyGroupTransforms(nodeLocalPoint(curve, node.position), chain)
+    }));
+  }
+
+  pickCurveNode(project, uid, screenX, screenY, radius = 14) {
+    let closest = null;
+    for (const entry of this.getCurveNodeWorldPoints(project, uid)) {
+      const projected = projectScreenPoint(entry.point, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
+      if (projected.behind || projected.depth < -1 || projected.depth > 1) continue;
+      const distance = Math.hypot(projected.x - screenX, projected.y - screenY);
+      if (distance <= radius && (!closest || distance < closest.distance)) closest = { ...entry, projected, distance };
+    }
+    return closest;
+  }
+
+  getCurveHandleWorldPoints(project, uid, nodeIndex = null) {
+    const curve = project.getNode(uid);
+    if (!curve) return [];
+    const chain = project.getGroupChain(uid);
+    if (curve.type === 'node') {
+      if (!curve.handlesEnabled) return [];
+      return ['handleIn', 'handleOut'].map(property => ({
+        uid,
+        index: null,
+        property,
+        point: applyGroupTransforms(rotatePoint(
+          curve.position.map((value, axis) => value + curve[property][axis]),
+          curve.position,
+          curve.rotation || [0, 0, 0]
+        ), chain)
+      }));
+    }
+    if (!['bezier2d', 'bezier3d'].includes(curve.type)) return [];
+    const entries = [];
+    curve.nodes.forEach((node, index) => {
+      if (!node.handlesEnabled || (nodeIndex !== null && index !== nodeIndex)) return;
+      const resolved = curve.resolvedNodeState(index);
+      for (const property of ['handleIn', 'handleOut']) {
+        const handle = property === 'handleIn' ? resolved.handleIn : resolved.handleOut;
+        const localPoint = node.position.map((value, axis) => value + handle[axis]);
+        entries.push({
+          uid,
+          index,
+          property,
+          point: applyGroupTransforms(nodeLocalPoint(curve, localPoint), chain)
+        });
+      }
+    });
+    return entries;
+  }
+
+  pickCurveHandle(project, uid, screenX, screenY, nodeIndex = null, radius = 13) {
+    let closest = null;
+    for (const entry of this.getCurveHandleWorldPoints(project, uid, nodeIndex)) {
+      const projected = projectScreenPoint(entry.point, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
+      if (projected.behind || projected.depth < -1 || projected.depth > 1) continue;
+      const distance = Math.hypot(projected.x - screenX, projected.y - screenY);
+      if (distance <= radius && (!closest || distance < closest.distance)) closest = { ...entry, projected, distance };
+    }
+    return closest;
+  }
+
+  pickCurveSegment(project, screenX, screenY, candidateUid = null, radius = 11) {
+    const curves = project.elements.filter(element => ['bezier2d', 'bezier3d'].includes(element.type)
+      && element.visible !== false && (!candidateUid || element.uid === candidateUid));
+    let closest = null;
+    for (const curve of curves) {
+      const chain = project.getGroupChain(curve.uid);
+      const dense = curve.sampleCurve();
+      for (let index = 0; index < dense.length - 1; index++) {
+        if (dense[index].segment !== dense[index + 1].segment) continue;
+        const startWorld = applyGroupTransforms(nodeLocalPoint(curve, dense[index].point), chain);
+        const endWorld = applyGroupTransforms(nodeLocalPoint(curve, dense[index + 1].point), chain);
+        const start = projectScreenPoint(startWorld, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
+        const end = projectScreenPoint(endWorld, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
+        if (start.behind || end.behind) continue;
+        const dx = end.x - start.x, dy = end.y - start.y;
+        const lengthSquared = dx * dx + dy * dy;
+        const amount = lengthSquared > 1e-8
+          ? Math.max(0, Math.min(1, ((screenX - start.x) * dx + (screenY - start.y) * dy) / lengthSquared)) : 0;
+        const distance = Math.hypot(screenX - (start.x + dx * amount), screenY - (start.y + dy * amount));
+        if (distance <= radius && (!closest || distance < closest.distance)) {
+          closest = { uid: curve.uid, segmentIndex: dense[index].segment, distance };
+        }
+      }
+    }
+    return closest;
   }
 
   getSelectionBounds(project, selection) {
@@ -1155,15 +1255,19 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
     const groupChain = project.getGroupChain(element.uid);
     const selectedByGroup = groupChain.some(group => selectedUids.has(group.uid));
     const selectedForBounds = selectedUids.has(element.uid) || selectedByGroup;
-    if (element.type === 'locator') {
-      const geometry = locatorGeometry(element, groupChain);
+    if (element.type === 'locator' || element.type === 'node') {
+      const geometry = element.type === 'locator' ? locatorGeometry(element, groupChain) : nodeElementGeometry(element, groupChain);
       if (element.visible) helpers.push(...geometry.lines);
       if (element.visible) ownerPoints.set(element.uid, geometry.points);
       if (element.visible || selectedForBounds) boundsPoints.push(...geometry.points);
       finishRanges();
       continue;
     }
-    const cubes = element.type === 'shape'
+    if (element.type === 'bezier2d' || element.type === 'bezier3d') {
+      const curveGeometry = bezierHelperGeometry(element, groupChain);
+      if (element.visible) helpers.push(...curveGeometry.lines);
+    }
+    const cubes = typeof element.toCubes === 'function'
       ? element.toCubes().map(cube => ({ cube, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
       : [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
 
@@ -1211,6 +1315,93 @@ function locatorGeometry(locator, groupChain) {
   const origin = locator.position || [0, 0, 0];
   const points = [applyGroupTransforms(origin, groupChain)];
   return { lines: [], points };
+}
+
+function nodeLocalPoint(element, point) {
+  const translated = point.map((value, axis) => value + element.origin[axis]);
+  return rotatePoint(translated, element.origin, element.rotation || [0, 0, 0]);
+}
+
+function appendLine(lines, start, end, color = [1, 1, 1, .9]) {
+  pushVertex(lines, start, color);
+  pushVertex(lines, end, color);
+}
+
+function curveNodeMark(node, transformPoint) {
+  const lines = [], points = [];
+  const center = transformPoint(node.position);
+  const oriented = offset => transformPoint(rotatePoint(
+    node.position.map((value, axis) => value + offset[axis]), node.position, node.rotation || [0, 0, 0]));
+  const rawDirection = node.directionVector || (node.handlesEnabled ? node.handleOut : null) || [0, 0, 1];
+  const directionLength = Math.hypot(...rawDirection) || 1;
+  const directionEnd = oriented(rawDirection.map(value => value / directionLength * 1.25));
+  appendLine(lines, center, directionEnd);
+  points.push(center, directionEnd);
+  let previous = oriented([.38, 0, 0]);
+  for (let index = 1; index <= 20; index++) {
+    const angle = index / 20 * Math.PI * 2;
+    const next = oriented([Math.cos(angle) * .38, 0, Math.sin(angle) * .38]);
+    appendLine(lines, previous, next, [1, 1, 1, .78]);
+    points.push(next);
+    previous = next;
+  }
+  if (node.handlesEnabled) {
+    const handleIn = oriented(node.handleIn);
+    const handleOut = oriented(node.handleOut);
+    appendLine(lines, handleIn, center, [1, 1, 1, .58]);
+    appendLine(lines, center, handleOut, [1, 1, 1, .58]);
+    for (const handleVector of [node.handleIn, node.handleOut]) {
+      const size = .13;
+      const horizontalA = oriented(handleVector.map((value, axis) => value + (axis === 0 ? -size : 0)));
+      const horizontalB = oriented(handleVector.map((value, axis) => value + (axis === 0 ? size : 0)));
+      const depthA = oriented(handleVector.map((value, axis) => value + (axis === 2 ? -size : 0)));
+      const depthB = oriented(handleVector.map((value, axis) => value + (axis === 2 ? size : 0)));
+      appendLine(lines, horizontalA, horizontalB, [1, 1, 1, .95]);
+      appendLine(lines, depthA, depthB, [1, 1, 1, .95]);
+    }
+    points.push(handleIn, handleOut);
+  }
+  return { lines, points };
+}
+
+function nodeElementGeometry(element, groupChain) {
+  const node = {
+    position: element.position,
+    rotation: element.rotation,
+    handlesEnabled: element.handlesEnabled,
+    handleIn: element.handleIn,
+    handleOut: element.handleOut
+  };
+  const transformPoint = point => applyGroupTransforms(point, groupChain);
+  return curveNodeMark(node, transformPoint);
+}
+
+function bezierHelperGeometry(element, groupChain) {
+  const lines = [], points = [];
+  const transformPoint = point => applyGroupTransforms(nodeLocalPoint(element, point), groupChain);
+  const sampled = element.sampleCurve();
+  for (let index = 0; index < sampled.length - 1; index++) {
+    const start = transformPoint(sampled[index].point);
+    const end = transformPoint(sampled[index + 1].point);
+    appendLine(lines, start, end, [1, 1, 1, .7]);
+    points.push(start, end);
+  }
+  element.nodes.forEach((node, index) => {
+    const resolved = element.resolvedNodeState(index);
+    const directionVector = index < element.nodes.length - 1
+      ? resolved.localHandleOut
+      : resolved.localHandleIn.map(value => -value);
+    const geometry = curveNodeMark({
+      ...node,
+      rotation: resolved.rotation,
+      handleIn: resolved.localHandleIn,
+      handleOut: resolved.localHandleOut,
+      directionVector
+    }, transformPoint);
+    lines.push(...geometry.lines);
+    points.push(...geometry.points);
+  });
+  return { lines, points };
 }
 
 function mergeOwnerPoints(staticPoints, dynamicPoints) {
@@ -1261,13 +1452,18 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
 
 function cubeWorldCorners(entry) {
   const { cube, offset, ownerRotation, ownerOrigin, groupChain } = entry;
-  const inflate = cube.inflate || 0;
+  const inflate = getEffectiveInflate(cube, groupChain);
   const start = cube.position.map((value, axis) => value + offset[axis]);
   const cubePivot = cube.pivot.map((value, axis) => value + offset[axis]);
   return createSignedCubeCorners(start, cube.size, inflate)
     .map(point => rotatePoint(point, cubePivot, cube.rotation || [0, 0, 0]))
     .map(point => rotatePoint(point, ownerOrigin, ownerRotation || [0, 0, 0]))
     .map(point => applyGroupTransforms(point, groupChain));
+}
+
+export function getEffectiveInflate(cube, groupChain = []) {
+  return (Number(cube?.inflate) || 0)
+    + groupChain.reduce((total, group) => total + (Number(group?.inflate) || 0), 0);
 }
 
 function gridGeometry(subdivisions = 16) {

@@ -2,6 +2,7 @@
   "name": "cubebricks",
   "version": "0.1.0",
   "description": "A modular Minecraft modelling workspace built around cubes and procedural shapes.",
+  "author": "CubeBricks",
   "productName": "CubeBricks",
   "main": "electron/main.cjs",
   "type": "module",
@@ -13,18 +14,37 @@
     "check": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check src/app.js && node --check src/model.js && node --check src/render/webgl-renderer.js && node --check src/ui/dock-manager.js && node --check src/core/config-registry.js && node --check src/core/model-format-registry.js && node --check src/config/app-config.js && node --check src/config/model-formats.js",
     "test:config": "node scripts/test-config-registry.mjs",
     "test:model": "node scripts/test-model-groups.mjs",
-    "test:render": "node scripts/test-render-uv.mjs"
+    "test:render": "node scripts/test-render-uv.mjs",
+    "dist:portable": "electron-builder --win portable --x64"
   },
   "devDependencies": {
-    "electron": "^38.2.0"
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12"
   },
   "build": {
     "appId": "com.cubebricks.desktop",
     "directories": {
-      "buildResources": "src/assets"
+      "buildResources": "src/assets",
+      "output": "dist"
     },
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "artifactName": "CubeBricks-${version}-portable.${ext}",
     "win": {
-      "icon": "src/assets/shortcut-icon.ico"
+      "icon": "src/assets/shortcut-icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "mac": {
       "icon": "src/assets/shortcut-icon.png"

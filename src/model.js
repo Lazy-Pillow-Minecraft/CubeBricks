@@ -57,7 +57,11 @@ export class Shape {
     this.uid = data.uid || uid('shape');
     this.name = data.name || 'shape';
     this.shapeType = data.shapeType || 'cylinder';
-    this.parameters = { radius: 4, height: 8, sides: 8, ...(data.parameters || {}) };
+    this.parameters = {
+      radius: 4, height: 8, sides: 8, cubeSize: 1,
+      snapMode: 'cube',
+      ...(data.parameters || {})
+    };
     this.origin = data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
     this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
@@ -69,23 +73,325 @@ export class Shape {
   }
 
   toCubes() {
-    const { radius, height, sides } = this.parameters;
-    return Array.from({ length: sides }, (_, i) => {
-      const a = (i / sides) * Math.PI * 2;
-      const x = Math.cos(a) * radius;
-      const z = Math.sin(a) * radius;
+    const radius = Math.max(.001, Number(this.parameters.radius) || 0);
+    const requestedHeight = Math.max(0, Number(this.parameters.height) || 0);
+    const sides = Math.max(3, Math.round(Number(this.parameters.sides) || 3));
+    const cubeSize = Math.max(.0625, Number(this.parameters.cubeSize) || 1);
+    const snapMode = this.parameters.snapMode === 'bounds' ? 'bounds' : 'cube';
+    const halfTurn = Math.PI / sides;
+    const outwardOffset = cubeSize / (2 * Math.cos(halfTurn));
+    let centerRadius = Math.max(.001, radius - outwardOffset);
+    let cubeLength = 2 * centerRadius * Math.sin(halfTurn) + cubeSize * Math.tan(halfTurn);
+    let height = requestedHeight;
+    if (snapMode === 'cube') {
+      cubeLength = Math.max(cubeSize, Math.round(cubeLength / cubeSize) * cubeSize);
+      centerRadius = Math.max(.001,
+        (cubeLength - cubeSize * Math.tan(halfTurn)) / (2 * Math.sin(halfTurn)));
+      height = Math.round(requestedHeight / cubeSize) * cubeSize;
+    }
+    const vertices = Array.from({ length: sides }, (_, index) => {
+      const angle = Math.PI / 2 + index * Math.PI * 2 / sides;
+      return [Math.cos(angle) * centerRadius, Math.sin(angle) * centerRadius];
+    });
+    return vertices.map((start, index) => {
+      const end = vertices[(index + 1) % sides];
+      const midpoint = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+      const direction = [end[0] - start[0], end[1] - start[1]];
+      const yaw = Math.atan2(direction[0], direction[1]) * 180 / Math.PI;
       return new Cube({
-        name: `${this.name}_${i + 1}`,
-        position: [x - 1.25, 0, z - 1.25],
-        size: [2.5, height, 2.5],
-        pivot: [0, height / 2, 0],
-        rotation: [0, -(i / sides) * 360, 0],
+        name: `${this.name}_${index + 1}`,
+        position: [midpoint[0] - cubeSize / 2, 0, midpoint[1] - cubeLength / 2],
+        size: [cubeSize, height, cubeLength],
+        pivot: [midpoint[0], height / 2, midpoint[1]],
+        rotation: [0, yaw, 0],
         autoUv: this.autoUv,
         exported: this.exported,
         locked: this.locked,
+        shade: this.shade,
         color: this.color
       });
     });
+  }
+}
+
+export function pointInRegularPolygon(point, radius, sides) {
+  const count = Math.max(3, Math.round(sides));
+  const vertices = Array.from({ length: count }, (_, index) => {
+    const angle = Math.PI / 2 + index * Math.PI * 2 / count;
+    return [Math.cos(angle) * radius, Math.sin(angle) * radius];
+  });
+  let sign = 0;
+  for (let index = 0; index < vertices.length; index++) {
+    const start = vertices[index], end = vertices[(index + 1) % vertices.length];
+    const crossValue = (end[0] - start[0]) * (point[1] - start[1]) - (end[1] - start[1]) * (point[0] - start[0]);
+    if (Math.abs(crossValue) < 1e-8) continue;
+    const nextSign = Math.sign(crossValue);
+    if (sign && nextSign !== sign) return false;
+    sign = nextSign;
+  }
+  return true;
+}
+
+const vector3 = (value, fallback = [0, 0, 0]) => Array.isArray(value) && value.length >= 3
+  ? value.slice(0, 3).map((component, axis) => Number.isFinite(Number(component)) ? Number(component) : fallback[axis])
+  : [...fallback];
+
+export class CurveNode {
+  constructor(data = {}, planar = false) {
+    this.uid = data.uid || uid('node');
+    this.position = vector3(data.position);
+    if (planar) this.position[1] = 0;
+    this.rotation = vector3(data.rotation);
+    if (planar) {
+      this.rotation[0] = 0;
+      this.rotation[2] = 0;
+    }
+    this.handlesEnabled = booleanProperty(data.handlesEnabled ?? data.handles, true);
+    const hasExplicitHandles = Array.isArray(data.handleIn) || Array.isArray(data.handleOut);
+    this.autoTangent = booleanProperty(data.autoTangent, !hasExplicitHandles);
+    this.roll = planar ? 0 : Number(data.roll) || 0;
+    this.handleIn = vector3(data.handleIn, [-2, 0, 0]);
+    this.handleOut = vector3(data.handleOut, [2, 0, 0]);
+    if (planar) {
+      this.handleIn[1] = 0;
+      this.handleOut[1] = 0;
+    }
+  }
+}
+
+export class NodeElement {
+  constructor(data = {}) {
+    this.type = 'node';
+    this.uid = data.uid || data.uuid || uid('node_element');
+    this.name = data.name || 'node';
+    this.position = vector3(data.position || data.origin);
+    this.rotation = vector3(data.rotation);
+    this.handlesEnabled = booleanProperty(data.handlesEnabled ?? data.handles, false);
+    this.handleIn = vector3(data.handleIn, [-2, 0, 0]);
+    this.handleOut = vector3(data.handleOut, [2, 0, 0]);
+    this.exported = booleanProperty(data.exported ?? data.export, true);
+    this.locked = booleanProperty(data.locked, false);
+    this.visible = booleanProperty(data.visible ?? data.visibility, true);
+  }
+}
+
+function cubicBezierPoint(start, controlA, controlB, end, t) {
+  const inverse = 1 - t;
+  return [0, 1, 2].map(axis => inverse ** 3 * start[axis]
+    + 3 * inverse ** 2 * t * controlA[axis]
+    + 3 * inverse * t ** 2 * controlB[axis]
+    + t ** 3 * end[axis]);
+}
+
+function cubicBezierTangent(start, controlA, controlB, end, t) {
+  const inverse = 1 - t;
+  return [0, 1, 2].map(axis => 3 * inverse ** 2 * (controlA[axis] - start[axis])
+    + 6 * inverse * t * (controlB[axis] - controlA[axis])
+    + 3 * t ** 2 * (end[axis] - controlB[axis]));
+}
+
+function vectorLength(vector) { return Math.hypot(vector[0], vector[1], vector[2]); }
+function normalizeVector(vector, fallback = [0, 0, 1]) {
+  const length = vectorLength(vector);
+  return length > 1e-8 ? vector.map(value => value / length) : [...fallback];
+}
+
+function interpolateAngleDegrees(start, end, amount) {
+  const delta = ((end - start + 540) % 360) - 180;
+  return start + delta * amount;
+}
+
+function crossVector(left, right) {
+  return [
+    left[1] * right[2] - left[2] * right[1],
+    left[2] * right[0] - left[0] * right[2],
+    left[0] * right[1] - left[1] * right[0]
+  ];
+}
+
+function directionFrameEuler(direction, roll = 0) {
+  const forward = normalizeVector(direction);
+  const referenceUp = Math.abs(forward[1]) < .98 ? [0, 1, 0] : [1, 0, 0];
+  const baseRight = normalizeVector(crossVector(referenceUp, forward), [1, 0, 0]);
+  const baseUp = normalizeVector(crossVector(forward, baseRight), [0, 1, 0]);
+  const radians = roll * Math.PI / 180;
+  const cosine = Math.cos(radians), sine = Math.sin(radians);
+  const right = baseRight.map((value, axis) => value * cosine + baseUp[axis] * sine);
+  const up = baseUp.map((value, axis) => value * cosine - baseRight[axis] * sine);
+  const r00 = right[0], r10 = right[1], r20 = right[2];
+  const r21 = up[2], r22 = forward[2];
+  const pitch = Math.atan2(r21, r22);
+  const yaw = Math.asin(Math.max(-1, Math.min(1, -r20)));
+  const rollZ = Math.atan2(r10, r00);
+  return [pitch, yaw, rollZ].map(value => value * 180 / Math.PI);
+}
+
+export class BezierElement {
+  constructor(data = {}, dimension = data.dimension === 2 ? 2 : 3) {
+    this.type = dimension === 2 ? 'bezier2d' : 'bezier3d';
+    this.uid = data.uid || data.uuid || uid(this.type);
+    this.name = data.name || (dimension === 2 ? 'bezier_2d' : 'bezier_3d');
+    this.dimension = dimension;
+    this.origin = vector3(data.origin);
+    this.rotation = vector3(data.rotation);
+    const defaults = dimension === 2
+      ? [{ position: [-4, 0, 0] }, { position: [4, 0, 0] }]
+      : [{ position: [-4, 0, 0] }, { position: [4, 4, 2] }];
+    this.nodes = (data.nodes?.length >= 2 ? data.nodes : defaults).map(node => new CurveNode(node, dimension === 2));
+    this.parameters = {
+      thickness: 1,
+      segmentationMode: 'distance',
+      segmentLength: 1,
+      angleStep: 10,
+      ...(data.parameters || {})
+    };
+    this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
+    this.exported = booleanProperty(data.exported ?? data.export, true);
+    this.locked = booleanProperty(data.locked, false);
+    this.shade = booleanProperty(data.shade, true);
+    this.visible = booleanProperty(data.visible ?? data.visibility, true);
+    this.color = data.color || (dimension === 2 ? '#d7b25b' : '#78b6d7');
+  }
+
+  resolvedNodeState(index) {
+    const node = this.nodes[index];
+    const previous = this.nodes[index - 1], next = this.nodes[index + 1];
+    let handleIn, handleOut;
+    if (node.autoTangent) {
+      const direction = previous && next
+        ? next.position.map((value, axis) => value - previous.position[axis])
+        : next ? next.position.map((value, axis) => value - node.position[axis])
+          : previous ? node.position.map((value, axis) => value - previous.position[axis])
+            : [0, 0, 1];
+      const tangent = normalizeVector(direction);
+      const previousDistance = previous
+        ? vectorLength(node.position.map((value, axis) => value - previous.position[axis]))
+        : next ? vectorLength(next.position.map((value, axis) => value - node.position[axis])) : 3;
+      const nextDistance = next
+        ? vectorLength(next.position.map((value, axis) => value - node.position[axis]))
+        : previousDistance;
+      handleIn = tangent.map(value => -value * previousDistance / 3);
+      handleOut = tangent.map(value => value * nextDistance / 3);
+    } else {
+      handleIn = rotateVector(node.handleIn, node.rotation || [0, 0, 0]);
+      handleOut = rotateVector(node.handleOut, node.rotation || [0, 0, 0]);
+    }
+    const direction = vectorLength(handleOut) > 1e-8
+      ? handleOut
+      : handleIn.map(value => -value);
+    const rotation = directionFrameEuler(direction, this.dimension === 3 ? node.roll : 0);
+    return {
+      handleIn,
+      handleOut,
+      rotation,
+      localHandleIn: inverseRotateVector(handleIn, rotation),
+      localHandleOut: inverseRotateVector(handleOut, rotation)
+    };
+  }
+
+  sampleCurve() {
+    const dense = [];
+    const segmentCount = this.nodes.length - 1;
+    const resolved = this.nodes.map((_, index) => this.resolvedNodeState(index));
+    for (let segment = 0; segment < segmentCount; segment++) {
+      const startNode = this.nodes[segment], endNode = this.nodes[segment + 1];
+      const start = startNode.position;
+      const end = endNode.position;
+      const startHandle = resolved[segment].handleOut;
+      const endHandle = resolved[segment + 1].handleIn;
+      const controlA = startNode.handlesEnabled ? start.map((value, axis) => value + startHandle[axis]) : start;
+      const controlB = endNode.handlesEnabled ? end.map((value, axis) => value + endHandle[axis]) : end;
+      const steps = 96;
+      for (let index = segment === 0 ? 0 : 1; index <= steps; index++) {
+        const t = index / steps;
+        dense.push({
+          point: cubicBezierPoint(start, controlA, controlB, end, t),
+          tangent: normalizeVector(cubicBezierTangent(start, controlA, controlB, end, t)),
+          roll: this.dimension === 3 ? interpolateAngleDegrees(startNode.roll, endNode.roll, t) : 0,
+          segment,
+          t
+        });
+      }
+    }
+    if (dense.length < 2) return dense;
+    if (this.parameters.segmentationMode === 'angle') {
+      const threshold = Math.max(.1, Number(this.parameters.angleStep) || 10) * Math.PI / 180;
+      const sampled = [dense[0]];
+      let previousDirection = dense[0].tangent;
+      for (let index = 1; index < dense.length - 1; index++) {
+        const direction = dense[index].tangent;
+        const cosine = Math.max(-1, Math.min(1, direction.reduce((sum, value, axis) => sum + value * previousDirection[axis], 0)));
+        if (Math.acos(cosine) < threshold) continue;
+        sampled.push(dense[index]);
+        previousDirection = direction;
+      }
+      sampled.push(dense.at(-1));
+      return sampled;
+    }
+    const spacing = Math.max(.0625, Number(this.parameters.segmentLength) || 1);
+    const sampled = [dense[0]];
+    let carried = 0;
+    let previousPoint = dense[0].point;
+    for (let index = 1; index < dense.length; index++) {
+      const current = dense[index];
+      carried += vectorLength(current.point.map((value, axis) => value - previousPoint[axis]));
+      previousPoint = current.point;
+      if (carried + 1e-8 < spacing && index < dense.length - 1) continue;
+      sampled.push(current);
+      carried = 0;
+    }
+    if (sampled.at(-1) !== dense.at(-1)) sampled.push(dense.at(-1));
+    return sampled;
+  }
+
+  toCubes() {
+    const points = this.sampleCurve();
+    const thickness = Math.max(.01, Number(this.parameters.thickness) || 1);
+    const segments = [];
+    for (let index = 0; index < points.length - 1; index++) {
+      const start = points[index].point, end = points[index + 1].point;
+      const delta = end.map((value, axis) => value - start[axis]);
+      const length = vectorLength(delta);
+      if (length < 1e-6) continue;
+      segments.push({ start, end, length, direction: delta.map(value => value / length) });
+    }
+    const jointExtension = (left, right) => {
+      if (!left || !right) return 0;
+      const cosine = Math.max(-1, Math.min(1,
+        left.direction.reduce((sum, value, axis) => sum + value * right.direction[axis], 0)));
+      const turn = Math.acos(cosine);
+      if (turn < 1e-5) return 0;
+      // Butt-ended cube columns leave a wedge on the outside of a bend. A
+      // square-stroke miter closes it by extending both neighbours according
+      // to their half-width and half of the turning angle. Cap pathological
+      // near-reversals so an accidental cusp cannot create a huge cube.
+      return Math.min(thickness * 4, thickness * .5 * Math.tan(Math.min(turn, Math.PI - .02) / 2));
+    };
+    const cubes = [];
+    for (let index = 0; index < segments.length; index++) {
+      const segment = segments[index];
+      const { start, end, direction } = segment;
+      const startExtension = jointExtension(segments[index - 1], segment);
+      const endExtension = jointExtension(segment, segments[index + 1]);
+      const length = segment.length + startExtension + endExtension;
+      const midpoint = start.map((value, axis) => (value + end[axis]) / 2
+        + direction[axis] * (endExtension - startExtension) / 2);
+      const roll = (points[index].roll + points[index + 1].roll) / 2;
+      const rotation = directionFrameEuler(direction, roll);
+      cubes.push(new Cube({
+        name: `${this.name}_${index + 1}`,
+        position: [midpoint[0] - thickness / 2, midpoint[1] - thickness / 2, midpoint[2] - length / 2],
+        size: [thickness, thickness, length],
+        pivot: midpoint,
+        rotation,
+        autoUv: this.autoUv,
+        exported: this.exported,
+        locked: this.locked,
+        shade: this.shade,
+        color: this.color
+      }));
+    }
+    return cubes;
   }
 }
 
@@ -109,9 +415,11 @@ export class Group {
     this.name = data.name || 'group';
     this.pivot = data.pivot || data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
+    this.inflate = Number(data.inflate) || 0;
     this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
     this.exported = booleanProperty(data.exported ?? data.export, true);
     this.locked = booleanProperty(data.locked, false);
+    this.shade = booleanProperty(data.shade, true);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.children = [...(data.children || [])];
   }
@@ -134,8 +442,8 @@ function translateNode(project, node, delta) {
   if (node.type === 'cube') {
     node.position = node.position.map((value, axis) => value + delta[axis]);
     node.pivot = node.pivot.map((value, axis) => value + delta[axis]);
-  } else if (node.type === 'shape') node.origin = node.origin.map((value, axis) => value + delta[axis]);
-  else if (node.type === 'locator') node.position = node.position.map((value, axis) => value + delta[axis]);
+  } else if (node.origin) node.origin = node.origin.map((value, axis) => value + delta[axis]);
+  else if (node.position) node.position = node.position.map((value, axis) => value + delta[axis]);
   else if (node.type === 'group') {
     node.pivot = node.pivot.map((value, axis) => value + delta[axis]);
     node.children.forEach(uidValue => {
@@ -317,6 +625,9 @@ export class CubeBricksProject {
     this.elements = (data.elements || []).map(item => {
       if (item.type === 'shape') return new Shape(item);
       if (item.type === 'locator') return new Locator(item);
+      if (item.type === 'node') return new NodeElement(item);
+      if (item.type === 'bezier2d') return new BezierElement(item, 2);
+      if (item.type === 'bezier3d') return new BezierElement(item, 3);
       return new Cube(item);
     });
     this.groups = (data.groups || []).map(group => new Group(group));
@@ -517,9 +828,11 @@ export function importBlockbench(data) {
       name: node.name ?? saved.name,
       origin: node.origin ?? saved.origin,
       rotation: node.rotation ?? saved.rotation,
+      inflate: node.inflate ?? saved.inflate,
       autoUv: booleanProperty(node.autouv ?? saved.autouv, false),
       exported: booleanProperty(node.export ?? saved.export, true),
       locked: booleanProperty(node.locked ?? saved.locked, false),
+      shade: booleanProperty(node.shade ?? saved.shade, true),
       visible: booleanProperty(node.visibility ?? node.visible ?? saved.visibility ?? saved.visible, true),
       children: []
     });
@@ -541,4 +854,144 @@ export function importBlockbench(data) {
     outliner,
     meta: { importedFrom: 'bbmodel', sourceModelFormat: data.meta?.model_format || 'free' }
   });
+}
+
+function blockbenchCube(cube, offset = [0, 0, 0]) {
+  const from = cube.position.map((value, axis) => value + offset[axis]);
+  const origin = cube.pivot.map((value, axis) => value + offset[axis]);
+  return {
+    name: cube.name,
+    box_uv: cube.uvMode !== 'face',
+    rescale: false,
+    locked: cube.locked === true,
+    from,
+    to: from.map((value, axis) => value + cube.size[axis]),
+    autouv: cube.autoUv ? 1 : 0,
+    color: 0,
+    origin,
+    rotation: [...cube.rotation],
+    uv_offset: [...(cube.uv || [0, 0])],
+    mirror_uv: cube.mirrorUv === true,
+    inflate: cube.inflate || 0,
+    shade: cube.shade !== false,
+    visibility: cube.visible !== false,
+    export: cube.exported !== false,
+    faces: cube.faces ? structuredClone(cube.faces) : undefined,
+    type: 'cube',
+    uuid: cube.uid
+  };
+}
+
+function blockbenchLocator(locator) {
+  return {
+    name: locator.name,
+    locked: locator.locked === true,
+    position: [...locator.position],
+    rotation: [...(locator.rotation || [0, 0, 0])],
+    visibility: locator.visible !== false,
+    export: locator.exported !== false,
+    type: 'locator',
+    uuid: locator.uid
+  };
+}
+
+export function exportBlockbench(project, textureAssets = []) {
+  const elements = [];
+  const exportedElementIds = new Set();
+  const pushElement = element => {
+    if (exportedElementIds.has(element.uuid)) return;
+    exportedElementIds.add(element.uuid);
+    elements.push(element);
+  };
+  const proceduralGroup = element => {
+    const generated = element.toCubes();
+    const children = generated.map((cube, index) => {
+      cube.uid = `${element.uid}_cube_${index + 1}`;
+      pushElement(blockbenchCube(cube, element.origin || [0, 0, 0]));
+      return cube.uid;
+    });
+    return {
+      name: element.name,
+      origin: [...(element.origin || [0, 0, 0])],
+      rotation: [...(element.rotation || [0, 0, 0])],
+      color: 0,
+      uuid: `${element.uid}_group`,
+      export: element.exported !== false,
+      locked: element.locked === true,
+      visibility: element.visible !== false,
+      autouv: element.autoUv ? 1 : 0,
+      shade: element.shade !== false,
+      isOpen: true,
+      children
+    };
+  };
+  const visit = uidValue => {
+    const node = project.getNode(uidValue);
+    if (!node) return null;
+    if (node.type === 'group') return {
+      name: node.name,
+      origin: [...node.pivot],
+      rotation: [...(node.rotation || [0, 0, 0])],
+      color: 0,
+      uuid: node.uid,
+      export: node.exported !== false,
+      locked: node.locked === true,
+      visibility: node.visible !== false,
+      autouv: node.autoUv ? 1 : 0,
+      shade: node.shade !== false,
+      isOpen: true,
+      children: node.children.map(visit).filter(Boolean)
+    };
+    if (node.type === 'cube') {
+      pushElement(blockbenchCube(node));
+      return node.uid;
+    }
+    if (node.type === 'locator' || node.type === 'node') {
+      const locator = node.type === 'locator' ? node : new Locator({
+        uid: node.uid, name: node.name, position: node.position, rotation: node.rotation,
+        exported: node.exported, locked: node.locked, visible: node.visible
+      });
+      pushElement(blockbenchLocator(locator));
+      return node.uid;
+    }
+    if (typeof node.toCubes === 'function') return proceduralGroup(node);
+    return null;
+  };
+  const textures = textureAssets.map((texture, index) => ({
+    path: texture.path || '',
+    name: texture.name || `texture_${index + 1}.png`,
+    folder: texture.folder || '',
+    namespace: texture.namespace || '',
+    id: texture.id || String(index),
+    particle: texture.particle === true,
+    render_mode: texture.renderMode || 'default',
+    visible: texture.visible !== false,
+    mode: 'bitmap',
+    saved: true,
+    uuid: texture.uuid || texture._uid || `texture_${index + 1}`,
+    source: texture.source,
+    relative_path: texture.relativePath,
+    uv_width: texture.uvWidth || project.textureSize[0],
+    uv_height: texture.uvHeight || project.textureSize[1],
+    use_as_default: texture.useAsDefault === true
+  }));
+  return {
+    meta: {
+      format_version: '4.10',
+      model_format: project.modelType || 'free',
+      box_uv: project.uvMode === 'box'
+    },
+    name: project.name,
+    model_identifier: '',
+    visible_box: [1, 1, 0],
+    variable_placeholders: '',
+    variable_placeholder_buttons: [],
+    timeline_setups: [],
+    unhandled_root_fields: {},
+    resolution: { width: project.textureSize[0], height: project.textureSize[1] },
+    render_type: project.renderType,
+    elements,
+    outliner: project.outliner.map(visit).filter(Boolean),
+    textures
+  };
 }
