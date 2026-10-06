@@ -53,12 +53,13 @@ export class Cube {
 
 export class Shape {
   constructor(data = {}) {
-    this.type = 'shape';
+    this.type = 'polygon_prism';
     this.uid = data.uid || uid('shape');
     this.name = data.name || 'shape';
-    this.shapeType = data.shapeType || 'cylinder';
+    this.shapeType = 'polygon_prism';
     this.parameters = {
       radius: 4, height: 8, sides: 8, cubeSize: 1,
+      innerRadiusEnabled: false, innerRadiusMode: 'radius', innerRadius: 2,
       snapMode: 'cube',
       ...(data.parameters || {})
     };
@@ -76,32 +77,34 @@ export class Shape {
     const radius = Math.max(.001, Number(this.parameters.radius) || 0);
     const requestedHeight = Math.max(0, Number(this.parameters.height) || 0);
     const sides = Math.max(3, Math.round(Number(this.parameters.sides) || 3));
-    const cubeSize = Math.max(.0625, Number(this.parameters.cubeSize) || 1);
-    const snapMode = this.parameters.snapMode === 'bounds' ? 'bounds' : 'cube';
     const halfTurn = Math.PI / sides;
-    const outwardOffset = cubeSize / (2 * Math.cos(halfTurn));
-    let centerRadius = Math.max(.001, radius - outwardOffset);
-    let cubeLength = 2 * centerRadius * Math.sin(halfTurn) + cubeSize * Math.tan(halfTurn);
-    let height = requestedHeight;
-    if (snapMode === 'cube') {
-      cubeLength = Math.max(cubeSize, Math.round(cubeLength / cubeSize) * cubeSize);
-      centerRadius = Math.max(.001,
-        (cubeLength - cubeSize * Math.tan(halfTurn)) / (2 * Math.sin(halfTurn)));
-      height = Math.round(requestedHeight / cubeSize) * cubeSize;
-    }
-    const vertices = Array.from({ length: sides }, (_, index) => {
-      const angle = Math.PI / 2 + index * Math.PI * 2 / sides;
-      return [Math.cos(angle) * centerRadius, Math.sin(angle) * centerRadius];
-    });
-    return vertices.map((start, index) => {
-      const end = vertices[(index + 1) % sides];
-      const midpoint = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
-      const direction = [end[0] - start[0], end[1] - start[1]];
-      const yaw = Math.atan2(direction[0], direction[1]) * 180 / Math.PI;
+    const hollow = this.parameters.innerRadiusEnabled === true;
+    const outerApothem = radius * Math.cos(halfTurn);
+    const edgeLength = 2 * radius * Math.sin(halfTurn);
+    const innerValue = Math.max(0, Number(this.parameters.innerRadius) || 0);
+    const height = requestedHeight;
+    const innerRadius = !hollow ? 0
+      : this.parameters.innerRadiusMode === 'depth'
+        ? Math.max(0, outerApothem - Math.min(outerApothem, innerValue))
+        : Math.max(0, Math.min(outerApothem - .001, innerValue));
+    const mergedOpposites = !hollow && sides % 2 === 0;
+    const cubeCount = mergedOpposites ? sides / 2 : sides;
+    return Array.from({ length: cubeCount }, (_, index) => {
+      // The normal of a regular-polygon edge points from the centre toward
+      // the midpoint of that edge. Solid columns reach the centre; opposite
+      // edges of an even polygon can therefore share one continuous cube.
+      const angle = Math.PI / 2 + (index + .5) * Math.PI * 2 / sides;
+      const radial = [Math.cos(angle), Math.sin(angle)];
+      const startRadius = mergedOpposites ? -outerApothem : innerRadius;
+      const endRadius = outerApothem;
+      const cubeLength = endRadius - startRadius;
+      const midpointRadius = (startRadius + endRadius) / 2;
+      const midpoint = radial.map(value => value * midpointRadius);
+      const yaw = Math.atan2(radial[0], radial[1]) * 180 / Math.PI;
       return new Cube({
         name: `${this.name}_${index + 1}`,
-        position: [midpoint[0] - cubeSize / 2, 0, midpoint[1] - cubeLength / 2],
-        size: [cubeSize, height, cubeLength],
+        position: [midpoint[0] - edgeLength / 2, 0, midpoint[1] - cubeLength / 2],
+        size: [edgeLength, height, cubeLength],
         pivot: [midpoint[0], height / 2, midpoint[1]],
         rotation: [0, yaw, 0],
         autoUv: this.autoUv,
@@ -147,6 +150,7 @@ export class CurveNode {
       this.rotation[2] = 0;
     }
     this.handlesEnabled = booleanProperty(data.handlesEnabled ?? data.handles, true);
+    this.symmetricHandles = booleanProperty(data.symmetricHandles, true);
     const hasExplicitHandles = Array.isArray(data.handleIn) || Array.isArray(data.handleOut);
     this.autoTangent = booleanProperty(data.autoTangent, !hasExplicitHandles);
     this.roll = planar ? 0 : Number(data.roll) || 0;
@@ -167,6 +171,7 @@ export class NodeElement {
     this.position = vector3(data.position || data.origin);
     this.rotation = vector3(data.rotation);
     this.handlesEnabled = booleanProperty(data.handlesEnabled ?? data.handles, false);
+    this.symmetricHandles = booleanProperty(data.symmetricHandles, true);
     this.handleIn = vector3(data.handleIn, [-2, 0, 0]);
     this.handleOut = vector3(data.handleOut, [2, 0, 0]);
     this.exported = booleanProperty(data.exported ?? data.export, true);
@@ -314,34 +319,77 @@ export class BezierElement {
       }
     }
     if (dense.length < 2) return dense;
+    const cumulative = [0];
+    for (let index = 1; index < dense.length; index++) {
+      cumulative.push(cumulative.at(-1) + vectorLength(
+        dense[index].point.map((value, axis) => value - dense[index - 1].point[axis])));
+    }
+    const totalLength = cumulative.at(-1);
+    const sampleAtDistance = distance => {
+      const target = Math.max(0, Math.min(totalLength, distance));
+      let high = cumulative.findIndex(value => value >= target);
+      if (high <= 0) return { ...dense[0], point: [...dense[0].point], tangent: [...dense[0].tangent] };
+      if (high < 0) return { ...dense.at(-1), point: [...dense.at(-1).point], tangent: [...dense.at(-1).tangent] };
+      const low = high - 1;
+      const span = cumulative[high] - cumulative[low];
+      const amount = span > 1e-9 ? (target - cumulative[low]) / span : 0;
+      return {
+        point: dense[low].point.map((value, axis) => value + (dense[high].point[axis] - value) * amount),
+        tangent: normalizeVector(dense[low].tangent.map(
+          (value, axis) => value + (dense[high].tangent[axis] - value) * amount)),
+        roll: interpolateAngleDegrees(dense[low].roll, dense[high].roll, amount),
+        segment: amount < .5 ? dense[low].segment : dense[high].segment,
+        t: dense[low].t + (dense[high].t - dense[low].t) * amount
+      };
+    };
     if (this.parameters.segmentationMode === 'angle') {
       const threshold = Math.max(.1, Number(this.parameters.angleStep) || 10) * Math.PI / 180;
-      const sampled = [dense[0]];
-      let previousDirection = dense[0].tangent;
-      for (let index = 1; index < dense.length - 1; index++) {
+      const middleDistance = totalLength / 2;
+      const middle = sampleAtDistance(middleDistance);
+      const left = [], right = [];
+      let previousDirection = middle.tangent;
+      for (let index = cumulative.findLastIndex(value => value < middleDistance); index > 0; index--) {
         const direction = dense[index].tangent;
-        const cosine = Math.max(-1, Math.min(1, direction.reduce((sum, value, axis) => sum + value * previousDirection[axis], 0)));
-        if (Math.acos(cosine) < threshold) continue;
-        sampled.push(dense[index]);
+        const cosine = Math.max(-1, Math.min(1, direction.reduce(
+          (sum, value, axis) => sum + value * previousDirection[axis], 0)));
+        if (Math.acos(cosine) + 1e-9 < threshold) continue;
+        left.push(dense[index]);
         previousDirection = direction;
       }
-      sampled.push(dense.at(-1));
-      return sampled;
+      previousDirection = middle.tangent;
+      for (let index = cumulative.findIndex(value => value > middleDistance); index < dense.length - 1; index++) {
+        const direction = dense[index].tangent;
+        const cosine = Math.max(-1, Math.min(1, direction.reduce(
+          (sum, value, axis) => sum + value * previousDirection[axis], 0)));
+        if (Math.acos(cosine) + 1e-9 < threshold) continue;
+        right.push(dense[index]);
+        previousDirection = direction;
+      }
+      return [dense[0], ...left.reverse(), middle, ...right, dense.at(-1)];
     }
     const spacing = Math.max(.0625, Number(this.parameters.segmentLength) || 1);
-    const sampled = [dense[0]];
-    let carried = 0;
-    let previousPoint = dense[0].point;
+    if (totalLength <= spacing + 1e-8) return [dense[0], dense.at(-1)];
+    // Each Bezier span is fitted outwards from its own arc-length midpoint.
+    // Keeping explicit nodes as boundaries preserves sharp bends and makes a
+    // mirrored span produce mirrored cube placement even with a remainder.
+    const spanBoundaries = [0];
     for (let index = 1; index < dense.length; index++) {
-      const current = dense[index];
-      carried += vectorLength(current.point.map((value, axis) => value - previousPoint[axis]));
-      previousPoint = current.point;
-      if (carried + 1e-8 < spacing && index < dense.length - 1) continue;
-      sampled.push(current);
-      carried = 0;
+      if (dense[index].segment !== dense[index - 1].segment) spanBoundaries.push(cumulative[index - 1]);
     }
-    if (sampled.at(-1) !== dense.at(-1)) sampled.push(dense.at(-1));
-    return sampled;
+    spanBoundaries.push(totalLength);
+    const distances = [...spanBoundaries];
+    for (let span = 0; span < spanBoundaries.length - 1; span++) {
+      const startDistance = spanBoundaries[span], endDistance = spanBoundaries[span + 1];
+      const middleDistance = (startDistance + endDistance) / 2;
+      for (let offset = spacing / 2; middleDistance - offset > startDistance + 1e-8; offset += spacing) {
+        distances.push(middleDistance - offset);
+      }
+      for (let offset = spacing / 2; middleDistance + offset < endDistance - 1e-8; offset += spacing) {
+        distances.push(middleDistance + offset);
+      }
+    }
+    const uniqueDistances = [...new Set(distances.map(value => Math.round(value * 1e9) / 1e9))];
+    return uniqueDistances.sort((left, right) => left - right).map(sampleAtDistance);
   }
 
   toCubes() {
@@ -623,7 +671,7 @@ export class CubeBricksProject {
     this.snap = { subdivisions: Number.isFinite(snapSubdivisions) && snapSubdivisions > 0 ? snapSubdivisions : null };
     this.formatData = structuredClone(data.formatData || {});
     this.elements = (data.elements || []).map(item => {
-      if (item.type === 'shape') return new Shape(item);
+      if (item.type === 'shape' || item.type === 'polygon_prism') return new Shape(item);
       if (item.type === 'locator') return new Locator(item);
       if (item.type === 'node') return new NodeElement(item);
       if (item.type === 'bezier2d') return new BezierElement(item, 2);

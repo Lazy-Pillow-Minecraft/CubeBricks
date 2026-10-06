@@ -1,14 +1,23 @@
 import assert from 'node:assert/strict';
 import {
   createSignedCubeCorners,
+  createBlockbenchFaceUvSlots,
   createBlockbenchFaceUvs,
   getBlockbenchBoxUv,
   getEffectiveInflate,
   getMinecraftRenderType,
+  hasAssignedFaceTexture,
   MinecraftRenderType,
   RenderPass,
   screenPolygonIntersectsRect
 } from '../src/render/webgl-renderer.js';
+
+assert.equal(hasAssignedFaceTexture(undefined), false, 'a cube face without a texture stays untextured');
+assert.equal(hasAssignedFaceTexture({ uv: [0, 0, 16, 16] }), false,
+  'UV coordinates alone do not implicitly assign a texture');
+assert.equal(hasAssignedFaceTexture({ texture: null }), false,
+  'the explicit null marker remains distinct from a texture assignment');
+assert.equal(hasAssignedFaceTexture({ texture: 0 }), true, 'an explicit texture index enables textured rendering');
 
 assert.equal(screenPolygonIntersectsRect([
   { x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }
@@ -30,6 +39,10 @@ assert.deepEqual(createBlockbenchFaceUvs(rectangle, [16, 16], 90), [
   [0, 0], [1, 0], [0, 1],
   [1, 0], [1, 1], [0, 1]
 ], 'Blockbench 90-degree UV slot rotation');
+
+assert.deepEqual(createBlockbenchFaceUvSlots([0, 0, 16, 8], 90), [
+  [0, 8], [0, 0], [16, 8], [16, 0]
+], 'UV preview orientation uses the same rotated slots as textured rendering');
 
 assert.deepEqual(createBlockbenchFaceUvs([16, 0, 0, 16], [16, 16]), [
   [1, 1], [1, 0], [0, 1],

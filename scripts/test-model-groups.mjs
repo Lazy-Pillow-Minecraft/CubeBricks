@@ -25,14 +25,25 @@ assert.equal(bedrockRoundTrip.formatId, ModelFormatId.BEDROCK_ENTITY, 'project f
 assert.deepEqual(bedrockRoundTrip.snap, { subdivisions: 16 }, 'project standard snap survives a cbmodel round trip');
 
 const filledPrism = new Shape({ parameters: { radius: 4, height: 8, sides: 8, cubeSize: 1, snapMode: 'cube' } });
-assert.equal(filledPrism.toCubes().length, filledPrism.parameters.sides,
-  'polygon prism uses one elongated cube for each polygon wall instead of voxel filling');
-assert.ok(filledPrism.toCubes().every(cube => cube.size[0] === 1 && cube.size[2] >= 1),
-  'polygon wall cubes preserve their requested thickness and span an entire side');
-assert.ok(filledPrism.toCubes().every(cube => Math.abs(cube.size[2] - Math.round(cube.size[2])) < 1e-9),
-  'cube-edge snapping applies to the generated wall cube length');
+assert.equal(filledPrism.type, 'polygon_prism', 'polygon prisms use their own registered element marker');
+assert.equal(filledPrism.toCubes().length, filledPrism.parameters.sides / 2,
+  'a solid even-sided prism merges each opposite edge pair into one centre-spanning cube');
+assert.ok(filledPrism.toCubes().every(cube => Math.abs(cube.pivot[0]) < 1e-9 && Math.abs(cube.pivot[2]) < 1e-9),
+  'merged solid prism cubes pass directly through the centre');
 const boundsPrism = new Shape({ parameters: { radius: 4.3, height: 8, sides: 6, cubeSize: 1, snapMode: 'bounds' } });
-assert.equal(boundsPrism.toCubes().length, 6, 'overall-edge snapping still produces one wall cube per side');
+assert.equal(boundsPrism.toCubes().length, 3, 'overall-edge snapping retains opposite-edge merging for solid even prisms');
+assert.ok(Math.abs(boundsPrism.toCubes()[0].size[2] - 2 * 4.3 * Math.cos(Math.PI / 6)) < 1e-9,
+  'shape generation preserves exact stored dimensions instead of forcibly normalizing them');
+const hollowPrism = new Shape({ parameters: { radius: 5, height: 8, sides: 8, cubeSize: 1,
+  innerRadiusEnabled: true, innerRadius: 2, snapMode: 'cube' } });
+assert.equal(hollowPrism.toCubes().length, 8, 'enabling an inner radius creates separate hollow wall cubes');
+assert.ok(hollowPrism.toCubes().every(cube => Math.hypot(cube.pivot[0], cube.pivot[2]) > 0),
+  'hollow wall cubes stop before reaching the centre');
+const inwardDepthPrism = new Shape({ parameters: { radius: 5, height: 8, sides: 8, cubeSize: 1,
+  innerRadiusEnabled: true, innerRadiusMode: 'depth', innerRadius: 2, snapMode: 'bounds' } });
+const inwardDepthCubes = inwardDepthPrism.toCubes();
+assert.ok(inwardDepthCubes.every(cube => Math.abs(cube.size[2] - 2) < 1e-7),
+  'inner-radius depth mode interprets the value as each cube inward extension distance');
 
 const planarCurve = new BezierElement({ nodes: [
   { position: [-4, 9, 0], handleOut: [2, 7, 0] },
@@ -64,6 +75,18 @@ const rolledCubes = rolledCurve.toCubes();
 assert.notDeepEqual(rolledCubes[0].rotation.map(value => Math.round(value * 1000)),
   rolledCubes.at(-1).rotation.map(value => Math.round(value * 1000)),
   '3D node roll interpolates into the fitted cube-column orientation');
+const centredCurve = new BezierElement({ nodes: [
+  { position: [-5, 0, 0], handlesEnabled: false },
+  { position: [5, 0, 0], handlesEnabled: false }
+], parameters: { segmentationMode: 'distance', segmentLength: 3 } }, 3);
+const centredSamples = centredCurve.sampleCurve();
+for (let index = 0; index < centredSamples.length; index++) {
+  assert.ok(Math.abs(centredSamples[index].point[0] + centredSamples.at(-1 - index).point[0]) < 1e-7,
+    'distance fitting expands symmetrically from the curve midpoint');
+}
+const centredCubes = centredCurve.toCubes();
+assert.ok(centredCubes.some(cube => Math.abs(cube.pivot[0]) < 1e-7),
+  'a symmetric curve receives a cube centred on its midpoint');
 const cornerCurve = new BezierElement({ nodes: [
   { position: [0, 0, 0], handlesEnabled: false },
   { position: [4, 0, 0], handlesEnabled: false },
@@ -74,7 +97,9 @@ assert.ok(cornerCubes.some(cube => cube.size[2] > 4),
   'cube columns extend around a bend to close the outside miter gap');
 const curveNode = new CurveNode({ handlesEnabled: false });
 assert.equal(curveNode.handlesEnabled, false, 'bezier handles are optional per node');
+assert.equal(curveNode.symmetricHandles, true, 'new curve nodes use symmetric bezier handles by default');
 const nodeElement = new NodeElement({ position: [1, 2, 3], handlesEnabled: true });
+assert.equal(nodeElement.symmetricHandles, true, 'standalone node handles can use the same symmetric mode');
 assert.equal('pivot' in nodeElement, false, 'standalone nodes do not expose a pivot');
 assert.equal('size' in nodeElement, false, 'standalone nodes do not expose resize dimensions');
 const curveRoundTrip = new CubeBricksProject({ elements: [planarCurve, spatialCurve, nodeElement] });

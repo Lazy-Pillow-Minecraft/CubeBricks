@@ -103,6 +103,27 @@ ipcMain.handle('project:save', async (_event, payload) => {
   return { filePath };
 });
 
+ipcMain.handle('project:export', async (_event, payload) => {
+  const picked = await dialog.showSaveDialog({
+    title: '導出模型',
+    defaultPath: `${payload.name || 'untitled'}.bbmodel`,
+    filters: [
+      { name: 'Blockbench Model', extensions: ['bbmodel'] },
+      { name: 'CubeBricks Model', extensions: ['cbmodel'] }
+    ]
+  });
+  if (picked.canceled || !picked.filePath) return null;
+  let filePath = picked.filePath;
+  let extension = path.extname(filePath).toLowerCase();
+  if (extension !== '.cbmodel' && extension !== '.bbmodel') {
+    extension = '.bbmodel';
+    filePath += extension;
+  }
+  const content = extension === '.cbmodel' ? payload.cbmodelContent : payload.bbmodelContent;
+  await fs.writeFile(filePath, content, 'utf8');
+  return { filePath, extension };
+});
+
 app.whenReady().then(() => {
   if (process.platform === 'win32') app.setAppUserModelId('com.cubebricks.desktop');
   createWindow();

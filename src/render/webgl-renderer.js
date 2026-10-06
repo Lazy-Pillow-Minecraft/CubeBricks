@@ -136,6 +136,14 @@ export class WebGLSceneRenderer {
     this.texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    this.faceLabelTexture = this.gl.createTexture();
+    this.faceLabelTextureKey = null;
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.faceLabelTexture);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
     this.lastViewProjection = identity();
     this.lastViewport = { width: 1, height: 1 };
     this.lastCameraState = null;
@@ -600,39 +608,56 @@ export class WebGLSceneRenderer {
   drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState) {
     const { gl } = this;
     if (camera.renderMode === 'wireframe') return;
-    if (camera.renderMode === 'textured' && minecraftRenderType.pass === RenderPass.TRANSLUCENT) {
-      if (this.selectionPreviewTransform) {
-        const staticFaces = this.staticCache.faces.filter(face => !dynamicUids.has(face.uid) && !lockedUids.has(face.uid))
-          .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
+    if (camera.faceDistinct || (camera.renderMode === 'textured' && minecraftRenderType.pass === RenderPass.TRANSLUCENT)) {
+      const facePreview = camera.faceDistinct === true;
+      const staticFaces = this.staticCache.faces.filter(face => !dynamicUids.has(face.uid) && !lockedUids.has(face.uid))
+        .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
+      const sortedFaces = [...staticFaces, ...this.selectedCache.faces]
+        .filter(face => !lockedUids.has(face.uid))
+        .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
+      const drawFacePass = options => {
+        if (!this.selectionPreviewTransform) {
+          this.drawVertices(sortedFaces.flatMap(face => face.vertices), gl.TRIANGLES, viewProjection, options);
+          return;
+        }
         this.drawVertices(staticFaces.flatMap(face => face.vertices), gl.TRIANGLES, viewProjection, {
+          ...options
+        });
+        this.drawBufferExcluding(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12,
+          lockedUids, this.selectedCache.triangleRanges, gl.TRIANGLES, viewProjection, {
+            ...options,
+            modelTransform: this.selectionPreviewTransform
+          });
+      };
+      if (facePreview) {
+        // First draw the real texture, then tint each face in a separate
+        // translucent pass. Face distinction must never replace the texture.
+        drawFacePass({
           depthWrite: minecraftRenderType.depthWrite,
           cull: project.cullFaces,
           renderMode: 2,
           alphaMode: minecraftRenderType.alphaMode,
           blend: minecraftRenderType.blend
         });
-        this.drawBufferExcluding(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12,
-          lockedUids, this.selectedCache.triangleRanges, gl.TRIANGLES, viewProjection, {
-            depthWrite: minecraftRenderType.depthWrite,
-            cull: project.cullFaces,
-            renderMode: 2,
-            alphaMode: minecraftRenderType.alphaMode,
-            blend: minecraftRenderType.blend,
-            modelTransform: this.selectionPreviewTransform
-          });
-        return;
+        drawFacePass({
+          depthWrite: false,
+          cull: false,
+          // Mode 3 uses the face colour while retaining the texture alpha,
+          // so cutout/transparent pixels never become coloured plates.
+          renderMode: 3,
+          alphaMode: minecraftRenderType.alphaMode,
+          blend: true,
+          opacity: .34
+        });
+      } else {
+        drawFacePass({
+          depthWrite: minecraftRenderType.depthWrite,
+          cull: project.cullFaces,
+          renderMode: 2,
+          alphaMode: minecraftRenderType.alphaMode,
+          blend: minecraftRenderType.blend
+        });
       }
-      const sortedFaces = [...this.staticCache.faces.filter(face => !dynamicUids.has(face.uid)), ...this.selectedCache.faces]
-        .filter(face => !lockedUids.has(face.uid))
-        .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
-      const translucentVertices = sortedFaces.flatMap(face => face.vertices);
-      this.drawVertices(translucentVertices, gl.TRIANGLES, viewProjection, {
-        depthWrite: minecraftRenderType.depthWrite,
-        cull: project.cullFaces,
-        renderMode: 2,
-        alphaMode: minecraftRenderType.alphaMode,
-        blend: minecraftRenderType.blend
-      });
       return;
     }
     const renderMode = camera.renderMode === 'textured' ? 2 : 1;
@@ -700,7 +725,7 @@ export class WebGLSceneRenderer {
         depthWrite: false, cull: false, renderMode: 0
       });
       this.drawVertices(selectedHelpers, gl.LINES, viewProjection, {
-        depthWrite: false, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform
+        depthWrite: false, depthTest: false, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform
       });
     }
     if (camera.editorOverlayLines?.length) {
@@ -808,12 +833,14 @@ export class WebGLSceneRenderer {
       this.drawGrid(camera, viewProjection);
       this.drawLockedOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
         ownerPoints, viewProjection, null, pixelWidth, pixelHeight, renderWidth, renderHeight);
+      this.drawFaceLabel(camera, viewProjection);
       this.drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection);
     } else {
       this.drawGrid(camera, viewProjection);
       this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
       this.drawLockedOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
         ownerPoints, viewProjection, null, pixelWidth, pixelHeight, pixelWidth, pixelHeight);
+      this.drawFaceLabel(camera, viewProjection);
       this.drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection);
     }
 
@@ -912,6 +939,13 @@ export class WebGLSceneRenderer {
       }
     }
     return closest;
+  }
+
+  getFaceQuad(uid, faceName) {
+    const selectedFace = this.selectedCache?.faces?.find(face => face.uid === uid && face.faceName === faceName);
+    if (selectedFace) return selectedFace.quad.map(point => [...point]);
+    const staticFace = this.staticCache?.faces?.find(face => face.uid === uid && face.faceName === faceName);
+    return staticFace ? staticFace.quad.map(point => [...point]) : null;
   }
 
   getWorldVertices(project, uid) {
@@ -1100,9 +1134,52 @@ export class WebGLSceneRenderer {
     this.drawBuffer(this.dynamicBuffer, vertices.length / 12, primitive, matrix, options);
   }
 
+  drawFaceLabel(camera, viewProjection) {
+    const label = camera.faceLabel;
+    if (!label?.source || label.quad?.length !== 4) return;
+    const { gl } = this;
+    if (this.faceLabelTextureKey !== label.key) {
+      gl.bindTexture(gl.TEXTURE_2D, this.faceLabelTexture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, label.source);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.faceLabelTextureKey = label.key;
+    }
+    const edgeU = subtract(label.quad[1], label.quad[0]);
+    const edgeV = subtract(label.quad[2], label.quad[0]);
+    let normal = normalize(cross(edgeU, edgeV));
+    if (this.lastCameraState?.eye
+      && dot(normal, subtract(this.lastCameraState.eye, label.quad[0])) < 0) {
+      normal = normal.map(value => -value);
+    }
+    // A shader-written logarithmic depth bypasses the useful part of
+    // polygonOffset on several WebGL drivers. Lift only the rasterized helper
+    // by a sub-pixel world-space epsilon so it remains attached to the face
+    // while receiving an unambiguous depth value.
+    const epsilon = Math.max(Math.hypot(...edgeU), Math.hypot(...edgeV), 1) * .0005;
+    const renderQuad = label.quad.map(point => add(point, scale(normal, epsilon)));
+    const uv = [[0, 1], [1, 1], [0, 0], [1, 0]];
+    const vertices = [];
+    FACE_TRIANGLE_SLOTS.forEach(slot => pushVertex(vertices, renderQuad[slot], [1, 1, 1, 1], [0, 0, 0], uv[slot]));
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    gl.polygonOffset(-4, -4);
+    this.drawVertices(vertices, gl.TRIANGLES, viewProjection, {
+      depthWrite: false,
+      cull: false,
+      renderMode: 2,
+      alphaMode: 2,
+      blend: true,
+      texture: this.faceLabelTexture
+    });
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+  }
+
   drawBuffer(buffer, vertexCount, primitive, matrix, {
     depthWrite = true, cull = true, renderMode = 1, alphaMode = 0, blend = false, first = 0, opacity = 1,
-    modelTransform = null
+    modelTransform = null, depthTest = true, texture = null
   } = {}) {
     if (!vertexCount) return;
     const { gl } = this;
@@ -1121,7 +1198,7 @@ export class WebGLSceneRenderer {
       this.logDepthEnabled && this.lastCameraState?.projection === 'perspective' ? 1 : 0);
     if (this.logDepthFactorLocation) gl.uniform1f(this.logDepthFactorLocation, 1 / Math.log2(30001));
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.bindTexture(gl.TEXTURE_2D, texture || this.texture);
     gl.uniform1i(this.textureLocation, 0);
     gl.enableVertexAttribArray(this.positionLocation);
     gl.vertexAttribPointer(this.positionLocation, 3, gl.FLOAT, false, 48, 0);
@@ -1132,7 +1209,7 @@ export class WebGLSceneRenderer {
     gl.enableVertexAttribArray(this.uvLocation);
     gl.vertexAttribPointer(this.uvLocation, 2, gl.FLOAT, false, 48, 40);
     gl.depthMask(depthWrite);
-    gl.enable(gl.DEPTH_TEST);
+    depthTest ? gl.enable(gl.DEPTH_TEST) : gl.disable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     cull ? gl.enable(gl.CULL_FACE) : gl.disable(gl.CULL_FACE);
     if (blend) {
@@ -1350,15 +1427,6 @@ function curveNodeMark(node, transformPoint) {
     const handleOut = oriented(node.handleOut);
     appendLine(lines, handleIn, center, [1, 1, 1, .58]);
     appendLine(lines, center, handleOut, [1, 1, 1, .58]);
-    for (const handleVector of [node.handleIn, node.handleOut]) {
-      const size = .13;
-      const horizontalA = oriented(handleVector.map((value, axis) => value + (axis === 0 ? -size : 0)));
-      const horizontalB = oriented(handleVector.map((value, axis) => value + (axis === 0 ? size : 0)));
-      const depthA = oriented(handleVector.map((value, axis) => value + (axis === 2 ? -size : 0)));
-      const depthB = oriented(handleVector.map((value, axis) => value + (axis === 2 ? size : 0)));
-      appendLine(lines, horizontalA, horizontalB, [1, 1, 1, .95]);
-      appendLine(lines, depthA, depthB, [1, 1, 1, .95]);
-    }
     points.push(handleIn, handleOut);
   }
   return { lines, points };
@@ -1430,13 +1498,18 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
   const triangles = [], faceBatches = [];
   for (const [faceName, quadIndices] of Object.entries(FACE_LAYOUTS)) {
     const faceData = cube.faces?.[faceName];
+    // An explicit null texture is the model's culled-face marker. A missing
+    // face/texture field instead means an ordinary untextured white face.
     if (faceData?.enabled === false || faceData?.texture === null) continue;
+    const textured = hasAssignedFaceTexture(faceData);
     const indices = FACE_TRIANGLE_SLOTS.map(slot => quadIndices[slot]);
     const a = corners[indices[0]], b = corners[indices[1]], c = corners[indices[2]];
     const normal = normalize(cross(subtract(b, a), subtract(c, a)));
-    const sourceColor = faceDistinct ? FACE_PREVIEW_COLORS[faceName] : base;
+    const sourceColor = faceDistinct ? FACE_PREVIEW_COLORS[faceName] : textured ? base : [1, 1, 1];
     const faceColor = sourceColor.map(channel => Math.min(1, channel * edgeBoost));
-    const faceUv = getFaceUv(cube, faceName, textureSize);
+    const faceUv = textured
+      ? getFaceUv(cube, faceName, textureSize)
+      : Array.from({ length: 6 }, () => [UNTEXTURED_UV_SENTINEL, UNTEXTURED_UV_SENTINEL]);
     const faceVertices = [];
     indices.forEach((index, vertexIndex) => pushVertex(faceVertices, corners[index], [...faceColor, selected ? 2 : 1], shade === false ? [0, 0, 0] : normal, faceUv[vertexIndex]));
     triangles.push(...faceVertices);
@@ -1448,6 +1521,12 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
     pushVertex(edges, corners[a], edgeColor); pushVertex(edges, corners[b], edgeColor);
   }
   return { triangles, faces: faceBatches, edges, corners };
+}
+
+const UNTEXTURED_UV_SENTINEL = -1000000;
+
+export function hasAssignedFaceTexture(face) {
+  return face?.texture !== undefined && face?.texture !== null;
 }
 
 function cubeWorldCorners(entry) {
@@ -1682,15 +1761,21 @@ export function createBlockbenchFaceUvs(rectangle, textureSize = [64, 64], rotat
   }
   const width = textureSize[0] || 1;
   const height = textureSize[1] || 1;
+  const slots = createBlockbenchFaceUvSlots(uv, rotation)
+    .map(slot => [slot[0] / width, 1 - slot[1] / height]);
+  return FACE_TRIANGLE_SLOTS.map(slot => slots[slot]);
+}
+
+export function createBlockbenchFaceUvSlots(rectangle, rotation = 0) {
   let slots = [
-    [uv[0] / width, 1 - uv[1] / height],
-    [uv[2] / width, 1 - uv[1] / height],
-    [uv[0] / width, 1 - uv[3] / height],
-    [uv[2] / width, 1 - uv[3] / height]
+    [rectangle[0], rectangle[1]],
+    [rectangle[2], rectangle[1]],
+    [rectangle[0], rectangle[3]],
+    [rectangle[2], rectangle[3]]
   ];
   let turns = ((Math.round(rotation / 90) % 4) + 4) % 4;
   while (turns-- > 0) slots = [slots[2], slots[0], slots[3], slots[1]];
-  return FACE_TRIANGLE_SLOTS.map(slot => slots[slot]);
+  return slots;
 }
 
 export function getBlockbenchBoxUv(cube, faceName) {
@@ -1877,8 +1962,11 @@ const FRAGMENT_SHADER = `
   varying float vSelected;
   void main() {
     vec4 color = vColor;
-    if (uRenderMode == 2) {
-      color *= texture2D(uTexture, vUv);
+    bool hasTexture = vUv.x > -999999.0;
+    if ((uRenderMode == 2 || uRenderMode == 3) && hasTexture) {
+      vec4 texel = texture2D(uTexture, vUv);
+      if (uRenderMode == 2) color *= texel;
+      else color.a *= texel.a;
       if (uAlphaMode == 0) color.a = 1.0;
       if (uAlphaMode == 1) {
         if (color.a < 0.1) discard;
@@ -1908,8 +1996,11 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
   uniform float uLogDepthFactor;
   void main() {
     vec4 color = vColor;
-    if (uRenderMode == 2) {
-      color *= texture2D(uTexture, vUv);
+    bool hasTexture = vUv.x > -999999.0;
+    if ((uRenderMode == 2 || uRenderMode == 3) && hasTexture) {
+      vec4 texel = texture2D(uTexture, vUv);
+      if (uRenderMode == 2) color *= texel;
+      else color.a *= texel.a;
       if (uAlphaMode == 0) color.a = 1.0;
       if (uAlphaMode == 1) {
         if (color.a < 0.1) discard;

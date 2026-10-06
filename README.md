@@ -50,6 +50,16 @@ The current version includes an interactive workspace; Cube, Shape, Node, 2D/3D 
 
 ### 最近更新 / Recent Updates
 
+- 貼圖窗口新增可選的「熱點聚焦」狀態：交互後以淡色主題框標記焦點，從貼圖窗口返回主視圖時，第一次點擊只切回主視圖焦點，不會誤觸空白取消選擇。聚焦貼圖窗口時，`R` 會以 `0.25 s` 緩動聚焦選中 UV，`Shift + R` 則緩動返回默認視圖。<br>
+  The texture dock now supports optional hotspot focus. Interaction marks it with a subtle theme-colored outline, and the first click back in the main viewport only restores viewport focus instead of accidentally clearing the selection. While the texture dock is focused, `R` eases to the selected UVs over `0.25 s`, and `Shift + R` eases back to the default view.
+- 貼圖窗口已加入完整的 UV 選取與基礎編輯：六個面向按鈕可批量選面；普通點擊替換選擇、Shift 追加、Ctrl 取消指定範圍。選中 UV 可由框內或空白拖動，並可從八個控制點調整範圍；移動與縮放沿用工程吸附及 Shift／Ctrl 微吸附，多選數值不一致時顯示 `-`。<br>
+  The texture dock now provides complete UV selection and basic editing. Six directional buttons select matching faces in batches; a normal click replaces the selection, Shift adds, and Ctrl removes items in the target range. Selected UVs can be dragged from either their bounds or blank space and resized through eight handles. Move/resize operations use project snapping and the Shift/Ctrl fine-snap modifiers, while mixed multi-selection values display `-`.
+- UV 視圖支援 Ctrl + 滾輪縮放、滾輪縱向捲動、Shift + 滾輪橫向捲動及中鍵任意平移，並具有四邊吸附。匯入時已超出貼圖的 UV 仍會如實顯示，但編輯操作不會主動把合法 UV 推出貼圖；空貼圖工程則使用工程貼圖尺寸作為工作區，不再退化成 `1 × 1`。<br>
+  The UV view supports Ctrl + wheel zoom, vertical wheel scrolling, Shift + wheel horizontal scrolling, middle-button panning, and four-edge snapping. Imported out-of-bounds UVs remain visible, while editing will not actively push valid UVs outside the texture. Projects without an assigned image use the project's texture dimensions as the workspace instead of collapsing to `1 × 1`.
+- 主視圖新增面選擇工具（快捷鍵 `7`），選面語義與貼圖窗口一致。面選擇高亮已與 WebGL 場景完全解耦：改變選中面只更新合併的 SVG 覆蓋層、UV 視圖及 UV 預覽，不會重建 Mesh、重繪主畫布或改動深度緩衝；攝像機或模型真正變化時才隨正常場景刷新重新投影。<br>
+  The main viewport now includes a Face Select tool (shortcut `7`) with the same selection semantics as the texture dock. Face-selection highlighting is fully decoupled from the WebGL scene: changing selected faces updates only a merged SVG overlay, the UV view, and UV Preview, without rebuilding meshes, redrawing the main canvas, or touching its depth buffer. The overlay is reprojected during normal scene rendering only when the camera or model actually changes.
+- UV 線框改用螢幕像素座標的獨立 SVG 覆蓋層與半像素對齊，避免 CSS 縮放造成模糊；多選線框會合併為少量路徑。另加入無效 UV 回退及折疊／隱藏窗口尺寸保護，修正部分聚焦操作黑屏或跳變。<br>
+  UV wireframes now use a separate screen-pixel SVG overlay with half-pixel alignment, avoiding blur caused by CSS scaling, and multi-selection wireframes are merged into a small number of paths. Invalid-UV fallbacks and collapsed/hidden-panel size guards also prevent black screens and jumps during focus operations.
 - 多邊形柱體 Shape 改為沿每條多邊形邊生成一根長方體 Cube，使用斜接延長閉合牆角，不再體素填充截面；可選按構成 Cube 的實際邊長或按整體外輪廓吸附。<br>
   Polygon-prism Shapes now generate one elongated Cube along each polygon edge, using miter extensions to close wall corners instead of voxel-filling the cross-section. Snapping can follow either the generated Cubes' actual edge lengths or the overall outer bounds.
 - 新增獨立節點、二維／三維 Bezier 元素與 Cube 柱擬合。未手動調整的節點使用鋼筆式平滑切線；手柄可直接拖動，二維節點固定共平面，三維節點則具有沿曲線插值並實際旋轉方形截面的獨立滾動角。<br>
@@ -110,6 +120,8 @@ The current version includes an interactive workspace; Cube, Shape, Node, 2D/3D 
   `R`: focus the selected object or group
 - `Shift + R`：將攝像機重新聚焦到世界中心  
   `Shift + R`: refocus the camera on the world origin
+- 面選擇工具快捷鍵為 `7`；普通點擊替換選中面，Shift 追加，Ctrl 取消指定面，不會觸發主視圖 WebGL 重繪<br>
+  The Face Select tool uses shortcut `7`; normal click replaces selected faces, Shift adds, and Ctrl removes target faces without triggering a main-viewport WebGL redraw
 - 視口左上角可真正切換透視與正交投影  
   The upper-left corner of the viewport provides a true perspective/orthographic projection toggle
 - 視口右上角可切換線框、體塊、紋理三種渲染模式  
@@ -118,6 +130,8 @@ The current version includes an interactive workspace; Cube, Shape, Node, 2D/3D 
   The ground consists of a 3×3 main grid plus a central subdivision grid generated according to snapping precision, with coordinate axes and north direction marked
 - 左側「UV 預覽」只顯示選中幾何；左鍵拖動可旋轉小視口，且不接受滾輪縮放。面區分模式使用六種固定方向色，方便辨認 UV 面向；自動旋轉只影響預覽攝像機，不會修改模型資料。<br>
   The left-side “UV Preview” displays selected geometry only. Left-button dragging rotates its small viewport, while wheel zoom is intentionally unsupported. Face-color mode uses six fixed directional colors to make UV orientation easier to inspect, and auto-rotation affects only the preview camera without modifying model data.
+- 貼圖窗口取得焦點後：`R` 聚焦選中 UV、`Shift + R` 返回默認視圖、Ctrl + 滾輪縮放、滾輪上下捲動、Shift + 滾輪左右捲動、中鍵拖動平移。這些操作只改變貼圖窗口內的視圖，不修改停靠窗口尺寸或主攝像機。<br>
+  While the texture dock has focus: `R` focuses the selected UVs, `Shift + R` restores the default view, Ctrl + wheel zooms, the wheel scrolls vertically, Shift + wheel scrolls horizontally, and middle-button drag pans. These controls affect only the view inside the texture dock, without changing the dock size or the main camera.
 
 紋理預覽提供實心、Cutout、半透明及三者的 Mipped 抗鋸齒版本；背面剔除、全局陰影和物件陰影均可獨立控制。透視模式使用對數深度以降低大可視距離下的 Z-fighting，Mipped 只對模型表面作高解析度離屏渲染後縮小；網格、選中框、邊界線和線框模式都繞過 Mipped，在所有模式下使用獨立的原生抗鋸齒。實體面亮度由旋轉後的法線套用 Minecraft Java `minecraft_mix_light` 雙方向光公式。Cube 的原生幾何欄位是 `position`、`size`、`pivot`、`rotation`；舊版 `from/to/origin` 僅在載入時自動遷移。  
 Texture preview provides Solid, Cutout, Translucent, and Mipped anti-aliased variants of all three. Backface culling, global shading, and per-object shading can each be controlled independently. Perspective mode uses logarithmic depth to reduce Z-fighting over large view distances. Mipped rendering only supersamples model surfaces offscreen at high resolution before downscaling; grids, selection boxes, boundary lines, and wireframe mode bypass Mipped and use independent native anti-aliasing in every mode. Solid-face brightness applies Minecraft Java's bidirectional `minecraft_mix_light` formula to the rotated normals. A Cube's native geometry fields are `position`, `size`, `pivot`, and `rotation`; legacy `from/to/origin` fields are migrated automatically only when loading.

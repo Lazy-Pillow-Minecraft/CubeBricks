@@ -10,6 +10,7 @@ export class DockPanelObject {
     this.id = definition.id;
     this.index = definition.index;
     this.modes = Object.freeze([...(definition.modes || [])]);
+    this.hotspotFocus = Boolean(definition.hotspotFocus);
     this.defaultState = Object.freeze({
       dock: definition.defaultDock,
       order: definition.defaultOrder || 0,
@@ -24,6 +25,7 @@ export class DockPanelObject {
     this.handle = element.querySelector('.panel-drag-handle');
     element.dataset.panelIndex = String(this.index);
     element.dataset.panelModes = this.modes.join(' ');
+    if (this.hotspotFocus) element.dataset.hotspotFocus = 'true';
   }
 
   serialize() {
@@ -69,6 +71,7 @@ export class DockManager {
       id: panel.id,
       index: panel.index,
       modes: [...panel.modes],
+      hotspotFocus: panel.hotspotFocus,
       defaults: { ...panel.defaultState },
       state: panel.serialize()
     }));

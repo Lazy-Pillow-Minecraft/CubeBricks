@@ -1,7 +1,7 @@
 import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
 import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
 import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
-import { WebGLSceneRenderer, applyGroupTransforms, getBlockbenchBoxUv, getEffectiveInflate } from './render/webgl-renderer.js';
+import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate } from './render/webgl-renderer.js';
 import { DockManager } from './ui/dock-manager.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -14,6 +14,7 @@ const TOOL_REGISTRY = Object.freeze({
   pivot: { modes: ['edit'] },
   vertexSnap: { modes: ['edit'] },
   knife: { modes: ['edit'] },
+  faceSelect: { modes: ['edit'] },
   brush: { modes: ['paint'] }
 });
 
@@ -74,9 +75,13 @@ const state = {
   textureAssets: [],
   textureGroups: [],
   activeTextureUid: null,
+  selectedUvFaces: new Set(),
+  textureView: { zoom: 1, panX: 0, panY: 0 },
+  uvPreviewAutoFocusTexture: true,
   uvPreviewEnabled: true,
   uvPreviewAutoRotate: false,
-  uvPreviewFaceColors: false,
+  uvPreviewFaceColors: true,
+  uvPreviewSelectedFace: null,
   uvPreviewYaw: -Math.PI / 4,
   uvPreviewPitch: Math.PI / 7,
   timelinePlaying: false,
@@ -85,7 +90,7 @@ const state = {
 };
 
 const DOCK_PANEL_DEFINITIONS = Object.freeze([
-  { id: 'texture', index: 0, modes: ['edit', 'paint'], defaultDock: 'left', defaultOrder: 0, defaultPosition: { x: 24, y: 104 }, defaultSize: { width: 236, height: 620 }, defaultCollapsed: false },
+  { id: 'texture', index: 0, modes: ['edit', 'paint'], hotspotFocus: true, defaultDock: 'left', defaultOrder: 0, defaultPosition: { x: 24, y: 104 }, defaultSize: { width: 236, height: 620 }, defaultCollapsed: false },
   { id: 'uvPreview', index: 1, modes: ['edit', 'paint', 'animate'], defaultDock: 'left', defaultOrder: 1, defaultPosition: { x: 24, y: 520 }, defaultSize: { width: 236, height: 260 }, defaultCollapsed: false },
   { id: 'inspector', index: 2, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 0, defaultPosition: { x: 920, y: 104 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
   { id: 'outliner', index: 3, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 1, defaultPosition: { x: 920, y: 460 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
@@ -129,17 +134,27 @@ let uvPreviewLastFrame = 0;
 let uvPreviewProjectCache = null;
 let uvPreviewDrag = null;
 let uvPreviewTextureDirty = true;
+let uvPreviewPanelMetrics = null;
+const uvPreviewFaceLabelCanvas = document.createElement('canvas');
+let uvPreviewFaceLabelCacheKey = null;
+let uvPreviewFaceLabelFontRevision = 0;
+let texturePreviewSize = [1, 1];
 let projectTabs = [];
 let activeProjectTabId = null;
 let editingProjectTabId = null;
 let draggingProjectTabId = null;
 let draggingProjectTabInsertIndex = null;
 let selectionExpansionCache = null;
+let focusedDockHotspot = null;
+let textureUvDrag = null;
+let textureViewLayout = null;
+let textureFocusFrame = null;
 
 const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
-  'target', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'timelineFrame'
+  'target', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'timelineFrame',
+  'selectedUvFaces', 'textureView'
 ]);
 
 function projectTabById(tabId) {
@@ -178,6 +193,8 @@ function createProjectSession(project, options = {}) {
     textureAssets,
     textureGroups: [],
     activeTextureUid: preferredTexture?._uid || null,
+    selectedUvFaces: new Set(),
+    textureView: { zoom: 1, panX: 0, panY: 0 },
     timelineFrame: 0
   };
 }
@@ -447,6 +464,7 @@ function renderAll(geometryScope = 'all') {
   renderOutliner();
   renderInspector();
   renderScene();
+  updateTextureStageTransform();
   updateSelectionLabels();
 }
 
@@ -545,7 +563,7 @@ function outlinerFlag(node, key, enabled, onIcon, offIcon, onTitle, offTitle, av
 function outlinerStateMarkup(node) {
   const visible = outlinerFlag(node, 'visible', node.visible !== false, 'icon-show', 'icon-unshow', '可見', '隱藏');
   if (!state.outlinerDetailed) return visible;
-  const autoUvAvailable = ['cube', 'shape', 'bezier2d', 'bezier3d', 'group'].includes(node.type);
+  const autoUvAvailable = node.type === 'cube' || isShapeElement(node) || isBezierElement(node) || node.type === 'group';
   return [
     outlinerFlag(node, 'autoUv', nodeAutoUvEnabled(node), 'icon-uv-update', 'icon-unuv-update', '自動 UV', '不自動更新 UV', autoUvAvailable),
     outlinerFlag(node, 'exported', node.exported !== false, 'icon-save', 'icon-unsave', '參與後續格式轉換', '不參與後續格式轉換'),
@@ -557,6 +575,7 @@ function outlinerStateMarkup(node) {
 function outlinerKindMarkup(node) {
   if (node.type === 'node') return '<span class="outliner-curve-kind" aria-hidden="true">●</span>';
   if (node.type === 'bezier2d' || node.type === 'bezier3d') return `<span class="outliner-curve-kind" aria-hidden="true">⌁${node.type === 'bezier2d' ? '²' : '³'}</span>`;
+  if (isShapeElement(node)) return '<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-polygon-prism"></use></svg>';
   if (node.type !== 'locator') return `<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-${node.type}"></use></svg>`;
   return `<svg class="outliner-kind-icon" aria-hidden="true" viewBox="0 0 197.49 189.08">${LOCATOR_ICON_SHAPES}</svg>`;
 }
@@ -604,6 +623,10 @@ function isBezierElement(item) {
   return item?.type === 'bezier2d' || item?.type === 'bezier3d';
 }
 
+function isShapeElement(item) {
+  return item?.type === 'polygon_prism' || item?.type === 'shape';
+}
+
 function curveNodeEditorMarkup(item) {
   return `<div class="curve-node-list">${item.nodes.map((node, index) => {
     const displayedRotation = node.autoTangent ? item.resolvedNodeState(index).rotation : node.rotation;
@@ -615,6 +638,7 @@ function curveNodeEditorMarkup(item) {
       <div class="option-row"><span>自動切線</span><label class="switch"><input type="checkbox" data-curve-node-auto="${index}" ${node.autoTangent ? 'checked' : ''}/><i></i></label></div>
       ${item.dimension === 3 ? `<div class="option-row"><span>滾動角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-curve-node-roll="${index}" value="${round(node.roll || 0)}" /></div></div>` : ''}
       <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-curve-node-toggle="${index}" ${node.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
+      ${node.handlesEnabled ? `<div class="option-row"><span>對稱手柄</span><label class="switch"><input type="checkbox" data-curve-node-symmetric="${index}" ${node.symmetricHandles ? 'checked' : ''}/><i></i></label></div>` : ''}
       ${node.handlesEnabled ? `${vectorField('前手柄', `curve-node:${index}:handleIn`, node.handleIn)}${vectorField('後手柄', `curve-node:${index}:handleOut`, node.handleOut)}` : ''}
       <button type="button" class="curve-node-remove" data-remove-curve-node="${index}" ${item.nodes.length <= 2 ? 'disabled' : ''}>刪除節點</button>
     </section>`;
@@ -629,7 +653,7 @@ function renderInspector() {
   }
   const items = inspectorBatchNodes();
   const rotation = item.rotation || [0, 0, 0];
-  const typeLabel = item.type === 'shape' ? '程序化形狀' : item.type === 'locator' ? 'Locator'
+  const typeLabel = isShapeElement(item) ? '多邊形柱體' : item.type === 'locator' ? 'Locator'
     : item.type === 'node' ? '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
       : item.type === 'bezier3d' ? '三維貝塞爾' : item.type === 'group' ? '組' : '立方體';
   const details = item.type === 'cube' ? `
@@ -640,14 +664,18 @@ function renderInspector() {
       ${vectorField('旋轉', 'rotation', rotation, items)}
       ${scalarField('膨脹', 'inflate', item.inflate, items)}
       <div class="option-row"><span>UV 模式</span><select data-field="uvMode"><option value="box" ${item.uvMode === 'box' ? 'selected' : ''}>箱型 UV</option><option value="face" ${item.uvMode === 'face' ? 'selected' : ''}>逐面 UV</option></select></div>`
-    : item.type === 'shape' ? `
-      <div class="field-title"><span>形狀參數</span><span>${item.shapeType}</span></div>
+    : isShapeElement(item) ? `
+      <div class="field-title"><span>多邊形柱體</span><span>POLYGON PRISM</span></div>
       ${vectorField('位置', 'origin', item.origin, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
       ${parameterField('半徑', 'radius', item.parameters.radius, .1, items)}
       ${parameterField('高度', 'height', item.parameters.height, .1, items)}
       ${parameterField('邊數', 'sides', item.parameters.sides, 1, items)}
-      ${parameterField('Cube 邊長', 'cubeSize', item.parameters.cubeSize, .0625, items)}
+      ${parameterField('Cube 吸附單位', 'cubeSize', item.parameters.cubeSize, .0625, items)}
+      <div class="option-row"><span>啟用內半徑</span><label class="switch"><input type="checkbox" data-shape-inner-radius ${item.parameters.innerRadiusEnabled ? 'checked' : ''}/><i></i></label></div>
+      ${item.parameters.innerRadiusEnabled ? `
+        <div class="option-row"><span>內半徑模式</span><select data-shape-inner-radius-mode><option value="radius" ${item.parameters.innerRadiusMode !== 'depth' ? 'selected' : ''}>實際內半徑</option><option value="depth" ${item.parameters.innerRadiusMode === 'depth' ? 'selected' : ''}>Cube 向內延伸</option></select></div>
+        ${parameterField(item.parameters.innerRadiusMode === 'depth' ? '向內延伸距離' : '實際內半徑', 'innerRadius', item.parameters.innerRadius, .1, items)}` : ''}
       <div class="option-row"><span>柱體吸附</span><select data-shape-snap-mode><option value="cube" ${item.parameters.snapMode === 'cube' ? 'selected' : ''}>按內含 Cube 邊長</option><option value="bounds" ${item.parameters.snapMode === 'bounds' ? 'selected' : ''}>按整體邊長</option></select></div>
       <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
     : item.type === 'locator' ? `
@@ -659,6 +687,7 @@ function renderInspector() {
       ${vectorField('位置', 'position', item.position, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
       <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-field="handlesEnabled" ${item.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
+      ${item.handlesEnabled ? `<div class="option-row"><span>對稱手柄</span><label class="switch"><input type="checkbox" data-field="symmetricHandles" ${item.symmetricHandles ? 'checked' : ''}/><i></i></label></div>` : ''}
       ${item.handlesEnabled ? `${vectorField('前手柄', 'handleIn', item.handleIn, items)}${vectorField('後手柄', 'handleOut', item.handleOut, items)}` : ''}`
     : isBezierElement(item) ? `
       <div class="field-title"><span>${item.dimension === 2 ? '二維' : '三維'}貝塞爾</span><span>${item.nodes.length} 節點</span></div>
@@ -685,7 +714,7 @@ function renderInspector() {
     <div class="field-section">
       ${details}
     </div>
-    ${item.type === 'cube' || item.type === 'shape' || isBezierElement(item) || item.type === 'group' ? `
+    ${item.type === 'cube' || isShapeElement(item) || isBezierElement(item) || item.type === 'group' ? `
     <div class="field-section">
       <div class="field-title"><span>外觀</span><span>預覽色</span></div>
       ${item.color ? `<div class="option-row"><span>材質色</span><input type="color" data-field="color" value="${item.color}" /></div>` : ''}
@@ -710,7 +739,7 @@ function parameterField(label, key, value, step, nodes = [selected()]) {
     const first = nodes[0]?.parameters?.[key];
     return Number.isFinite(first) && nodes.every(node => Number.isFinite(node?.parameters?.[key]) && Math.abs(node.parameters[key] - first) < 1e-9) ? first : null;
   })();
-  const minimum = key === 'sides' ? 3 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1;
+  const minimum = key === 'sides' ? 3 : key === 'innerRadius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1;
   return `<div class="option-row"><span>${label}</span><div class="number-wrap" style="width:68px"><input type="number" min="${minimum}" step="${step}" data-parameter="${key}" ${numberInputAttributes(displayed)} /></div></div>`;
 }
 
@@ -761,14 +790,19 @@ function bindInspector() {
       snapshot();
       const value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
       const targets = key === 'name' ? [item]
-        : key === 'shade' ? items.filter(node => ['cube', 'shape', 'bezier2d', 'bezier3d', 'group'].includes(node.type))
+        : key === 'shade' ? items.filter(node => node.type === 'cube' || isShapeElement(node) || isBezierElement(node) || node.type === 'group')
         : key === 'inflate' ? items.filter(node => ['cube', 'group'].includes(node.type))
         : key === 'uvMode' ? items.filter(node => node.type === 'cube')
         : key === 'color' ? items.filter(node => typeof node.color === 'string')
         : items.filter(node => key in node);
       for (const target of targets) {
         if (['visible', 'shade', 'autoUv', 'exported', 'locked'].includes(key)) setNodeFlag(target, key, value);
-        else target[key] = value;
+        else {
+          target[key] = value;
+          if (key === 'symmetricHandles' && value && target.type === 'node') {
+            setCurveHandle(target, 'handleOut', target.handleOut, false);
+          }
+        }
       }
       if (key === 'locked') sceneRenderer.invalidateLockState();
       markDirty();
@@ -792,7 +826,10 @@ function bindInspector() {
         const planarVector = property === 'position' || property === 'handleIn' || property === 'handleOut';
         const lockedPlanarAxis = item.dimension === 2
           && ((planarVector && axis === 1) || (property === 'rotation' && axis !== 1));
-        node[property][axis] = lockedPlanarAxis ? 0 : value;
+        const nextVector = [...node[property]];
+        nextVector[axis] = lockedPlanarAxis ? 0 : value;
+        if (property === 'handleIn' || property === 'handleOut') setCurveHandle(node, property, nextVector, item.dimension === 2);
+        else node[property] = nextVector;
         if (item.dimension === 2 && planarVector) node[property][1] = 0;
         if (item.dimension === 2 && property === 'rotation') {
           node.rotation[0] = 0;
@@ -815,6 +852,10 @@ function bindInspector() {
           const nextPivot = [...target.pivot];
           nextPivot[axis] = nextValue;
           setPivotPreservingGeometry(state.project, target, nextPivot);
+        } else if ((field === 'handleIn' || field === 'handleOut') && target.type === 'node') {
+          const nextHandle = [...target[field]];
+          nextHandle[axis] = nextValue;
+          setCurveHandle(target, field, nextHandle, false);
         } else target[field][axis] = nextValue;
       }
       const displayedValue = item.type === 'cube' && field === 'size' && !state.allowNegativeSize ? Math.max(0, value) : value;
@@ -834,7 +875,7 @@ function bindInspector() {
       delete input.dataset.mixed;
       const key = input.dataset.parameter;
       const nextValue = key === 'sides' ? Math.max(3, Math.round(value))
-        : Math.max(key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1, value);
+        : Math.max(key === 'innerRadius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1, value);
       for (const target of items.filter(node => node.parameters && key in node.parameters)) {
         target.parameters[key] = nextValue;
       }
@@ -846,7 +887,21 @@ function bindInspector() {
   });
   $('[data-shape-snap-mode]', inspector)?.addEventListener('change', event => {
     snapshot();
-    for (const target of items.filter(node => node.type === 'shape')) target.parameters.snapMode = event.target.value;
+    for (const target of items.filter(isShapeElement)) target.parameters.snapMode = event.target.value;
+    markDirty(); renderAll('selection');
+  });
+  $('[data-shape-inner-radius]', inspector)?.addEventListener('change', event => {
+    snapshot();
+    for (const target of items.filter(isShapeElement)) {
+      target.parameters.innerRadiusEnabled = event.target.checked;
+    }
+    markDirty(); renderAll('selection');
+  });
+  $('[data-shape-inner-radius-mode]', inspector)?.addEventListener('change', event => {
+    snapshot();
+    for (const target of items.filter(isShapeElement)) {
+      target.parameters.innerRadiusMode = event.target.value === 'depth' ? 'depth' : 'radius';
+    }
     markDirty(); renderAll('selection');
   });
   $('[data-curve-segmentation]', inspector)?.addEventListener('change', event => {
@@ -862,6 +917,14 @@ function bindInspector() {
     const node = item.nodes?.[Number(toggle.dataset.curveNodeToggle)];
     if (!node) return;
     snapshot(); node.handlesEnabled = toggle.checked; markDirty(); renderAll('selection');
+  }));
+  $$('[data-curve-node-symmetric]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    const node = item.nodes?.[Number(toggle.dataset.curveNodeSymmetric)];
+    if (!node) return;
+    snapshot();
+    node.symmetricHandles = toggle.checked;
+    if (toggle.checked) setCurveHandle(node, 'handleOut', node.handleOut, item.dimension === 2);
+    markDirty(); renderAll('selection');
   }));
   $$('[data-curve-node-auto]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const index = Number(toggle.dataset.curveNodeAuto);
@@ -936,6 +999,7 @@ function refreshSelectionUi() {
   updateToolOptions();
   renderInspector();
   renderScene();
+  renderTextureUvOverlay();
   updateSelectionLabels();
 }
 
@@ -1119,7 +1183,7 @@ function addCube() {
 
 function addShape() {
   snapshot();
-  const shape = new Shape({ name: 'cylinder_shape', origin: [0, 2, 0] });
+  const shape = new Shape({ name: 'polygon_prism', origin: [0, 2, 0] });
   state.project.elements.push(shape);
   insertNewNodeUid(shape.uid);
   selectCreatedNode(shape.uid);
@@ -1134,16 +1198,6 @@ function addLocator() {
   insertNewNodeUid(locator.uid);
   selectCreatedNode(locator.uid);
   markDirty(); renderAll(); toast('已新增 Locator');
-}
-
-function addNodeElement() {
-  snapshot();
-  const count = state.project.elements.filter(item => item.type === 'node').length + 1;
-  const node = new NodeElement({ name: `node_${count}`, position: [0, 4, 0] });
-  state.project.elements.push(node);
-  insertNewNodeUid(node.uid);
-  selectCreatedNode(node.uid);
-  markDirty(); renderAll(); toast('已新增節點');
 }
 
 function addBezierElement(dimension) {
@@ -1217,6 +1271,114 @@ function deleteSelected() {
   state.selectionAnchorUid = null;
   state.selectedCurveNodeIndex = null;
   markDirty(); renderAll(); toast(selectedIds.length > 1 ? `已刪除 ${selectedIds.length} 項` : '物件已刪除');
+}
+
+let elementClipboard = null;
+
+function captureSelectedElements() {
+  const order = new Map((state.outlinerRows || []).map((row, index) => [row.node.uid, index]));
+  const roots = topLevelSelectedUids()
+    .sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity));
+  if (!roots.length) return null;
+  const records = new Map();
+  const visit = uidValue => {
+    if (records.has(uidValue)) return;
+    const node = state.project.getNode(uidValue);
+    if (!node) return;
+    records.set(uidValue, structuredClone(node));
+    if (node.type === 'group') node.children.forEach(visit);
+  };
+  roots.forEach(visit);
+  return { roots: [...roots], records: [...records.entries()] };
+}
+
+function copySelected({ notify = true } = {}) {
+  const payload = captureSelectedElements();
+  if (!payload) return false;
+  elementClipboard = payload;
+  if (notify) toast(payload.roots.length > 1 ? `已複製 ${payload.roots.length} 項` : '已複製選中項');
+  return true;
+}
+
+function instantiateClipboard(payload, renameRoots = false) {
+  if (!payload?.records?.length) return null;
+  const instances = new Map();
+  const rootSet = new Set(payload.roots);
+  for (const [oldUid, source] of payload.records) {
+    const data = structuredClone(source);
+    delete data.uid;
+    delete data.uuid;
+    if (renameRoots && rootSet.has(oldUid)) data.name = `${data.name || data.type} 副本`;
+    let node;
+    if (data.type === 'group') node = new Group({ ...data, children: [] });
+    else if (data.type === 'shape' || data.type === 'polygon_prism') node = new Shape(data);
+    else if (data.type === 'locator') node = new Locator(data);
+    else if (data.type === 'node') node = new NodeElement(data);
+    else if (data.type === 'bezier2d') node = new BezierElement(data, 2);
+    else if (data.type === 'bezier3d') node = new BezierElement(data, 3);
+    else node = new Cube(data);
+    instances.set(oldUid, node);
+  }
+  for (const [oldUid, source] of payload.records) {
+    const node = instances.get(oldUid);
+    if (node?.type === 'group') node.children = (source.children || [])
+      .map(childUid => instances.get(childUid)?.uid).filter(Boolean);
+  }
+  return {
+    nodes: [...instances.values()],
+    roots: payload.roots.map(uidValue => instances.get(uidValue)).filter(Boolean)
+  };
+}
+
+function insertClonedRoots(cloned, sourceRootUids = null) {
+  const roots = cloned.roots.map(node => node.uid);
+  if (sourceRootUids?.length) {
+    sourceRootUids.forEach((sourceUid, index) => {
+      const { items } = nodeContainer(sourceUid);
+      const sourceIndex = items.indexOf(sourceUid);
+      items.splice(sourceIndex < 0 ? items.length : sourceIndex + 1, 0, roots[index]);
+    });
+    return;
+  }
+  const selectedIds = selectedNodeUids();
+  const reference = state.project.getNode(state.selectedUid);
+  if (selectedIds.length === 1 && reference?.type === 'group') {
+    reference.children.push(...roots);
+    state.collapsedGroups.delete(reference.uid);
+    return;
+  }
+  if (reference) {
+    const { items } = nodeContainer(reference.uid);
+    const index = items.indexOf(reference.uid);
+    items.splice(index < 0 ? items.length : index + 1, 0, ...roots);
+  } else state.project.outliner.push(...roots);
+}
+
+function pasteElements({ inPlace = false } = {}) {
+  const payload = inPlace ? captureSelectedElements() : elementClipboard;
+  if (!payload) return toast(inPlace ? '沒有可複製的選中項' : '元素剪貼簿是空的');
+  const cloned = instantiateClipboard(payload, true);
+  if (!cloned?.roots.length) return;
+  snapshot();
+  for (const node of cloned.nodes) {
+    if (node.type === 'group') state.project.groups.push(node);
+    else state.project.elements.push(node);
+  }
+  insertClonedRoots(cloned, inPlace ? payload.roots : null);
+  state.project.invalidateHierarchyIndex();
+  state.selectedUids = new Set(cloned.roots.map(node => node.uid));
+  state.selectedUid = cloned.roots.at(-1).uid;
+  state.selectionAnchorUid = state.selectedUid;
+  state.selectedCurveNodeIndex = null;
+  markDirty(); renderAll();
+  toast(inPlace ? '已就地複製選中項' : '已貼上元素');
+}
+
+function cutSelected() {
+  if (!copySelected({ notify: false })) return;
+  const count = elementClipboard.roots.length;
+  deleteSelected();
+  toast(count > 1 ? `已剪切 ${count} 項` : '已剪切選中項');
 }
 
 function clearOutlinerDropState({ keepDragging = false } = {}) {
@@ -1326,12 +1488,15 @@ function uvPreviewIsActive() {
 function uvPreviewElements() {
   return selectedElementUids()
     .map(uidValue => state.project.getNode(uidValue))
-    .filter(element => element && (element.type === 'cube' || element.type === 'shape' || isBezierElement(element)));
+    .filter(element => element && (element.type === 'cube' || isShapeElement(element) || isBezierElement(element)));
 }
 
 function getUvPreviewProject() {
   const sourceElements = uvPreviewElements();
   const key = sourceElements.map(element => element.uid).sort().join('|');
+  if (state.uvPreviewSelectedFace && !sourceElements.some(element => element.uid === state.uvPreviewSelectedFace.uid)) {
+    state.uvPreviewSelectedFace = null;
+  }
   if (uvPreviewProjectCache?.source === state.project
     && uvPreviewProjectCache.key === key
     && uvPreviewProjectCache.hierarchyRevision === state.project.hierarchyRevision) return uvPreviewProjectCache;
@@ -1386,12 +1551,190 @@ function uvPreviewFit(cache) {
   return cache.fit;
 }
 
+function syncUvPreviewPanelAspect(textureWidth, textureHeight) {
+  const panel = dockManager?.get('uvPreview');
+  if (!panel || panel.state.collapsed || panel.element.hidden) {
+    uvPreviewPanelMetrics = null;
+    return;
+  }
+  const width = Math.max(1, panel.element.getBoundingClientRect().width || panel.state.width);
+  const ratio = Math.max(.001, textureHeight / textureWidth);
+  const current = { width, ratio };
+  const previous = uvPreviewPanelMetrics;
+  uvPreviewPanelMetrics = current;
+  if (!previous) return;
+
+  const widthChanged = Math.abs(current.width - previous.width) >= .75;
+  const ratioChanged = Math.abs(current.ratio - previous.ratio) >= .0001;
+  if (!widthChanged && !ratioChanged) return;
+
+  // Keep manual vertical resizing intact. Only compensate for the amount by which
+  // a horizontal resize (or texture aspect change) changes the preview itself.
+  const previousPreviewHeight = Math.max(1, (previous.width - 16) * previous.ratio);
+  const currentPreviewHeight = Math.max(1, (current.width - 16) * current.ratio);
+  const heightDelta = currentPreviewHeight - previousPreviewHeight;
+  if (Math.abs(heightDelta) < .5) return;
+  const maximum = panel.state.dock === 'floating'
+    ? Math.max(180, window.innerHeight - panel.state.y)
+    : Math.max(180, window.innerHeight - 120);
+  const desired = Math.min(maximum, Math.max(180, panel.state.height + heightDelta));
+  if (Math.abs(panel.state.height - desired) < .5) return;
+  panel.state.height = desired;
+  dockManager.applyPanelState(panel);
+}
+
 function setUvPreviewPlaceholder(message, visible) {
   const empty = $('#uvPreviewEmpty');
   empty.textContent = message;
   empty.hidden = !visible;
   uvPreviewCanvas.hidden = visible;
+  if (visible) {
+    $('#uvPreviewSize').textContent = '—';
+    $('#uvPreviewFaceOverlay').innerHTML = '';
+    $('#uvSelectedFaceLabel').textContent = '未選擇面';
+    $$('[data-uv-face-action]').forEach(button => button.disabled = true);
+  }
   $('[data-panel="uvPreview"]')?.classList.toggle('preview-disabled', !state.uvPreviewEnabled);
+}
+
+const UV_FACE_LABELS = Object.freeze({ north: '北面', south: '南面', east: '東面', west: '西面', up: '上面', down: '下面' });
+
+function textureOrderedFacePoints(points, uv, rotation) {
+  const slots = createBlockbenchFaceUvSlots(uv, rotation);
+  const uValues = slots.map(slot => slot[0]), vValues = slots.map(slot => slot[1]);
+  const minU = Math.min(...uValues), maxU = Math.max(...uValues);
+  const minV = Math.min(...vValues), maxV = Math.max(...vValues);
+  const used = new Set();
+  return [[minU, minV], [maxU, minV], [minU, maxV], [maxU, maxV]].map(([u, v]) => {
+    let bestIndex = -1, bestDistance = Infinity;
+    slots.forEach((slot, index) => {
+      if (used.has(index)) return;
+      const distance = (slot[0] - u) ** 2 + (slot[1] - v) ** 2;
+      if (distance < bestDistance) { bestIndex = index; bestDistance = distance; }
+    });
+    if (bestIndex < 0) bestIndex = used.size;
+    used.add(bestIndex);
+    return points[bestIndex];
+  });
+}
+
+function buildUvPreviewFaceLabel() {
+  const selection = state.uvPreviewSelectedFace;
+  const data = selectedUvFaceData(false);
+  const points = selection?.points || [];
+  if (!data || points.length !== 4) return null;
+  const [u1, v1, u2, v2] = data.uv;
+  const rotation = ((Math.round(Number(data.face.rotation) || 0) % 360) + 360) % 360;
+  const info = `↻${rotation}°${u2 < u1 ? ' ↔' : ''}${v2 < v1 ? ' ↕' : ''}`;
+  const cacheKey = `${uvPreviewFaceLabelFontRevision}:${info}`;
+  if (uvPreviewFaceLabelCacheKey !== cacheKey) {
+    const context = uvPreviewFaceLabelCanvas.getContext('2d');
+    const font = '12px "Fusion Pixel Latin", monospace';
+    context.font = font;
+    const metrics = context.measureText(info);
+    const ascent = Math.ceil(metrics.actualBoundingBoxAscent || 10);
+    const descent = Math.ceil(metrics.actualBoundingBoxDescent || 2);
+    uvPreviewFaceLabelCanvas.width = Math.max(1, Math.ceil(metrics.width) + 4);
+    uvPreviewFaceLabelCanvas.height = Math.max(1, ascent + descent + 4);
+    context.clearRect(0, 0, uvPreviewFaceLabelCanvas.width, uvPreviewFaceLabelCanvas.height);
+    context.imageSmoothingEnabled = false;
+    context.font = font;
+    context.textBaseline = 'alphabetic';
+    context.fillStyle = '#080908';
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) context.fillText(info, 2 + dx, 2 + ascent + dy);
+    context.fillStyle = '#f5f6f2';
+    context.fillText(info, 2, 2 + ascent);
+    uvPreviewFaceLabelCacheKey = cacheKey;
+  }
+
+  const uVector = points[1].map((value, axis) => value - points[0][axis]);
+  const vVector = points[2].map((value, axis) => value - points[0][axis]);
+  const uLength = Math.hypot(...uVector), vLength = Math.hypot(...vVector);
+  if (uLength < 1e-5 || vLength < 1e-5) return null;
+  const uDirection = normalize3(uVector), vDirection = normalize3(vVector);
+  const textureAspect = uvPreviewFaceLabelCanvas.width / uvPreviewFaceLabelCanvas.height;
+  // Deliberately size from the longest face edge. Thin faces must not crush
+  // the label merely because their other axis is short.
+  const labelHeight = Math.max(uLength, vLength) * .18;
+  const labelWidth = labelHeight * textureAspect;
+  const origin = addScaled3(addScaled3(points[0], uDirection, uLength * .055), vDirection, vLength * .035);
+  const topRight = addScaled3(origin, uDirection, labelWidth);
+  const bottomLeft = addScaled3(origin, vDirection, labelHeight);
+  const bottomRight = addScaled3(topRight, vDirection, labelHeight);
+  return {
+    key: cacheKey,
+    source: uvPreviewFaceLabelCanvas,
+    quad: [origin, topRight, bottomLeft, bottomRight]
+  };
+}
+
+function selectedUvFaceData(create = false) {
+  const selection = state.uvPreviewSelectedFace;
+  const cube = selection && state.project.getNode(selection.uid);
+  if (!cube || cube.type !== 'cube' || !selection.faceName) return null;
+  if (!cube.faces) {
+    if (!create) return { cube, face: {}, uv: getBlockbenchBoxUv(cube, selection.faceName) };
+    cube.faces = {};
+  }
+  if (!cube.faces[selection.faceName]) {
+    if (!create) return { cube, face: {}, uv: getBlockbenchBoxUv(cube, selection.faceName) };
+    cube.faces[selection.faceName] = { uv: getBlockbenchBoxUv(cube, selection.faceName), rotation: 0 };
+  }
+  const face = cube.faces[selection.faceName];
+  if (face === null) return null;
+  return { cube, face, uv: face.uv?.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, selection.faceName) };
+}
+
+function updateUvFaceUi() {
+  const selection = state.uvPreviewSelectedFace;
+  const data = selectedUvFaceData(false);
+  const controls = $$('[data-uv-face-action]');
+  controls.forEach(button => button.disabled = !data);
+  const label = $('#uvSelectedFaceLabel');
+  const size = $('#uvPreviewSize');
+  const overlay = $('#uvPreviewFaceOverlay');
+  if (!data || !selection) {
+    label.textContent = '未選擇面';
+    size.textContent = '—';
+    overlay.innerHTML = '';
+    controls.forEach(button => button.classList.remove('active'));
+    return;
+  }
+  const [u1, v1, u2, v2] = data.uv;
+  const rotation = ((Math.round(Number(data.face.rotation) || 0) % 360) + 360) % 360;
+  const mirrorX = u2 < u1, mirrorY = v2 < v1;
+  label.textContent = `${data.cube.name} · ${UV_FACE_LABELS[selection.faceName] || selection.faceName}`;
+  size.textContent = `${formatNumber(Math.abs(u2 - u1))} × ${formatNumber(Math.abs(v2 - v1))} px`;
+  $('[data-uv-face-action="mirror-x"]').classList.toggle('active', mirrorX);
+  $('[data-uv-face-action="mirror-y"]').classList.toggle('active', mirrorY);
+  const points = selection.points || [];
+  const projected = points.map(point => uvPreviewRenderer.projectPoint(point));
+  if (projected.length !== 4 || projected.some(point => point.behind || point.depth < -1 || point.depth > 1)) {
+    overlay.innerHTML = ''; return;
+  }
+  const width = uvPreviewViewport.clientWidth, height = uvPreviewViewport.clientHeight;
+  overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  const perimeter = [projected[0], projected[1], projected[3], projected[2]];
+  const texturePoints = textureOrderedFacePoints(points, data.uv, rotation);
+  const textureProjected = texturePoints.map(point => uvPreviewRenderer.projectPoint(point));
+  const [textureTopLeft, textureTopRight] = textureProjected;
+  overlay.innerHTML = `<path class="uv-preview-face-outline" d="M${perimeter.map(point => `${point.x},${point.y}`).join(' L')} Z"/>
+    <path class="uv-preview-face-north" d="M${textureTopLeft.x},${textureTopLeft.y} L${textureTopRight.x},${textureTopRight.y}"/>`;
+}
+
+function editSelectedUvFace(action) {
+  const data = selectedUvFaceData(true);
+  if (!data) return toast('請先在 UV 預覽中選擇 Cube 的面');
+  snapshot();
+  if (!Array.isArray(data.face.uv) || data.face.uv.length < 4) data.face.uv = [...data.uv];
+  if (action === 'rotate') data.face.rotation = ((Number(data.face.rotation) || 0) + 90) % 360;
+  if (action === 'mirror-x') [data.face.uv[0], data.face.uv[2]] = [data.face.uv[2], data.face.uv[0]];
+  if (action === 'mirror-y') [data.face.uv[1], data.face.uv[3]] = [data.face.uv[3], data.face.uv[1]];
+  data.cube.autoUv = false;
+  markDirty();
+  uvPreviewProjectCache = null;
+  invalidateSelectionRenderGeometry();
+  renderScene();
 }
 
 function renderUvPreview() {
@@ -1413,9 +1756,13 @@ function renderUvPreview() {
     uvPreviewTextureDirty = false;
   }
   cache.project.textureSize = state.project.textureSize;
-  cache.project.renderType = state.uvPreviewFaceColors ? 'solid' : state.project.renderType;
+  cache.project.renderType = state.project.renderType;
   cache.project.cullFaces = state.project.cullFaces;
   const fit = uvPreviewFit(cache);
+  const textureWidth = Math.max(1, Number(state.project.textureSize?.[0]) || 1);
+  const textureHeight = Math.max(1, Number(state.project.textureSize?.[1]) || 1);
+  uvPreviewViewport.style.setProperty('--uv-preview-aspect', `${textureWidth} / ${textureHeight}`);
+  syncUvPreviewPanelAspect(textureWidth, textureHeight);
   uvPreviewRenderer.render(cache.project, null, {
     projection: 'perspective',
     zoom: fit.zoom,
@@ -1425,17 +1772,19 @@ function renderUvPreview() {
     pitch: state.uvPreviewPitch,
     target: fit.target,
     selectedUids: new Set(),
-    renderMode: state.uvPreviewFaceColors ? 'solid' : 'textured',
+    renderMode: 'textured',
     previewShade: true,
     grid: false,
     wire: false,
     geometryOnly: true,
     snap: state.settingsSnap,
     faceDistinct: state.uvPreviewFaceColors,
+    faceLabel: buildUvPreviewFaceLabel(),
     lockedDefaultAlpha: 100,
     lockedHoverFade: false,
     editorOverlayLines: []
   });
+  updateUvFaceUi();
   return true;
 }
 
@@ -1477,11 +1826,38 @@ function refreshUvPreview() {
 function renderScene() {
   if (sceneRenderFrame !== null) cancelAnimationFrame(sceneRenderFrame);
   sceneRenderFrame = null;
-  sceneRenderer.render(state.project, state.selectedUid, { ...state, editorOverlayLines: buildKnifeOverlayLines() });
+  sceneRenderer.render(state.project, state.selectedUid, { ...state, editorOverlayLines: buildEditorOverlayLines() });
   updateLocatorOverlay();
+  updateFaceSelectionOverlay();
   updateTransformGizmo();
   updateAxisWidget();
   refreshUvPreview();
+}
+
+function updateFaceSelectionOverlay() {
+  const overlay = $('#faceSelectionOverlay');
+  if (!overlay) return;
+  const rect = sceneCanvas.getBoundingClientRect();
+  overlay.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+  if (!state.selectedUvFaces.size || rect.width < 1 || rect.height < 1) {
+    overlay.innerHTML = '';
+    overlay.setAttribute('hidden', '');
+    return;
+  }
+  const selectedElements = getSelectionExpansion().elementSet;
+  const paths = [];
+  for (const key of state.selectedUvFaces) {
+    const parsed = parseUvFaceKey(key);
+    let quad = parsed && sceneRenderer.getFaceQuad(parsed.uid, parsed.faceName);
+    if (!quad?.length) continue;
+    if (selectedElements.has(parsed.uid)) quad = quad.map(point => sceneRenderer.transformSelectionPreviewPoint(point));
+    const projected = quad.map(point => sceneRenderer.projectPoint(point));
+    if (projected.some(point => !point || point.behind || point.depth < -1 || point.depth > 1)) continue;
+    const perimeter = [projected[0], projected[1], projected[3], projected[2]];
+    paths.push(`M${perimeter.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join('L')}Z`);
+  }
+  overlay.innerHTML = paths.length ? `<path d="${paths.join('')}"/>` : '';
+  overlay.toggleAttribute('hidden', !paths.length);
 }
 
 function scheduleSceneRender() {
@@ -1493,7 +1869,7 @@ function scheduleSceneRender() {
 }
 
 function renderLockedHoverFrame() {
-  sceneRenderer.redrawLockedOverlay({ ...state, editorOverlayLines: buildKnifeOverlayLines() });
+  sceneRenderer.redrawLockedOverlay({ ...state, editorOverlayLines: buildEditorOverlayLines() });
   updateLocatorHoverOpacity();
 }
 
@@ -1838,6 +2214,16 @@ function bakeCurveNodeTangent(curve, index) {
   return node;
 }
 
+function setCurveHandle(node, property, value, planar = false) {
+  const handle = value.map(component => Number(component) || 0);
+  if (planar) handle[1] = 0;
+  node[property] = handle;
+  if (node.symmetricHandles) {
+    const opposite = property === 'handleIn' ? 'handleOut' : 'handleIn';
+    node[opposite] = handle.map(component => -component);
+  }
+}
+
 function getCurveNodeTransformAxes(context) {
   const chain = [...state.project.getGroupChain(context.curve.uid), { pivot: [0, 0, 0], rotation: context.curve.rotation || [0, 0, 0] }];
   return [0, 1, 2].map(axis => {
@@ -2128,6 +2514,29 @@ function pivotMarkerMarkup(origin) {
   </g>`;
 }
 
+function curveEditorOverlayMarkup(curve) {
+  if (!isBezierElement(curve)) return '';
+  const nodes = sceneRenderer.getCurveNodeWorldPoints(state.project, curve.uid);
+  const handles = sceneRenderer.getCurveHandleWorldPoints(state.project, curve.uid, null);
+  const nodeMarkup = nodes.map(entry => {
+    const point = projectViewportPoint(entry.point);
+    if (point.behind || point.depth < -1 || point.depth > 1) return '';
+    const active = entry.index === state.selectedCurveNodeIndex ? ' active' : '';
+    return `<g class="curve-node-marker${active}" aria-label="曲線節點">
+      <path class="curve-node-marker-cross" d="M${point.x - 12},${point.y} H${point.x + 12} M${point.x},${point.y - 12} V${point.y + 12}"/>
+      <path class="curve-node-marker-ring" d="M${point.x},${point.y - 8} L${point.x + 8},${point.y} L${point.x},${point.y + 8} L${point.x - 8},${point.y} Z"/>
+      <circle class="curve-node-marker-core" cx="${point.x}" cy="${point.y}" r="2.8"/>
+    </g>`;
+  }).join('');
+  const handleMarkup = handles.map(entry => {
+    const point = projectViewportPoint(entry.point);
+    if (point.behind || point.depth < -1 || point.depth > 1) return '';
+    const radius = 5.5;
+    return `<path class="curve-handle-head" aria-label="貝塞爾手柄" d="M${point.x},${point.y - radius} L${point.x + radius},${point.y} L${point.x},${point.y + radius} L${point.x - radius},${point.y} Z"/>`;
+  }).join('');
+  return `<g class="curve-editor-overlay">${nodeMarkup}${handleMarkup}</g>`;
+}
+
 function frontRingGeometry(origin, axis, radius, cameraFrame) {
   const [u, v] = axisBasis(axis);
   let path = '', drawing = false, group = [], groups = [];
@@ -2307,14 +2716,22 @@ function updateTransformGizmo() {
   const item = selected();
   const curveNodeContext = activeCurveNodeContext();
   const selectionContext = getSelectionTransformContext();
-  if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)
-    || (state.tool === 'resize' && (curveNodeContext || (!selectionContext.multiple && !['cube', 'shape'].includes(item.type))))) {
-    gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null; return;
-  }
   const rect = sceneCanvas.getBoundingClientRect();
   const width = rect.width, height = rect.height;
+  const curveOverlay = curveEditorOverlayMarkup(item);
+  if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)
+    || (state.tool === 'resize' && (curveNodeContext || (!selectionContext.multiple && item.type !== 'cube' && !isShapeElement(item))))) {
+    state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
+    if (curveOverlay && item && !isEffectivelyLocked(item.uid)) {
+      gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      gizmo.innerHTML = curveOverlay;
+      gizmo.removeAttribute('hidden');
+    } else { gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; }
+    return;
+  }
   if (state.tool === 'vertexSnap') {
     renderVertexSnapGizmo(gizmo, width, height);
+    gizmo.insertAdjacentHTML('beforeend', curveOverlay);
     return;
   }
   if (state.tool === 'pivot' && selectionContext.multiple && !selectionContext.commonGroup) {
@@ -2417,15 +2834,433 @@ function updateTransformGizmo() {
     active?.classList.add('active');
     state.dragging.handleElement = active;
   }
+  gizmo.insertAdjacentHTML('beforeend', curveOverlay);
   gizmo.removeAttribute('hidden');
 }
 
 function updateTexturePreviewFrame(width, height) {
   const safeWidth = Math.max(1, Number(width) || 1);
   const safeHeight = Math.max(1, Number(height) || 1);
+  texturePreviewSize = [safeWidth, safeHeight];
   const preview = $('#texturePreview');
   preview.style.setProperty('--texture-aspect', `${safeWidth} / ${safeHeight}`);
   $('.texture-preview > span').textContent = `${safeWidth} × ${safeHeight}`;
+  syncTexturePreviewPriority();
+  updateTextureStageTransform();
+}
+
+function uvFaceKey(uidValue, faceName) {
+  return `${uidValue}::${faceName}`;
+}
+
+function parseUvFaceKey(key) {
+  const separator = key.lastIndexOf('::');
+  return separator < 0 ? null : { uid: key.slice(0, separator), faceName: key.slice(separator + 2) };
+}
+
+function textureUvEntries() {
+  const entries = [];
+  for (const uidValue of selectedElementUids()) {
+    const cube = state.project.getNode(uidValue);
+    if (cube?.type !== 'cube') continue;
+    for (const faceName of CUBE_FACE_NAMES) {
+      const face = cube.faces?.[faceName];
+      if (face === null || face?.enabled === false) continue;
+      let uv = Array.isArray(face?.uv) && face.uv.length >= 4
+        ? face.uv.map(Number)
+        : getBlockbenchBoxUv(cube, faceName).map(Number);
+      if (!uv.every(Number.isFinite)) uv = getBlockbenchBoxUv(cube, faceName).map(Number);
+      entries.push({ key: uvFaceKey(cube.uid, faceName), uid: cube.uid, cube, faceName, face, uv });
+    }
+  }
+  return entries;
+}
+
+function selectedTextureUvEntries(entries = textureUvEntries()) {
+  const available = new Set(entries.map(entry => entry.key));
+  state.selectedUvFaces = new Set([...state.selectedUvFaces].filter(key => available.has(key)));
+  return entries.filter(entry => state.selectedUvFaces.has(entry.key));
+}
+
+function normalizedUvBounds(entries) {
+  if (!entries.length) return null;
+  const u = entries.flatMap(entry => [entry.uv[0], entry.uv[2]]);
+  const v = entries.flatMap(entry => [entry.uv[1], entry.uv[3]]);
+  return { minU: Math.min(...u), minV: Math.min(...v), maxU: Math.max(...u), maxV: Math.max(...v) };
+}
+
+function textureUvPath(entries, layout) {
+  const screen = (value, offset) => Math.round(offset + value * layout.scale) + .5;
+  return entries.map(({ uv }) => {
+    const [u1, v1, u2, v2] = uv;
+    const x1 = screen(u1, layout.left), y1 = screen(v1, layout.top);
+    const x2 = screen(u2, layout.left), y2 = screen(v2, layout.top);
+    return `M${x1},${y1}H${x2}V${y2}H${x1}Z`;
+  }).join('');
+}
+
+function updateTextureUvFields(selectedEntries) {
+  $$('[data-uv-coordinate]').forEach(input => {
+    const coordinate = Number(input.dataset.uvCoordinate);
+    const first = selectedEntries[0]?.uv[coordinate];
+    const shared = selectedEntries.length && selectedEntries.every(entry => Math.abs(entry.uv[coordinate] - first) < 1e-8);
+    if (document.activeElement !== input) input.value = shared ? String(round(first)) : '';
+    input.disabled = !selectedEntries.length;
+    input.dataset.mixed = selectedEntries.length && !shared ? 'true' : 'false';
+  });
+}
+
+function renderTextureUvOverlay() {
+  const overlay = $('#textureUvOverlay');
+  if (!overlay || !textureViewLayout) return;
+  const layout = textureViewLayout;
+  overlay.setAttribute('viewBox', `0 0 ${layout.viewportWidth} ${layout.viewportHeight}`);
+  const entries = textureUvEntries();
+  const selectedEntries = selectedTextureUvEntries(entries);
+  const allPath = textureUvPath(entries, layout);
+  const selectedPath = textureUvPath(selectedEntries, layout);
+  const bounds = normalizedUvBounds(selectedEntries);
+  let boundsMarkup = '';
+  if (bounds) {
+    const { minU, minV, maxU, maxV } = bounds;
+    const screenX = value => Math.round(layout.left + value * layout.scale) + .5;
+    const screenY = value => Math.round(layout.top + value * layout.scale) + .5;
+    const left = screenX(minU), top = screenY(minV), right = screenX(maxU), bottom = screenY(maxV);
+    const handleSize = 7;
+    const positions = [
+      ['nw', left, top], ['n', (left + right) / 2, top], ['ne', right, top],
+      ['w', left, (top + bottom) / 2], ['e', right, (top + bottom) / 2],
+      ['sw', left, bottom], ['s', (left + right) / 2, bottom], ['se', right, bottom]
+    ];
+    boundsMarkup = `<rect class="texture-uv-bounds" x="${left}" y="${top}" width="${right - left}" height="${bottom - top}"/>${positions.map(([name, x, y]) => `<rect class="texture-uv-handle" data-uv-handle="${name}" x="${Math.round(x - handleSize / 2)}" y="${Math.round(y - handleSize / 2)}" width="${handleSize}" height="${handleSize}"/>`).join('')}`;
+  }
+  overlay.innerHTML = `${allPath ? `<path class="texture-uv-all" d="${allPath}"/>` : ''}${selectedPath ? `<path class="texture-uv-selected" d="${selectedPath}"/>` : ''}${boundsMarkup}`;
+  updateTextureUvFields(selectedEntries);
+  $$('[data-texture-face]').forEach(button => {
+    const matching = entries.filter(entry => entry.faceName === button.dataset.textureFace);
+    button.classList.toggle('active', Boolean(matching.length) && matching.every(entry => state.selectedUvFaces.has(entry.key)));
+  });
+}
+
+function updateTextureStageTransform() {
+  const preview = $('#texturePreview');
+  const stage = $('#textureStage');
+  if (!preview || !stage) return;
+  const viewportWidth = Math.max(1, preview.clientWidth);
+  const viewportHeight = Math.max(1, preview.clientHeight);
+  const [textureWidth, textureHeight] = texturePreviewSize;
+  const baseScale = Math.min(viewportWidth / textureWidth, viewportHeight / textureHeight);
+  state.textureView.zoom = Math.max(.05, Math.min(64, Number(state.textureView.zoom) || 1));
+  const scale = baseScale * state.textureView.zoom;
+  const left = (viewportWidth - textureWidth * scale) / 2 + state.textureView.panX;
+  const top = (viewportHeight - textureHeight * scale) / 2 + state.textureView.panY;
+  stage.style.width = `${textureWidth}px`;
+  stage.style.height = `${textureHeight}px`;
+  stage.style.transform = `translate(${left}px, ${top}px) scale(${scale})`;
+  const checker = $('.checkerboard', stage);
+  if (checker) {
+    checker.style.backgroundSize = `${18 / scale}px ${18 / scale}px`;
+    checker.style.backgroundPosition = `0 0, ${9 / scale}px ${9 / scale}px`;
+  }
+  textureViewLayout = { left, top, scale, baseScale, viewportWidth, viewportHeight, textureWidth, textureHeight };
+  renderTextureUvOverlay();
+}
+
+function cancelTextureFocus() {
+  if (textureFocusFrame !== null) cancelAnimationFrame(textureFocusFrame);
+  textureFocusFrame = null;
+}
+
+function animateTextureView(target, animate = true) {
+  cancelTextureFocus();
+  const from = { ...state.textureView };
+  if (!animate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    state.textureView = { ...target };
+    updateTextureStageTransform();
+    return;
+  }
+  const started = performance.now();
+  const duration = 250;
+  const step = now => {
+    const progress = Math.min(1, (now - started) / duration);
+    const eased = 1 - (1 - progress) ** 3;
+    state.textureView = {
+      zoom: from.zoom + (target.zoom - from.zoom) * eased,
+      panX: from.panX + (target.panX - from.panX) * eased,
+      panY: from.panY + (target.panY - from.panY) * eased
+    };
+    updateTextureStageTransform();
+    if (progress < 1) textureFocusFrame = requestAnimationFrame(step);
+    else textureFocusFrame = null;
+  };
+  textureFocusFrame = requestAnimationFrame(step);
+}
+
+function resetTextureView(animate = true) {
+  animateTextureView({ zoom: 1, panX: 0, panY: 0 }, animate);
+}
+
+function focusSelectedTextureUvs(animate = true, retry = true) {
+  const entries = selectedTextureUvEntries();
+  const bounds = normalizedUvBounds(entries);
+  if (!bounds || !Object.values(bounds).every(Number.isFinite)) return resetTextureView(animate);
+  const preview = $('#texturePreview');
+  if (preview.clientWidth < 8 || preview.clientHeight < 8) {
+    if (retry) requestAnimationFrame(() => focusSelectedTextureUvs(animate, false));
+    return;
+  }
+  const viewportWidth = preview.clientWidth;
+  const viewportHeight = preview.clientHeight;
+  const [textureWidth, textureHeight] = texturePreviewSize;
+  const baseScale = Math.min(viewportWidth / textureWidth, viewportHeight / textureHeight);
+  const spanU = Math.max(.25, bounds.maxU - bounds.minU);
+  const spanV = Math.max(.25, bounds.maxV - bounds.minV);
+  const desiredScale = Math.min(viewportWidth * .78 / spanU, viewportHeight * .78 / spanV);
+  const zoom = Math.max(.05, Math.min(32, desiredScale / baseScale));
+  const scale = baseScale * zoom;
+  animateTextureView({
+    zoom,
+    panX: -(((bounds.minU + bounds.maxU) / 2) - textureWidth / 2) * scale,
+    panY: -(((bounds.minV + bounds.maxV) / 2) - textureHeight / 2) * scale
+  }, animate);
+}
+
+function setDockHotspotFocus(panelId) {
+  focusedDockHotspot = panelId;
+  $$('[data-hotspot-focus="true"]').forEach(panel => panel.classList.toggle('hotspot-focused', panel.dataset.panel === panelId));
+}
+
+function clientToTextureUv(clientX, clientY) {
+  if (!textureViewLayout) updateTextureStageTransform();
+  const rect = $('#texturePreview').getBoundingClientRect();
+  return [
+    (clientX - rect.left - textureViewLayout.left) / textureViewLayout.scale,
+    (clientY - rect.top - textureViewLayout.top) / textureViewLayout.scale
+  ];
+}
+
+function textureUvHit(entries, point) {
+  return entries
+    .filter(entry => point[0] >= Math.min(entry.uv[0], entry.uv[2]) && point[0] <= Math.max(entry.uv[0], entry.uv[2])
+      && point[1] >= Math.min(entry.uv[1], entry.uv[3]) && point[1] <= Math.max(entry.uv[1], entry.uv[3]))
+    .sort((left, right) => Math.abs((left.uv[2] - left.uv[0]) * (left.uv[3] - left.uv[1]))
+      - Math.abs((right.uv[2] - right.uv[0]) * (right.uv[3] - right.uv[1])))[0] || null;
+}
+
+function textureUvHandleAt(point, bounds) {
+  if (!bounds || !textureViewLayout) return null;
+  const tolerance = 9 / textureViewLayout.scale;
+  const positions = {
+    nw: [bounds.minU, bounds.minV], n: [(bounds.minU + bounds.maxU) / 2, bounds.minV], ne: [bounds.maxU, bounds.minV],
+    w: [bounds.minU, (bounds.minV + bounds.maxV) / 2], e: [bounds.maxU, (bounds.minV + bounds.maxV) / 2],
+    sw: [bounds.minU, bounds.maxV], s: [(bounds.minU + bounds.maxU) / 2, bounds.maxV], se: [bounds.maxU, bounds.maxV]
+  };
+  return Object.entries(positions).find(([, value]) => Math.hypot(point[0] - value[0], point[1] - value[1]) <= tolerance)?.[0] || null;
+}
+
+function snapTexturePan() {
+  if (!textureViewLayout) return;
+  const { viewportWidth, viewportHeight, textureWidth, textureHeight, scale } = textureViewLayout;
+  let left = (viewportWidth - textureWidth * scale) / 2 + state.textureView.panX;
+  let top = (viewportHeight - textureHeight * scale) / 2 + state.textureView.panY;
+  const right = left + textureWidth * scale;
+  const bottom = top + textureHeight * scale;
+  const distance = 12;
+  if (Math.abs(left) <= distance) state.textureView.panX -= left;
+  else if (Math.abs(right - viewportWidth) <= distance) state.textureView.panX += viewportWidth - right;
+  if (Math.abs(top) <= distance) state.textureView.panY -= top;
+  else if (Math.abs(bottom - viewportHeight) <= distance) state.textureView.panY += viewportHeight - bottom;
+}
+
+function constrainUvMoveDelta(bounds, delta) {
+  const [width, height] = texturePreviewSize;
+  const minimumU = bounds.minU < 0 ? 0 : -bounds.minU;
+  const maximumU = bounds.maxU > width ? 0 : width - bounds.maxU;
+  const minimumV = bounds.minV < 0 ? 0 : -bounds.minV;
+  const maximumV = bounds.maxV > height ? 0 : height - bounds.maxV;
+  return [clamp(delta[0], minimumU, maximumU), clamp(delta[1], minimumV, maximumV)];
+}
+
+function materializeUvFaces(entries) {
+  for (const entry of entries) {
+    entry.cube.faces ||= {};
+    const existing = entry.cube.faces[entry.faceName];
+    if (existing === null) continue;
+    entry.cube.faces[entry.faceName] = {
+      ...(existing || {}),
+      uv: Array.isArray(existing?.uv) && existing.uv.length >= 4
+        ? [...existing.uv]
+        : [...getBlockbenchBoxUv(entry.cube, entry.faceName)]
+    };
+    entry.cube.autoUv = false;
+  }
+}
+
+function beginTextureUvMutation(drag) {
+  if (drag.snapshotTaken) return;
+  snapshot();
+  materializeUvFaces(selectedTextureUvEntries());
+  const entries = selectedTextureUvEntries();
+  drag.entries = entries;
+  drag.originals = new Map(entries.map(entry => [entry.key, [...entry.cube.faces[entry.faceName].uv]]));
+  drag.bounds = normalizedUvBounds(entries);
+  drag.snapshotTaken = true;
+}
+
+function applyTextureUvDrag(event) {
+  const drag = textureUvDrag;
+  if (!drag || !['move', 'resize'].includes(drag.kind)) return;
+  beginTextureUvMutation(drag);
+  if (!drag.entries.length || !drag.bounds) return;
+  const point = clientToTextureUv(event.clientX, event.clientY);
+  let delta = [snapValue(point[0] - drag.startUv[0], event), snapValue(point[1] - drag.startUv[1], event)];
+  if (drag.kind === 'move') {
+    delta = constrainUvMoveDelta(drag.bounds, delta);
+    drag.entries.forEach(entry => {
+      const original = drag.originals.get(entry.key);
+      entry.cube.faces[entry.faceName].uv = [original[0] + delta[0], original[1] + delta[1], original[2] + delta[0], original[3] + delta[1]];
+    });
+  } else {
+    const original = drag.bounds;
+    let next = { ...original };
+    if (drag.handle.includes('w')) next.minU = snapValue(original.minU + delta[0], event);
+    if (drag.handle.includes('e')) next.maxU = snapValue(original.maxU + delta[0], event);
+    if (drag.handle.includes('n')) next.minV = snapValue(original.minV + delta[1], event);
+    if (drag.handle.includes('s')) next.maxV = snapValue(original.maxV + delta[1], event);
+    const [width, height] = texturePreviewSize;
+    if (drag.handle.includes('w')) next.minU = clamp(next.minU, original.minU < 0 ? original.minU : 0, next.maxU - .001);
+    if (drag.handle.includes('e')) next.maxU = clamp(next.maxU, next.minU + .001, original.maxU > width ? original.maxU : width);
+    if (drag.handle.includes('n')) next.minV = clamp(next.minV, original.minV < 0 ? original.minV : 0, next.maxV - .001);
+    if (drag.handle.includes('s')) next.maxV = clamp(next.maxV, next.minV + .001, original.maxV > height ? original.maxV : height);
+    const oldWidth = Math.max(1e-8, original.maxU - original.minU);
+    const oldHeight = Math.max(1e-8, original.maxV - original.minV);
+    drag.entries.forEach(entry => {
+      const source = drag.originals.get(entry.key);
+      entry.cube.faces[entry.faceName].uv = source.map((value, index) => index % 2 === 0
+        ? next.minU + (value - original.minU) / oldWidth * (next.maxU - next.minU)
+        : next.minV + (value - original.minV) / oldHeight * (next.maxV - next.minV));
+    });
+  }
+  if (!state.dirty) markDirty();
+  invalidateSelectionRenderGeometry();
+  renderTextureUvOverlay();
+  scheduleSceneRender();
+}
+
+function startTexturePointer(event) {
+  if (![0, 1].includes(event.button)) return;
+  event.preventDefault();
+  cancelTextureFocus();
+  setDockHotspotFocus('texture');
+  const preview = $('#texturePreview');
+  preview.setPointerCapture(event.pointerId);
+  if (event.button === 1) {
+    textureUvDrag = { kind: 'pan', pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+    preview.classList.add('is-panning');
+    return;
+  }
+  const point = clientToTextureUv(event.clientX, event.clientY);
+  const entries = textureUvEntries();
+  let selectedEntries = selectedTextureUvEntries(entries);
+  const bounds = normalizedUvBounds(selectedEntries);
+  const handle = textureUvHandleAt(point, bounds);
+  const hit = textureUvHit(entries, point);
+  if (!handle && hit) {
+    const next = event.shiftKey || event.ctrlKey || event.metaKey
+      ? new Set(state.selectedUvFaces)
+      : new Set();
+    if (event.ctrlKey || event.metaKey) next.has(hit.key) ? next.delete(hit.key) : next.add(hit.key);
+    else next.add(hit.key);
+    state.selectedUvFaces = next;
+    selectedEntries = selectedTextureUvEntries(entries);
+    renderTextureUvOverlay();
+    updateFaceSelectionOverlay();
+  }
+  textureUvDrag = {
+    kind: handle ? 'resize' : selectedEntries.length && (!hit || state.selectedUvFaces.has(hit.key)) ? 'move' : 'select',
+    handle, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+    startUv: point, moved: false, blank: !hit && !handle, snapshotTaken: false
+  };
+}
+
+function moveTexturePointer(event) {
+  if (!textureUvDrag || textureUvDrag.pointerId !== event.pointerId) return;
+  if (textureUvDrag.kind === 'pan') {
+    const dx = event.clientX - textureUvDrag.x;
+    const dy = event.clientY - textureUvDrag.y;
+    textureUvDrag.x = event.clientX;
+    textureUvDrag.y = event.clientY;
+    textureUvDrag.moved ||= Math.hypot(dx, dy) > 0;
+    state.textureView.panX += dx;
+    state.textureView.panY += dy;
+    updateTextureStageTransform();
+    return;
+  }
+  if (!textureUvDrag.moved && Math.hypot(event.clientX - textureUvDrag.startX, event.clientY - textureUvDrag.startY) < 3) return;
+  textureUvDrag.moved = true;
+  if (textureUvDrag.kind === 'select') return;
+  applyTextureUvDrag(event);
+}
+
+function endTexturePointer(event) {
+  if (!textureUvDrag || textureUvDrag.pointerId !== event.pointerId) return;
+  const drag = textureUvDrag;
+  textureUvDrag = null;
+  const preview = $('#texturePreview');
+  if (preview.hasPointerCapture?.(event.pointerId)) preview.releasePointerCapture(event.pointerId);
+  preview.classList.remove('is-panning');
+  if (drag.kind === 'pan') {
+    snapTexturePan();
+    updateTextureStageTransform();
+  } else if (!drag.moved && drag.blank) {
+    state.selectedUvFaces = new Set();
+    renderTextureUvOverlay();
+    updateFaceSelectionOverlay();
+  } else if (drag.snapshotTaken) {
+    markDirty();
+    renderAll('selection');
+  }
+}
+
+function wheelTextureView(event) {
+  event.preventDefault();
+  cancelTextureFocus();
+  setDockHotspotFocus('texture');
+  if (!textureViewLayout) updateTextureStageTransform();
+  if (event.ctrlKey || event.metaKey) {
+    const before = clientToTextureUv(event.clientX, event.clientY);
+    state.textureView.zoom = Math.max(.05, Math.min(64, state.textureView.zoom * (event.deltaY > 0 ? .9 : 1.1)));
+    updateTextureStageTransform();
+    const after = clientToTextureUv(event.clientX, event.clientY);
+    state.textureView.panX += (after[0] - before[0]) * textureViewLayout.scale;
+    state.textureView.panY += (after[1] - before[1]) * textureViewLayout.scale;
+  } else if (event.shiftKey) state.textureView.panX -= event.deltaY || event.deltaX;
+  else if (textureViewLayout.textureHeight * textureViewLayout.scale > textureViewLayout.viewportHeight + 1) state.textureView.panY -= event.deltaY;
+  snapTexturePan();
+  updateTextureStageTransform();
+}
+
+function setUvCoordinate(coordinate, value) {
+  const entries = selectedTextureUvEntries();
+  if (!entries.length || !Number.isFinite(value)) return;
+  snapshot();
+  const maximum = coordinate % 2 === 0 ? texturePreviewSize[0] : texturePreviewSize[1];
+  const nextValue = clamp(value, 0, maximum);
+  materializeUvFaces(entries);
+  entries.forEach(entry => { entry.cube.faces[entry.faceName].uv[coordinate] = nextValue; });
+  markDirty();
+  renderAll('selection');
+  updateTextureStageTransform();
+}
+
+function syncTexturePreviewPriority() {
+  const panel = dockManager?.get('texture');
+  const element = panel?.element || $('[data-panel="texture"]');
+  if (!element || element.hidden || element.classList.contains('is-collapsed')) return;
+  const width = element.getBoundingClientRect().width || panel?.state.width || 236;
+  const [textureWidth, textureHeight] = texturePreviewSize;
+  const previewHeight = Math.max(1, width - 24) * textureHeight / textureWidth;
+  element.style.setProperty('--texture-preview-priority-height', `${previewHeight}px`);
 }
 
 function syncRendererTexture(source) {
@@ -2438,15 +3273,20 @@ function syncRendererTexture(source) {
 }
 
 function renderTexture() {
-  textureCanvas.width = 1;
-  textureCanvas.height = 1;
+  const width = Math.max(1, Number(state.project.textureSize?.[0]) || 16);
+  const height = Math.max(1, Number(state.project.textureSize?.[1]) || 16);
+  textureCanvas.width = width;
+  textureCanvas.height = height;
   textureCtx.imageSmoothingEnabled = false;
   textureCtx.fillStyle = '#fff';
-  textureCtx.fillRect(0, 0, 1, 1);
+  textureCtx.fillRect(0, 0, width, height);
   syncRendererTexture(textureCanvas);
-  textureCtx.clearRect(0, 0, 1, 1);
-  $('#texturePreview').style.setProperty('--texture-aspect', '1 / 1');
-  $('.texture-preview > span').textContent = '無貼圖';
+  textureCtx.clearRect(0, 0, width, height);
+  texturePreviewSize = [width, height];
+  $('#texturePreview').style.setProperty('--texture-aspect', `${width} / ${height}`);
+  $('.texture-preview > span').textContent = `無貼圖 · ${width} × ${height}`;
+  syncTexturePreviewPriority();
+  resetTextureView(false);
 }
 
 const paletteRows = [
@@ -2681,7 +3521,7 @@ function setTool(tool) {
 
 function updateToolOptions() {
   const lane = $('#toolOptionsLane');
-  const labels = { move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割' };
+  const labels = { move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇' };
   lane.hidden = !labels[state.tool];
   $('#transformSpaceControl').hidden = !['move', 'rotate', 'pivot'].includes(state.tool);
   $('#rotationModeControl').hidden = state.tool !== 'rotate' || state.transformSpace !== 'self';
@@ -2781,9 +3621,33 @@ async function exportProject() {
       });
       return { ...texture, source };
     }));
-    const content = JSON.stringify(exportBlockbench(state.project, textureAssets), null, 2);
-    download(content, `${state.project.name}.bbmodel`, 'application/json');
-    toast('已導出 .bbmodel（程序化物件已轉為 Cube 組）');
+    const cbmodelContent = state.project.serialize();
+    const bbmodelContent = JSON.stringify(exportBlockbench(state.project, textureAssets), null, 2);
+    if (window.cubeBricksDesktop?.exportProject) {
+      const result = await window.cubeBricksDesktop.exportProject({
+        name: state.project.name, cbmodelContent, bbmodelContent
+      });
+      if (!result) return;
+      toast(result.extension === '.cbmodel'
+        ? '已導出 .cbmodel'
+        : '已導出 .bbmodel（程序化物件已轉為 Cube 組）');
+    } else if (window.showSaveFilePicker) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: `${state.project.name}.bbmodel`,
+        types: [
+          { description: 'Blockbench Model', accept: { 'application/json': ['.bbmodel'] } },
+          { description: 'CubeBricks Model', accept: { 'application/json': ['.cbmodel'] } }
+        ]
+      });
+      const extension = handle.name.toLowerCase().endsWith('.cbmodel') ? '.cbmodel' : '.bbmodel';
+      const writable = await handle.createWritable();
+      await writable.write(extension === '.cbmodel' ? cbmodelContent : bbmodelContent);
+      await writable.close();
+      toast(`已導出 ${extension}`);
+    } else {
+      download(bbmodelContent, `${state.project.name}.bbmodel`, 'application/json');
+      toast('已導出 .bbmodel（目前瀏覽器不支援格式選擇）');
+    }
   } catch (error) {
     toast(`導出失敗：${error.message}`);
   }
@@ -3005,6 +3869,9 @@ function initializeDockSystem() {
       else requestAnimationFrame(refreshUvPreview);
     },
     onLayoutChange: () => {
+      const [textureWidth = 16, textureHeight = 16] = state.project.textureSize || [];
+      syncUvPreviewPanelAspect(Math.max(1, Number(textureWidth) || 1), Math.max(1, Number(textureHeight) || 1));
+      syncTexturePreviewPriority();
       scheduleOutlinerWindow();
       requestAnimationFrame(renderScene);
     }
@@ -3081,6 +3948,11 @@ function showElementContextMenu(event, uidValue, source = null) {
       }] : []),
       ...(selectedNodes.length > 1 ? [{ icon: '▰', label: '將選中項建立為組', action: addGroup }] : []),
       { separator: true },
+      { icon: '□', label: '複製　Ctrl+C', action: copySelected },
+      { icon: '✂', label: '剪切　Ctrl+X', action: cutSelected },
+      { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
+      { icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) },
+      { separator: true },
       { icon: '×', label: '刪除選中項', danger: true, action: deleteSelected }
     ]
   });
@@ -3122,6 +3994,9 @@ function bindContextMenus() {
         { icon: '⌖', label: '聚焦選中物件', action: focusSelected },
         { icon: '◎', label: '回到場景中心', action: focusSceneOrigin },
         { separator: true },
+        { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
+        ...(selectedNodeUids().length ? [{ icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) }] : []),
+        { separator: true },
         { icon: '#', label: state.grid ? '隱藏網格' : '顯示網格', action: () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-context-menu' }) },
         { icon: '▧', label: state.wire ? '隱藏邊界線框' : '顯示邊界線框', action: () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-context-menu' }) }
       ]
@@ -3129,7 +4004,13 @@ function bindContextMenus() {
   });
   outliner.addEventListener('contextmenu', event => {
     const item = event.target.closest('.outliner-item');
-    if (!item) { event.preventDefault(); event.stopPropagation(); return; }
+    if (!item) {
+      showContextMenu(event, { title: state.project.name, source: outliner, items: [
+        { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
+        ...(selectedNodeUids().length ? [{ icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) }] : [])
+      ] });
+      return;
+    }
     const uidValue = item.dataset.uid;
     const source = outliner.querySelector(`[data-uid="${uidValue}"]`);
     showElementContextMenu(event, uidValue, source);
@@ -3318,11 +4199,33 @@ function bindEvents() {
   $$('.tool').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
   $$('.dock-tab').forEach(button => button.addEventListener('click', () => activateDock(button.dataset.dock)));
   $('[data-action="addCube"]').addEventListener('click', addCube);
-  $('[data-action="addShape"]').addEventListener('click', addShape);
+  const shapeCreateButton = $('[data-action="toggleShapeCreate"]');
+  const shapeCreateMenu = $('#shapeCreateMenu');
+  const closeShapeCreateMenu = () => {
+    shapeCreateMenu.hidden = true;
+    shapeCreateButton.setAttribute('aria-expanded', 'false');
+  };
+  shapeCreateButton.addEventListener('click', event => {
+    event.stopPropagation();
+    if (!shapeCreateMenu.hidden) return closeShapeCreateMenu();
+    const rect = shapeCreateButton.getBoundingClientRect();
+    shapeCreateMenu.hidden = false;
+    const menuRect = shapeCreateMenu.getBoundingClientRect();
+    shapeCreateMenu.style.left = `${Math.max(8, Math.min(window.innerWidth - menuRect.width - 8, rect.right - menuRect.width))}px`;
+    shapeCreateMenu.style.top = `${Math.max(8, Math.min(window.innerHeight - menuRect.height - 8, rect.bottom + 5))}px`;
+    shapeCreateButton.setAttribute('aria-expanded', 'true');
+  });
+  shapeCreateMenu.addEventListener('click', event => {
+    event.stopPropagation();
+    const option = event.target.closest('[data-create-shape]');
+    if (!option) return;
+    closeShapeCreateMenu();
+    if (option.dataset.createShape === 'polygon_prism') addShape();
+    if (option.dataset.createShape === 'bezier2d') addBezierElement(2);
+    if (option.dataset.createShape === 'bezier3d') addBezierElement(3);
+  });
+  document.addEventListener('click', closeShapeCreateMenu);
   $('[data-action="addLocator"]').addEventListener('click', addLocator);
-  $('[data-action="addNode"]').addEventListener('click', addNodeElement);
-  $('[data-action="addBezier2d"]').addEventListener('click', () => addBezierElement(2));
-  $('[data-action="addBezier3d"]').addEventListener('click', () => addBezierElement(3));
   $('[data-action="addGroup"]').addEventListener('click', addGroup);
   $('.outliner-create-actions [data-action="deleteSelected"]').addEventListener('click', deleteSelected);
   $('[data-action="new"]').addEventListener('click', openNewProjectDialog);
@@ -3367,31 +4270,117 @@ function bindEvents() {
     uvPreviewRenderer.invalidateGeometry();
     renderUvPreview();
   });
+  $('#uvPreviewAutoFocusTexture').addEventListener('change', event => {
+    state.uvPreviewAutoFocusTexture = event.target.checked;
+  });
+  $$('[data-uv-face-action]').forEach(button => button.addEventListener('click', () => {
+    editSelectedUvFace(button.dataset.uvFaceAction);
+  }));
   uvPreviewViewport.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || !uvPreviewIsActive() || !uvPreviewElements().length) return;
+    if (![0, 1].includes(event.button) || !uvPreviewIsActive() || !uvPreviewElements().length) return;
     event.preventDefault();
-    uvPreviewDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-    uvPreviewViewport.classList.add('is-rotating');
+    uvPreviewDrag = {
+      pointerId: event.pointerId,
+      button: event.button,
+      rotates: event.button === 1,
+      x: event.clientX, y: event.clientY,
+      startX: event.clientX, startY: event.clientY,
+      moved: false
+    };
+    if (uvPreviewDrag.rotates) uvPreviewViewport.classList.add('is-rotating');
     uvPreviewViewport.setPointerCapture(event.pointerId);
   });
   uvPreviewViewport.addEventListener('pointermove', event => {
     if (!uvPreviewDrag || uvPreviewDrag.pointerId !== event.pointerId) return;
     const dx = event.clientX - uvPreviewDrag.x;
     const dy = event.clientY - uvPreviewDrag.y;
+    if (!uvPreviewDrag.moved && Math.hypot(event.clientX - uvPreviewDrag.startX, event.clientY - uvPreviewDrag.startY) < 4) return;
+    uvPreviewDrag.moved = true;
     uvPreviewDrag.x = event.clientX;
     uvPreviewDrag.y = event.clientY;
-    state.uvPreviewYaw += dx * .01;
+    if (!uvPreviewDrag.rotates) return;
+    state.uvPreviewYaw -= dx * .01;
     state.uvPreviewPitch = Math.max(-Math.PI / 2 + .02, Math.min(Math.PI / 2 - .02, state.uvPreviewPitch + dy * .01));
     renderUvPreview();
   });
   const endUvPreviewDrag = event => {
     if (!uvPreviewDrag || uvPreviewDrag.pointerId !== event.pointerId) return;
+    const wasClick = !uvPreviewDrag.moved && uvPreviewDrag.button === 0;
     uvPreviewViewport.releasePointerCapture?.(event.pointerId);
     uvPreviewViewport.classList.remove('is-rotating');
     uvPreviewDrag = null;
+    if (wasClick) {
+      const rect = uvPreviewCanvas.getBoundingClientRect();
+      const cache = getUvPreviewProject();
+      const hit = uvPreviewRenderer.pickDetailed(cache.project,
+        event.clientX - rect.left, event.clientY - rect.top, true);
+      if (!hit) {
+        state.uvPreviewSelectedFace = null;
+        state.selectedUvFaces = new Set();
+        renderTextureUvOverlay();
+        updateFaceSelectionOverlay();
+      }
+      else if (state.project.getNode(hit.uid)?.type !== 'cube') {
+        state.uvPreviewSelectedFace = null;
+        toast('程序化 Shape 請先轉換為 Cube 才能編輯逐面 UV');
+      } else state.uvPreviewSelectedFace = {
+        uid: hit.uid,
+        faceName: hit.faceName,
+        points: hit.facePoints.map(point => [...point])
+      };
+      if (state.uvPreviewSelectedFace) {
+        state.selectedUvFaces = new Set([uvFaceKey(state.uvPreviewSelectedFace.uid, state.uvPreviewSelectedFace.faceName)]);
+        renderTextureUvOverlay();
+        updateFaceSelectionOverlay();
+        if (state.uvPreviewAutoFocusTexture) {
+          dockManager?.expand('texture');
+          setDockHotspotFocus('texture');
+          requestAnimationFrame(focusSelectedTextureUvs);
+        }
+      }
+      renderUvPreview();
+    }
   };
   uvPreviewViewport.addEventListener('pointerup', endUvPreviewDrag);
   uvPreviewViewport.addEventListener('pointercancel', endUvPreviewDrag);
+  uvPreviewViewport.addEventListener('auxclick', event => event.preventDefault());
+  $$('[data-hotspot-focus="true"]').forEach(panel => panel.addEventListener('pointerdown', () => {
+    setDockHotspotFocus(panel.dataset.panel);
+  }));
+  const texturePreview = $('#texturePreview');
+  texturePreview.addEventListener('pointerdown', startTexturePointer);
+  texturePreview.addEventListener('pointermove', moveTexturePointer);
+  texturePreview.addEventListener('pointerup', endTexturePointer);
+  texturePreview.addEventListener('pointercancel', endTexturePointer);
+  texturePreview.addEventListener('auxclick', event => event.preventDefault());
+  texturePreview.addEventListener('wheel', wheelTextureView, { passive: false });
+  $$('[data-texture-face]').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    setDockHotspotFocus('texture');
+    const matching = textureUvEntries().filter(entry => entry.faceName === button.dataset.textureFace);
+    const next = event.shiftKey || event.ctrlKey || event.metaKey
+      ? new Set(state.selectedUvFaces)
+      : new Set();
+    matching.forEach(entry => {
+      if (event.ctrlKey || event.metaKey) next.has(entry.key) ? next.delete(entry.key) : next.add(entry.key);
+      else next.add(entry.key);
+    });
+    state.selectedUvFaces = next;
+    renderTextureUvOverlay();
+    updateFaceSelectionOverlay();
+  }));
+  $$('[data-uv-coordinate]').forEach(input => input.addEventListener('change', () => {
+    setUvCoordinate(Number(input.dataset.uvCoordinate), Number(input.value));
+  }));
+  new ResizeObserver(() => {
+    syncTexturePreviewPriority();
+    updateTextureStageTransform();
+  }).observe(texturePreview);
+  document.fonts?.load('12px "Fusion Pixel Latin"').then(() => {
+    uvPreviewFaceLabelFontRevision++;
+    uvPreviewFaceLabelCacheKey = null;
+    refreshUvPreview();
+  });
   $('#geometryOnlyToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SHOW_GEOMETRY_ONLY, event.target.checked, { source: 'toolbar' }));
   $$('[data-transform-space]').forEach(button => button.addEventListener('click', () => {
     state.transformSpace = button.dataset.transformSpace;
@@ -3693,17 +4682,22 @@ function bindEvents() {
   window.addEventListener('resize', renderScene);
   document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
-    if (event.target.matches('input,select')) return;
-    if (event.key === 'Escape') setRenderModeMenu(false);
+    if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
+    if (event.key === 'Escape') { setRenderModeMenu(false); closeShapeCreateMenu(); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(event.shiftKey); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelected(); }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'x') { event.preventDefault(); cutSelected(); }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteElements(); }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); pasteElements({ inPlace: true }); }
     if (event.key === 'Delete') deleteSelected();
     if (event.key.toLowerCase() === 'f') { cancelCameraFocus(); state.zoom = 1.12; state.panX = 0; state.panY = 0; renderScene(); }
     if (event.key.toLowerCase() === 'r') {
       event.preventDefault();
-      event.shiftKey ? focusSceneOrigin() : focusSelected();
+      if (focusedDockHotspot === 'texture') event.shiftKey ? resetTextureView() : focusSelectedTextureUvs();
+      else event.shiftKey ? focusSceneOrigin() : focusSelected();
     }
-    const shortcuts = { '1': 'move', '2': 'resize', '3': 'rotate', '4': 'pivot', '5': 'vertexSnap', '6': 'knife' }; if (shortcuts[event.key]) setTool(shortcuts[event.key]);
+    const shortcuts = { '1': 'move', '2': 'resize', '3': 'rotate', '4': 'pivot', '5': 'vertexSnap', '6': 'knife', '7': 'faceSelect' }; if (shortcuts[event.key]) setTool(shortcuts[event.key]);
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
   });
   window.addEventListener('keyup', event => {
@@ -3774,9 +4768,43 @@ function onPointerDown(event) {
     return;
   }
   if (event.button !== 0) return;
+  const suppressBlankDeselect = Boolean(focusedDockHotspot);
+  if (focusedDockHotspot) setDockHotspotFocus(null);
   if (state.tool === 'knife') {
     event.preventDefault();
     useKnifePoint(event);
+    return;
+  }
+  if (state.tool === 'faceSelect') {
+    event.preventDefault();
+    const hit = sceneRenderer.pickDetailed(state.project, x, y, true);
+    const cube = hit && state.project.getNode(hit.uid);
+    if (!hit?.faceName || cube?.type !== 'cube') {
+      if (!suppressBlankDeselect) state.selectedUvFaces = new Set();
+      renderTextureUvOverlay();
+      updateFaceSelectionOverlay();
+      return;
+    }
+    if (!state.selectedUids.has(hit.uid)) {
+      if (event.shiftKey || event.ctrlKey || event.metaKey) {
+        sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
+        state.selectedUids = new Set([...state.selectedUids, hit.uid]);
+        state.selectedUid = hit.uid;
+        state.selectionAnchorUid = hit.uid;
+        refreshSelectionUi();
+      } else selectItem(hit.uid, { revealInOutliner: true });
+    }
+    const key = uvFaceKey(hit.uid, hit.faceName);
+    const next = event.shiftKey || event.ctrlKey || event.metaKey
+      ? new Set(state.selectedUvFaces)
+      : new Set();
+    if (event.ctrlKey || event.metaKey) next.has(key) ? next.delete(key) : next.add(key);
+    else next.add(key);
+    state.selectedUvFaces = next;
+    state.uvPreviewSelectedFace = { uid: hit.uid, faceName: hit.faceName, points: hit.facePoints.map(point => [...point]) };
+    renderTextureUvOverlay();
+    updateFaceSelectionOverlay();
+    renderUvPreview();
     return;
   }
   const activeCurve = selected();
@@ -3807,7 +4835,7 @@ function onPointerDown(event) {
     x: event.clientX, y: event.clientY, startX: x, startY: y,
     currentX: x, currentY: y, moved: false, hitUid,
     selection: new Set(state.selectedUids),
-    mode: viewportSelectionMode(event)
+    mode: viewportSelectionMode(event), suppressBlankDeselect
   };
 }
 
@@ -4266,6 +5294,10 @@ function buildKnifeOverlayLines() {
   return lines;
 }
 
+function buildEditorOverlayLines() {
+  return buildKnifeOverlayLines();
+}
+
 function nodeTransformAnchor(node) {
   if (node.type === 'cube' || node.type === 'group') return node.pivot;
   return node.position || node.origin;
@@ -4538,10 +5570,10 @@ function onPointerMove(event) {
     let handle = inverseRotateVector(
       curvePoint.map((value, axis) => value - drag.node.position[axis]),
       drag.node.rotation || [0, 0, 0]
-    );
+    ).map(value => snapValue(value, event));
     if (drag.curve.dimension === 2) handle[1] = 0;
     if (isBezierElement(drag.curve)) drag.node.autoTangent = false;
-    drag.node[drag.property] = handle;
+    setCurveHandle(drag.node, drag.property, handle, drag.curve.dimension === 2);
     drag.tooltipText = `${drag.property === 'handleIn' ? '前' : '後'}手柄 ${formatNumber(Math.hypot(...handle))} px`;
     invalidateSelectionRenderGeometry();
     updateTransformTooltip(event, drag);
@@ -4668,7 +5700,7 @@ function endPointerDrag(event) {
         toggle: event.ctrlKey || event.metaKey,
         range: event.shiftKey
       });
-      else clearSelection();
+      else if (!finishedDrag.suppressBlankDeselect) clearSelection();
     }
     return;
   }
@@ -4919,7 +5951,7 @@ function applyTransformDrag(drag, dx, dy, event) {
         }
         targetItem.position = position;
         targetItem.size = size;
-      } else if (targetItem.type === 'shape') {
+      } else if (isShapeElement(targetItem)) {
         if (drag.kind === 'plane-uniform') {
           const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
           if (drag.axisIndices.includes(1)) targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height + distance * 2, event));
@@ -4989,7 +6021,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       }
       item.size = size;
     }
-    if (item.type === 'shape') {
+    if (isShapeElement(item)) {
       if (drag.kind === 'plane-uniform') {
         const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
         if (drag.axisIndices.includes(1)) item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + distance * 2, event));
@@ -5157,12 +6189,8 @@ function snapShapeDimension(shape, key, value, event = {}) {
     if (key !== 'radius') return Math.round(value / step) * step;
     const sides = Math.max(3, Math.round(Number(shape.parameters.sides) || 3));
     const halfTurn = Math.PI / sides;
-    const outwardOffset = step / (2 * Math.cos(halfTurn));
-    const centerRadius = Math.max(.001, value - outwardOffset);
-    const wallLength = 2 * centerRadius * Math.sin(halfTurn) + step * Math.tan(halfTurn);
-    const snappedLength = Math.max(step, Math.round(wallLength / step) * step);
-    return Math.max(.001,
-      (snappedLength - step * Math.tan(halfTurn)) / (2 * Math.sin(halfTurn))) + outwardOffset;
+    const snappedApothem = Math.max(step, Math.round(value * Math.cos(halfTurn) / step) * step);
+    return snappedApothem / Math.cos(halfTurn);
   }
   return key === 'radius' ? snapValue(value * 2, event) / 2 : snapValue(value, event);
 }
