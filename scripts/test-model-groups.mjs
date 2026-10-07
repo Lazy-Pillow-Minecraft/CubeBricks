@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
+import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, buildGroupMirrorRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
 import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
 import { ModelFormatRegistry } from '../src/core/model-format-registry.js';
 import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/config/model-formats.js';
@@ -118,6 +118,51 @@ assert.equal(exportedBbmodel.outliner[0].children[0].children.length, 5,
   'procedural shape cubes are wrapped in a named outliner group');
 assert.equal(importBlockbench(exportedBbmodel).elements.filter(element => element.type === 'cube').length, 5,
   'exported procedural cube groups can be imported again');
+
+const mirrorCube = new Cube({ uid: 'mirror-cube', name: 'petal', position: [2, 0, 0], size: [2, 3, 1], pivot: [2, 0, 0] });
+const mirrorGroup = new Group({
+  uid: 'mirror-group', name: 'wing', children: [mirrorCube.uid],
+  mirror: { enabled: true, mode: 'axes', axes: { x: true, y: false, z: true }, wrapParent: false }
+});
+const mirrorProject = new CubeBricksProject({ elements: [mirrorCube], groups: [mirrorGroup], outliner: [mirrorGroup.uid] });
+const projectMirrorGroup = mirrorProject.getNode(mirrorGroup.uid);
+const mirrorController = mirrorProject.getNode(projectMirrorGroup.mirror.controllerUid);
+assert.equal(mirrorController.type, 'node', 'enabling group mirroring creates a real controller node');
+assert.equal(mirrorController.mirrorControllerFor, projectMirrorGroup.uid, 'the controller node retains its mirror-group owner');
+assert.ok(projectMirrorGroup.children.includes(mirrorController.uid), 'the mirror controller appears inside its group');
+const mirroredAxesBbmodel = exportBlockbench(mirrorProject);
+assert.equal(mirroredAxesBbmodel.outliner.length, 4, 'two enabled Cartesian mirror axes expand to four groups');
+const mirroredAxesPreview = buildGroupMirrorRenderInstances(mirrorProject);
+assert.equal(mirroredAxesPreview.length, 3, 'viewport mirror preview omits the already-rendered identity instance');
+assert.ok(mirroredAxesPreview.every(instance => instance.sourceUids.length === 1
+  && instance.sourceUids[0] === mirrorCube.uid),
+  'viewport mirror instances reuse source element ranges instead of generating duplicate cubes');
+assert.equal(mirroredAxesPreview.filter(instance => instance.reflected).length, 2,
+  'odd-axis mirror instances request front-face winding compensation');
+assert.deepEqual(mirroredAxesBbmodel.outliner.map(group => group.name).sort(), [
+  'left_before_wing', 'left_front_wing', 'right_before_wing', 'right_front_wing'
+]);
+assert.equal(mirroredAxesBbmodel.elements.length, 4, 'each Cartesian mirror instance receives its own cube UUID');
+assert.ok(mirroredAxesBbmodel.elements.every(element => !element.uuid.includes(mirrorController.uid)),
+  'the editor-only mirror controller is never exported');
+const mirrorRoundTrip = new CubeBricksProject(JSON.parse(mirrorProject.serialize()));
+assert.equal(mirrorRoundTrip.elements.filter(element => element.mirrorControllerFor === projectMirrorGroup.uid).length, 1,
+  'cbmodel round trips do not duplicate the mirror controller');
+
+projectMirrorGroup.mirror.mode = 'radial';
+projectMirrorGroup.mirror.copies = 4;
+projectMirrorGroup.mirror.wrapParent = true;
+const radialBbmodel = exportBlockbench(mirrorProject);
+assert.equal(radialBbmodel.outliner[0].children.length, 4, 'radial export creates exactly N rotated groups');
+assert.deepEqual(radialBbmodel.outliner[0].children.map(group => group.name), ['wing_1', 'wing_2', 'wing_3', 'wing_4']);
+projectMirrorGroup.mirror.mode = 'mandala';
+projectMirrorGroup.mirror.copies = 3;
+const mandalaBbmodel = exportBlockbench(mirrorProject);
+assert.equal(mandalaBbmodel.outliner[0].children.length, 6, 'mandala export creates a rotated and reflected pair for every axis');
+assert.deepEqual(mandalaBbmodel.outliner[0].children.map(group => group.name),
+  ['wing_1', 'wing_2', 'wing_3', 'wing_4', 'wing_5', 'wing_6']);
+assert.equal(importBlockbench(mandalaBbmodel).elements.filter(element => element.type === 'cube').length, 6,
+  'expanded mandala groups remain valid when the exported bbmodel is imported again');
 
 const customFormats = new ModelFormatRegistry();
 let registeredCustom = null;

@@ -1,3 +1,5 @@
+import { buildGroupMirrorRenderInstances } from '../model.js';
+
 const DEG = Math.PI / 180;
 const MIPPED_SUPERSAMPLE = 1.5;
 const LOCATOR_ICON_PIXELS = 17;
@@ -113,6 +115,7 @@ export class WebGLSceneRenderer {
     this.visibleStaticWireBuffer = this.gl.createBuffer();
     this.selectedTriangleBuffer = this.gl.createBuffer();
     this.selectedWireBuffer = this.gl.createBuffer();
+    this.faceSelectionBuffer = this.gl.createBuffer();
     this.ghostWireBuffer = this.gl.createBuffer();
     this.lockedBatchBuffers = [this.gl.createBuffer(), this.gl.createBuffer(), this.gl.createBuffer(), this.gl.createBuffer()];
     this.lockedOutlineBuffer = this.gl.createBuffer();
@@ -149,10 +152,14 @@ export class WebGLSceneRenderer {
     this.lastCameraState = null;
     this.lastCameraInput = null;
     this.lastOwnerPoints = new Map();
+    this.lastHelperPoints = [];
     this.geometryRevision = 0;
     this.selectionRevision = 0;
     this.staticCache = null;
     this.selectedCache = null;
+    this.faceSelectionCache = null;
+    this.mirrorCache = null;
+    this.mirrorRevision = 0;
     this.selectedGeometryDirty = false;
     this.selectionDescriptorCache = null;
     this.visibleStaticBatchCache = null;
@@ -366,6 +373,9 @@ export class WebGLSceneRenderer {
     this.selectionRevision += 1;
     this.staticCache = null;
     this.selectedCache = null;
+    this.faceSelectionCache = null;
+    this.mirrorRevision += 1;
+    this.mirrorCache = null;
     this.selectedGeometryDirty = false;
     this.selectionDescriptorCache = null;
     this.visibleStaticBatchCache = null;
@@ -375,10 +385,18 @@ export class WebGLSceneRenderer {
   }
 
   invalidateSelectionGeometry(geometryChanged = true) {
-    if (geometryChanged) this.selectedGeometryDirty = true;
+    if (geometryChanged) {
+      this.selectedGeometryDirty = true;
+      this.mirrorCache?.rangeCache?.clear();
+    }
     this.selectionRevision += 1;
     this.selectedCache = null;
+    this.faceSelectionCache = null;
     this.lockedBatchCache = null;
+  }
+
+  invalidateMirrorGeometry() {
+    this.mirrorRevision += 1;
   }
 
   invalidateLockState() {
@@ -482,6 +500,8 @@ export class WebGLSceneRenderer {
     this.patchGeometryBuffer(this.staticWireBuffer, this.staticCache.edges, this.staticCache.edgeRanges, geometry.edges, geometry.edgeRanges, dynamicUids);
     patchVertexArrays(this.staticCache.helpers, this.staticCache.helperRanges, geometry.helpers, geometry.helperRanges, dynamicUids);
     this.staticCache.faces = this.staticCache.faces.filter(face => !dynamicUids.has(face.uid)).concat(geometry.faces);
+    this.staticCache.faceIndex = indexFaces(this.staticCache.faces);
+    this.staticCache.faceBvh = buildFaceBvh(this.staticCache.faces);
     for (const uid of dynamicUids) {
       if (geometry.ownerPoints.has(uid)) this.staticCache.ownerPoints.set(uid, geometry.ownerPoints.get(uid));
       else this.staticCache.ownerPoints.delete(uid);
@@ -578,9 +598,18 @@ export class WebGLSceneRenderer {
             opacity: 1, blend: false };
       this.drawBuffer(this.lockedBatchBuffers[index], batches.counts[index], batches.primitive, viewProjection, options);
     }
+    const mirrorOptions = camera.renderMode === 'wireframe'
+      ? { depthWrite: true, cull: false, renderMode: 0, opacity: 1, blend: false }
+      : { depthWrite: true, cull: project.cullFaces, renderMode, alphaMode: pipeline.alphaMode,
+          opacity: 1, blend: false };
+    this.drawMirrorInstances(dynamicUids, lockedUids, batches.primitive, viewProjection, mirrorOptions,
+      { lockedOnly: true });
     if (!depthOnly && camera.renderMode !== 'wireframe' && batches.outlineCount) {
       this.drawBuffer(this.lockedOutlineBuffer, batches.outlineCount, gl.LINES, viewProjection,
         { depthWrite: false, cull: false, renderMode: 0, opacity: 1, blend: false });
+      this.drawMirrorInstances(dynamicUids, lockedUids, gl.LINES, viewProjection,
+        { depthWrite: false, cull: false, renderMode: 0, opacity: 1, blend: false },
+        { lockedOnly: true, selectedOnly: true });
     }
   }
 
@@ -605,12 +634,58 @@ export class WebGLSceneRenderer {
     this.drawLockedGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, false);
   }
 
+  drawMirrorInstances(dynamicUids, lockedUids, primitive, viewProjection, options = {},
+    { lockedOnly = false, selectedOnly = false } = {}) {
+    const lines = primitive === this.gl.LINES;
+    const rangeKey = lines ? 'edgeRanges' : 'triangleRanges';
+    for (const instance of this.mirrorCache?.instances || []) {
+      const batchKey = [
+        instance.groupUid, lines ? 'edges' : 'triangles', lockedOnly ? 'locked' : 'visible',
+        selectedOnly ? 'selected' : 'all', this.geometryRevision,
+        this.currentDynamicElementKey || '', this.currentLockedKey || ''
+      ].join('::');
+      let batches = this.mirrorCache.rangeCache.get(batchKey);
+      if (!batches) {
+        const staticRanges = [], selectedRanges = [];
+        for (const uid of instance.sourceUids) {
+          const locked = lockedUids.has(uid);
+          if (lockedOnly !== locked || (selectedOnly && !dynamicUids.has(uid))) continue;
+          const selected = dynamicUids.has(uid);
+          const cache = selected ? this.selectedCache : this.staticCache;
+          const range = cache?.[rangeKey]?.get(uid);
+          if (range?.count) (selected ? selectedRanges : staticRanges).push(range);
+        }
+        batches = {
+          static: mergeAdjacentVertexRanges(staticRanges),
+          selected: mergeAdjacentVertexRanges(selectedRanges)
+        };
+        this.mirrorCache.rangeCache.set(batchKey, batches);
+      }
+      for (const selected of [false, true]) {
+        const ranges = selected ? batches.selected : batches.static;
+        const buffer = selected
+          ? (lines ? this.selectedWireBuffer : this.selectedTriangleBuffer)
+          : (lines ? this.staticWireBuffer : this.staticTriangleBuffer);
+        const modelTransform = selected && this.selectionPreviewTransform
+          ? multiply(instance.transform, this.selectionPreviewTransform)
+          : instance.transform;
+        for (const range of ranges) this.drawBuffer(buffer, range.count, primitive, viewProjection, {
+            ...options,
+            first: range.start,
+            modelTransform,
+            flipWinding: instance.reflected
+          });
+      }
+    }
+  }
+
   drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState) {
     const { gl } = this;
     if (camera.renderMode === 'wireframe') return;
     if (camera.faceDistinct || (camera.renderMode === 'textured' && minecraftRenderType.pass === RenderPass.TRANSLUCENT)) {
       const facePreview = camera.faceDistinct === true;
-      const staticFaces = this.staticCache.faces.filter(face => !dynamicUids.has(face.uid) && !lockedUids.has(face.uid))
+      const staticFaces = this.staticCache.faces
+        .filter(face => !dynamicUids.has(face.uid) && !lockedUids.has(face.uid))
         .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
       const sortedFaces = [...staticFaces, ...this.selectedCache.faces]
         .filter(face => !lockedUids.has(face.uid))
@@ -618,6 +693,7 @@ export class WebGLSceneRenderer {
       const drawFacePass = options => {
         if (!this.selectionPreviewTransform) {
           this.drawVertices(sortedFaces.flatMap(face => face.vertices), gl.TRIANGLES, viewProjection, options);
+          this.drawMirrorInstances(dynamicUids, lockedUids, gl.TRIANGLES, viewProjection, options);
           return;
         }
         this.drawVertices(staticFaces.flatMap(face => face.vertices), gl.TRIANGLES, viewProjection, {
@@ -628,6 +704,7 @@ export class WebGLSceneRenderer {
             ...options,
             modelTransform: this.selectionPreviewTransform
           });
+        this.drawMirrorInstances(dynamicUids, lockedUids, gl.TRIANGLES, viewProjection, options);
       };
       if (facePreview) {
         // First draw the real texture, then tint each face in a separate
@@ -674,6 +751,7 @@ export class WebGLSceneRenderer {
     const staticBatches = this.ensureVisibleStaticBatches(dynamicUids, lockedUids);
     this.drawBuffer(this.visibleStaticTriangleBuffer, staticBatches.triangleCount,
       gl.TRIANGLES, viewProjection, options);
+    this.drawMirrorInstances(dynamicUids, lockedUids, gl.TRIANGLES, viewProjection, options);
     this.drawBufferExcluding(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12,
       lockedUids, this.selectedCache.triangleRanges, gl.TRIANGLES, viewProjection,
       { ...options, modelTransform: this.selectionPreviewTransform });
@@ -694,6 +772,8 @@ export class WebGLSceneRenderer {
       const staticBatches = this.ensureVisibleStaticBatches(dynamicUids, lockedUids);
       this.drawBuffer(this.visibleStaticWireBuffer, staticBatches.edgeCount, gl.LINES, viewProjection,
         { depthWrite: true, cull: false, renderMode: 0 });
+      this.drawMirrorInstances(dynamicUids, lockedUids, gl.LINES, viewProjection,
+        { depthWrite: true, cull: false, renderMode: 0 });
       this.drawBufferExcluding(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
         lockedUids, this.selectedCache.edgeRanges, gl.LINES, viewProjection,
         { depthWrite: true, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform });
@@ -701,7 +781,10 @@ export class WebGLSceneRenderer {
     this.drawBuffer(this.ghostWireBuffer, this.ghostWireCount, gl.LINES, viewProjection, {
       depthWrite: false, cull: false, renderMode: 0
     });
-    if (camera.renderMode !== 'wireframe') {
+    // Face editing has its own compact GPU outline buffer below. Drawing the
+    // complete selected-object wire mesh as well duplicates most edges and is
+    // especially expensive when every cube is selected.
+    if (camera.renderMode !== 'wireframe' && camera.tool !== 'faceSelect') {
       this.drawBufferExcluding(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
         lockedUids, this.selectedCache.edgeRanges, gl.LINES, viewProjection,
         { depthWrite: false, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform });
@@ -712,6 +795,8 @@ export class WebGLSceneRenderer {
         (dynamicUids.has(uid) ? selectedWire : staticWire).push(...boundsWireGeometry(points));
       }
       this.drawVertices(staticWire, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+      this.drawMirrorInstances(dynamicUids, lockedUids, gl.LINES, viewProjection,
+        { depthWrite: true, cull: false, renderMode: 0 });
       this.drawVertices(selectedWire, gl.LINES, viewProjection, {
         depthWrite: true, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform
       });
@@ -737,6 +822,37 @@ export class WebGLSceneRenderer {
       }
       this.drawVertices(overlay, gl.LINES, viewProjection, { depthWrite: false, cull: false, renderMode: 0 });
     }
+    const selectedFaceFillCount = this.ensureFaceSelectionFill(camera.selectedUvFaces);
+    this.drawBuffer(this.faceSelectionBuffer, selectedFaceFillCount, gl.TRIANGLES, viewProjection, {
+      depthWrite: false, depthTest: true, cull: false, renderMode: 0, blend: true,
+      modelTransform: this.selectionPreviewTransform
+    });
+  }
+
+  ensureFaceSelectionFill(selection) {
+    const selectedFaces = selection instanceof Set ? selection : new Set();
+    if (this.faceSelectionCache?.selection === selectedFaces
+      && this.faceSelectionCache.size === selectedFaces.size
+      && this.faceSelectionCache.geometryRevision === this.geometryRevision
+      && this.faceSelectionCache.selectionRevision === this.selectionRevision) {
+      return this.faceSelectionCache.count;
+    }
+    const vertices = [];
+    const color = [...this.selectionOutline, .16];
+    for (const key of selectedFaces) {
+      const face = this.selectedCache?.faceIndex?.get(key) || this.staticCache?.faceIndex?.get(key);
+      if (!face?.quad?.length) continue;
+      FACE_TRIANGLE_SLOTS.forEach(slot => pushVertex(vertices, face.quad[slot], color));
+    }
+    this.uploadBuffer(this.faceSelectionBuffer, vertices, this.gl.DYNAMIC_DRAW);
+    this.faceSelectionCache = {
+      selection: selectedFaces,
+      size: selectedFaces.size,
+      geometryRevision: this.geometryRevision,
+      selectionRevision: this.selectionRevision,
+      count: vertices.length / 12
+    };
+    return this.faceSelectionCache.count;
   }
 
   render(project, selectedUid, camera) {
@@ -789,9 +905,29 @@ export class WebGLSceneRenderer {
       || this.staticCache.faceDistinct !== (camera.faceDistinct === true)) {
       const faceDistinct = camera.faceDistinct === true;
       const geometry = buildElementGeometry(project, project.elements, null, [1, 1, 1], faceDistinct);
-      this.staticCache = { project, revision: this.geometryRevision, faceDistinct, ...geometry };
+      this.staticCache = {
+        project, revision: this.geometryRevision, faceDistinct, ...geometry,
+        faceIndex: indexFaces(geometry.faces), faceBvh: buildFaceBvh(geometry.faces)
+      };
       this.uploadBuffer(this.staticTriangleBuffer, geometry.triangles, gl.STATIC_DRAW);
       this.uploadBuffer(this.staticWireBuffer, geometry.edges, gl.STATIC_DRAW);
+    }
+
+    const mirrorCacheDirty = !this.mirrorCache
+      || this.mirrorCache.project !== project
+      || this.mirrorCache.revision !== this.mirrorRevision
+      || this.mirrorCache.faceDistinct !== (camera.faceDistinct === true);
+    if (mirrorCacheDirty) {
+      this.mirrorCache = {
+        project,
+        revision: this.mirrorRevision,
+        faceDistinct: camera.faceDistinct === true,
+        rangeCache: new Map(),
+        instances: buildGroupMirrorRenderInstances(project).map(instance => ({
+          ...instance,
+          transform: mirrorModelMatrix(instance.matrix, instance.center)
+        }))
+      };
     }
 
     if (!this.selectedCache
@@ -802,7 +938,10 @@ export class WebGLSceneRenderer {
       const selectedElements = project.elements.filter(element => dynamicUids.has(element.uid));
       const faceDistinct = camera.faceDistinct === true;
       const geometry = buildElementGeometry(project, selectedElements, selectedUids, this.selectionOutline, faceDistinct);
-      this.selectedCache = { project, revision: this.selectionRevision, selectedKey, faceDistinct, ...geometry };
+      this.selectedCache = {
+        project, revision: this.selectionRevision, selectedKey, faceDistinct, ...geometry,
+        faceIndex: indexFaces(geometry.faces), faceBvh: buildFaceBvh(geometry.faces)
+      };
       this.uploadBuffer(this.selectedTriangleBuffer, geometry.triangles, gl.DYNAMIC_DRAW);
       this.uploadBuffer(this.selectedWireBuffer, geometry.edges, gl.DYNAMIC_DRAW);
     }
@@ -813,6 +952,8 @@ export class WebGLSceneRenderer {
     this.currentLockedKey = [...lockedUids].sort().join('|');
     this.lastLockedUids = lockedUids;
     this.lastNodeByUid = lockedState.nodes;
+    this.lastHelperPoints = [...ownerPoints.entries()].filter(([uid]) =>
+      ['locator', 'node'].includes(this.lastNodeByUid.get(uid)?.type));
 
     this.applyTextureSampling();
 
@@ -893,20 +1034,18 @@ export class WebGLSceneRenderer {
     let closestDistance = Infinity;
     let locatorHit = null;
     let locatorDistance = Infinity;
-    for (const [uid, points] of this.lastOwnerPoints) {
+    for (const [uid, points] of geometryOnly ? [] : this.lastHelperPoints) {
       if (candidateUids && !candidateUids.has(uid)) continue;
       const node = this.lastNodeByUid.get(uid);
       const locked = this.lastLockedUids.has(uid);
-      if (!node || (!includeLocked && locked) || (lockedOnly && !locked) || (geometryOnly && ['locator', 'node'].includes(node.type))) continue;
-      if (['locator', 'node'].includes(node.type)) {
-        const projected = projectScreenPoint(points[0], this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
-        const distance = dot(subtract(points[0], ray.origin), ray.direction);
-        const iconSize = node.type === 'locator' ? locatorScreenSize(points[0], this.lastCameraState) : 16;
-        if (!projected.behind && projected.depth >= -1 && projected.depth <= 1
-          && Math.hypot(projected.x - screenX, projected.y - screenY) <= iconSize * .72 && distance > 0 && distance < locatorDistance) {
-          locatorDistance = distance;
-          locatorHit = { uid, distance, point: [...points[0]], faceName: null };
-        }
+      if (!node || (!includeLocked && locked) || (lockedOnly && !locked)) continue;
+      const projected = projectScreenPoint(points[0], this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
+      const distance = dot(subtract(points[0], ray.origin), ray.direction);
+      const iconSize = node.type === 'locator' ? locatorScreenSize(points[0], this.lastCameraState) : 16;
+      if (!projected.behind && projected.depth >= -1 && projected.depth <= 1
+        && Math.hypot(projected.x - screenX, projected.y - screenY) <= iconSize * .72 && distance > 0 && distance < locatorDistance) {
+        locatorDistance = distance;
+        locatorHit = { uid, distance, point: [...points[0]], faceName: null };
       }
     }
     // Helper elements are editor overlays whose visible marks take priority
@@ -914,8 +1053,8 @@ export class WebGLSceneRenderer {
     if (locatorHit) return locatorHit;
     const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
     const faces = [
-      ...(this.staticCache?.faces || []).filter(face => !dynamicUids.has(face.uid)),
-      ...(this.selectedCache?.faces || [])
+      ...queryFaceBvh(this.staticCache?.faceBvh, ray).filter(face => !dynamicUids.has(face.uid)),
+      ...queryFaceBvh(this.selectedCache?.faceBvh, ray)
     ];
     for (const face of faces) {
       if (candidateUids && !candidateUids.has(face.uid)) continue;
@@ -942,9 +1081,10 @@ export class WebGLSceneRenderer {
   }
 
   getFaceQuad(uid, faceName) {
-    const selectedFace = this.selectedCache?.faces?.find(face => face.uid === uid && face.faceName === faceName);
+    const key = `${uid}::${faceName}`;
+    const selectedFace = this.selectedCache?.faceIndex?.get(key);
     if (selectedFace) return selectedFace.quad.map(point => [...point]);
-    const staticFace = this.staticCache?.faces?.find(face => face.uid === uid && face.faceName === faceName);
+    const staticFace = this.staticCache?.faceIndex?.get(key);
     return staticFace ? staticFace.quad.map(point => [...point]) : null;
   }
 
@@ -1179,7 +1319,7 @@ export class WebGLSceneRenderer {
 
   drawBuffer(buffer, vertexCount, primitive, matrix, {
     depthWrite = true, cull = true, renderMode = 1, alphaMode = 0, blend = false, first = 0, opacity = 1,
-    modelTransform = null, depthTest = true, texture = null
+    modelTransform = null, depthTest = true, texture = null, flipWinding = false
   } = {}) {
     if (!vertexCount) return;
     const { gl } = this;
@@ -1212,15 +1352,28 @@ export class WebGLSceneRenderer {
     depthTest ? gl.enable(gl.DEPTH_TEST) : gl.disable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     cull ? gl.enable(gl.CULL_FACE) : gl.disable(gl.CULL_FACE);
+    gl.frontFace(flipWinding ? gl.CW : gl.CCW);
     if (blend) {
       gl.enable(gl.BLEND);
       gl.blendEquation(gl.FUNC_ADD);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     } else gl.disable(gl.BLEND);
     gl.drawArrays(primitive, first, vertexCount);
+    gl.frontFace(gl.CCW);
     gl.depthMask(true);
     gl.disable(gl.BLEND);
   }
+}
+
+function mergeAdjacentVertexRanges(ranges) {
+  const sorted = ranges.map(range => ({ ...range })).sort((left, right) => left.start - right.start);
+  const merged = [];
+  for (const range of sorted) {
+    const previous = merged[merged.length - 1];
+    if (previous && previous.start + previous.count === range.start) previous.count += range.count;
+    else merged.push(range);
+  }
+  return merged;
 }
 
 function complementVertexRanges(totalCount, excludedUids, rangesByUid) {
@@ -1271,6 +1424,77 @@ function normalizeSelectedNodeUids(selection) {
   if (!selection) return new Set();
   if (typeof selection === 'string') return new Set([selection]);
   return new Set(selection);
+}
+
+function indexFaces(faces) {
+  const index = new Map();
+  for (const face of faces || []) index.set(`${face.uid}::${face.faceName}`, face);
+  return index;
+}
+
+function buildFaceBvh(faces, leafSize = 8) {
+  if (!faces?.length) return null;
+  const entries = faces.map(face => {
+    const min = [0, 1, 2].map(axis => Math.min(...face.quad.map(point => point[axis])) - 1e-6);
+    const max = [0, 1, 2].map(axis => Math.max(...face.quad.map(point => point[axis])) + 1e-6);
+    return { face, min, max, center: min.map((value, axis) => (value + max[axis]) / 2) };
+  });
+  const build = list => {
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    for (const entry of list) for (let axis = 0; axis < 3; axis++) {
+      min[axis] = Math.min(min[axis], entry.min[axis]);
+      max[axis] = Math.max(max[axis], entry.max[axis]);
+    }
+    if (list.length <= leafSize) return { min, max, entries: list };
+    const extent = max.map((value, axis) => value - min[axis]);
+    const axis = extent.indexOf(Math.max(...extent));
+    list.sort((left, right) => left.center[axis] - right.center[axis]);
+    const middle = Math.floor(list.length / 2);
+    return { min, max, left: build(list.slice(0, middle)), right: build(list.slice(middle)) };
+  };
+  return build(entries);
+}
+
+function rayBoundsDistance(origin, direction, min, max, maximum = Infinity) {
+  let near = 0, far = maximum;
+  for (let axis = 0; axis < 3; axis++) {
+    if (Math.abs(direction[axis]) < 1e-10) {
+      if (origin[axis] < min[axis] || origin[axis] > max[axis]) return null;
+      continue;
+    }
+    let first = (min[axis] - origin[axis]) / direction[axis];
+    let second = (max[axis] - origin[axis]) / direction[axis];
+    if (first > second) [first, second] = [second, first];
+    near = Math.max(near, first);
+    far = Math.min(far, second);
+    if (far < near) return null;
+  }
+  return far >= 0 ? near : null;
+}
+
+function queryFaceBvh(root, ray) {
+  if (!root) return [];
+  const candidates = [];
+  const firstDistance = rayBoundsDistance(ray.origin, ray.direction, root.min, root.max);
+  if (firstDistance === null) return candidates;
+  const stack = [{ node: root, distance: firstDistance }];
+  while (stack.length) {
+    const { node } = stack.pop();
+    if (node.entries) {
+      for (const entry of node.entries) {
+        const distance = rayBoundsDistance(ray.origin, ray.direction, entry.min, entry.max);
+        if (distance !== null) candidates.push({ face: entry.face, distance });
+      }
+      continue;
+    }
+    const children = [node.left, node.right]
+      .map(child => ({ node: child, distance: rayBoundsDistance(ray.origin, ray.direction, child.min, child.max) }))
+      .filter(entry => entry.distance !== null)
+      .sort((left, right) => right.distance - left.distance);
+    stack.push(...children);
+  }
+  candidates.sort((left, right) => left.distance - right.distance);
+  return candidates.map(entry => entry.face);
 }
 
 function getDynamicElementUids(project, selection) {
@@ -1813,6 +2037,16 @@ function normalize(v) { const length = Math.hypot(...v) || 1; return scale(v, 1 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
 function identity() { return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; }
+function mirrorModelMatrix(matrix, center) {
+  const transformedCenter = matrix.map(row => row[0] * center[0] + row[1] * center[1] + row[2] * center[2]);
+  const translation = center.map((value, axis) => value - transformedCenter[axis]);
+  return [
+    matrix[0][0], matrix[1][0], matrix[2][0], 0,
+    matrix[0][1], matrix[1][1], matrix[2][1], 0,
+    matrix[0][2], matrix[1][2], matrix[2][2], 0,
+    translation[0], translation[1], translation[2], 1
+  ];
+}
 function multiply(a, b) {
   const out = new Array(16).fill(0);
   for (let column = 0; column < 4; column++) for (let row = 0; row < 4; row++) {

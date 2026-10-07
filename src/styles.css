@@ -299,8 +299,25 @@ kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; padding: 1
 .selection-marquee[hidden] { display: none; }
 .locator-overlay { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
 .face-selection-overlay { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; overflow: hidden; pointer-events: none; shape-rendering: geometricPrecision; }
-.face-selection-overlay path { fill: rgba(var(--accent-rgb), .06); stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 1px rgba(var(--accent-rgb), .55)); }
+.face-selection-overlay path { fill: rgba(var(--accent-rgb), .06); stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .face-selection-overlay[hidden] { display: none; }
+.mirror-guide-overlay { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity .32s ease; shape-rendering: geometricPrecision; }
+.mirror-guide-overlay.visible { opacity: 1; }
+.mirror-guide-overlay[hidden] { display: none; }
+.mirror-guide-overlay .mirror-guide { color: var(--accent); }
+.mirror-guide-overlay .axis-x { color: #ff6657; }
+.mirror-guide-overlay .axis-y { color: #61df70; }
+.mirror-guide-overlay .axis-z { color: #4c9dff; }
+.mirror-guide-overlay .mirror-grid-minor { fill: none; stroke: currentColor; stroke-width: .75; stroke-opacity: .16; vector-effect: non-scaling-stroke; }
+.mirror-guide-overlay .mirror-grid-major { fill: none; stroke: currentColor; stroke-width: 1.15; stroke-opacity: .42; vector-effect: non-scaling-stroke; }
+.mirror-guide-overlay .mirror-axis-line { fill: none; stroke: currentColor; stroke-width: 1.45; stroke-opacity: .86; vector-effect: non-scaling-stroke; }
+.mirror-guide-overlay .mirror-ray { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-opacity: .72; vector-effect: non-scaling-stroke; }
+.group-mirror-axes { gap: 8px; }
+.group-mirror-axes label { display: inline-flex; align-items: center; gap: 3px; font-size: .64rem; }
+.group-mirror-axes input { accent-color: currentColor; }
+.group-mirror-axes .axis-x { color: #ff6657; }
+.group-mirror-axes .axis-y { color: #61df70; }
+.group-mirror-axes .axis-z { color: #4c9dff; }
 .locator-screen-icon { color: var(--muted); fill: currentColor; opacity: .9; filter: drop-shadow(0 1px 2px rgba(0,0,0,.72)); }
 .locator-screen-icon.selected { color: var(--accent); opacity: 1; filter: drop-shadow(0 0 3px rgba(var(--accent-rgb),.8)); }
 .transform-gizmo { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }

@@ -130,10 +130,12 @@ let lockedHoverPointer = null;
 let sceneRenderFrame = null;
 let transformUpdateFrame = null;
 let uvPreviewAnimationFrame = null;
+let uvPreviewResizeFrame = null;
 let uvPreviewLastFrame = 0;
 let uvPreviewProjectCache = null;
 let uvPreviewDrag = null;
 let uvPreviewTextureDirty = true;
+let uvPreviewRenderDirty = true;
 let uvPreviewPanelMetrics = null;
 const uvPreviewFaceLabelCanvas = document.createElement('canvas');
 let uvPreviewFaceLabelCacheKey = null;
@@ -145,10 +147,15 @@ let editingProjectTabId = null;
 let draggingProjectTabId = null;
 let draggingProjectTabInsertIndex = null;
 let selectionExpansionCache = null;
+let selectionTransformContextCache = null;
 let focusedDockHotspot = null;
 let textureUvDrag = null;
 let textureViewLayout = null;
 let textureFocusFrame = null;
+let textureUvEntryCache = null;
+let mirrorGuideGroupUid = null;
+let mirrorGuideHoldTimer = null;
+let mirrorGuideHideTimer = null;
 
 const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'filePath', 'dirty', 'history', 'future',
@@ -471,13 +478,37 @@ function renderAll(geometryScope = 'all') {
 function invalidateAllRenderGeometry() {
   sceneRenderer.invalidateGeometry();
   uvPreviewRenderer.invalidateGeometry();
+  uvPreviewRenderDirty = true;
+  textureUvEntryCache = null;
+  selectionTransformContextCache = null;
   if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
+}
+
+function selectionAffectsMirrorPreview() {
+  const selectedIds = state.selectedUids?.size
+    ? [...state.selectedUids]
+    : state.selectedUid ? [state.selectedUid] : [];
+  if (!selectedIds.length) return false;
+  const selectedSet = new Set(selectedIds);
+  for (const uidValue of selectedIds) {
+    const node = state.project.getNode(uidValue);
+    if (node?.mirrorControllerFor) return true;
+    if (node?.type === 'group' && node.mirror?.enabled) return true;
+  }
+  // Moving an ancestor group also moves an enabled mirror group and its
+  // controller even though that mirror group is not itself selected.
+  return state.project.groups.some(group => group.mirror?.enabled
+    && state.project.getGroupChain(group.uid).some(parent => selectedSet.has(parent.uid)));
 }
 
 function invalidateSelectionRenderGeometry(geometryChanged = true) {
   sceneRenderer.invalidateSelectionGeometry(geometryChanged);
+  uvPreviewRenderDirty = true;
+  selectionTransformContextCache = null;
   if (geometryChanged) {
+    if (selectionAffectsMirrorPreview()) sceneRenderer.invalidateMirrorGeometry();
     uvPreviewRenderer.invalidateGeometry();
+    textureUvEntryCache = null;
     if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
   }
 }
@@ -645,6 +676,64 @@ function curveNodeEditorMarkup(item) {
   }).join('')}</div>`;
 }
 
+function groupMirrorController(group) {
+  if (group?.type !== 'group' || !group.mirror?.controllerUid) return null;
+  const controller = state.project.getNode(group.mirror.controllerUid);
+  return controller?.type === 'node' ? controller : null;
+}
+
+function ensureGroupMirrorController(group) {
+  let controller = groupMirrorController(group);
+  if (controller) return controller;
+  controller = new NodeElement({
+    name: `${group.name}_mirror_axis`,
+    position: [...group.pivot],
+    rotation: [0, 0, 0],
+    exported: false,
+    mirrorControllerFor: group.uid
+  });
+  state.project.elements.push(controller);
+  group.children.push(controller.uid);
+  group.mirror.controllerUid = controller.uid;
+  state.project.invalidateHierarchyIndex();
+  return controller;
+}
+
+function removeGroupMirrorController(group) {
+  const uidValue = group?.mirror?.controllerUid;
+  if (!uidValue) return;
+  group.children = group.children.filter(childUid => childUid !== uidValue);
+  state.project.elements = state.project.elements.filter(element => element.uid !== uidValue);
+  group.mirror.controllerUid = null;
+  state.project.invalidateHierarchyIndex();
+}
+
+function groupMirrorInspectorMarkup(group) {
+  const mirror = group.mirror;
+  if (!mirror) return '';
+  const enabled = mirror.enabled === true;
+  const radial = mirror.mode === 'radial' || mirror.mode === 'mandala';
+  return `<div class="field-title"><span>組鏡像</span><span>${enabled ? 'ENABLED' : 'OFF'}</span></div>
+    <div class="option-row"><span>啟用組鏡像</span><label class="switch"><input type="checkbox" data-group-mirror-enabled ${enabled ? 'checked' : ''}/><i></i></label></div>
+    ${enabled ? `
+      <div class="option-row"><span>鏡像模式</span><select data-group-mirror-mode>
+        <option value="axes" ${mirror.mode === 'axes' ? 'selected' : ''}>XYZ 鏡像</option>
+        <option value="radial" ${mirror.mode === 'radial' ? 'selected' : ''}>徑向旋轉</option>
+        <option value="mandala" ${mirror.mode === 'mandala' ? 'selected' : ''}>曼陀羅</option>
+      </select></div>
+      ${mirror.mode === 'axes' ? `<div class="option-row group-mirror-axes"><span>啟用軸</span>
+        ${['x', 'y', 'z'].map(axis => `<label class="axis-${axis}"><input type="checkbox" data-group-mirror-axis="${axis}" ${mirror.axes[axis] ? 'checked' : ''}/><b>${axis.toUpperCase()}</b></label>`).join('')}
+      </div>` : ''}
+      ${radial ? `
+        <div class="option-row"><span>${mirror.mode === 'mandala' ? '對稱軸數量' : '複製數量'}</span><div class="number-wrap" style="width:68px"><input type="number" min="1" max="256" step="1" data-group-mirror-copies value="${mirror.copies}" /></div></div>
+        <div class="option-row"><span>角度分布</span><select data-group-mirror-distribution><option value="full" ${mirror.distribution === 'full' ? 'selected' : ''}>360° 均分</option><option value="range" ${mirror.distribution === 'range' ? 'selected' : ''}>限制範圍</option></select></div>
+        ${mirror.distribution === 'range' ? `
+          <div class="option-row"><span>起始角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-group-mirror-range="start" value="${round(mirror.rangeStart)}" /></div></div>
+          <div class="option-row"><span>結束角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-group-mirror-range="end" value="${round(mirror.rangeEnd)}" /></div></div>` : ''}` : ''}
+      <div class="option-row"><span>導出時建立父組</span><label class="switch"><input type="checkbox" data-group-mirror-wrap ${mirror.wrapParent ? 'checked' : ''}/><i></i></label></div>
+      <div class="option-row"><span>控制軸點</span><strong style="color:var(--accent)">${escapeHtml(groupMirrorController(group)?.name || '未建立')}</strong></div>` : ''}`;
+}
+
 function renderInspector() {
   const item = selected();
   if (!item) {
@@ -654,7 +743,7 @@ function renderInspector() {
   const items = inspectorBatchNodes();
   const rotation = item.rotation || [0, 0, 0];
   const typeLabel = isShapeElement(item) ? '多邊形柱體' : item.type === 'locator' ? 'Locator'
-    : item.type === 'node' ? '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
+    : item.type === 'node' ? item.mirrorControllerFor ? '鏡像軸點' : '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
       : item.type === 'bezier3d' ? '三維貝塞爾' : item.type === 'group' ? '組' : '立方體';
   const details = item.type === 'cube' ? `
       <div class="field-title"><span>幾何</span><button data-action="resetTransform">重置</button></div>
@@ -683,7 +772,7 @@ function renderInspector() {
       ${vectorField('位置', 'position', item.position, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}`
     : item.type === 'node' ? `
-      <div class="field-title"><span>節點</span><span>只可移動／旋轉</span></div>
+      <div class="field-title"><span>${item.mirrorControllerFor ? '組鏡像軸點' : '節點'}</span><span>只可移動／旋轉</span></div>
       ${vectorField('位置', 'position', item.position, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
       <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-field="handlesEnabled" ${item.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
@@ -704,7 +793,8 @@ function renderInspector() {
       <div class="field-title"><span>組屬性</span></div>
       ${vectorField('樞軸', 'pivot', item.pivot, items)}
       ${scalarField('膨脹', 'inflate', item.inflate, items)}
-      <div class="option-row"><span>直接子項</span><strong style="color:var(--accent)">${item.children.length}</strong></div>`;
+      <div class="option-row"><span>直接子項</span><strong style="color:var(--accent)">${item.children.length}</strong></div>
+      ${groupMirrorInspectorMarkup(item)}`;
   inspector.innerHTML = `
     <div class="field-section">
       <div class="field-title"><span>基本</span><span>${items.length > 1 ? `多選 ${items.length}` : typeLabel}</span></div>
@@ -885,6 +975,50 @@ function bindInspector() {
     input.addEventListener('change', apply);
     input.addEventListener('blur', () => { snapshotTaken = false; });
   });
+  $('[data-group-mirror-enabled]', inspector)?.addEventListener('change', event => {
+    if (item.type !== 'group') return;
+    snapshot();
+    item.mirror.enabled = event.target.checked;
+    if (item.mirror.enabled) ensureGroupMirrorController(item);
+    else removeGroupMirrorController(item);
+    sceneRenderer.invalidateMirrorGeometry();
+    markDirty(); renderAll('selection');
+  });
+  $('[data-group-mirror-mode]', inspector)?.addEventListener('change', event => {
+    if (item.type !== 'group') return;
+    snapshot();
+    item.mirror.mode = ['radial', 'mandala'].includes(event.target.value) ? event.target.value : 'axes';
+    ensureGroupMirrorController(item);
+    markDirty(); renderAll('selection');
+  });
+  $$('[data-group-mirror-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    if (item.type !== 'group') return;
+    snapshot();
+    item.mirror.axes[toggle.dataset.groupMirrorAxis] = toggle.checked;
+    markDirty(); renderAll('selection');
+  }));
+  $('[data-group-mirror-distribution]', inspector)?.addEventListener('change', event => {
+    if (item.type !== 'group') return;
+    snapshot(); item.mirror.distribution = event.target.value === 'range' ? 'range' : 'full';
+    markDirty(); renderAll('selection');
+  });
+  $('[data-group-mirror-wrap]', inspector)?.addEventListener('change', event => {
+    if (item.type !== 'group') return;
+    snapshot(); item.mirror.wrapParent = event.target.checked;
+    markDirty(); renderScene();
+  });
+  $('[data-group-mirror-copies]', inspector)?.addEventListener('change', event => {
+    if (item.type !== 'group') return;
+    const value = Math.max(1, Math.min(256, Math.round(Number(event.target.value) || 1)));
+    snapshot(); item.mirror.copies = value; event.target.value = String(value);
+    markDirty(); sceneRenderer.invalidateMirrorGeometry(); renderScene();
+  });
+  $$('[data-group-mirror-range]', inspector).forEach(input => input.addEventListener('change', () => {
+    if (item.type !== 'group' || !Number.isFinite(Number(input.value))) return;
+    snapshot();
+    item.mirror[input.dataset.groupMirrorRange === 'start' ? 'rangeStart' : 'rangeEnd'] = Number(input.value);
+    markDirty(); sceneRenderer.invalidateMirrorGeometry(); renderScene();
+  }));
   $('[data-shape-snap-mode]', inspector)?.addEventListener('change', event => {
     snapshot();
     for (const target of items.filter(isShapeElement)) target.parameters.snapMode = event.target.value;
@@ -995,7 +1129,7 @@ function refreshSelectionUi() {
   state.outlinerWindowStart = -1;
   state.outlinerWindowEnd = -1;
   renderOutlinerWindow();
-  sceneRenderer.invalidateSelectionGeometry(false);
+  invalidateSelectionRenderGeometry(false);
   updateToolOptions();
   renderInspector();
   renderScene();
@@ -1265,7 +1399,17 @@ function deleteSelected() {
   const selectedIds = topLevelSelectedUids();
   if (!selectedIds.length) return;
   snapshot();
-  selectedIds.forEach(uidValue => state.project.removeNode(uidValue));
+  selectedIds.forEach(uidValue => {
+    const node = state.project.getNode(uidValue);
+    if (node?.mirrorControllerFor) {
+      const owner = state.project.getNode(node.mirrorControllerFor);
+      if (owner?.type === 'group') {
+        owner.mirror.enabled = false;
+        owner.mirror.controllerUid = null;
+      }
+    }
+    state.project.removeNode(uidValue);
+  });
   state.selectedUid = null;
   state.selectedUids = new Set();
   state.selectionAnchorUid = null;
@@ -1740,14 +1884,17 @@ function editSelectedUvFace(action) {
 function renderUvPreview() {
   if (!state.uvPreviewEnabled) {
     setUvPreviewPlaceholder('預覽已關閉', true);
+    uvPreviewRenderDirty = false;
     return false;
   }
   if (!uvPreviewIsActive()) {
+    uvPreviewRenderDirty = false;
     return false;
   }
   const cache = getUvPreviewProject();
   if (!cache.elements.length) {
     setUvPreviewPlaceholder('選擇 Cube、Shape 或貝塞爾', true);
+    uvPreviewRenderDirty = false;
     return false;
   }
   setUvPreviewPlaceholder('', false);
@@ -1784,6 +1931,7 @@ function renderUvPreview() {
     lockedHoverFade: false,
     editorOverlayLines: []
   });
+  uvPreviewRenderDirty = false;
   updateUvFaceUi();
   return true;
 }
@@ -1818,8 +1966,9 @@ function scheduleUvPreviewAnimation() {
   uvPreviewAnimationFrame = requestAnimationFrame(tick);
 }
 
-function refreshUvPreview() {
-  renderUvPreview();
+function refreshUvPreview(force = true) {
+  if (force) uvPreviewRenderDirty = true;
+  if (uvPreviewRenderDirty) renderUvPreview();
   scheduleUvPreviewAnimation();
 }
 
@@ -1828,36 +1977,184 @@ function renderScene() {
   sceneRenderFrame = null;
   sceneRenderer.render(state.project, state.selectedUid, { ...state, editorOverlayLines: buildEditorOverlayLines() });
   updateLocatorOverlay();
-  updateFaceSelectionOverlay();
+  updateMirrorGuideOverlay();
   updateTransformGizmo();
   updateAxisWidget();
-  refreshUvPreview();
+  refreshUvPreview(false);
+}
+
+function selectedMirrorGuideGroup() {
+  const item = selected();
+  if (item?.type === 'group' && item.mirror?.enabled) return item;
+  if (item?.type === 'node' && item.mirrorControllerFor) {
+    const group = state.project.getNode(item.mirrorControllerFor);
+    if (group?.type === 'group' && group.mirror?.enabled) return group;
+  }
+  return null;
+}
+
+function mirrorControllerWorldFrame(group) {
+  const controller = groupMirrorController(group);
+  if (!controller) return null;
+  const chain = state.project.getGroupChain(controller.uid);
+  const rotateDirection = direction => normalize3(applyGroupTransforms(
+    rotateVector(direction, controller.rotation || [0, 0, 0]),
+    chain.map(parent => ({ pivot: [0, 0, 0], rotation: parent.rotation || [0, 0, 0] }))
+  ));
+  return {
+    controller,
+    origin: getTransformPivot(controller),
+    axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(rotateDirection)
+  };
+}
+
+function groupMirrorAngles(mirror) {
+  const count = Math.max(1, Math.min(256, Math.round(Number(mirror.copies) || 1)));
+  if (mirror.distribution !== 'range') return Array.from({ length: count }, (_, index) => index * 360 / count);
+  const start = Number(mirror.rangeStart) || 0;
+  const end = Number(mirror.rangeEnd) || 0;
+  if (count === 1) return [start];
+  return Array.from({ length: count }, (_, index) => start + (end - start) * index / (count - 1));
+}
+
+function mirrorProjectedSegment(start, end) {
+  const first = projectViewportPoint(start), second = projectViewportPoint(end);
+  if (first.behind || second.behind) return '';
+  return `M${first.x.toFixed(1)},${first.y.toFixed(1)}L${second.x.toFixed(1)},${second.y.toFixed(1)}`;
+}
+
+function mirrorGridPlaneMarkup(origin, firstAxis, secondAxis, className) {
+  const size = 24, step = 4;
+  const minor = [], major = [];
+  for (let offset = -size; offset <= size + .001; offset += step) {
+    const firstStart = addScaled3(addScaled3(origin, firstAxis, -size), secondAxis, offset);
+    const firstEnd = addScaled3(addScaled3(origin, firstAxis, size), secondAxis, offset);
+    const secondStart = addScaled3(addScaled3(origin, secondAxis, -size), firstAxis, offset);
+    const secondEnd = addScaled3(addScaled3(origin, secondAxis, size), firstAxis, offset);
+    const target = Math.abs(offset) < .001 || Math.abs(offset % 8) < .001 ? major : minor;
+    const firstPath = mirrorProjectedSegment(firstStart, firstEnd);
+    const secondPath = mirrorProjectedSegment(secondStart, secondEnd);
+    if (firstPath) target.push(firstPath);
+    if (secondPath) target.push(secondPath);
+  }
+  return `<g class="mirror-guide ${className}">
+    <path class="mirror-grid-minor" d="${minor.join('')}"/>
+    <path class="mirror-grid-major" d="${major.join('')}"/>
+  </g>`;
+}
+
+function clipScreenDirection(origin, direction, width, height, ray = false) {
+  const length = Math.hypot(direction[0], direction[1]);
+  if (length < .0001) return null;
+  const unit = direction.map(value => value / length);
+  const candidates = [];
+  if (Math.abs(unit[0]) > .0001) for (const x of [0, width]) {
+    const t = (x - origin[0]) / unit[0], y = origin[1] + unit[1] * t;
+    if (y >= 0 && y <= height && (!ray || t >= 0)) candidates.push([x, y, t]);
+  }
+  if (Math.abs(unit[1]) > .0001) for (const y of [0, height]) {
+    const t = (y - origin[1]) / unit[1], x = origin[0] + unit[0] * t;
+    if (x >= 0 && x <= width && (!ray || t >= 0)) candidates.push([x, y, t]);
+  }
+  candidates.sort((left, right) => left[2] - right[2]);
+  if (ray) return candidates.length ? [origin, candidates[candidates.length - 1].slice(0, 2)] : null;
+  return candidates.length >= 2 ? [candidates[0].slice(0, 2), candidates[candidates.length - 1].slice(0, 2)] : null;
+}
+
+function mirrorInfiniteLineMarkup(origin, direction, width, height, className, ray = false) {
+  const center = projectViewportPoint(origin);
+  const forward = projectViewportPoint(addScaled3(origin, direction, 1));
+  const backward = projectViewportPoint(addScaled3(origin, direction, -1));
+  let delta = !forward.behind ? [forward.x - center.x, forward.y - center.y] : [0, 0];
+  if (Math.hypot(...delta) < .001 && !backward.behind) delta = [center.x - backward.x, center.y - backward.y];
+  const clipped = clipScreenDirection([center.x, center.y], delta, width, height, ray);
+  if (!clipped) return '';
+  return `<line class="mirror-guide ${className} ${ray ? 'mirror-ray' : 'mirror-axis-line'}" x1="${clipped[0][0]}" y1="${clipped[0][1]}" x2="${clipped[1][0]}" y2="${clipped[1][1]}"/>`;
+}
+
+function renderMirrorGuide(group) {
+  const overlay = $('#mirrorGuideOverlay');
+  const frame = mirrorControllerWorldFrame(group);
+  if (!frame) { overlay.innerHTML = ''; return false; }
+  const rect = sceneCanvas.getBoundingClientRect();
+  const width = rect.width, height = rect.height;
+  overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  const [xAxis, yAxis, zAxis] = frame.axes;
+  const markup = [];
+  if (group.mirror.mode === 'axes') {
+    const definitions = [
+      ['x', xAxis, yAxis, zAxis],
+      ['y', yAxis, zAxis, xAxis],
+      ['z', zAxis, xAxis, yAxis]
+    ];
+    for (const [axisName, normal, first, second] of definitions) {
+      if (!group.mirror.axes[axisName]) continue;
+      markup.push(mirrorGridPlaneMarkup(frame.origin, first, second, `axis-${axisName}`));
+      markup.push(mirrorInfiniteLineMarkup(frame.origin, normal, width, height, `axis-${axisName}`));
+    }
+  } else {
+    markup.push(mirrorInfiniteLineMarkup(frame.origin, yAxis, width, height, 'radial-axis'));
+    const angles = groupMirrorAngles(group.mirror);
+    for (const degrees of angles) {
+      const radians = degrees * Math.PI / 180;
+      const radial = normalize3(xAxis.map((value, axis) => value * Math.cos(radians) + zAxis[axis] * Math.sin(radians)));
+      markup.push(mirrorGridPlaneMarkup(frame.origin, yAxis, radial, 'radial-plane'));
+      markup.push(mirrorInfiniteLineMarkup(frame.origin, radial, width, height, 'radial-ray', true));
+    }
+  }
+  overlay.innerHTML = markup.join('');
+  return Boolean(markup.length);
+}
+
+function updateMirrorGuideOverlay() {
+  const overlay = $('#mirrorGuideOverlay');
+  const activeGroup = selectedMirrorGuideGroup();
+  if (activeGroup) {
+    clearTimeout(mirrorGuideHoldTimer);
+    clearTimeout(mirrorGuideHideTimer);
+    mirrorGuideHoldTimer = null;
+    mirrorGuideHideTimer = null;
+    mirrorGuideGroupUid = activeGroup.uid;
+    const visible = renderMirrorGuide(activeGroup);
+    overlay.toggleAttribute('hidden', !visible);
+    if (visible) requestAnimationFrame(() => overlay.classList.add('visible'));
+    return;
+  }
+  const previous = mirrorGuideGroupUid && state.project.getNode(mirrorGuideGroupUid);
+  if (!previous?.mirror?.enabled) {
+    overlay.classList.remove('visible');
+    overlay.setAttribute('hidden', '');
+    overlay.innerHTML = '';
+    mirrorGuideGroupUid = null;
+    return;
+  }
+  renderMirrorGuide(previous);
+  if (mirrorGuideHoldTimer || mirrorGuideHideTimer) return;
+  mirrorGuideHoldTimer = setTimeout(() => {
+    mirrorGuideHoldTimer = null;
+    overlay.classList.remove('visible');
+    mirrorGuideHideTimer = setTimeout(() => {
+      mirrorGuideHideTimer = null;
+      if (selectedMirrorGuideGroup()) return;
+      overlay.setAttribute('hidden', '');
+      overlay.innerHTML = '';
+      mirrorGuideGroupUid = null;
+    }, 340);
+  }, 1500);
 }
 
 function updateFaceSelectionOverlay() {
   const overlay = $('#faceSelectionOverlay');
-  if (!overlay) return;
-  const rect = sceneCanvas.getBoundingClientRect();
-  overlay.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
-  if (!state.selectedUvFaces.size || rect.width < 1 || rect.height < 1) {
-    overlay.innerHTML = '';
+  // Face outlines are kept in one GPU line buffer by the scene renderer.  The
+  // old SVG path-per-face overlay forced every selected face through DOM layout
+  // and reprojection on every camera frame, which made viewport motion degrade
+  // continuously on large selections.
+  if (overlay) {
+    overlay.replaceChildren();
     overlay.setAttribute('hidden', '');
-    return;
   }
-  const selectedElements = getSelectionExpansion().elementSet;
-  const paths = [];
-  for (const key of state.selectedUvFaces) {
-    const parsed = parseUvFaceKey(key);
-    let quad = parsed && sceneRenderer.getFaceQuad(parsed.uid, parsed.faceName);
-    if (!quad?.length) continue;
-    if (selectedElements.has(parsed.uid)) quad = quad.map(point => sceneRenderer.transformSelectionPreviewPoint(point));
-    const projected = quad.map(point => sceneRenderer.projectPoint(point));
-    if (projected.some(point => !point || point.behind || point.depth < -1 || point.depth > 1)) continue;
-    const perimeter = [projected[0], projected[1], projected[3], projected[2]];
-    paths.push(`M${perimeter.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join('L')}Z`);
-  }
-  overlay.innerHTML = paths.length ? `<path d="${paths.join('')}"/>` : '';
-  overlay.toggleAttribute('hidden', !paths.length);
+  uvPreviewRenderDirty = true;
+  scheduleSceneRender();
 }
 
 function scheduleSceneRender() {
@@ -2153,17 +2450,31 @@ function selectionGeometryCenter() {
 
 function getSelectionTransformContext() {
   if (state.dragging?.type === 'transform' && state.dragging.batchPreview) return state.dragging.selectionContext;
+  if (selectionTransformContextCache?.project === state.project
+    && selectionTransformContextCache.selection === state.selectedUids
+    && selectionTransformContextCache.size === state.selectedUids.size
+    && selectionTransformContextCache.hierarchyRevision === state.project.hierarchyRevision) {
+    return selectionTransformContextCache.context;
+  }
   const nodes = selectedTopLevelNodes();
   const multiple = nodes.length > 1;
   const commonGroup = multiple ? deepestCommonSelectionGroup() : null;
   const center = multiple ? selectionGeometryCenter() : null;
-  return {
+  const context = {
     nodes,
     multiple,
     commonGroup,
     center,
     pivot: multiple ? (commonGroup ? getTransformPivot(commonGroup) : center) : null
   };
+  selectionTransformContextCache = {
+    project: state.project,
+    selection: state.selectedUids,
+    size: state.selectedUids.size,
+    hierarchyRevision: state.project.hierarchyRevision,
+    context
+  };
+  return context;
 }
 
 function getTransformAxes(item) {
@@ -2714,15 +3025,23 @@ function renderVertexSnapGizmo(gizmo, width, height) {
 function updateTransformGizmo() {
   const gizmo = $('#transformGizmo');
   const item = selected();
-  const curveNodeContext = activeCurveNodeContext();
-  const selectionContext = getSelectionTransformContext();
   const rect = sceneCanvas.getBoundingClientRect();
   const width = rect.width, height = rect.height;
   const curveOverlay = curveEditorOverlayMarkup(item);
-  if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)
-    || (state.tool === 'resize' && (curveNodeContext || (!selectionContext.multiple && item.type !== 'cube' && !isShapeElement(item))))) {
+  if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)) {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
     if (curveOverlay && item && !isEffectivelyLocked(item.uid)) {
+      gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      gizmo.innerHTML = curveOverlay;
+      gizmo.removeAttribute('hidden');
+    } else { gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; }
+    return;
+  }
+  const curveNodeContext = activeCurveNodeContext();
+  const selectionContext = getSelectionTransformContext();
+  if (state.tool === 'resize' && (curveNodeContext || (!selectionContext.multiple && item.type !== 'cube' && !isShapeElement(item)))) {
+    state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
+    if (curveOverlay) {
       gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
       gizmo.innerHTML = curveOverlay;
       gizmo.removeAttribute('hidden');
@@ -2859,8 +3178,13 @@ function parseUvFaceKey(key) {
 }
 
 function textureUvEntries() {
+  const expansion = getSelectionExpansion();
+  if (textureUvEntryCache?.project === state.project
+    && textureUvEntryCache.selection === state.selectedUids
+    && textureUvEntryCache.selectionSize === state.selectedUids.size
+    && textureUvEntryCache.hierarchyRevision === state.project.hierarchyRevision) return textureUvEntryCache.entries;
   const entries = [];
-  for (const uidValue of selectedElementUids()) {
+  for (const uidValue of expansion.elementUids) {
     const cube = state.project.getNode(uidValue);
     if (cube?.type !== 'cube') continue;
     for (const faceName of CUBE_FACE_NAMES) {
@@ -2873,13 +3197,34 @@ function textureUvEntries() {
       entries.push({ key: uvFaceKey(cube.uid, faceName), uid: cube.uid, cube, faceName, face, uv });
     }
   }
+  const byKey = new Map(entries.map(entry => [entry.key, entry]));
+  const faceCounts = new Map(CUBE_FACE_NAMES.map(faceName => [faceName, 0]));
+  entries.forEach(entry => faceCounts.set(entry.faceName, (faceCounts.get(entry.faceName) || 0) + 1));
+  textureUvEntryCache = {
+    project: state.project,
+    selection: state.selectedUids,
+    selectionSize: state.selectedUids.size,
+    hierarchyRevision: state.project.hierarchyRevision,
+    entries,
+    byKey,
+    faceCounts
+  };
   return entries;
 }
 
 function selectedTextureUvEntries(entries = textureUvEntries()) {
-  const available = new Set(entries.map(entry => entry.key));
-  state.selectedUvFaces = new Set([...state.selectedUvFaces].filter(key => available.has(key)));
-  return entries.filter(entry => state.selectedUvFaces.has(entry.key));
+  const byKey = textureUvEntryCache?.entries === entries
+    ? textureUvEntryCache.byKey
+    : new Map(entries.map(entry => [entry.key, entry]));
+  const selected = [];
+  let removedInvalid = false;
+  for (const key of state.selectedUvFaces) {
+    const entry = byKey.get(key);
+    if (entry) selected.push(entry);
+    else removedInvalid = true;
+  }
+  if (removedInvalid) state.selectedUvFaces = new Set(selected.map(entry => entry.key));
+  return selected;
 }
 
 function normalizedUvBounds(entries) {
@@ -2910,14 +3255,12 @@ function updateTextureUvFields(selectedEntries) {
   });
 }
 
-function renderTextureUvOverlay() {
+function renderTextureUvOverlay(selectionOnly = false) {
   const overlay = $('#textureUvOverlay');
   if (!overlay || !textureViewLayout) return;
   const layout = textureViewLayout;
-  overlay.setAttribute('viewBox', `0 0 ${layout.viewportWidth} ${layout.viewportHeight}`);
   const entries = textureUvEntries();
   const selectedEntries = selectedTextureUvEntries(entries);
-  const allPath = textureUvPath(entries, layout);
   const selectedPath = textureUvPath(selectedEntries, layout);
   const bounds = normalizedUvBounds(selectedEntries);
   let boundsMarkup = '';
@@ -2934,11 +3277,26 @@ function renderTextureUvOverlay() {
     ];
     boundsMarkup = `<rect class="texture-uv-bounds" x="${left}" y="${top}" width="${right - left}" height="${bottom - top}"/>${positions.map(([name, x, y]) => `<rect class="texture-uv-handle" data-uv-handle="${name}" x="${Math.round(x - handleSize / 2)}" y="${Math.round(y - handleSize / 2)}" width="${handleSize}" height="${handleSize}"/>`).join('')}`;
   }
-  overlay.innerHTML = `${allPath ? `<path class="texture-uv-all" d="${allPath}"/>` : ''}${selectedPath ? `<path class="texture-uv-selected" d="${selectedPath}"/>` : ''}${boundsMarkup}`;
+  let allPathNode = overlay.querySelector('.texture-uv-all');
+  let selectedPathNode = overlay.querySelector('.texture-uv-selected');
+  let selectionUi = overlay.querySelector('.texture-uv-selection-ui');
+  if (!selectionOnly || !allPathNode || !selectedPathNode || !selectionUi) {
+    overlay.setAttribute('viewBox', `0 0 ${layout.viewportWidth} ${layout.viewportHeight}`);
+    overlay.innerHTML = '<path class="texture-uv-all"/><path class="texture-uv-selected"/><g class="texture-uv-selection-ui"></g>';
+    allPathNode = overlay.querySelector('.texture-uv-all');
+    selectedPathNode = overlay.querySelector('.texture-uv-selected');
+    selectionUi = overlay.querySelector('.texture-uv-selection-ui');
+    allPathNode.setAttribute('d', textureUvPath(entries, layout));
+  }
+  selectedPathNode.setAttribute('d', selectedPath);
+  selectionUi.innerHTML = boundsMarkup;
   updateTextureUvFields(selectedEntries);
+  const selectedFaceCounts = new Map(CUBE_FACE_NAMES.map(faceName => [faceName, 0]));
+  selectedEntries.forEach(entry => selectedFaceCounts.set(entry.faceName, (selectedFaceCounts.get(entry.faceName) || 0) + 1));
   $$('[data-texture-face]').forEach(button => {
-    const matching = entries.filter(entry => entry.faceName === button.dataset.textureFace);
-    button.classList.toggle('active', Boolean(matching.length) && matching.every(entry => state.selectedUvFaces.has(entry.key)));
+    const faceName = button.dataset.textureFace;
+    const total = textureUvEntryCache?.faceCounts.get(faceName) || 0;
+    button.classList.toggle('active', total > 0 && selectedFaceCounts.get(faceName) === total);
   });
 }
 
@@ -3173,7 +3531,7 @@ function startTexturePointer(event) {
     else next.add(hit.key);
     state.selectedUvFaces = next;
     selectedEntries = selectedTextureUvEntries(entries);
-    renderTextureUvOverlay();
+    renderTextureUvOverlay(true);
     updateFaceSelectionOverlay();
   }
   textureUvDrag = {
@@ -3214,7 +3572,7 @@ function endTexturePointer(event) {
     updateTextureStageTransform();
   } else if (!drag.moved && drag.blank) {
     state.selectedUvFaces = new Set();
-    renderTextureUvOverlay();
+    renderTextureUvOverlay(true);
     updateFaceSelectionOverlay();
   } else if (drag.snapshotTaken) {
     markDirty();
@@ -3266,6 +3624,7 @@ function syncTexturePreviewPriority() {
 function syncRendererTexture(source) {
   sceneRenderer.setTexture(source);
   uvPreviewTextureDirty = true;
+  uvPreviewRenderDirty = true;
   if (uvPreviewIsActive()) {
     uvPreviewRenderer.setTexture(source);
     uvPreviewTextureDirty = false;
@@ -3869,6 +4228,7 @@ function initializeDockSystem() {
       else requestAnimationFrame(refreshUvPreview);
     },
     onLayoutChange: () => {
+      uvPreviewRenderDirty = true;
       const [textureWidth = 16, textureHeight = 16] = state.project.textureSize || [];
       syncUvPreviewPanelAspect(Math.max(1, Number(textureWidth) || 1), Math.max(1, Number(textureHeight) || 1));
       syncTexturePreviewPriority();
@@ -4317,7 +4677,7 @@ function bindEvents() {
       if (!hit) {
         state.uvPreviewSelectedFace = null;
         state.selectedUvFaces = new Set();
-        renderTextureUvOverlay();
+        renderTextureUvOverlay(true);
         updateFaceSelectionOverlay();
       }
       else if (state.project.getNode(hit.uid)?.type !== 'cube') {
@@ -4330,7 +4690,7 @@ function bindEvents() {
       };
       if (state.uvPreviewSelectedFace) {
         state.selectedUvFaces = new Set([uvFaceKey(state.uvPreviewSelectedFace.uid, state.uvPreviewSelectedFace.faceName)]);
-        renderTextureUvOverlay();
+        renderTextureUvOverlay(true);
         updateFaceSelectionOverlay();
         if (state.uvPreviewAutoFocusTexture) {
           dockManager?.expand('texture');
@@ -4366,7 +4726,7 @@ function bindEvents() {
       else next.add(entry.key);
     });
     state.selectedUvFaces = next;
-    renderTextureUvOverlay();
+    renderTextureUvOverlay(true);
     updateFaceSelectionOverlay();
   }));
   $$('[data-uv-coordinate]').forEach(input => input.addEventListener('change', () => {
@@ -4376,6 +4736,15 @@ function bindEvents() {
     syncTexturePreviewPriority();
     updateTextureStageTransform();
   }).observe(texturePreview);
+  new ResizeObserver(entries => {
+    const rect = entries[0]?.contentRect;
+    if (!rect || rect.width < 2 || rect.height < 2 || uvPreviewResizeFrame !== null) return;
+    uvPreviewResizeFrame = requestAnimationFrame(() => {
+      uvPreviewResizeFrame = null;
+      uvPreviewRenderDirty = true;
+      refreshUvPreview(false);
+    });
+  }).observe(uvPreviewViewport);
   document.fonts?.load('12px "Fusion Pixel Latin"').then(() => {
     uvPreviewFaceLabelFontRevision++;
     uvPreviewFaceLabelCacheKey = null;
@@ -4510,7 +4879,7 @@ function bindEvents() {
       state.selectionAnchorUid = item.dataset.uid;
       outliner.querySelectorAll('.outliner-item.active').forEach(row => row.classList.remove('active'));
       item.classList.add('active');
-      sceneRenderer.invalidateSelectionGeometry(false);
+      invalidateSelectionRenderGeometry(false);
       renderInspector(); renderScene(); updateSelectionLabels();
     }
     state.outlinerDragUids = topLevelSelectedUids();
@@ -4781,7 +5150,7 @@ function onPointerDown(event) {
     const cube = hit && state.project.getNode(hit.uid);
     if (!hit?.faceName || cube?.type !== 'cube') {
       if (!suppressBlankDeselect) state.selectedUvFaces = new Set();
-      renderTextureUvOverlay();
+      renderTextureUvOverlay(true);
       updateFaceSelectionOverlay();
       return;
     }
@@ -4802,9 +5171,9 @@ function onPointerDown(event) {
     else next.add(key);
     state.selectedUvFaces = next;
     state.uvPreviewSelectedFace = { uid: hit.uid, faceName: hit.faceName, points: hit.facePoints.map(point => [...point]) };
-    renderTextureUvOverlay();
+    renderTextureUvOverlay(true);
     updateFaceSelectionOverlay();
-    renderUvPreview();
+    updateUvFaceUi();
     return;
   }
   const activeCurve = selected();
