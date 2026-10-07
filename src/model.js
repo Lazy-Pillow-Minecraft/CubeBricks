@@ -26,6 +26,32 @@ function booleanProperty(value, fallback) {
   return Boolean(value);
 }
 
+const SUBDIVISION_VECTOR_FIELDS = Object.freeze(['position', 'size', 'pivot', 'rotation']);
+
+function cloneData(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function applySubdivisionEdits(cubes, owner) {
+  const edits = owner.subdivisionEdits || {};
+  return cubes.map((cube, index) => {
+    const edit = edits[index] || edits[String(index)];
+    cube.uid = `${owner.uid}::subdivision::${index}`;
+    cube.subdivisionOwnerUid = owner.uid;
+    cube.subdivisionIndex = index;
+    if (!edit) return cube;
+    for (const field of SUBDIVISION_VECTOR_FIELDS) {
+      const delta = edit[`${field}Delta`];
+      if (Array.isArray(delta)) cube[field] = cube[field].map((value, axis) => value + (Number(delta[axis]) || 0));
+    }
+    if (Number.isFinite(Number(edit.inflateDelta))) cube.inflate += Number(edit.inflateDelta);
+    for (const field of ['name', 'uvMode', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
+      if (edit[field] !== undefined) cube[field] = cloneData(edit[field]);
+    }
+    return cube;
+  });
+}
+
 export class Cube {
   constructor(data = {}) {
     this.type = 'cube';
@@ -71,9 +97,11 @@ export class Shape {
     this.shade = data.shade ?? true;
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.color = data.color || '#d6b35b';
+    this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
+    this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
   }
 
-  toCubes() {
+  toBaseCubes() {
     const radius = Math.max(.001, Number(this.parameters.radius) || 0);
     const requestedHeight = Math.max(0, Number(this.parameters.height) || 0);
     const sides = Math.max(3, Math.round(Number(this.parameters.sides) || 3));
@@ -115,6 +143,8 @@ export class Shape {
       });
     });
   }
+
+  toCubes() { return applySubdivisionEdits(this.toBaseCubes(), this); }
 }
 
 export function pointInRegularPolygon(point, radius, sides) {
@@ -257,6 +287,8 @@ export class BezierElement {
     this.shade = booleanProperty(data.shade, true);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.color = data.color || (dimension === 2 ? '#d7b25b' : '#78b6d7');
+    this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
+    this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
   }
 
   resolvedNodeState(index) {
@@ -393,7 +425,7 @@ export class BezierElement {
     return uniqueDistances.sort((left, right) => left - right).map(sampleAtDistance);
   }
 
-  toCubes() {
+  toBaseCubes() {
     const points = this.sampleCurve();
     const thickness = Math.max(.01, Number(this.parameters.thickness) || 1);
     const segments = [];
@@ -442,6 +474,9 @@ export class BezierElement {
     }
     return cubes;
   }
+
+
+  toCubes() { return applySubdivisionEdits(this.toBaseCubes(), this); }
 }
 
 export class Locator {
@@ -776,6 +811,8 @@ export class CubeBricksProject {
   }
 
   getParentGroup(uidValue) {
+    const node = this.getNode(uidValue);
+    if (node?.subdivisionOwnerUid) return this.getParentGroup(node.subdivisionOwnerUid);
     return this.ensureParentIndex().get(uidValue) || null;
   }
 
@@ -835,7 +872,10 @@ export class CubeBricksProject {
 
   serialize() {
     this.meta.modifiedAt = new Date().toISOString();
-    return JSON.stringify(this, null, 2);
+    return JSON.stringify({
+      ...this,
+      elements: this.elements.filter(element => !element.subdivisionOwnerUid)
+    }, null, 2);
   }
 
   static demo() {

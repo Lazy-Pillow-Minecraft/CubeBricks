@@ -904,7 +904,10 @@ export class WebGLSceneRenderer {
       || this.staticCache.revision !== this.geometryRevision
       || this.staticCache.faceDistinct !== (camera.faceDistinct === true)) {
       const faceDistinct = camera.faceDistinct === true;
-      const geometry = buildElementGeometry(project, project.elements, null, [1, 1, 1], faceDistinct);
+      const renderElements = camera.subdivisionEditOwnerUid
+        ? project.elements.filter(element => element.uid !== camera.subdivisionEditOwnerUid)
+        : project.elements;
+      const geometry = buildElementGeometry(project, renderElements, null, [1, 1, 1], faceDistinct);
       this.staticCache = {
         project, revision: this.geometryRevision, faceDistinct, ...geometry,
         faceIndex: indexFaces(geometry.faces), faceBvh: buildFaceBvh(geometry.faces)
@@ -935,7 +938,8 @@ export class WebGLSceneRenderer {
       || this.selectedCache.revision !== this.selectionRevision
       || this.selectedCache.selectedKey !== selectedKey
       || this.selectedCache.faceDistinct !== (camera.faceDistinct === true)) {
-      const selectedElements = project.elements.filter(element => dynamicUids.has(element.uid));
+      const selectedElements = project.elements.filter(element => dynamicUids.has(element.uid)
+        && element.uid !== camera.subdivisionEditOwnerUid);
       const faceDistinct = camera.faceDistinct === true;
       const geometry = buildElementGeometry(project, selectedElements, selectedUids, this.selectionOutline, faceDistinct);
       this.selectedCache = {
@@ -948,7 +952,13 @@ export class WebGLSceneRenderer {
     const ownerPoints = mergeOwnerPoints(this.staticCache.ownerPoints, this.selectedCache.ownerPoints);
     this.lastOwnerPoints = ownerPoints;
     const lockedState = this.getLockedState(project);
-    const lockedUids = lockedState.uids;
+    const lockedUids = new Set(lockedState.uids);
+    if (camera.subdivisionEditOwnerUid) {
+      for (const element of project.elements) {
+        if (element.uid !== camera.subdivisionEditOwnerUid
+          && element.subdivisionOwnerUid !== camera.subdivisionEditOwnerUid) lockedUids.add(element.uid);
+      }
+    }
     this.currentLockedKey = [...lockedUids].sort().join('|');
     this.lastLockedUids = lockedUids;
     this.lastNodeByUid = lockedState.nodes;
@@ -1553,7 +1563,8 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
       edgeRanges.set(element.uid, { start: edgeStart, count: edges.length / 12 - edgeStart });
       helperRanges.set(element.uid, { start: helperStart, count: helpers.length / 12 - helperStart });
     };
-    const groupChain = project.getGroupChain(element.uid);
+    const subdivisionOwner = element.subdivisionOwnerUid && project.getNode(element.subdivisionOwnerUid);
+    const groupChain = project.getGroupChain(subdivisionOwner?.uid || element.uid);
     const selectedByGroup = groupChain.some(group => selectedUids.has(group.uid));
     const selectedForBounds = selectedUids.has(element.uid) || selectedByGroup;
     if (element.type === 'locator' || element.type === 'node') {
@@ -1568,7 +1579,9 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
       const curveGeometry = bezierHelperGeometry(element, groupChain);
       if (element.visible) helpers.push(...curveGeometry.lines);
     }
-    const cubes = typeof element.toCubes === 'function'
+    const cubes = subdivisionOwner
+      ? [{ cube: element, offset: subdivisionOwner.origin || [0, 0, 0], ownerRotation: subdivisionOwner.rotation || [0, 0, 0], ownerOrigin: subdivisionOwner.origin || [0, 0, 0], groupChain, textureSize: project.textureSize, shade: element.shade !== false && subdivisionOwner.shade !== false }]
+      : typeof element.toCubes === 'function'
       ? element.toCubes().map(cube => ({ cube, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
       : [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
 

@@ -45,6 +45,27 @@ const inwardDepthCubes = inwardDepthPrism.toCubes();
 assert.ok(inwardDepthCubes.every(cube => Math.abs(cube.size[2] - 2) < 1e-7),
   'inner-radius depth mode interprets the value as each cube inward extension distance');
 
+const editedPrism = new Shape({
+  uid: 'edited_prism',
+  parameters: { radius: 4, height: 8, sides: 8 },
+  preserveSubdivisionEdits: true,
+  subdivisionEdits: {
+    0: { positionDelta: [1, 0, 0], sizeDelta: [0, 2, 0], faces: { north: { uv: [1, 2, 5, 7], texture: '#0' } } }
+  }
+});
+const editedPrismCube = editedPrism.toCubes()[0];
+assert.equal(editedPrismCube.uid, 'edited_prism::subdivision::0', 'generated Shape cubes keep a stable subdivision identity');
+assert.equal(editedPrismCube.position[0], editedPrism.toBaseCubes()[0].position[0] + 1,
+  'subdivision position edits remain relative to regenerated Shape geometry');
+assert.equal(editedPrismCube.size[1], 10, 'subdivision size edits are applied as non-destructive deltas');
+assert.deepEqual(editedPrismCube.faces.north.uv, [1, 2, 5, 7], 'subdivision face UV overrides survive regeneration');
+const transientCube = editedPrism.toCubes()[0];
+const subdivisionProject = new CubeBricksProject({ elements: [editedPrism], outliner: [editedPrism.uid] });
+subdivisionProject.elements.push(transientCube);
+const subdivisionRoundTrip = JSON.parse(subdivisionProject.serialize());
+assert.equal(subdivisionRoundTrip.elements.length, 1, 'temporary subdivision cubes never leak into cbmodel serialization');
+assert.ok(subdivisionRoundTrip.elements[0].subdivisionEdits['0'], 'Shape subdivision edits are stored on the procedural element');
+
 const planarCurve = new BezierElement({ nodes: [
   { position: [-4, 9, 0], handleOut: [2, 7, 0] },
   { position: [4, -3, 0], handleIn: [-2, -5, 0] }

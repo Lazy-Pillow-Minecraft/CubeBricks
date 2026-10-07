@@ -156,6 +156,7 @@ let textureUvEntryCache = null;
 let mirrorGuideGroupUid = null;
 let mirrorGuideHoldTimer = null;
 let mirrorGuideHideTimer = null;
+let subdivisionSession = null;
 
 const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'filePath', 'dirty', 'history', 'future',
@@ -263,6 +264,7 @@ function restoreProjectTextureView() {
 function activateProjectTab(tabId, { render = true } = {}) {
   const tab = projectTabById(tabId);
   if (!tab) return false;
+  if (tabId !== activeProjectTabId && subdivisionSession) exitSubdivisionEdit(false);
   if (tabId !== activeProjectTabId) syncActiveProjectTab();
   activeProjectTabId = tabId;
   for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
@@ -413,6 +415,7 @@ function restore(serialized) {
   const previousSelectedUids = new Set(state.selectedUids);
   const previousSelectedUid = state.selectedUid;
   const previousSelectionAnchorUid = state.selectionAnchorUid;
+  subdivisionSession = null;
   state.project = new CubeBricksProject(JSON.parse(serialized));
   state.selectedUids = new Set([...previousSelectedUids].filter(uidValue => state.project.getNode(uidValue)));
   state.selectedUid = previousSelectedUid && state.selectedUids.has(previousSelectedUid)
@@ -502,6 +505,7 @@ function selectionAffectsMirrorPreview() {
 }
 
 function invalidateSelectionRenderGeometry(geometryChanged = true) {
+  if (geometryChanged) syncSubdivisionEdits();
   sceneRenderer.invalidateSelectionGeometry(geometryChanged);
   uvPreviewRenderDirty = true;
   selectionTransformContextCache = null;
@@ -521,7 +525,7 @@ function updateSelectionLabels() {
   $('#uidChip').textContent = item?.uid || '—';
   const selectedCount = selectedElementUids().length;
   const counter = $('#outlinerSelectionCount');
-  if (counter) counter.textContent = `${selectedCount}/${state.project.elements.length}`;
+  if (counter) counter.textContent = `${selectedCount}/${state.project.elements.filter(element => !element.subdivisionOwnerUid).length}`;
 }
 
 function renderOutliner() {
@@ -658,6 +662,88 @@ function isShapeElement(item) {
   return item?.type === 'polygon_prism' || item?.type === 'shape';
 }
 
+function isProceduralShape(item) {
+  return Boolean(item && item.type !== 'cube' && typeof item.toCubes === 'function' && typeof item.toBaseCubes === 'function');
+}
+
+function subdivisionOwner(item) {
+  return item?.subdivisionOwnerUid ? state.project.getNode(item.subdivisionOwnerUid) : null;
+}
+
+function subdivisionPatch(owner, cube, index) {
+  const base = owner.toBaseCubes?.()[index];
+  if (!base) return null;
+  const patch = {};
+  for (const field of ['position', 'size', 'pivot', 'rotation']) {
+    const delta = cube[field].map((value, axis) => Number(value) - Number(base[field][axis]));
+    if (delta.some(value => Math.abs(value) > 1e-8)) patch[`${field}Delta`] = delta;
+  }
+  const inflateDelta = Number(cube.inflate || 0) - Number(base.inflate || 0);
+  if (Math.abs(inflateDelta) > 1e-8) patch.inflateDelta = inflateDelta;
+  for (const field of ['name', 'uvMode', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
+    if (JSON.stringify(cube[field]) !== JSON.stringify(base[field])) patch[field] = structuredClone(cube[field]);
+  }
+  return Object.keys(patch).length ? patch : null;
+}
+
+function syncSubdivisionEdits() {
+  if (!subdivisionSession) return;
+  const owner = state.project.getNode(subdivisionSession.ownerUid);
+  if (!owner?.toBaseCubes) return;
+  const edits = {};
+  subdivisionSession.cubes.forEach((cube, index) => {
+    const patch = subdivisionPatch(owner, cube, index);
+    if (patch) edits[index] = patch;
+  });
+  owner.subdivisionEdits = edits;
+}
+
+function enterSubdivisionEdit(owner) {
+  if (!isProceduralShape(owner)) return;
+  if (subdivisionSession?.ownerUid === owner.uid) return;
+  if (subdivisionSession) exitSubdivisionEdit(false);
+  const cubes = owner.toCubes().map((cube, index) => {
+    cube.uid = `${owner.uid}::subdivision::${index}`;
+    cube.subdivisionOwnerUid = owner.uid;
+    cube.subdivisionIndex = index;
+    return cube;
+  });
+  if (!cubes.length) return toast('這個 Shape 目前沒有可編輯的 Cube');
+  subdivisionSession = { ownerUid: owner.uid, cubes };
+  state.project.elements.push(...cubes);
+  state.project.invalidateHierarchyIndex();
+  sceneRenderer.invalidateLockState();
+  state.selectedUid = cubes[0].uid;
+  state.selectedUids = new Set([cubes[0].uid]);
+  state.selectionAnchorUid = cubes[0].uid;
+  state.selectedUvFaces = new Set();
+  invalidateAllRenderGeometry();
+  renderAll('all');
+  toast('已進入細分編輯；其他物件已虛化');
+}
+
+function exitSubdivisionEdit(render = true) {
+  if (!subdivisionSession) return;
+  syncSubdivisionEdits();
+  const ownerUid = subdivisionSession.ownerUid;
+  const transientUids = new Set(subdivisionSession.cubes.map(cube => cube.uid));
+  state.project.elements = state.project.elements.filter(element => !transientUids.has(element.uid));
+  state.project.invalidateHierarchyIndex();
+  sceneRenderer.invalidateLockState();
+  subdivisionSession = null;
+  state.selectedUid = state.project.getNode(ownerUid) ? ownerUid : null;
+  state.selectedUids = new Set(state.selectedUid ? [state.selectedUid] : []);
+  state.selectionAnchorUid = state.selectedUid;
+  state.selectedUvFaces = new Set();
+  invalidateAllRenderGeometry();
+  if (render) renderAll('all');
+}
+
+function discardSubdivisionEdits(target) {
+  if (!isProceduralShape(target) || target.preserveSubdivisionEdits) return;
+  target.subdivisionEdits = {};
+}
+
 function curveNodeEditorMarkup(item) {
   return `<div class="curve-node-list">${item.nodes.map((node, index) => {
     const displayedRotation = node.autoTangent ? item.resolvedNodeState(index).rotation : node.rotation;
@@ -742,7 +828,8 @@ function renderInspector() {
   }
   const items = inspectorBatchNodes();
   const rotation = item.rotation || [0, 0, 0];
-  const typeLabel = isShapeElement(item) ? '多邊形柱體' : item.type === 'locator' ? 'Locator'
+  const editOwner = subdivisionOwner(item);
+  const typeLabel = editOwner ? 'Shape 細分 Cube' : isShapeElement(item) ? '多邊形柱體' : item.type === 'locator' ? 'Locator'
     : item.type === 'node' ? item.mirrorControllerFor ? '鏡像軸點' : '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
       : item.type === 'bezier3d' ? '三維貝塞爾' : item.type === 'group' ? '組' : '立方體';
   const details = item.type === 'cube' ? `
@@ -804,13 +891,23 @@ function renderInspector() {
     <div class="field-section">
       ${details}
     </div>
+    ${isProceduralShape(item) ? `<div class="field-section subdivision-controls">
+      <div class="field-title"><span>細分編輯</span><span>${Object.keys(item.subdivisionEdits || {}).length} 個覆寫</span></div>
+      <div class="option-row"><span>操作時保留已有細分編輯</span><label class="switch"><input type="checkbox" data-field="preserveSubdivisionEdits" ${item.preserveSubdivisionEdits ? 'checked' : ''}/><i></i></label></div>
+      <button type="button" data-action="enterSubdivisionEdit">進入細分編輯</button>
+    </div>` : ''}
+    ${editOwner ? `<div class="field-section subdivision-controls active">
+      <div class="field-title"><span>${escapeHtml(editOwner.name)}</span><span>細分 ${item.subdivisionIndex + 1}</span></div>
+      <p>正在非破壞地編輯 Shape 生成的 Cube。</p>
+      <button type="button" data-action="exitSubdivisionEdit">完成細分編輯</button>
+    </div>` : ''}
     ${item.type === 'cube' || isShapeElement(item) || isBezierElement(item) || item.type === 'group' ? `
     <div class="field-section">
       <div class="field-title"><span>外觀</span><span>預覽色</span></div>
       ${item.color ? `<div class="option-row"><span>材質色</span><input type="color" data-field="color" value="${item.color}" /></div>` : ''}
       <div class="option-row"><span>面陰影</span><label class="switch"><input type="checkbox" data-field="shade" ${item.shade !== false ? 'checked' : ''}/><i></i></label></div>
     </div>` : ''}
-    <div class="field-section"><button class="danger-button" data-action="deleteSelected">${items.length > 1 ? '刪除選中項' : `刪除${item.type === 'group' ? '組及其內容' : '物件'}`}</button></div>`;
+    ${editOwner ? '' : `<div class="field-section"><button class="danger-button" data-action="deleteSelected">${items.length > 1 ? '刪除選中項' : `刪除${item.type === 'group' ? '組及其內容' : '物件'}`}</button></div>`}`;
   bindInspector();
 }
 
@@ -912,6 +1009,7 @@ function bindInspector() {
         const [, indexText, property] = field.split(':');
         const node = item.nodes[Number(indexText)];
         if (!node || !Array.isArray(node[property])) return;
+        discardSubdivisionEdits(item);
         if (property === 'rotation' && node.autoTangent) bakeCurveNodeTangent(item, Number(indexText));
         const planarVector = property === 'position' || property === 'handleIn' || property === 'handleOut';
         const lockedPlanarAxis = item.dimension === 2
@@ -967,6 +1065,7 @@ function bindInspector() {
       const nextValue = key === 'sides' ? Math.max(3, Math.round(value))
         : Math.max(key === 'innerRadius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1, value);
       for (const target of items.filter(node => node.parameters && key in node.parameters)) {
+        discardSubdivisionEdits(target);
         target.parameters[key] = nextValue;
       }
       markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(); renderScene();
@@ -1027,6 +1126,7 @@ function bindInspector() {
   $('[data-shape-inner-radius]', inspector)?.addEventListener('change', event => {
     snapshot();
     for (const target of items.filter(isShapeElement)) {
+      discardSubdivisionEdits(target);
       target.parameters.innerRadiusEnabled = event.target.checked;
     }
     markDirty(); renderAll('selection');
@@ -1034,13 +1134,17 @@ function bindInspector() {
   $('[data-shape-inner-radius-mode]', inspector)?.addEventListener('change', event => {
     snapshot();
     for (const target of items.filter(isShapeElement)) {
+      discardSubdivisionEdits(target);
       target.parameters.innerRadiusMode = event.target.value === 'depth' ? 'depth' : 'radius';
     }
     markDirty(); renderAll('selection');
   });
   $('[data-curve-segmentation]', inspector)?.addEventListener('change', event => {
     snapshot();
-    for (const target of items.filter(isBezierElement)) target.parameters.segmentationMode = event.target.value;
+    for (const target of items.filter(isBezierElement)) {
+      discardSubdivisionEdits(target);
+      target.parameters.segmentationMode = event.target.value;
+    }
     markDirty(); renderAll('selection');
   });
   $$('[data-select-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
@@ -1050,12 +1154,13 @@ function bindInspector() {
   $$('[data-curve-node-toggle]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const node = item.nodes?.[Number(toggle.dataset.curveNodeToggle)];
     if (!node) return;
-    snapshot(); node.handlesEnabled = toggle.checked; markDirty(); renderAll('selection');
+    snapshot(); discardSubdivisionEdits(item); node.handlesEnabled = toggle.checked; markDirty(); renderAll('selection');
   }));
   $$('[data-curve-node-symmetric]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const node = item.nodes?.[Number(toggle.dataset.curveNodeSymmetric)];
     if (!node) return;
     snapshot();
+    discardSubdivisionEdits(item);
     node.symmetricHandles = toggle.checked;
     if (toggle.checked) setCurveHandle(node, 'handleOut', node.handleOut, item.dimension === 2);
     markDirty(); renderAll('selection');
@@ -1065,6 +1170,7 @@ function bindInspector() {
     const node = item.nodes?.[index];
     if (!node) return;
     snapshot();
+    discardSubdivisionEdits(item);
     if (!toggle.checked && node.autoTangent) bakeCurveNodeTangent(item, index);
     else node.autoTangent = toggle.checked;
     markDirty(); renderAll('selection');
@@ -1076,6 +1182,7 @@ function bindInspector() {
       const value = Number(input.value);
       if (!node || !Number.isFinite(value) || item.dimension !== 3) return;
       if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      discardSubdivisionEdits(item);
       node.roll = value;
       markDirty(); invalidateSelectionRenderGeometry(); renderScene();
     };
@@ -1086,11 +1193,14 @@ function bindInspector() {
   $$('[data-remove-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
     if (!isBezierElement(item) || item.nodes.length <= 2) return;
     snapshot();
+    discardSubdivisionEdits(item);
     item.nodes.splice(Number(button.dataset.removeCurveNode), 1);
     state.selectedCurveNodeIndex = Math.min(item.nodes.length - 1, state.selectedCurveNodeIndex ?? 0);
     markDirty(); renderAll('selection');
   }));
   $('[data-action="deleteSelected"]', inspector)?.addEventListener('click', deleteSelected);
+  $('[data-action="enterSubdivisionEdit"]', inspector)?.addEventListener('click', () => enterSubdivisionEdit(item));
+  $('[data-action="exitSubdivisionEdit"]', inspector)?.addEventListener('click', () => exitSubdivisionEdit());
   $('[data-action="resetTransform"]', inspector)?.addEventListener('click', () => {
     snapshot();
     for (const target of items) {
@@ -1150,7 +1260,12 @@ function clearSelection() {
 }
 
 function selectItem(uid, { revealInOutliner = false, toggle = false, range = false } = {}) {
-  if (!state.project.getNode(uid)) return;
+  const requestedNode = state.project.getNode(uid);
+  if (!requestedNode) return;
+  if (subdivisionSession && requestedNode.subdivisionOwnerUid !== subdivisionSession.ownerUid) {
+    toast('細分編輯期間只能選擇目前 Shape 內的 Cube');
+    return;
+  }
   const previousSelectedUid = state.selectedUid;
   sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
   if (range && state.selectionAnchorUid) {
@@ -1398,6 +1513,9 @@ function addGroup() {
 function deleteSelected() {
   const selectedIds = topLevelSelectedUids();
   if (!selectedIds.length) return;
+  if (subdivisionSession && selectedIds.some(uidValue => state.project.getNode(uidValue)?.subdivisionOwnerUid)) {
+    return toast('細分 Cube 由 Shape 管理，不能單獨刪除');
+  }
   snapshot();
   selectedIds.forEach(uidValue => {
     const node = state.project.getNode(uidValue);
@@ -1975,7 +2093,13 @@ function refreshUvPreview(force = true) {
 function renderScene() {
   if (sceneRenderFrame !== null) cancelAnimationFrame(sceneRenderFrame);
   sceneRenderFrame = null;
-  sceneRenderer.render(state.project, state.selectedUid, { ...state, editorOverlayLines: buildEditorOverlayLines() });
+  sceneRenderer.render(state.project, state.selectedUid, {
+    ...state,
+    subdivisionEditOwnerUid: subdivisionSession?.ownerUid || null,
+    lockedDefaultAlpha: subdivisionSession ? 12 : state.lockedDefaultAlpha,
+    lockedHoverFade: subdivisionSession ? false : state.lockedHoverFade,
+    editorOverlayLines: buildEditorOverlayLines()
+  });
   updateLocatorOverlay();
   updateMirrorGuideOverlay();
   updateTransformGizmo();
@@ -2206,9 +2330,9 @@ function isEffectivelyLocked(uidValue) {
 
 function lockedObjectOpacity(uidValue, screenPoint) {
   if (!isEffectivelyLocked(uidValue)) return 1;
-  const base = state.lockedDefaultAlpha / 100;
+  const base = subdivisionSession ? .12 : state.lockedDefaultAlpha / 100;
   const hover = state.lockedHoverAlpha / 100;
-  if (!state.lockedHoverFade || !state.lockedHoverPoint || !screenPoint || state.lockedHoverStrength <= 0) return base;
+  if (subdivisionSession || !state.lockedHoverFade || !state.lockedHoverPoint || !screenPoint || state.lockedHoverStrength <= 0) return base;
   const distance = Math.hypot(screenPoint.x - state.lockedHoverPoint[0], screenPoint.y - state.lockedHoverPoint[1]);
   const ratio = Math.min(1, distance / Math.max(1, state.lockedHoverRadius));
   const smooth = ratio * ratio * (3 - 2 * ratio);
@@ -2418,6 +2542,12 @@ function eulerFromQuaternion(q) {
 }
 
 function getTransformPivot(item) {
+  const owner = subdivisionOwner(item);
+  if (owner) {
+    const parentPoint = rotateVector(item.pivot || [0, 0, 0], owner.rotation || [0, 0, 0])
+      .map((value, axis) => value + owner.origin[axis]);
+    return applyGroupTransforms(parentPoint, state.project.getGroupChain(owner.uid));
+  }
   const local = item.type === 'cube' || item.type === 'group' ? item.pivot : item.position || item.origin;
   return applyGroupTransforms(local, state.project.getGroupChain(item.uid));
 }
@@ -2478,11 +2608,13 @@ function getSelectionTransformContext() {
 }
 
 function getTransformAxes(item) {
-  const chain = state.project.getGroupChain(item.uid);
+  const owner = subdivisionOwner(item);
+  const chain = state.project.getGroupChain(owner?.uid || item.uid);
   const parentRotation = vector => applyGroupTransforms(vector, chain.map(group => ({ pivot: [0, 0, 0], rotation: group.rotation })));
   return [0, 1, 2].map(axis => {
     const unit = [0, 0, 0]; unit[axis] = 1;
-    let direction = state.transformSpace === 'global' ? unit : parentRotation(unit);
+    let direction = state.transformSpace === 'global' ? unit
+      : parentRotation(owner ? rotateVector(unit, owner.rotation || [0, 0, 0]) : unit);
     if (state.transformSpace === 'self' || (state.tool === 'resize' && item.type !== 'group')) {
       const rotation = item.rotation || [0, 0, 0];
       if (state.tool === 'rotate' && state.rotationMode === 'euler') {
@@ -2492,9 +2624,11 @@ function getTransformAxes(item) {
         const stagedRotation = axis === 0 ? [0, rotation[1], rotation[2]]
           : axis === 1 ? [0, 0, rotation[2]]
           : [0, 0, 0];
-        direction = parentRotation(rotateVector(unit, stagedRotation));
+        const localDirection = rotateVector(unit, stagedRotation);
+        direction = parentRotation(owner ? rotateVector(localDirection, owner.rotation || [0, 0, 0]) : localDirection);
       } else {
-        direction = parentRotation(rotateVector(unit, rotation));
+        const localDirection = rotateVector(unit, rotation);
+        direction = parentRotation(owner ? rotateVector(localDirection, owner.rotation || [0, 0, 0]) : localDirection);
       }
     }
     return normalize3(direction);
@@ -3282,7 +3416,7 @@ function renderTextureUvOverlay(selectionOnly = false) {
   let selectionUi = overlay.querySelector('.texture-uv-selection-ui');
   if (!selectionOnly || !allPathNode || !selectedPathNode || !selectionUi) {
     overlay.setAttribute('viewBox', `0 0 ${layout.viewportWidth} ${layout.viewportHeight}`);
-    overlay.innerHTML = '<path class="texture-uv-all"/><path class="texture-uv-selected"/><g class="texture-uv-selection-ui"></g>';
+    overlay.innerHTML = '<path class="texture-uv-all"/><path class="texture-uv-selected"/><g class="texture-uv-selection-ui"></g><rect class="texture-uv-alt-box" hidden/>';
     allPathNode = overlay.querySelector('.texture-uv-all');
     selectedPathNode = overlay.querySelector('.texture-uv-selected');
     selectionUi = overlay.querySelector('.texture-uv-selection-ui');
@@ -3290,6 +3424,17 @@ function renderTextureUvOverlay(selectionOnly = false) {
   }
   selectedPathNode.setAttribute('d', selectedPath);
   selectionUi.innerHTML = boundsMarkup;
+  const altBox = overlay.querySelector('.texture-uv-alt-box');
+  if (altBox && textureUvDrag?.kind === 'assign' && textureUvDrag.moved && textureUvDrag.currentUv) {
+    const start = textureUvDrag.startUv, end = textureUvDrag.currentUv;
+    const left = layout.left + Math.min(start[0], end[0]) * layout.scale;
+    const top = layout.top + Math.min(start[1], end[1]) * layout.scale;
+    altBox.setAttribute('x', String(left));
+    altBox.setAttribute('y', String(top));
+    altBox.setAttribute('width', String(Math.abs(end[0] - start[0]) * layout.scale));
+    altBox.setAttribute('height', String(Math.abs(end[1] - start[1]) * layout.scale));
+    altBox.removeAttribute('hidden');
+  } else altBox?.setAttribute('hidden', '');
   updateTextureUvFields(selectedEntries);
   const selectedFaceCounts = new Map(CUBE_FACE_NAMES.map(faceName => [faceName, 0]));
   selectedEntries.forEach(entry => selectedFaceCounts.set(entry.faceName, (selectedFaceCounts.get(entry.faceName) || 0) + 1));
@@ -3408,12 +3553,21 @@ function textureUvHit(entries, point) {
 function textureUvHandleAt(point, bounds) {
   if (!bounds || !textureViewLayout) return null;
   const tolerance = 9 / textureViewLayout.scale;
-  const positions = {
-    nw: [bounds.minU, bounds.minV], n: [(bounds.minU + bounds.maxU) / 2, bounds.minV], ne: [bounds.maxU, bounds.minV],
-    w: [bounds.minU, (bounds.minV + bounds.maxV) / 2], e: [bounds.maxU, (bounds.minV + bounds.maxV) / 2],
-    sw: [bounds.minU, bounds.maxV], s: [(bounds.minU + bounds.maxU) / 2, bounds.maxV], se: [bounds.maxU, bounds.maxV]
-  };
-  return Object.entries(positions).find(([, value]) => Math.hypot(point[0] - value[0], point[1] - value[1]) <= tolerance)?.[0] || null;
+  const nearLeft = Math.abs(point[0] - bounds.minU) <= tolerance;
+  const nearRight = Math.abs(point[0] - bounds.maxU) <= tolerance;
+  const nearTop = Math.abs(point[1] - bounds.minV) <= tolerance;
+  const nearBottom = Math.abs(point[1] - bounds.maxV) <= tolerance;
+  if (nearLeft && nearTop) return 'nw';
+  if (nearRight && nearTop) return 'ne';
+  if (nearLeft && nearBottom) return 'sw';
+  if (nearRight && nearBottom) return 'se';
+  const withinX = point[0] >= bounds.minU - tolerance && point[0] <= bounds.maxU + tolerance;
+  const withinY = point[1] >= bounds.minV - tolerance && point[1] <= bounds.maxV + tolerance;
+  if (nearTop && withinX) return 'n';
+  if (nearBottom && withinX) return 's';
+  if (nearLeft && withinY) return 'w';
+  if (nearRight && withinY) return 'e';
+  return null;
 }
 
 function snapTexturePan() {
@@ -3520,6 +3674,14 @@ function startTexturePointer(event) {
   const point = clientToTextureUv(event.clientX, event.clientY);
   const entries = textureUvEntries();
   let selectedEntries = selectedTextureUvEntries(entries);
+  if (event.altKey && selectedEntries.length) {
+    textureUvDrag = {
+      kind: 'assign', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+      startUv: point, currentUv: point, entries: selectedEntries, moved: false, blank: false, snapshotTaken: false
+    };
+    preview.style.cursor = 'crosshair';
+    return;
+  }
   const bounds = normalizedUvBounds(selectedEntries);
   const handle = textureUvHandleAt(point, bounds);
   const hit = textureUvHit(entries, point);
@@ -3542,7 +3704,11 @@ function startTexturePointer(event) {
 }
 
 function moveTexturePointer(event) {
-  if (!textureUvDrag || textureUvDrag.pointerId !== event.pointerId) return;
+  if (!textureUvDrag) {
+    updateTextureUvCursor(event);
+    return;
+  }
+  if (textureUvDrag.pointerId !== event.pointerId) return;
   if (textureUvDrag.kind === 'pan') {
     const dx = event.clientX - textureUvDrag.x;
     const dy = event.clientY - textureUvDrag.y;
@@ -3556,6 +3722,16 @@ function moveTexturePointer(event) {
   }
   if (!textureUvDrag.moved && Math.hypot(event.clientX - textureUvDrag.startX, event.clientY - textureUvDrag.startY) < 3) return;
   textureUvDrag.moved = true;
+  if (textureUvDrag.kind === 'assign') {
+    const [width, height] = texturePreviewSize;
+    const point = clientToTextureUv(event.clientX, event.clientY);
+    textureUvDrag.currentUv = [
+      clamp(snapValue(point[0], event), 0, width),
+      clamp(snapValue(point[1], event), 0, height)
+    ];
+    renderTextureUvOverlay(true);
+    return;
+  }
   if (textureUvDrag.kind === 'select') return;
   applyTextureUvDrag(event);
 }
@@ -3570,6 +3746,21 @@ function endTexturePointer(event) {
   if (drag.kind === 'pan') {
     snapTexturePan();
     updateTextureStageTransform();
+  } else if (drag.kind === 'assign' && drag.moved && drag.entries.length) {
+    snapshot();
+    materializeUvFaces(drag.entries);
+    const [width, height] = texturePreviewSize;
+    const u1 = clamp(snapValue(Math.min(drag.startUv[0], drag.currentUv[0]), event), 0, width);
+    const v1 = clamp(snapValue(Math.min(drag.startUv[1], drag.currentUv[1]), event), 0, height);
+    const u2 = clamp(snapValue(Math.max(drag.startUv[0], drag.currentUv[0]), event), 0, width);
+    const v2 = clamp(snapValue(Math.max(drag.startUv[1], drag.currentUv[1]), event), 0, height);
+    if (u2 > u1 && v2 > v1) drag.entries.forEach(entry => {
+      entry.cube.faces[entry.faceName].uv = [u1, v1, u2, v2];
+    });
+    markDirty();
+    invalidateSelectionRenderGeometry();
+    renderTextureUvOverlay();
+    scheduleSceneRender();
   } else if (!drag.moved && drag.blank) {
     state.selectedUvFaces = new Set();
     renderTextureUvOverlay(true);
@@ -3578,6 +3769,26 @@ function endTexturePointer(event) {
     markDirty();
     renderAll('selection');
   }
+  updateTextureUvCursor(event);
+}
+
+function updateTextureUvCursor(event) {
+  const preview = $('#texturePreview');
+  if (!textureViewLayout || !selectedTextureUvEntries().length) {
+    preview.style.cursor = event?.altKey ? 'crosshair' : '';
+    return;
+  }
+  if (event?.altKey) {
+    preview.style.cursor = 'crosshair';
+    return;
+  }
+  const point = clientToTextureUv(event.clientX, event.clientY);
+  const selectedEntries = selectedTextureUvEntries();
+  const bounds = normalizedUvBounds(selectedEntries);
+  const handle = textureUvHandleAt(point, bounds);
+  const cursors = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
+  preview.style.cursor = cursors[handle]
+    || (textureUvHit(selectedEntries, point) ? 'move' : '');
 }
 
 function wheelTextureView(event) {
@@ -4307,13 +4518,21 @@ function showElementContextMenu(event, uidValue, source = null) {
         }
       }] : []),
       ...(selectedNodes.length > 1 ? [{ icon: '▰', label: '將選中項建立為組', action: addGroup }] : []),
+      ...(isProceduralShape(node) ? [{
+        icon: subdivisionSession?.ownerUid === node.uid ? '◆' : '◇',
+        label: subdivisionSession?.ownerUid === node.uid ? '完成細分編輯' : '進入細分編輯',
+        action: () => subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node)
+      }] : []),
+      ...(node.subdivisionOwnerUid ? [{ icon: '◆', label: '完成細分編輯', action: () => exitSubdivisionEdit() }] : []),
       { separator: true },
       { icon: '□', label: '複製　Ctrl+C', action: copySelected },
       { icon: '✂', label: '剪切　Ctrl+X', action: cutSelected },
       { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
       { icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) },
-      { separator: true },
-      { icon: '×', label: '刪除選中項', danger: true, action: deleteSelected }
+      ...(node.subdivisionOwnerUid ? [] : [
+        { separator: true },
+        { icon: '×', label: '刪除選中項', danger: true, action: deleteSelected }
+      ])
     ]
   });
 }
@@ -4374,6 +4593,28 @@ function bindContextMenus() {
     const uidValue = item.dataset.uid;
     const source = outliner.querySelector(`[data-uid="${uidValue}"]`);
     showElementContextMenu(event, uidValue, source);
+  });
+  outliner.addEventListener('dblclick', event => {
+    const row = event.target.closest('.outliner-item');
+    const node = row && state.project.getNode(row.dataset.uid);
+    if (!isProceduralShape(node)) return;
+    event.preventDefault();
+    subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node);
+  });
+  $('#viewport').addEventListener('dblclick', event => {
+    if (event.target !== sceneCanvas) return;
+    const rect = sceneCanvas.getBoundingClientRect();
+    const uidValue = sceneRenderer.pick(state.project, event.clientX - rect.left, event.clientY - rect.top, state.geometryOnly);
+    if (!uidValue) {
+      if (!subdivisionSession) return;
+      event.preventDefault();
+      exitSubdivisionEdit();
+      return;
+    }
+    const node = uidValue && state.project.getNode(uidValue);
+    if (!isProceduralShape(node)) return;
+    event.preventDefault();
+    enterSubdivisionEdit(node);
   });
   $('#textureList').addEventListener('contextmenu', event => {
     const item = event.target.closest('.texture-item');
@@ -4452,6 +4693,7 @@ function addCurveNodeAtViewportPoint(curve, event, rect = sceneCanvas.getBoundin
   const node = new CurveNode({ position: local }, curve.dimension === 2);
   const insertionIndex = selectedIndex === 0 ? 0 : selectedIndex + 1;
   snapshot();
+  discardSubdivisionEdits(curve);
   curve.nodes.splice(insertionIndex, 0, node);
   state.selectedCurveNodeIndex = insertionIndex;
   markDirty(); renderAll('selection'); toast('已建立並連接新節點');
@@ -4712,6 +4954,9 @@ function bindEvents() {
   texturePreview.addEventListener('pointermove', moveTexturePointer);
   texturePreview.addEventListener('pointerup', endTexturePointer);
   texturePreview.addEventListener('pointercancel', endTexturePointer);
+  texturePreview.addEventListener('pointerleave', () => {
+    if (!textureUvDrag) texturePreview.style.cursor = '';
+  });
   texturePreview.addEventListener('auxclick', event => event.preventDefault());
   texturePreview.addEventListener('wheel', wheelTextureView, { passive: false });
   $$('[data-texture-face]').forEach(button => button.addEventListener('click', event => {
@@ -5052,7 +5297,11 @@ function bindEvents() {
   document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
     if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
-    if (event.key === 'Escape') { setRenderModeMenu(false); closeShapeCreateMenu(); }
+    if (event.key === 'Escape') {
+      setRenderModeMenu(false);
+      closeShapeCreateMenu();
+      if (subdivisionSession) exitSubdivisionEdit();
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(event.shiftKey); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelected(); }
@@ -5673,18 +5922,22 @@ function nodeTransformAnchor(node) {
 }
 
 function captureTransformTarget(node) {
-  const chain = state.project.getGroupChain(node.uid);
+  const owner = subdivisionOwner(node);
+  const chain = state.project.getGroupChain(owner?.uid || node.uid);
+  const rotationChain = owner
+    ? [...chain, { pivot: [0, 0, 0], rotation: owner.rotation || [0, 0, 0] }]
+    : chain;
   const worldToLocalAxes = [0, 1, 2].map(worldAxis => {
     let local = [0, 1, 2].map(axis => axis === worldAxis ? 1 : 0);
-    chain.forEach(group => { local = inverseRotateVector(local, group.rotation || [0, 0, 0]); });
+    rotationChain.forEach(group => { local = inverseRotateVector(local, group.rotation || [0, 0, 0]); });
     return local;
   });
   const anchor = [...nodeTransformAnchor(node)];
   return {
     node,
-    chain,
+    chain: rotationChain,
     anchor,
-    worldAnchor: applyGroupTransforms(anchor, chain),
+    worldAnchor: owner ? getTransformPivot(node) : applyGroupTransforms(anchor, chain),
     worldToLocalAxes,
     transformAxes: getTransformAxes(node).map(axis => [...axis]),
     position: node.position ? [...node.position] : node.origin ? [...node.origin] : node.pivot ? [...node.pivot] : [0, 0, 0],
@@ -5814,9 +6067,13 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
       centerX: state.gizmoCenter.x, centerY: state.gizmoCenter.y
     };
   }
+  const itemSubdivisionOwner = subdivisionOwner(item);
+  const parentChain = state.project.getGroupChain(itemSubdivisionOwner?.uid || item.uid);
   const chain = curveNodeContext
-    ? [...state.project.getGroupChain(item.uid), { pivot: item.origin, rotation: item.rotation || [0, 0, 0] }]
-    : state.project.getGroupChain(item.uid);
+    ? [...parentChain, { pivot: item.origin, rotation: item.rotation || [0, 0, 0] }]
+    : itemSubdivisionOwner
+      ? [...parentChain, { pivot: [0, 0, 0], rotation: itemSubdivisionOwner.rotation || [0, 0, 0] }]
+      : parentChain;
   const cameraFrame = sceneRenderer.getCameraFrame();
   const freeMovePlane = kind === 'free' && ['move', 'pivot'].includes(state.tool)
     ? { point: [...state.gizmoOrigin], normal: [...cameraFrame.forward] }
@@ -5926,6 +6183,7 @@ function onPointerMove(event) {
     if (!drag.snapshotTaken && Math.hypot(dx, dy) < .5) return;
     if (!drag.snapshotTaken) {
       snapshot();
+      discardSubdivisionEdits(drag.curve);
       drag.snapshotTaken = true;
       markDirty();
     }
@@ -5963,6 +6221,9 @@ function onPointerMove(event) {
     if (Math.hypot(dx, dy) < .5) return;
     if (!state.dragging.snapshotTaken) {
       snapshot();
+      if (state.dragging.tool === 'resize') {
+        state.dragging.targets.forEach(target => discardSubdivisionEdits(target.node));
+      }
       state.dragging.snapshotTaken = true;
     }
     if (state.dragging.tool === 'resize' && !state.dragging.uvFrozen) {

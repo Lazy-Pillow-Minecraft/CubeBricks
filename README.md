@@ -50,14 +50,20 @@ The current version includes an interactive workspace; Cube, Shape, Node, 2D/3D 
 
 ### 最近更新 / Recent Updates
 
+- 所有程序化 Shape 現在都支援非破壞式「細分編輯」：可由右鍵菜單或雙擊 Shape 進入，其他場景內容會暫時虛化且不可選，只保留該 Shape 生成的 Cube 供單獨調整幾何與 UV。修改會以 Cube 索引覆寫記錄在原 Shape 上，不會把臨時 Cube 寫入 `.cbmodel`；導出 `.bbmodel` 時則會套用覆寫後再展開。可用屬性面板、右鍵菜單、`Esc`，或雙擊主視圖空白背景退出。<br>
+  Every procedural Shape now supports non-destructive Subdivision Edit. Enter through the context menu or by double-clicking a Shape; other scene content is temporarily faded and made unselectable, leaving the Shape's generated Cubes available for individual geometry and UV editing. Changes are stored as indexed Cube overrides on the original Shape, so transient Cubes are never written to `.cbmodel`; `.bbmodel` export applies the overrides before expansion. Exit through the inspector, context menu, `Esc`, or by double-clicking blank space in the main viewport.
+- Shape 的「操作時保留已有細分編輯」選項可決定重新生成幾何時是否延續 Cube 覆寫；移動與旋轉整個 Shape 不會清除覆寫。貼圖窗口另支援按住 `Alt` 拖出共同 UV 矩形，直接把目前選中的單面或多面配置到同一區域，毋須先尋找原 UV 框；UV 邊與角也會顯示對應的縮放游標。<br>
+  A Shape's “preserve existing subdivision edits during operations” option controls whether Cube overrides survive geometry regeneration; moving or rotating the whole Shape never clears them. In the texture dock, holding `Alt` while dragging creates a shared UV rectangle for all currently selected faces, without first locating their old UV bounds, and UV edges/corners now show the corresponding resize cursors.
+- 組鏡像支援 XYZ 軸鏡像、徑向旋轉與曼陀羅模式，並以可編輯節點決定局部鏡像軸；預覽直接重用原幾何緩衝並在負行列式變換時修正繞序，避免鏡像結果翻成負形或反覆重建 Mesh。面選擇高亮亦改為低 Alpha 的 GPU 實色覆蓋，只更新獨立高亮緩衝，不再按面建立 SVG 或重建模型 Mesh。<br>
+  Group mirroring supports XYZ-axis reflection, radial rotation, and mandala modes, with an editable node defining the local mirror frame. Preview instances reuse the original geometry buffers and correct winding for negative-determinant transforms, avoiding inverted mirrored results and repeated mesh rebuilding. Face-selection highlighting now uses a low-alpha solid GPU overlay that updates only its dedicated highlight buffer, without per-face SVG construction or model-mesh rebuilds.
 - 貼圖窗口新增可選的「熱點聚焦」狀態：交互後以淡色主題框標記焦點，從貼圖窗口返回主視圖時，第一次點擊只切回主視圖焦點，不會誤觸空白取消選擇。聚焦貼圖窗口時，`R` 會以 `0.25 s` 緩動聚焦選中 UV，`Shift + R` 則緩動返回默認視圖。<br>
   The texture dock now supports optional hotspot focus. Interaction marks it with a subtle theme-colored outline, and the first click back in the main viewport only restores viewport focus instead of accidentally clearing the selection. While the texture dock is focused, `R` eases to the selected UVs over `0.25 s`, and `Shift + R` eases back to the default view.
 - 貼圖窗口已加入完整的 UV 選取與基礎編輯：六個面向按鈕可批量選面；普通點擊替換選擇、Shift 追加、Ctrl 取消指定範圍。選中 UV 可由框內或空白拖動，並可從八個控制點調整範圍；移動與縮放沿用工程吸附及 Shift／Ctrl 微吸附，多選數值不一致時顯示 `-`。<br>
   The texture dock now provides complete UV selection and basic editing. Six directional buttons select matching faces in batches; a normal click replaces the selection, Shift adds, and Ctrl removes items in the target range. Selected UVs can be dragged from either their bounds or blank space and resized through eight handles. Move/resize operations use project snapping and the Shift/Ctrl fine-snap modifiers, while mixed multi-selection values display `-`.
 - UV 視圖支援 Ctrl + 滾輪縮放、滾輪縱向捲動、Shift + 滾輪橫向捲動及中鍵任意平移，並具有四邊吸附。匯入時已超出貼圖的 UV 仍會如實顯示，但編輯操作不會主動把合法 UV 推出貼圖；空貼圖工程則使用工程貼圖尺寸作為工作區，不再退化成 `1 × 1`。<br>
   The UV view supports Ctrl + wheel zoom, vertical wheel scrolling, Shift + wheel horizontal scrolling, middle-button panning, and four-edge snapping. Imported out-of-bounds UVs remain visible, while editing will not actively push valid UVs outside the texture. Projects without an assigned image use the project's texture dimensions as the workspace instead of collapsing to `1 × 1`.
-- 主視圖新增面選擇工具（快捷鍵 `7`），選面語義與貼圖窗口一致。面選擇高亮已與 WebGL 場景完全解耦：改變選中面只更新合併的 SVG 覆蓋層、UV 視圖及 UV 預覽，不會重建 Mesh、重繪主畫布或改動深度緩衝；攝像機或模型真正變化時才隨正常場景刷新重新投影。<br>
-  The main viewport now includes a Face Select tool (shortcut `7`) with the same selection semantics as the texture dock. Face-selection highlighting is fully decoupled from the WebGL scene: changing selected faces updates only a merged SVG overlay, the UV view, and UV Preview, without rebuilding meshes, redrawing the main canvas, or touching its depth buffer. The overlay is reprojected during normal scene rendering only when the camera or model actually changes.
+- 主視圖新增面選擇工具（快捷鍵 `7`），選面語義與貼圖窗口一致。選中面以低 Alpha 實色覆蓋明確標示，狀態改變只更新合併的 GPU 高亮緩衝、UV 視圖及 UV 預覽，不重建模型 Mesh；高亮共用主場景深度，保持正確遮擋。<br>
+  The main viewport now includes a Face Select tool (shortcut `7`) with the same selection semantics as the texture dock. Selected faces are clearly marked by a low-alpha solid fill; selection changes update only a merged GPU highlight buffer, the UV view, and UV Preview without rebuilding model meshes, while sharing the main scene depth for correct occlusion.
 - UV 線框改用螢幕像素座標的獨立 SVG 覆蓋層與半像素對齊，避免 CSS 縮放造成模糊；多選線框會合併為少量路徑。另加入無效 UV 回退及折疊／隱藏窗口尺寸保護，修正部分聚焦操作黑屏或跳變。<br>
   UV wireframes now use a separate screen-pixel SVG overlay with half-pixel alignment, avoiding blur caused by CSS scaling, and multi-selection wireframes are merged into a small number of paths. Invalid-UV fallbacks and collapsed/hidden-panel size guards also prevent black screens and jumps during focus operations.
 - 多邊形柱體 Shape 改為沿每條多邊形邊生成一根長方體 Cube，使用斜接延長閉合牆角，不再體素填充截面；可選按構成 Cube 的實際邊長或按整體外輪廓吸附。<br>
@@ -120,8 +126,8 @@ The current version includes an interactive workspace; Cube, Shape, Node, 2D/3D 
   `R`: focus the selected object or group
 - `Shift + R`：將攝像機重新聚焦到世界中心  
   `Shift + R`: refocus the camera on the world origin
-- 面選擇工具快捷鍵為 `7`；普通點擊替換選中面，Shift 追加，Ctrl 取消指定面，不會觸發主視圖 WebGL 重繪<br>
-  The Face Select tool uses shortcut `7`; normal click replaces selected faces, Shift adds, and Ctrl removes target faces without triggering a main-viewport WebGL redraw
+- 面選擇工具快捷鍵為 `7`；普通點擊替換選中面，Shift 追加，Ctrl 取消指定面，只更新合併高亮緩衝而不重建模型 Mesh<br>
+  The Face Select tool uses shortcut `7`; normal click replaces selected faces, Shift adds, and Ctrl removes target faces, updating only the merged highlight buffer without rebuilding model meshes
 - 視口左上角可真正切換透視與正交投影  
   The upper-left corner of the viewport provides a true perspective/orthographic projection toggle
 - 視口右上角可切換線框、體塊、紋理三種渲染模式  

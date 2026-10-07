@@ -239,6 +239,7 @@ kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; padding: 1
 .texture-uv-selected { fill: rgba(var(--accent-rgb),.12); stroke: var(--accent); stroke-width: 2; }
 .texture-uv-bounds { fill: none; stroke: rgba(255,255,255,.9); stroke-width: 1; stroke-dasharray: 3 2; }
 .texture-uv-handle { fill: var(--accent); stroke: #161814; stroke-width: 1; }
+.texture-uv-alt-box { fill: rgba(var(--accent-rgb),.16); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 2; }
 .texture-preview > span { position: absolute; right: 7px; bottom: 7px; z-index: 2; padding: 3px 6px; border-radius: 4px; background: rgba(10,12,9,.76); color: var(--muted); font-size: .62rem; }
 .texture-uv-fields { flex: 0 0 auto; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 4px; padding: 0 8px 7px; }
 .texture-uv-fields label { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 3px; color: var(--subtle); font-size: .52rem; }
@@ -622,6 +623,11 @@ kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; padding: 1
 .context-menu button.danger { color: var(--danger); }
 .context-open-icon { width: 11px; height: 8px; vertical-align: middle; }
 .context-menu-separator { height: 1px; margin: 4px 5px; background: var(--line); }
+.subdivision-controls { border-color: rgba(var(--accent-rgb),.28); }
+.subdivision-controls.active { background: rgba(var(--accent-rgb),.055); }
+.subdivision-controls p { margin: 0 0 8px; color: var(--subtle); font-size: .58rem; line-height: 1.5; }
+.subdivision-controls > button { width: 100%; min-height: 29px; border: 1px solid rgba(var(--accent-rgb),.36); border-radius: 4px; color: var(--accent); background: rgba(var(--accent-rgb),.08); }
+.subdivision-controls > button:hover { background: rgba(var(--accent-rgb),.15); }
 .context-active { background: rgba(var(--accent-rgb), .1) !important; box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .3) !important; }
 .toast { position: fixed; z-index: 20; left: 50%; bottom: 20px; transform: translate(-50%, 20px); opacity: 0; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--panel-3); box-shadow: 0 10px 30px rgba(0,0,0,.35); color: var(--text); font-size: .7rem; pointer-events: none; transition: .2s; }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
