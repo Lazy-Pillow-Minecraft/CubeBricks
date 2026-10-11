@@ -82,7 +82,9 @@ async function readTextureAssets(content, modelPath) {
       source,
       uvWidth: texture.uv_width,
       uvHeight: texture.uv_height,
-      useAsDefault: texture.use_as_default === true
+      useAsDefault: texture.use_as_default === true,
+      groupId: texture.group_id || null,
+      kind: texture.kind || 'IMAGE'
     });
   }
   return assets;

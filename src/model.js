@@ -1,4 +1,5 @@
 import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './config/model-formats.js';
+import { modifierRegistry } from './config/modifiers.js';
 
 const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
 
@@ -32,6 +33,68 @@ function cloneData(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
+function normalizeModifierList(modifiers, targetType, anchorPosition = [0, 0, 0]) {
+  if (!Array.isArray(modifiers)) return [];
+  return modifiers.flatMap(data => {
+    const modifier = modifierRegistry.create(data?.type, targetType, data);
+    if (!modifier) return [];
+    modifier.anchor = {
+      position: vector3(modifier.anchor?.position, anchorPosition),
+      rotation: vector3(modifier.anchor?.rotation)
+    };
+    return [modifier];
+  });
+}
+
+function legacyMirrorHasState(mirror) {
+  return Boolean(mirror && (mirror.enabled || mirror.controllerUid || mirror.mode && mirror.mode !== 'axes'
+    || mirror.axes?.x || mirror.axes?.y || mirror.axes?.z || mirror.distribution === 'range'
+    || Number(mirror.copies) !== 3 || Number(mirror.rangeStart) !== 0 || Number(mirror.rangeEnd) !== 180
+    || mirror.wrapParent === false));
+}
+
+function legacyMirrorModifier(mirror, targetType, anchorPosition) {
+  if (!legacyMirrorHasState(mirror)) return null;
+  return modifierRegistry.create('symmetry', targetType, {
+    enabled: booleanProperty(mirror.enabled, false),
+    mode: ['axes', 'radial', 'mandala'].includes(mirror.mode) ? mirror.mode : 'axes',
+    axes: {
+      x: booleanProperty(mirror.axes?.x, false),
+      y: booleanProperty(mirror.axes?.y, false),
+      z: booleanProperty(mirror.axes?.z, false)
+    },
+    copies: Math.max(1, Math.round(Number(mirror.copies) || 3)),
+    distribution: mirror.distribution === 'range' ? 'range' : 'full',
+    rangeStart: Number.isFinite(Number(mirror.rangeStart)) ? Number(mirror.rangeStart) : 0,
+    rangeEnd: Number.isFinite(Number(mirror.rangeEnd)) ? Number(mirror.rangeEnd) : 180,
+    wrapParent: booleanProperty(mirror.wrapParent, true),
+    anchor: { position: [...anchorPosition], rotation: [0, 0, 0] },
+    _legacyControllerUid: mirror.controllerUid || null
+  });
+}
+
+export function getModifier(owner, type) {
+  return owner?.modifiers?.find(modifier => modifier.type === type) || null;
+}
+
+export function addModifier(owner, type, data = {}) {
+  if (!owner) return null;
+  const definition = modifierRegistry.get(type);
+  if (definition?.allowMultiple === false && getModifier(owner, type)) return null;
+  const modifier = modifierRegistry.create(type, owner.type, data);
+  if (!modifier) return null;
+  const anchorPosition = owner.type === 'group' || owner.type === 'cube'
+    ? owner.pivot
+    : owner.origin || owner.position || [0, 0, 0];
+  modifier.anchor = {
+    position: vector3(data.anchor?.position, anchorPosition),
+    rotation: vector3(data.anchor?.rotation)
+  };
+  owner.modifiers ||= [];
+  owner.modifiers.push(modifier);
+  return modifier;
+}
+
 function applySubdivisionEdits(cubes, owner) {
   const edits = owner.subdivisionEdits || {};
   return cubes.map((cube, index) => {
@@ -45,7 +108,7 @@ function applySubdivisionEdits(cubes, owner) {
       if (Array.isArray(delta)) cube[field] = cube[field].map((value, axis) => value + (Number(delta[axis]) || 0));
     }
     if (Number.isFinite(Number(edit.inflateDelta))) cube.inflate += Number(edit.inflateDelta);
-    for (const field of ['name', 'uvMode', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
+    for (const field of ['name', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
       if (edit[field] !== undefined) cube[field] = cloneData(edit[field]);
     }
     return cube;
@@ -65,6 +128,7 @@ export class Cube {
     this.pivot = data.pivot || data.origin || [0, 4, 0];
     this.rotation = data.rotation || [0, 0, 0];
     this.uvMode = data.uvMode || 'box';
+    this.uvNormalized = booleanProperty(data.uvNormalized ?? data.uv_normalized, true);
     this.uv = data.uv || [0, 0];
     this.mirrorUv = data.mirrorUv ?? data.mirror_uv ?? false;
     this.faces = data.faces || null;
@@ -74,6 +138,7 @@ export class Cube {
     this.shade = data.shade ?? true;
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.color = data.color || '#9ac24d';
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
   }
 }
 
@@ -91,6 +156,8 @@ export class Shape {
     };
     this.origin = data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
+    this.uvMode = data.uvMode || 'box';
+    this.uvNormalized = booleanProperty(data.uvNormalized ?? data.uv_normalized, true);
     this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
     this.exported = booleanProperty(data.exported ?? data.export, true);
     this.locked = booleanProperty(data.locked, false);
@@ -99,6 +166,7 @@ export class Shape {
     this.color = data.color || '#d6b35b';
     this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
     this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.origin);
   }
 
   toBaseCubes() {
@@ -135,6 +203,8 @@ export class Shape {
         size: [edgeLength, height, cubeLength],
         pivot: [midpoint[0], height / 2, midpoint[1]],
         rotation: [0, yaw, 0],
+        uvMode: this.uvMode,
+        uvNormalized: this.uvNormalized,
         autoUv: this.autoUv,
         exported: this.exported,
         locked: this.locked,
@@ -208,6 +278,7 @@ export class NodeElement {
     this.locked = booleanProperty(data.locked, false);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.mirrorControllerFor = data.mirrorControllerFor || null;
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.position);
   }
 }
 
@@ -270,6 +341,8 @@ export class BezierElement {
     this.dimension = dimension;
     this.origin = vector3(data.origin);
     this.rotation = vector3(data.rotation);
+    this.uvMode = data.uvMode || 'box';
+    this.uvNormalized = booleanProperty(data.uvNormalized ?? data.uv_normalized, true);
     const defaults = dimension === 2
       ? [{ position: [-4, 0, 0] }, { position: [4, 0, 0] }]
       : [{ position: [-4, 0, 0] }, { position: [4, 4, 2] }];
@@ -289,6 +362,7 @@ export class BezierElement {
     this.color = data.color || (dimension === 2 ? '#d7b25b' : '#78b6d7');
     this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
     this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.origin);
   }
 
   resolvedNodeState(index) {
@@ -465,6 +539,8 @@ export class BezierElement {
         size: [thickness, thickness, length],
         pivot: midpoint,
         rotation,
+        uvMode: this.uvMode,
+        uvNormalized: this.uvNormalized,
         autoUv: this.autoUv,
         exported: this.exported,
         locked: this.locked,
@@ -489,6 +565,7 @@ export class Locator {
     this.exported = booleanProperty(data.exported ?? data.export, true);
     this.locked = booleanProperty(data.locked, false);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.position);
   }
 }
 
@@ -500,30 +577,19 @@ export class Group {
     this.pivot = data.pivot || data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
     this.inflate = Number(data.inflate) || 0;
+    this.uvMode = data.uvMode || 'box';
+    this.uvNormalized = booleanProperty(data.uvNormalized ?? data.uv_normalized, true);
     this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
     this.exported = booleanProperty(data.exported ?? data.export, true);
     this.locked = booleanProperty(data.locked, false);
     this.shade = booleanProperty(data.shade, true);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.children = [...(data.children || [])];
-    const mirror = data.mirror || {};
-    const mode = ['axes', 'radial', 'mandala'].includes(mirror.mode) ? mirror.mode : 'axes';
-    const distribution = mirror.distribution === 'range' ? 'range' : 'full';
-    this.mirror = {
-      enabled: booleanProperty(mirror.enabled, false),
-      mode,
-      axes: {
-        x: booleanProperty(mirror.axes?.x, false),
-        y: booleanProperty(mirror.axes?.y, false),
-        z: booleanProperty(mirror.axes?.z, false)
-      },
-      copies: Math.max(1, Math.round(Number(mirror.copies) || 3)),
-      distribution,
-      rangeStart: Number.isFinite(Number(mirror.rangeStart)) ? Number(mirror.rangeStart) : 0,
-      rangeEnd: Number.isFinite(Number(mirror.rangeEnd)) ? Number(mirror.rangeEnd) : 180,
-      wrapParent: booleanProperty(mirror.wrapParent, true),
-      controllerUid: mirror.controllerUid || null
-    };
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
+    if (!getModifier(this, 'symmetry')) {
+      const migrated = legacyMirrorModifier(data.mirror, this.type, this.pivot);
+      if (migrated) this.modifiers.push(migrated);
+    }
   }
 }
 
@@ -540,7 +606,15 @@ function inverseRotateVector(vector, rotation) {
   return rotateVector(rotateVector(rotateVector(vector, [0, 0, -rotation[2]]), [0, -rotation[1], 0]), [-rotation[0], 0, 0]);
 }
 
+function translateModifierAnchors(node, delta) {
+  for (const modifier of node?.modifiers || []) {
+    if (!Array.isArray(modifier.anchor?.position)) continue;
+    modifier.anchor.position = modifier.anchor.position.map((value, axis) => value + delta[axis]);
+  }
+}
+
 function translateNode(project, node, delta) {
+  translateModifierAnchors(node, delta);
   if (node.type === 'cube') {
     node.position = node.position.map((value, axis) => value + delta[axis]);
     node.pivot = node.pivot.map((value, axis) => value + delta[axis]);
@@ -569,6 +643,7 @@ export function setPivotPreservingGeometry(project, item, nextPivot) {
       if (child) translateNode(project, child, compensation);
     });
   }
+  translateModifierAnchors(item, delta);
   item.pivot = [...nextPivot];
   return compensation;
 }
@@ -734,24 +809,22 @@ export class CubeBricksProject {
     });
     this.groups = (data.groups || []).map(group => new Group(group));
     this.outliner = [...(data.outliner || [])];
+    const legacyControllerUids = new Set();
     for (const group of this.groups) {
-      if (!group.mirror?.enabled) continue;
-      let controller = this.elements.find(element => element.uid === group.mirror.controllerUid
-        || element.mirrorControllerFor === group.uid);
-      if (!controller) {
-        controller = new NodeElement({
-          name: `${group.name}_mirror_axis`,
-          position: [...group.pivot],
-          rotation: [0, 0, 0],
-          exported: false,
-          mirrorControllerFor: group.uid
-        });
-        this.elements.push(controller);
+      const modifier = getModifier(group, 'symmetry');
+      const legacyUid = modifier?._legacyControllerUid;
+      const controller = this.elements.find(element => element.uid === legacyUid || element.mirrorControllerFor === group.uid);
+      if (modifier && controller) {
+        modifier.anchor = { position: vector3(controller.position, group.pivot), rotation: vector3(controller.rotation) };
+        legacyControllerUids.add(controller.uid);
       }
-      controller.mirrorControllerFor = group.uid;
-      controller.exported = false;
-      group.mirror.controllerUid = controller.uid;
-      if (!group.children.includes(controller.uid)) group.children.push(controller.uid);
+      if (modifier) delete modifier._legacyControllerUid;
+    }
+    this.elements.forEach(element => { if (element.mirrorControllerFor) legacyControllerUids.add(element.uid); });
+    if (legacyControllerUids.size) {
+      this.elements = this.elements.filter(element => !legacyControllerUids.has(element.uid));
+      this.outliner = this.outliner.filter(uidValue => !legacyControllerUids.has(uidValue));
+      this.groups.forEach(group => group.children = group.children.filter(uidValue => !legacyControllerUids.has(uidValue)));
     }
     Object.defineProperties(this, {
       _nodeIndex: { value: null, writable: true },
@@ -915,7 +988,8 @@ export function importBlockbench(data) {
       inflate: item.inflate,
       pivot: item.origin,
       rotation: item.rotation,
-      uvMode: item.box_uv ? 'box' : 'face',
+      uvMode: item.box_uv === false ? 'face' : 'box',
+      uvNormalized: booleanProperty(item.uv_normalized, true),
       uv: item.uv_offset,
       mirrorUv: item.mirror_uv,
       faces: item.faces,
@@ -955,6 +1029,8 @@ export function importBlockbench(data) {
       origin: node.origin ?? saved.origin,
       rotation: node.rotation ?? saved.rotation,
       inflate: node.inflate ?? saved.inflate,
+      uvMode: (node.box_uv ?? saved.box_uv) === false ? 'face' : 'box',
+      uvNormalized: booleanProperty(node.uv_normalized ?? saved.uv_normalized, true),
       autoUv: booleanProperty(node.autouv ?? saved.autouv, false),
       exported: booleanProperty(node.export ?? saved.export, true),
       locked: booleanProperty(node.locked ?? saved.locked, false),
@@ -985,9 +1061,18 @@ export function importBlockbench(data) {
 function blockbenchCube(cube, offset = [0, 0, 0]) {
   const from = cube.position.map((value, axis) => value + offset[axis]);
   const origin = cube.pivot.map((value, axis) => value + offset[axis]);
+  const hasExplicitFaceUv = Object.values(cube.faces || {}).some(face => Array.isArray(face?.uv) && face.uv.length >= 4);
+  const faces = cube.faces ? structuredClone(cube.faces) : undefined;
+  for (const face of Object.values(faces || {})) {
+    if (face && typeof face === 'object') delete face._cubebricksCulledTexture;
+  }
   return {
     name: cube.name,
-    box_uv: cube.uvMode !== 'face',
+    // Blockbench box UV cannot represent a normalized layout whose pixel
+    // density differs from one model unit per pixel. Preserve such templates
+    // losslessly as explicit per-face UV while retaining CubeBricks' mode.
+    box_uv: cube.uvMode !== 'face' && !hasExplicitFaceUv,
+    uv_normalized: cube.uvNormalized !== false,
     rescale: false,
     locked: cube.locked === true,
     from,
@@ -1002,7 +1087,7 @@ function blockbenchCube(cube, offset = [0, 0, 0]) {
     shade: cube.shade !== false,
     visibility: cube.visible !== false,
     export: cube.exported !== false,
-    faces: cube.faces ? structuredClone(cube.faces) : undefined,
+    faces,
     type: 'cube',
     uuid: cube.uid
   };
@@ -1064,21 +1149,20 @@ function relativeMirrorChain(project, uidValue, mirrorGroupUid) {
   const index = chain.findIndex(group => group.uid === mirrorGroupUid);
   return index < 0 ? chain : chain.slice(index);
 }
-function groupMirrorExportAngles(mirror) {
-  const count = Math.max(1, Math.min(256, Math.round(Number(mirror.copies) || 1)));
-  if (mirror.distribution !== 'range') return Array.from({ length: count }, (_, index) => index * 360 / count);
-  const start = Number(mirror.rangeStart) || 0, end = Number(mirror.rangeEnd) || 0;
+function symmetryExportAngles(modifier) {
+  const count = Math.max(1, Math.min(256, Math.round(Number(modifier.copies) || 1)));
+  if (modifier.distribution !== 'range') return Array.from({ length: count }, (_, index) => index * 360 / count);
+  const start = Number(modifier.rangeStart) || 0, end = Number(modifier.rangeEnd) || 0;
   if (count === 1) return [start];
   return Array.from({ length: count }, (_, index) => start + (end - start) * index / (count - 1));
 }
 function rotationYMatrix(degrees) { return rotationMatrix([0, degrees, 0]); }
-function mirrorInstanceDefinitions(group, frameMatrix) {
-  const mirror = group.mirror;
+function symmetryInstanceDefinitions(owner, modifier, frameMatrix) {
   const inverseFrame = matrixTranspose(frameMatrix);
   const worldMatrix = local => matrixMultiply(matrixMultiply(frameMatrix, local), inverseFrame);
-  if (mirror.mode === 'axes') {
-    const axes = ['x', 'y', 'z'].filter(axis => mirror.axes?.[axis]);
-    if (!axes.length) return [{ matrix: matrixIdentity(), name: group.name }];
+  if (modifier.mode === 'axes') {
+    const axes = ['x', 'y', 'z'].filter(axis => modifier.axes?.[axis]);
+    if (!axes.length) return [{ matrix: matrixIdentity(), name: owner.name }];
     const definitions = [];
     const visit = (index, signs) => {
       if (index < axes.length) {
@@ -1088,24 +1172,24 @@ function mirrorInstanceDefinitions(group, frameMatrix) {
       }
       const diagonal = [signs.x || 1, signs.y || 1, signs.z || 1];
       const labels = [];
-      if (mirror.axes.x) labels.push(diagonal[0] < 0 ? 'left' : 'right');
-      if (mirror.axes.y) labels.push(diagonal[1] < 0 ? 'down' : 'up');
-      if (mirror.axes.z) labels.push(diagonal[2] < 0 ? 'before' : 'front');
-      definitions.push({ matrix: worldMatrix([[diagonal[0], 0, 0], [0, diagonal[1], 0], [0, 0, diagonal[2]]]), name: `${labels.join('_')}_${group.name}` });
+      if (modifier.axes.x) labels.push(diagonal[0] < 0 ? 'left' : 'right');
+      if (modifier.axes.y) labels.push(diagonal[1] < 0 ? 'down' : 'up');
+      if (modifier.axes.z) labels.push(diagonal[2] < 0 ? 'before' : 'front');
+      definitions.push({ matrix: worldMatrix([[diagonal[0], 0, 0], [0, diagonal[1], 0], [0, 0, diagonal[2]]]), name: `${labels.join('_')}_${owner.name}` });
     };
     visit(0, {});
     return definitions;
   }
-  const angles = groupMirrorExportAngles(mirror);
-  if (mirror.mode === 'radial') return angles.map((angle, index) => ({
-    matrix: worldMatrix(rotationYMatrix(angle)), name: `${group.name}_${index + 1}`
+  const angles = symmetryExportAngles(modifier);
+  if (modifier.mode === 'radial') return angles.map((angle, index) => ({
+    matrix: worldMatrix(rotationYMatrix(angle)), name: `${owner.name}_${index + 1}`
   }));
   const reflection = [[1, 0, 0], [0, 1, 0], [0, 0, -1]];
   const definitions = [];
   angles.forEach((angle, index) => {
     const turn = rotationYMatrix(angle);
-    definitions.push({ matrix: worldMatrix(turn), name: `${group.name}_${index * 2 + 1}` });
-    definitions.push({ matrix: worldMatrix(matrixMultiply(turn, reflection)), name: `${group.name}_${index * 2 + 2}` });
+    definitions.push({ matrix: worldMatrix(turn), name: `${owner.name}_${index * 2 + 1}` });
+    definitions.push({ matrix: worldMatrix(matrixMultiply(turn, reflection)), name: `${owner.name}_${index * 2 + 2}` });
   });
   return definitions;
 }
@@ -1116,27 +1200,65 @@ function matrixIsIdentity(matrix, epsilon = 1e-6) {
     Math.abs(value - identity[rowIndex][columnIndex]) <= epsilon));
 }
 
-// Describe render-only mirror instances without duplicating any Cube or mesh.
+function mirrorFaceUvHorizontally(face) {
+  if (!face || !Array.isArray(face.uv) || face.uv.length < 4) return face;
+  const mirrored = { ...face, uv: [...face.uv] };
+  const turns = ((Math.round((Number(face.rotation) || 0) / 90) % 4) + 4) % 4;
+  if (turns % 2 === 0) [mirrored.uv[0], mirrored.uv[2]] = [mirrored.uv[2], mirrored.uv[0]];
+  else [mirrored.uv[1], mirrored.uv[3]] = [mirrored.uv[3], mirrored.uv[1]];
+  return mirrored;
+}
+
+function mirrorCubeFacesAcrossLocalX(faces, flipExplicitUv) {
+  if (!faces) return faces;
+  const source = structuredClone(faces);
+  const faceSource = { north: 'north', south: 'south', east: 'west', west: 'east', up: 'up', down: 'down' };
+  return Object.fromEntries(Object.entries(faceSource).flatMap(([targetName, sourceName]) => {
+    if (!Object.prototype.hasOwnProperty.call(source, sourceName)) return [];
+    const face = source[sourceName];
+    return [[targetName, flipExplicitUv ? mirrorFaceUvHorizontally(face) : face]];
+  }));
+}
+
+function modifierOwnerTransform(owner) {
+  return {
+    pivot: owner.type === 'group' || owner.type === 'cube'
+      ? owner.pivot
+      : owner.origin || owner.position || [0, 0, 0],
+    rotation: owner.rotation || [0, 0, 0]
+  };
+}
+
+function symmetryWorldFrame(project, owner, modifier) {
+  const chain = [...project.getGroupChain(owner.uid), modifierOwnerTransform(owner)];
+  return {
+    center: applyGroupChainPoint(modifier.anchor?.position || modifierOwnerTransform(owner).pivot, chain),
+    matrix: matrixMultiply(groupChainMatrix(chain), rotationMatrix(modifier.anchor?.rotation || [0, 0, 0]))
+  };
+}
+
+function symmetrySourceUids(project, owner) {
+  return owner.type === 'group' ? project.getDescendantElementUids(owner.uid) : [owner.uid];
+}
+
+// Describe render-only symmetry instances without duplicating any Cube or mesh.
 // The renderer reuses the source element ranges already uploaded to the GPU and
 // applies these world-space matrices at draw time.
-export function buildGroupMirrorRenderInstances(project) {
+export function buildModifierRenderInstances(project) {
   const renderInstances = [];
-  for (const group of project.groups) {
-    if (!group.mirror?.enabled || group.visible === false) continue;
-    const controller = project.getNode(group.mirror.controllerUid);
-    if (!controller || controller.type !== 'node') continue;
-    const controllerChain = project.getGroupChain(controller.uid);
-    const frameMatrix = matrixMultiply(groupChainMatrix(controllerChain), rotationMatrix(controller.rotation));
-    const center = applyGroupChainPoint(controller.position, controllerChain);
-    const instances = mirrorInstanceDefinitions(group, frameMatrix)
+  for (const owner of [...project.groups, ...project.elements]) {
+    const modifier = getModifier(owner, 'symmetry');
+    if (!modifier?.enabled || owner.visible === false) continue;
+    const frame = symmetryWorldFrame(project, owner, modifier);
+    const instances = symmetryInstanceDefinitions(owner, modifier, frame.matrix)
       .filter(instance => !matrixIsIdentity(instance.matrix));
     if (!instances.length) continue;
-    const sourceUids = project.getDescendantElementUids(group.uid)
-      .filter(uidValue => uidValue !== controller.uid && !project.getNode(uidValue)?.mirrorControllerFor);
+    const sourceUids = symmetrySourceUids(project, owner);
     for (const instance of instances) renderInstances.push({
-      groupUid: group.uid,
+      groupUid: owner.uid,
+      modifierUid: modifier.uid,
       sourceUids: [...sourceUids],
-      center: [...center],
+      center: [...frame.center],
       matrix: instance.matrix.map(row => [...row]),
       reflected: matrixDeterminant(instance.matrix) < 0
     });
@@ -1144,15 +1266,14 @@ export function buildGroupMirrorRenderInstances(project) {
   return renderInstances;
 }
 
-function exportMirroredGroup(project, group, pushElement) {
-  const controller = project.getNode(group.mirror.controllerUid);
-  if (!controller || controller.type !== 'node') return null;
-  const controllerChain = relativeMirrorChain(project, controller.uid, group.uid);
-  const frameMatrix = matrixMultiply(groupChainMatrix(controllerChain), rotationMatrix(controller.rotation));
-  const center = applyGroupChainPoint(controller.position, controllerChain);
-  const instances = mirrorInstanceDefinitions(group, frameMatrix);
-  const sourceUids = project.getDescendantElementUids(group.uid)
-    .filter(uidValue => uidValue !== controller.uid && !project.getNode(uidValue)?.mirrorControllerFor);
+// Compatibility alias for extensions built against early CubeBricks previews.
+export const buildGroupMirrorRenderInstances = buildModifierRenderInstances;
+
+function exportSymmetryOwner(project, owner, modifier, pushElement) {
+  const frame = symmetryWorldFrame(project, owner, modifier);
+  const center = frame.center;
+  const instances = symmetryInstanceDefinitions(owner, modifier, frame.matrix);
+  const sourceUids = symmetrySourceUids(project, owner);
   const reflectedLocalAxis = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
   const instanceGroups = instances.map((instance, instanceIndex) => {
     const children = [];
@@ -1160,7 +1281,9 @@ function exportMirroredGroup(project, group, pushElement) {
     for (const uidValue of sourceUids) {
       const element = project.getNode(uidValue);
       if (!element) continue;
-      const chain = relativeMirrorChain(project, element.uid, group.uid);
+      const chain = owner.type === 'group'
+        ? relativeMirrorChain(project, element.uid, owner.uid)
+        : project.getGroupChain(element.uid);
       const chainMatrix = groupChainMatrix(chain);
       if (element.type === 'locator' || element.type === 'node') {
         const basePosition = applyGroupChainPoint(element.position, chain);
@@ -1198,10 +1321,16 @@ function exportMirroredGroup(project, group, pushElement) {
         const nextToOffset = matrixVector(handednessFix, baseTo.map((value, axis) => value - basePivot[axis]));
         const exported = blockbenchCube(source.cube, source.offset);
         exported.uuid = `${element.uid}_mirror_${instanceIndex + 1}_${++generatedIndex}`;
-        exported.from = nextFromOffset.map((value, axis) => value + nextPivot[axis]);
-        exported.to = nextToOffset.map((value, axis) => value + nextPivot[axis]);
+        const transformedFrom = nextFromOffset.map((value, axis) => value + nextPivot[axis]);
+        const transformedTo = nextToOffset.map((value, axis) => value + nextPivot[axis]);
+        exported.from = transformedFrom.map((value, axis) => Math.min(value, transformedTo[axis]));
+        exported.to = transformedFrom.map((value, axis) => Math.max(value, transformedTo[axis]));
         exported.origin = nextPivot;
         exported.rotation = matrixEuler(matrixMultiply(matrixMultiply(instance.matrix, worldOrientation), handednessFix));
+        if (mirrored) {
+          exported.faces = mirrorCubeFacesAcrossLocalX(exported.faces, exported.box_uv === false);
+          if (exported.box_uv) exported.mirror_uv = !Boolean(exported.mirror_uv);
+        }
         exported.inflate = (Number(source.cube.inflate) || 0) + chain.reduce((total, parent) => total + (Number(parent.inflate) || 0), 0);
         exported.shade = source.cube.shade !== false && element.shade !== false && chain.every(parent => parent.shade !== false);
         exported.visibility = source.cube.visible !== false && element.visible !== false && chain.every(parent => parent.visible !== false);
@@ -1212,19 +1341,21 @@ function exportMirroredGroup(project, group, pushElement) {
     return {
       name: instance.name,
       origin: [...center], rotation: [0, 0, 0], color: 0,
-      uuid: `${group.uid}_mirror_instance_${instanceIndex + 1}`,
-      export: group.exported !== false, locked: group.locked === true,
-      visibility: group.visible !== false, autouv: group.autoUv ? 1 : 0,
-      shade: group.shade !== false, isOpen: true, children
+      uuid: `${owner.uid}_symmetry_instance_${instanceIndex + 1}`,
+      export: owner.exported !== false, locked: owner.locked === true,
+      visibility: owner.visible !== false, autouv: owner.autoUv ? 1 : 0,
+      shade: owner.shade !== false, box_uv: owner.uvMode !== 'face',
+      uv_normalized: owner.uvNormalized !== false, isOpen: true, children
     };
   });
-  if (!group.mirror.wrapParent) return instanceGroups;
+  if (!modifier.wrapParent) return instanceGroups;
   return {
-    name: group.name,
+    name: owner.name,
     origin: [...center], rotation: [0, 0, 0], color: 0,
-    uuid: `${group.uid}_mirror_parent`, export: group.exported !== false,
-    locked: group.locked === true, visibility: group.visible !== false,
-    autouv: group.autoUv ? 1 : 0, shade: group.shade !== false,
+    uuid: `${owner.uid}_symmetry_parent`, export: owner.exported !== false,
+    locked: owner.locked === true, visibility: owner.visible !== false,
+    autouv: owner.autoUv ? 1 : 0, shade: owner.shade !== false,
+    box_uv: owner.uvMode !== 'face', uv_normalized: owner.uvNormalized !== false,
     isOpen: true, children: instanceGroups
   };
 }
@@ -1254,6 +1385,8 @@ export function exportBlockbench(project, textureAssets = []) {
       locked: element.locked === true,
       visibility: element.visible !== false,
       autouv: element.autoUv ? 1 : 0,
+      box_uv: element.uvMode !== 'face',
+      uv_normalized: element.uvNormalized !== false,
       shade: element.shade !== false,
       isOpen: true,
       children
@@ -1262,8 +1395,9 @@ export function exportBlockbench(project, textureAssets = []) {
   const visit = uidValue => {
     const node = project.getNode(uidValue);
     if (!node) return null;
-    if (node.type === 'group' && node.mirror?.enabled) {
-      const mirrored = exportMirroredGroup(project, node, pushElement);
+    const symmetry = getModifier(node, 'symmetry');
+    if (symmetry?.enabled) {
+      const mirrored = exportSymmetryOwner(project, node, symmetry, pushElement);
       if (mirrored) return mirrored;
     }
     if (node.type === 'group') return {
@@ -1276,6 +1410,8 @@ export function exportBlockbench(project, textureAssets = []) {
       locked: node.locked === true,
       visibility: node.visible !== false,
       autouv: node.autoUv ? 1 : 0,
+      box_uv: node.uvMode !== 'face',
+      uv_normalized: node.uvNormalized !== false,
       shade: node.shade !== false,
       isOpen: true,
       children: node.children.flatMap(childUid => {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, buildGroupMirrorRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
+import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, addModifier, buildModifierRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
 import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
 import { ModelFormatRegistry } from '../src/core/model-format-registry.js';
 import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/config/model-formats.js';
@@ -140,6 +140,19 @@ assert.equal(exportedBbmodel.outliner[0].children[0].children.length, 5,
 assert.equal(importBlockbench(exportedBbmodel).elements.filter(element => element.type === 'cube').length, 5,
   'exported procedural cube groups can be imported again');
 
+const culledCube = new Cube({
+  uid: 'culled-cube',
+  faces: {
+    north: { uv: [0, 0, 4, 4], texture: null, _cubebricksCulledTexture: '#skin' },
+    south: { uv: [4, 0, 8, 4], texture: '#skin' }
+  }
+});
+const culledExport = exportBlockbench(new CubeBricksProject({ elements: [culledCube], outliner: [culledCube.uid] }));
+assert.equal(culledExport.elements[0].faces.north.texture, null,
+  'culled cube faces retain the Blockbench null-texture marker');
+assert.equal('_cubebricksCulledTexture' in culledExport.elements[0].faces.north, false,
+  'the editor-only cull restore texture does not leak into bbmodel export');
+
 const mirrorCube = new Cube({ uid: 'mirror-cube', name: 'petal', position: [2, 0, 0], size: [2, 3, 1], pivot: [2, 0, 0] });
 const mirrorGroup = new Group({
   uid: 'mirror-group', name: 'wing', children: [mirrorCube.uid],
@@ -147,13 +160,16 @@ const mirrorGroup = new Group({
 });
 const mirrorProject = new CubeBricksProject({ elements: [mirrorCube], groups: [mirrorGroup], outliner: [mirrorGroup.uid] });
 const projectMirrorGroup = mirrorProject.getNode(mirrorGroup.uid);
-const mirrorController = mirrorProject.getNode(projectMirrorGroup.mirror.controllerUid);
-assert.equal(mirrorController.type, 'node', 'enabling group mirroring creates a real controller node');
-assert.equal(mirrorController.mirrorControllerFor, projectMirrorGroup.uid, 'the controller node retains its mirror-group owner');
-assert.ok(projectMirrorGroup.children.includes(mirrorController.uid), 'the mirror controller appears inside its group');
+const symmetryModifier = getModifier(projectMirrorGroup, 'symmetry');
+assert.ok(symmetryModifier, 'legacy group mirror data migrates into a symmetry modifier');
+assert.deepEqual(symmetryModifier.anchor.position, projectMirrorGroup.pivot,
+  'the symmetry modifier owns its control point instead of adding a scene node');
+assert.equal(mirrorProject.elements.some(element => element.mirrorControllerFor === projectMirrorGroup.uid), false,
+  'group symmetry no longer creates controller elements');
+assert.deepEqual(projectMirrorGroup.children, [mirrorCube.uid], 'the modifier control point does not pollute group children');
 const mirroredAxesBbmodel = exportBlockbench(mirrorProject);
 assert.equal(mirroredAxesBbmodel.outliner.length, 4, 'two enabled Cartesian mirror axes expand to four groups');
-const mirroredAxesPreview = buildGroupMirrorRenderInstances(mirrorProject);
+const mirroredAxesPreview = buildModifierRenderInstances(mirrorProject);
 assert.equal(mirroredAxesPreview.length, 3, 'viewport mirror preview omits the already-rendered identity instance');
 assert.ok(mirroredAxesPreview.every(instance => instance.sourceUids.length === 1
   && instance.sourceUids[0] === mirrorCube.uid),
@@ -164,20 +180,89 @@ assert.deepEqual(mirroredAxesBbmodel.outliner.map(group => group.name).sort(), [
   'left_before_wing', 'left_front_wing', 'right_before_wing', 'right_front_wing'
 ]);
 assert.equal(mirroredAxesBbmodel.elements.length, 4, 'each Cartesian mirror instance receives its own cube UUID');
-assert.ok(mirroredAxesBbmodel.elements.every(element => !element.uuid.includes(mirrorController.uid)),
-  'the editor-only mirror controller is never exported');
-const mirrorRoundTrip = new CubeBricksProject(JSON.parse(mirrorProject.serialize()));
-assert.equal(mirrorRoundTrip.elements.filter(element => element.mirrorControllerFor === projectMirrorGroup.uid).length, 1,
-  'cbmodel round trips do not duplicate the mirror controller');
+assert.ok(mirroredAxesBbmodel.elements.every(element => element.to.every((value, axis) => value >= element.from[axis])),
+  'mirrored Blockbench cubes always export with non-negative dimensions');
+assert.ok(mirroredAxesBbmodel.elements.every(element => !element.uuid.includes('mirror_axis')),
+  'the embedded modifier control point is never exported as an element');
+const mirroredAxisGroups = new Map(mirroredAxesBbmodel.outliner.map(group => [group.name, group]));
+for (const groupName of ['left_front_wing', 'right_before_wing']) {
+  const mirroredElement = mirroredAxesBbmodel.elements.find(element => element.uuid === mirroredAxisGroups.get(groupName).children[0]);
+  assert.equal(mirroredElement.mirror_uv, true, 'odd-axis box-UV mirrors also mirror their texture layout');
+}
 
-projectMirrorGroup.mirror.mode = 'radial';
-projectMirrorGroup.mirror.copies = 4;
-projectMirrorGroup.mirror.wrapParent = true;
+const uvMirrorCube = new Cube({
+  uid: 'uv-mirror-cube', name: 'uv_part', position: [1, 0, 0], size: [2, 3, 4], pivot: [1, 0, 0],
+  uvMode: 'face',
+  faces: {
+    north: { uv: [1, 2, 5, 7], texture: '#north', rotation: 0 },
+    east: { uv: [10, 20, 30, 40], texture: '#east', rotation: 0 },
+    west: { uv: [50, 60, 70, 80], texture: '#west', rotation: 0 },
+    up: { uv: [10, 20, 50, 80], texture: '#up', rotation: 90 }
+  }
+});
+const uvMirrorGroup = new Group({
+  uid: 'uv-mirror-group', name: 'uv_pair', children: [uvMirrorCube.uid],
+  mirror: { enabled: true, mode: 'axes', axes: { x: true, y: false, z: false }, wrapParent: false }
+});
+const uvMirrorExport = exportBlockbench(new CubeBricksProject({
+  elements: [uvMirrorCube], groups: [uvMirrorGroup], outliner: [uvMirrorGroup.uid]
+}));
+const reflectedUvGroup = uvMirrorExport.outliner.find(group => group.name === 'left_uv_pair');
+const reflectedUvCube = uvMirrorExport.elements.find(element => element.uuid === reflectedUvGroup.children[0]);
+assert.equal(reflectedUvCube.faces.east.texture, '#west', 'local-X reflection swaps east and west face textures');
+assert.equal(reflectedUvCube.faces.west.texture, '#east', 'local-X reflection swaps the opposite face texture too');
+assert.deepEqual(reflectedUvCube.faces.north.uv, [5, 2, 1, 7], 'unrotated explicit face UV mirrors horizontally');
+assert.deepEqual(reflectedUvCube.faces.up.uv, [10, 80, 50, 20], '90-degree explicit face UV mirrors in its rotated horizontal axis');
+const mirrorRoundTrip = new CubeBricksProject(JSON.parse(mirrorProject.serialize()));
+assert.equal(mirrorRoundTrip.elements.filter(element => element.mirrorControllerFor === projectMirrorGroup.uid).length, 0,
+  'cbmodel round trips keep modifier anchors embedded');
+assert.ok(getModifier(mirrorRoundTrip.getNode(projectMirrorGroup.uid), 'symmetry'),
+  'symmetry modifiers survive cbmodel round trips');
+
+const legacyControllerProject = new CubeBricksProject({
+  elements: [
+    { type: 'cube', uid: 'legacy-part', name: 'legacy_part' },
+    { type: 'node', uid: 'legacy-mirror-controller', name: 'mirror_axis', position: [3, 4, 5], rotation: [10, 20, 30], mirrorControllerFor: 'legacy-mirror-group' }
+  ],
+  groups: [{
+    uid: 'legacy-mirror-group', name: 'legacy_group', children: ['legacy-part', 'legacy-mirror-controller'],
+    mirror: { enabled: true, mode: 'axes', axes: { x: true, y: false, z: false }, controllerUid: 'legacy-mirror-controller' }
+  }],
+  outliner: ['legacy-mirror-group']
+});
+const migratedLegacyGroup = legacyControllerProject.getNode('legacy-mirror-group');
+assert.deepEqual(getModifier(migratedLegacyGroup, 'symmetry').anchor,
+  { position: [3, 4, 5], rotation: [10, 20, 30] },
+  'legacy mirror controller transforms migrate into the embedded modifier anchor');
+assert.equal(legacyControllerProject.getNode('legacy-mirror-controller'), null,
+  'legacy mirror controller nodes are removed from the scene index');
+assert.deepEqual(migratedLegacyGroup.children, ['legacy-part'],
+  'legacy mirror controller nodes are removed from group children');
+
+const objectMirrorCube = new Cube({ uid: 'object-mirror-cube', name: 'object_mirror', position: [2, 0, 0], size: [1, 2, 3], pivot: [2, 0, 0] });
+const objectSymmetry = addModifier(objectMirrorCube, 'symmetry', {
+  enabled: true, axes: { x: true, y: false, z: false }, wrapParent: false
+});
+assert.ok(objectSymmetry, 'compatible scene objects can attach a symmetry modifier');
+assert.equal(addModifier(objectMirrorCube, 'symmetry'), null,
+  'single-instance modifiers cannot be attached twice');
+const objectMirrorProject = new CubeBricksProject({ elements: [objectMirrorCube], outliner: [objectMirrorCube.uid] });
+const objectMirrorPreview = buildModifierRenderInstances(objectMirrorProject);
+assert.equal(objectMirrorPreview.length, 1, 'object symmetry reuses one reflected viewport instance beside the source');
+assert.deepEqual(objectMirrorPreview[0].sourceUids, [objectMirrorCube.uid],
+  'object symmetry points directly at the existing object mesh range');
+const objectMirrorExport = exportBlockbench(objectMirrorProject);
+assert.equal(objectMirrorExport.outliner.length, 2, 'object symmetry expands into two bbmodel instance groups');
+assert.equal(objectMirrorExport.elements.length, 2, 'object symmetry exports one cube per instance');
+
+symmetryModifier.mode = 'radial';
+symmetryModifier.copies = 4;
+symmetryModifier.wrapParent = true;
 const radialBbmodel = exportBlockbench(mirrorProject);
 assert.equal(radialBbmodel.outliner[0].children.length, 4, 'radial export creates exactly N rotated groups');
 assert.deepEqual(radialBbmodel.outliner[0].children.map(group => group.name), ['wing_1', 'wing_2', 'wing_3', 'wing_4']);
-projectMirrorGroup.mirror.mode = 'mandala';
-projectMirrorGroup.mirror.copies = 3;
+symmetryModifier.mode = 'mandala';
+symmetryModifier.copies = 3;
 const mandalaBbmodel = exportBlockbench(mirrorProject);
 assert.equal(mandalaBbmodel.outliner[0].children.length, 6, 'mandala export creates a rotated and reflected pair for every axis');
 assert.deepEqual(mandalaBbmodel.outliner[0].children.map(group => group.name),
@@ -256,6 +341,8 @@ assert.deepEqual(Object.keys(JSON.parse(indexedProject.serialize())).filter(key 
 
 const freshFlags = new Cube();
 assert.equal(freshFlags.autoUv, true, 'new cubes enable auto UV');
+assert.equal(freshFlags.uvMode, 'box', 'new cubes use box UV mode');
+assert.equal(freshFlags.uvNormalized, true, 'new cubes normalize template UV size by default');
 assert.equal(freshFlags.exported, true, 'new cubes participate in future conversions');
 assert.equal(freshFlags.locked, false, 'new cubes are unlocked');
 const texturedFlags = new Cube({ faces: { north: { texture: '#skin' } } });
@@ -266,6 +353,11 @@ const flagRoundTrip = new CubeBricksProject(JSON.parse(flagProject.serialize()))
 assert.equal(flagRoundTrip.elements.length, 1, 'conversion export flag never removes elements from cbmodel');
 assert.equal(flagRoundTrip.getNode(excludedCube.uid).exported, false);
 assert.equal(flagRoundTrip.getNode(excludedCube.uid).locked, true);
+const uvFlagCube = new Cube({ uid: 'uv-flags', uvMode: 'face', uvNormalized: false });
+const uvFlagProject = new CubeBricksProject({ elements: [uvFlagCube], outliner: [uvFlagCube.uid] });
+const uvFlagRoundTrip = new CubeBricksProject(JSON.parse(uvFlagProject.serialize()));
+assert.equal(uvFlagRoundTrip.getNode('uv-flags').uvMode, 'face');
+assert.equal(uvFlagRoundTrip.getNode('uv-flags').uvNormalized, false, 'UV normalization survives cbmodel round trips');
 
 const importedFlags = importBlockbench({
   elements: [

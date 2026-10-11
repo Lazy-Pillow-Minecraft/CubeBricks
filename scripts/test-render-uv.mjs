@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import {
   createSignedCubeCorners,
+  createAtlasFaceUvs,
   createBlockbenchFaceUvSlots,
   createBlockbenchFaceUvs,
   getBlockbenchBoxUv,
   getEffectiveInflate,
   getMinecraftRenderType,
+  getSurfaceRenderMode,
   hasAssignedFaceTexture,
+  isCubeFaceCulled,
   MinecraftRenderType,
   RenderPass,
   screenPolygonIntersectsRect
@@ -18,6 +21,10 @@ assert.equal(hasAssignedFaceTexture({ uv: [0, 0, 16, 16] }), false,
 assert.equal(hasAssignedFaceTexture({ texture: null }), false,
   'the explicit null marker remains distinct from a texture assignment');
 assert.equal(hasAssignedFaceTexture({ texture: 0 }), true, 'an explicit texture index enables textured rendering');
+assert.equal(isCubeFaceCulled({ texture: null }), true, 'a null texture marks a culled cube face');
+assert.equal(isCubeFaceCulled({ texture: '#skin' }), false, 'a textured face remains renderable');
+assert.equal(getSurfaceRenderMode('normal'), 4, 'normal display uses the texture-free normal shader branch');
+assert.equal(getSurfaceRenderMode('textured'), 2, 'textured display keeps the texture sampling branch');
 
 assert.equal(screenPolygonIntersectsRect([
   { x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }
@@ -48,6 +55,12 @@ assert.deepEqual(createBlockbenchFaceUvs([16, 0, 0, 16], [16, 16]), [
   [1, 1], [1, 0], [0, 1],
   [1, 0], [0, 0], [0, 1]
 ], 'reversed U rectangle');
+
+assert.deepEqual(createAtlasFaceUvs([0, 0, 16, 8], 0,
+  { x: 32, y: 8, width: 16, height: 8 }, [64, 32]), [
+  [.5, .75], [.5, .5], [.75, .75],
+  [.5, .5], [.75, .5], [.75, .75]
+], 'per-face texture UVs are remapped into their own runtime atlas rectangle');
 
 const head = { uv: [0, 0], size: [8, 10, 8], mirrorUv: false };
 assert.deepEqual(getBlockbenchBoxUv(head, 'east'), [0, 8, 8, 18]);

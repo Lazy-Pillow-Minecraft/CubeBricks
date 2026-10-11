@@ -1,4 +1,4 @@
-import { buildGroupMirrorRenderInstances } from '../model.js';
+import { buildModifierRenderInstances } from '../model.js';
 
 const DEG = Math.PI / 180;
 const MIPPED_SUPERSAMPLE = 1.5;
@@ -137,6 +137,8 @@ export class WebGLSceneRenderer {
     this.lockedTargetSize = { width: 0, height: 0 };
     this.ghostWireCount = 0;
     this.texture = this.gl.createTexture();
+    this.textureLayout = null;
+    this.textureLayoutKey = '';
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
     this.faceLabelTexture = this.gl.createTexture();
@@ -188,6 +190,48 @@ export class WebGLSceneRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    if (this.textureLayout) {
+      this.textureLayout = null;
+      this.textureLayoutKey = '';
+      this.invalidateGeometry();
+    }
+  }
+
+  setTextureAtlas(source, entries = []) {
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const key = `${source.width}x${source.height}:` + entries.map(entry =>
+      `${entry.uid}:${entry.x},${entry.y},${entry.width},${entry.height}:${(entry.references || []).join(',')}`).join('|');
+    if (key === this.textureLayoutKey) return;
+    const byReference = new Map();
+    let defaultEntry = null;
+    for (const entry of entries) {
+      if (entry.default && !defaultEntry) defaultEntry = entry;
+      for (const reference of entry.references || []) {
+        const raw = String(reference);
+        byReference.set(raw, entry);
+        byReference.set(raw.startsWith('#') ? raw.slice(1) : `#${raw}`, entry);
+      }
+    }
+    this.textureLayout = { width: source.width, height: source.height, byReference, defaultEntry: defaultEntry || entries[0] || null };
+    this.textureLayoutKey = key;
+    this.invalidateGeometry();
+  }
+
+  updateTextureAtlasRegion(source, x, y) {
+    if (!this.textureLayout || !source) return false;
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    const destinationY = this.textureLayout.height - y - source.height;
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, x, destinationY, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    return true;
   }
 
   setSelectionOutline(color) {
@@ -484,7 +528,7 @@ export class WebGLSceneRenderer {
     const dynamicUids = getDynamicElementUids(project, selection);
     if (!dynamicUids.size) return false;
     const elements = project.elements.filter(element => dynamicUids.has(element.uid));
-    const geometry = buildElementGeometry(project, elements, null);
+    const geometry = buildElementGeometry(project, elements, null, [1, 1, 1], false, this.textureLayout);
     for (const uid of dynamicUids) {
       const checks = [
         [this.staticCache.triangleRanges.get(uid), geometry.triangleRanges.get(uid)],
@@ -586,7 +630,7 @@ export class WebGLSceneRenderer {
 
   drawLockedGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, depthOnly = false) {
     const { gl } = this;
-    const renderMode = camera.renderMode === 'textured' ? 2 : 1;
+    const renderMode = getSurfaceRenderMode(camera.renderMode);
     const pipeline = camera.renderMode === 'textured'
       ? minecraftRenderType
       : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
@@ -737,7 +781,7 @@ export class WebGLSceneRenderer {
       }
       return;
     }
-    const renderMode = camera.renderMode === 'textured' ? 2 : 1;
+    const renderMode = getSurfaceRenderMode(camera.renderMode);
     const pipeline = camera.renderMode === 'textured'
       ? minecraftRenderType
       : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
@@ -907,7 +951,7 @@ export class WebGLSceneRenderer {
       const renderElements = camera.subdivisionEditOwnerUid
         ? project.elements.filter(element => element.uid !== camera.subdivisionEditOwnerUid)
         : project.elements;
-      const geometry = buildElementGeometry(project, renderElements, null, [1, 1, 1], faceDistinct);
+      const geometry = buildElementGeometry(project, renderElements, null, [1, 1, 1], faceDistinct, this.textureLayout);
       this.staticCache = {
         project, revision: this.geometryRevision, faceDistinct, ...geometry,
         faceIndex: indexFaces(geometry.faces), faceBvh: buildFaceBvh(geometry.faces)
@@ -926,7 +970,7 @@ export class WebGLSceneRenderer {
         revision: this.mirrorRevision,
         faceDistinct: camera.faceDistinct === true,
         rangeCache: new Map(),
-        instances: buildGroupMirrorRenderInstances(project).map(instance => ({
+        instances: buildModifierRenderInstances(project).map(instance => ({
           ...instance,
           transform: mirrorModelMatrix(instance.matrix, instance.center)
         }))
@@ -941,7 +985,7 @@ export class WebGLSceneRenderer {
       const selectedElements = project.elements.filter(element => dynamicUids.has(element.uid)
         && element.uid !== camera.subdivisionEditOwnerUid);
       const faceDistinct = camera.faceDistinct === true;
-      const geometry = buildElementGeometry(project, selectedElements, selectedUids, this.selectionOutline, faceDistinct);
+      const geometry = buildElementGeometry(project, selectedElements, selectedUids, this.selectionOutline, faceDistinct, this.textureLayout);
       this.selectedCache = {
         project, revision: this.selectionRevision, selectedKey, faceDistinct, ...geometry,
         faceIndex: indexFaces(geometry.faces), faceBvh: buildFaceBvh(geometry.faces)
@@ -1543,7 +1587,7 @@ function collectLockedState(project) {
   return { uids, nodes };
 }
 
-function buildElementGeometry(project, elements, selection, selectionOutline = [1, 1, 1], faceDistinct = false) {
+function buildElementGeometry(project, elements, selection, selectionOutline = [1, 1, 1], faceDistinct = false, textureLayout = null) {
   const selectedUids = normalizeSelectedNodeUids(selection);
   const triangles = [];
   const faces = [];
@@ -1592,7 +1636,7 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
     }
 
     for (const entry of cubes) {
-      const geometry = cubeGeometry(entry, element.color, selectedForBounds, selectionOutline, faceDistinct);
+      const geometry = cubeGeometry(entry, element.color, selectedForBounds, selectionOutline, faceDistinct, textureLayout);
       triangles.push(...geometry.triangles);
       faces.push(...geometry.faces.map(face => ({ ...face, uid: element.uid })));
       edges.push(...geometry.edges);
@@ -1726,7 +1770,7 @@ export function createSignedCubeCorners(position, size, inflate = 0) {
   ];
 }
 
-function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], faceDistinct = false) {
+function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], faceDistinct = false, textureLayout = null) {
   const corners = cubeWorldCorners(entry);
   const { cube, offset, ownerRotation, ownerOrigin, groupChain, textureSize, shade } = entry;
 
@@ -1737,7 +1781,7 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
     const faceData = cube.faces?.[faceName];
     // An explicit null texture is the model's culled-face marker. A missing
     // face/texture field instead means an ordinary untextured white face.
-    if (faceData?.enabled === false || faceData?.texture === null) continue;
+    if (isCubeFaceCulled(faceData)) continue;
     const textured = hasAssignedFaceTexture(faceData);
     const indices = FACE_TRIANGLE_SLOTS.map(slot => quadIndices[slot]);
     const a = corners[indices[0]], b = corners[indices[1]], c = corners[indices[2]];
@@ -1745,7 +1789,7 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
     const sourceColor = faceDistinct ? FACE_PREVIEW_COLORS[faceName] : textured ? base : [1, 1, 1];
     const faceColor = sourceColor.map(channel => Math.min(1, channel * edgeBoost));
     const faceUv = textured
-      ? getFaceUv(cube, faceName, textureSize)
+      ? getFaceUv(cube, faceName, textureSize, textureLayout)
       : Array.from({ length: 6 }, () => [UNTEXTURED_UV_SENTINEL, UNTEXTURED_UV_SENTINEL]);
     const faceVertices = [];
     indices.forEach((index, vertexIndex) => pushVertex(faceVertices, corners[index], [...faceColor, selected ? 2 : 1], shade === false ? [0, 0, 0] : normal, faceUv[vertexIndex]));
@@ -1764,6 +1808,14 @@ const UNTEXTURED_UV_SENTINEL = -1000000;
 
 export function hasAssignedFaceTexture(face) {
   return face?.texture !== undefined && face?.texture !== null;
+}
+
+export function isCubeFaceCulled(face) {
+  return face === null || face?.enabled === false || face?.texture === null;
+}
+
+export function getSurfaceRenderMode(mode) {
+  return mode === 'textured' ? 2 : mode === 'normal' ? 4 : 1;
 }
 
 function cubeWorldCorners(entry) {
@@ -1980,11 +2032,42 @@ export function applyGroupTransforms(point, groupChain = []) {
 }
 
 function pushVertex(target, position, color, normal = [0, 0, 0], uv = [0, 0]) { target.push(position[0], position[1], position[2], color[0], color[1], color[2], color[3], normal[0], normal[1], normal[2], uv[0], uv[1]); }
-function getFaceUv(cube, faceName, textureSize) {
+function textureLayoutEntry(layout, reference) {
+  if (!layout) return null;
+  if (reference === null || reference === undefined) return layout.defaultEntry;
+  const raw = String(reference);
+  return layout.byReference.get(raw) || layout.byReference.get(raw.startsWith('#') ? raw.slice(1) : `#${raw}`) || layout.defaultEntry;
+}
+
+function getFaceUv(cube, faceName, textureSize, textureLayout = null) {
   const face = cube.faces?.[faceName] || {};
   const uv = face.uv?.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
-  const rectangle = uv?.length >= 4 ? uv : [0, 0, textureSize[0], textureSize[1]];
+  const rectangle = uv?.length >= 4 ? [...uv] : [0, 0, textureSize[0], textureSize[1]];
+  const atlasEntry = textureLayoutEntry(textureLayout, face.texture);
+  if (atlasEntry) {
+    return createAtlasFaceUvs(rectangle, face.rotation || 0, atlasEntry,
+      [textureLayout.width, textureLayout.height], cube.uvMode === 'box');
+  }
   return createBlockbenchFaceUvs(rectangle, textureSize, face.rotation || 0, cube.uvMode === 'box');
+}
+
+export function createAtlasFaceUvs(rectangle, rotation, atlasEntry, atlasSize, insetBoxUv = false) {
+  const uv = [...rectangle];
+  if (insetBoxUv) {
+    for (let axis = 0; axis < 2; axis++) {
+      const margin = uv[axis] > uv[axis + 2] ? -1 / 64 : 1 / 64;
+      uv[axis] += margin;
+      uv[axis + 2] -= margin;
+    }
+  }
+  const atlasWidth = Math.max(1, atlasSize?.[0] || 1);
+  const atlasHeight = Math.max(1, atlasSize?.[1] || 1);
+  const slots = createBlockbenchFaceUvSlots(uv, rotation).map(slot => {
+    const u = Math.max(0, Math.min(atlasEntry.width, slot[0]));
+    const v = Math.max(0, Math.min(atlasEntry.height, slot[1]));
+    return [(atlasEntry.x + u) / atlasWidth, 1 - (atlasEntry.y + v) / atlasHeight];
+  });
+  return FACE_TRIANGLE_SLOTS.map(slot => slots[slot]);
 }
 
 export function createBlockbenchFaceUvs(rectangle, textureSize = [64, 64], rotation = 0, insetBoxUv = false) {
@@ -2179,11 +2262,13 @@ const VERTEX_SHADER = `
     gl_Position = uViewProjection * uModelTransform * vec4(aPosition, 1.0);
     vFragDepth = 1.0 + gl_Position.w;
     float normalLength = length(aNormal);
+    vec3 transformedNormal = normalLength > 0.1
+      ? normalize((uModelTransform * vec4(aNormal, 0.0)).xyz)
+      : vec3(0.0);
     float diffuse = 1.0;
     if (uPreviewShade == 1 && normalLength > 0.1) {
-      vec3 normal = normalize((uModelTransform * vec4(aNormal, 0.0)).xyz);
-      float light0 = max(0.0, dot(uLight0Direction, normal));
-      float light1 = max(0.0, dot(uLight1Direction, normal));
+      float light0 = max(0.0, dot(uLight0Direction, transformedNormal));
+      float light1 = max(0.0, dot(uLight1Direction, transformedNormal));
       // Exact vanilla minecraft_mix_light constants: ambient 0.4 and
       // equal 0.6-power contribution from both directional lights.
       diffuse = min(1.0, (light0 + light1) * 0.6 + 0.4);
@@ -2191,9 +2276,11 @@ const VERTEX_SHADER = `
     // Textured mode keeps the source texture chroma. Vertex color is only used
     // by solid mode; diffuse light remains available when shade is enabled.
     vSelected = step(1.5, aColor.a);
-    vColor = uRenderMode == 2
-      ? vec4(vec3(diffuse), min(aColor.a, 1.0))
-      : vec4(aColor.rgb * diffuse, min(aColor.a, 1.0));
+    vColor = uRenderMode == 4 && normalLength > 0.1
+      ? vec4(transformedNormal * 0.5 + 0.5, min(aColor.a, 1.0))
+      : uRenderMode == 2
+        ? vec4(vec3(diffuse), min(aColor.a, 1.0))
+        : vec4(aColor.rgb * diffuse, min(aColor.a, 1.0));
     vUv = aUv;
   }
 `;

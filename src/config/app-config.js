@@ -8,6 +8,7 @@ export const AppLanguage = Object.freeze({
 
 export const ConfigKey = Object.freeze({
   LANGUAGE: 'application.language',
+  SEPARATE_UV_MODE: 'editor.separate-uv-mode',
   SNAP: 'editor.snap-subdivisions',
   ALLOW_NEGATIVE_SIZE: 'editor.allow-negative-size',
   SHIFT_SNAP_MODE: 'editor.snap-shift-mode',
@@ -76,6 +77,7 @@ configRegistry.register({
 });
 
 configRegistry.registerMany([
+  { id: ConfigKey.SEPARATE_UV_MODE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Separate UV editing from model editing into its own workspace mode.' },
   {
     id: ConfigKey.SNAP,
     type: ConfigType.NUMBER,
@@ -117,9 +119,11 @@ export function getLanguageLabel(language = configRegistry.get(ConfigKey.LANGUAG
 
 const ENGLISH_UI = Object.freeze({
   '未保存': 'Unsaved', '主選單': 'Main menu', '新建': 'New', '打開': 'Open', '保存': 'Save', '撤銷': 'Undo', '重做': 'Redo', 'CubeBricks 設定': 'CubeBricks Settings',
-  '編輯': 'Edit', '繪畫': 'Paint', '動畫': 'Animate', '設定': 'Settings', '導出': 'Export',
+  '編輯': 'Edit', 'UV 編輯模式': 'UV Edit mode', '繪畫': 'Paint', '動畫': 'Animate', '設定': 'Settings', '導出': 'Export',
   '工具欄': 'Toolbar', '工具': 'Tools', '目前工具參數': 'Current tool options', '工具參數': 'Tool options',
-  '移動': 'Move', '縮放': 'Scale', '旋轉': 'Rotate', '新增方塊': 'Add cube', '新增形狀': 'Add shape', '新增 Locator': 'Add locator', '畫筆': 'Brush',
+  '移動': 'Move', '縮放': 'Scale', '旋轉': 'Rotate', '新增方塊': 'Add cube', '新增形狀': 'Add shape', '新增 Locator': 'Add locator', '畫筆': 'Brush', '橡皮擦': 'Eraser', '取色器': 'Eyedropper',
+  '畫筆（B）': 'Brush (B)', '橡皮擦（E）': 'Eraser (E)', '取色器（I）': 'Eyedropper (I)',
+  '繪畫顏色': 'Paint color', '筆刷尺寸': 'Brush size', '筆刷透明度': 'Brush opacity', '顏色': 'Color', '尺寸': 'Size', '透明度': 'Opacity',
   '新增節點': 'Add node', '新增二維貝塞爾': 'Add 2D Bezier', '新增三維貝塞爾': 'Add 3D Bezier',
   '移動樞軸': 'Move pivot', '頂點捕捉': 'Vertex snap', '刀具切割': 'Knife', '切割軸': 'Cut axis',
   '沿 X 軸切割': 'Cut along X', '沿 Y 軸切割': 'Cut along Y', '沿 Z 軸切割': 'Cut along Z',
@@ -157,19 +161,36 @@ const ENGLISH_UI = Object.freeze({
   '只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件': 'Show only cubes and shapes; temporarily hide helpers such as locators',
   '沿 X 軸對稱編輯': 'Mirror edits across the X axis', '繪畫時鎖定透明度': 'Preserve alpha while painting',
   '左側停靠區': 'Left dock', '右側停靠區': 'Right dock', '底部停靠區': 'Bottom dock',
-  '貼圖': 'Textures', '導入貼圖': 'Import texture', '新增貼圖組': 'Add texture group', '貼圖組': 'Texture group', '折疊或展開面板': 'Collapse or expand panel', '折疊／展開': 'Collapse / expand',
+  '貼圖': 'Textures', '新建貼圖': 'New Texture', '導入貼圖': 'Import texture', '新增貼圖組': 'Add texture group', '貼圖組': 'Texture group', '折疊或展開面板': 'Collapse or expand panel', '折疊／展開': 'Collapse / expand',
+  '獨立 UV 編輯模式': 'Separate UV editing mode', '模型製作與 UV 調整使用不同模式': 'Use separate modes for modelling and UV editing',
+  '類型': 'Type', '名稱': 'Name', '紋理模板': 'Texture template', '純色模板': 'Solid template', '空白貼圖': 'Blank texture',
+  '寬度': 'Width', '高度': 'Height', '填充顏色': 'Fill color', '啟用箱型 UV': 'Use box UV', '使用 2 冪尺寸': 'Use power-of-two size',
+  '保持多紋理佔用': 'Preserve multi-texture occupancy', '填充間隔': 'Padding', '間隔像素': 'Padding pixels', '尺寸倍數': 'Size multiple',
+  '僅分配選中元素': 'Selected elements only', '只重排目前選取範圍的 UV': 'Repack UVs only for the current selection',
+  '正在建立貼圖': 'Generating texture', '正在準備 UV…': 'Preparing UVs…', '進度按照需要處理的面數計算': 'Progress is based on the number of faces to process',
+  '正在讀取已有紋理…': 'Reading existing textures…', '正在由大到小排列 UV…': 'Packing UVs from largest to smallest…', '正在繪製並分配 UV…': 'Drawing and assigning UVs…',
+  '目前沒有可建立模板的面': 'There are no faces available for a texture template',
+  'UV 歸一化': 'Normalize UV', '保留原 UV 像素': 'Preserve original UV pixels', '細分編輯期間不能使用刀具': 'The Knife is unavailable during Subdivision Edit',
   'UV 預覽': 'UV Preview', '選中部分 UV 預覽': 'Selected-part UV preview', '啟用預覽': 'Enable preview', '自動旋轉': 'Auto rotate', '面區分': 'Face colors',
+  '剔除／恢復面': 'Cull / restore face', '剔除面': 'Cull face', '恢復面': 'Restore face', '已剔除': 'Culled',
+  '請把貼圖拖到 Cube 面上': 'Drop the texture onto a cube face',
+  '全部面已剔除，Cube 已刪除': 'All faces were culled; the cube was deleted',
   '完全開啟或關閉預覽渲染': 'Completely enable or disable preview rendering', '僅在此預覽中讓模型慢速轉動': 'Slowly rotate the model in this preview only',
   '用不同顏色區分六個面': 'Color each of the six faces differently', '選擇 Cube 或 Shape': 'Select a Cube or Shape', '選擇 Cube、Shape 或貝塞爾': 'Select a Cube, Shape, or Bezier element', '預覽已關閉': 'Preview disabled',
-  '視圖模式': 'View mode', '透視': 'Perspective', '正交': 'Orthographic', '實體著色': 'Entity shading', '貼圖預覽': 'Texture preview', '動畫預覽': 'Animation preview',
+  '視圖模式': 'View mode', '透視': 'Perspective', '正交': 'Orthographic', '實體著色': 'Entity shading', '貼圖預覽': 'Texture preview', '三維繪畫': '3D painting', '動畫預覽': 'Animation preview',
   '聚焦': 'Focus', '網格': 'Grid', '邊界線框': 'Bounds wireframe', '實心': 'Solid', '實心 Mipped': 'Solid Mipped',
   '半透明': 'Translucent', '半透明 Mipped': 'Translucent Mipped', '背面剔除': 'Back-face culling', '剔除': 'Cull',
   '變換手柄': 'Transform gizmo', 'Locator 標記': 'Locator marker', '目前：線框': 'Current: Wireframe', '目前：體塊': 'Current: Solid', '目前：紋理': 'Current: Textured',
   '目前渲染模式：線框': 'Current render mode: Wireframe', '目前渲染模式：體塊': 'Current render mode: Solid', '目前渲染模式：紋理': 'Current render mode: Textured',
-  '線框': 'Wireframe', '體塊': 'Solid', '紋理': 'Textured', '座標軸': 'Axes', '頂視圖': 'Top view', '右視圖': 'Right view', '正視圖': 'Front view',
+  '線框': 'Wireframe', '體塊': 'Solid', '紋理': 'Textured', '法向': 'Normals', '目前：法向': 'Current: Normals', '目前渲染模式：法向': 'Current render mode: Normals', '座標軸': 'Axes', '頂視圖': 'Top view', '右視圖': 'Right view', '正視圖': 'Front view',
   '中鍵': 'Middle mouse', 'Shift + 中鍵': 'Shift + Middle mouse', '平移': 'Pan', '滾輪': 'Wheel', '中心': 'Origin',
   '色卡': 'Palette', '時間軸': 'Timeline', '輸出': 'Output', '模型色卡': 'Model palette', '新增一行': 'Add row', '項目已就緒。': 'Project ready.',
   '物件屬性': 'Object properties', '場景層級': 'Scene hierarchy', '新增組': 'Add group', '搜尋物件或 UID': 'Search objects or UID',
+  '基礎': 'Basic', '修改器': 'Modifiers', '新增修改器': 'Add modifier', '這個物件目前沒有修改器。': 'This object has no modifiers.',
+  '展開或折疊': 'Expand or collapse', '啟用修改器': 'Enable modifier', '內嵌軸點': 'Embedded axis', '不進入場景層級': 'Not added to the scene hierarchy',
+  '在主視圖編輯': 'Edit in viewport', '結束軸點編輯': 'Finish axis editing',
+  '不進入場景層級；可在主視圖點擊標記後移動或旋轉。': 'Not added to the scene hierarchy; click the marker in the viewport to move or rotate it.',
+  '對稱軸點': 'Symmetry axis',
   '基本': 'Basic', '立方體': 'Cube', '程序化形狀': 'Procedural shape', '組': 'Group', '名稱': 'Name', '可見': 'Visible',
   '幾何': 'Geometry', '重置': 'Reset', '位置': 'Position', '尺寸': 'Size', '樞軸': 'Pivot', '膨脹': 'Inflate',
   'UV 模式': 'UV mode', '箱型 UV': 'Box UV', '逐面 UV': 'Per-face UV', '形狀參數': 'Shape parameters',
@@ -203,6 +224,8 @@ const ENGLISH_UI = Object.freeze({
   '聚焦選中物件': 'Focus selected object', '回到場景中心': 'Return to scene origin', '隱藏網格': 'Hide grid', '顯示網格': 'Show grid',
   '隱藏邊界線框': 'Hide bounds wireframe', '顯示邊界線框': 'Show bounds wireframe', '設為目前貼圖': 'Set as current texture',
   '在繪畫模式打開': 'Open in Paint mode', '導入新貼圖': 'Import new texture', '新增色卡行': 'Add palette row',
+  '請先建立或導入一張貼圖': 'Create or import a texture first', '鎖定透明度時橡皮擦不會改變貼圖': 'The eraser cannot change the texture while alpha lock is enabled',
+  '這個面沒有可用的貼圖': 'This face has no usable texture', '請指向一個 Cube 面': 'Point at a cube face',
   '改用離散色卡': 'Use discrete palette', '啟用連續漸變': 'Enable continuous gradient', '隱藏': 'Hide', '顯示': 'Show',
   '展開組': 'Expand group', '折疊組': 'Collapse group', '刪除': 'Delete', '刪除選中項': 'Delete selection',
   '隱藏選中項': 'Hide selection', '顯示選中項': 'Show selection', '將選中項建立為組': 'Group selection',
@@ -234,7 +257,8 @@ const SIMPLIFIED_PHRASES = Object.freeze({
 const SIMPLIFIED_CHARS = Object.freeze({
   '體':'体','開':'开','關':'关','閉':'闭','陰':'阴','顯':'显','圖':'图','層':'层','編':'编','輯':'辑','繪':'绘','畫':'画','動':'动','導':'导','檔':'档','儲':'储','復':'复','設':'设','覽':'览','縮':'缩','態':'态','級':'级','軸':'轴','長':'长','圍':'围','線':'线','僅':'仅','鎖':'锁','稱':'称','變':'变','換':'换','擇':'择','組':'组','場':'场','間':'间','輸':'输','項':'项','參':'参','數':'数','塊':'块','刪':'删','除':'除','見':'见','幾':'几','樞':'枢','脹':'胀','狀':'状','徑':'径','邊':'边','質':'质','預':'预','選':'选','語':'语','網':'网','負':'负','許':'许','顔':'颜','顏':'颜','圓':'圆','強':'强','調':'调','熔':'熔','還':'还','應':'应','過':'过','這':'这','臺':'台','電':'电','腦':'脑','獨':'独','當':'当','與':'与','後':'后','會':'会','啟':'启','連':'连','續':'续','離':'离','內':'内','實':'实','視':'视','點':'点','擊':'击','進':'进','階':'阶','構':'构','則':'则','個':'个','處':'处','從':'从','標':'标','記':'记','題':'题','樣':'样','細':'细','節':'节','類':'类','別':'别','載':'载','務':'务','優':'优','勢':'势','據':'据','墊':'垫','疊':'叠','寬':'宽','釋':'释','權':'权','傳':'传','統':'统','築':'筑','擁':'拥','護':'护','隱':'隐','響':'响','極':'极','遠':'远','習':'习','萬':'万','屬':'属','為':'为','時':'时','種':'种','並':'并','註':'注','冊':'册','觀':'观','對':'对','滾':'滚','輪':'轮','鍵':'键','頂':'顶','單':'单','銷':'销','欄':'栏','轉':'转','筆':'笔','蓋':'盖','暫':'暂','輔':'辅','側':'侧','區':'区','紋':'纹','帶':'带','巢':'巢','匯':'汇','總':'总',
   '來':'来','歐':'欧','貼':'贴','範':'范','覺':'觉','緒':'绪','沒':'没','漸':'渐','無':'无','讀':'读','張':'张','敗':'败','認':'认','義':'义','請':'请','須':'须','於':'于','繞':'绕','齊':'齐','適':'适','豎':'竖','橫':'横','執':'执','讓':'让',
-  '詳':'详','資':'资','訊':'讯','虛':'虚','準':'准','維':'维','佔':'占','膚':'肤','頁':'页','隨':'随','貝':'贝','爾':'尔'
+  '詳':'详','資':'资','訊':'讯','虛':'虚','準':'准','維':'维','佔':'占','膚':'肤','頁':'页','隨':'随','貝':'贝','爾':'尔',
+  '歸':'归','純':'纯','冪':'幂','將':'将','恢':'恢','礎':'础','鏡':'镜','羅':'罗','東':'东','順':'顺','針':'针','結':'结'
 });
 
 function toSimplified(source) {
@@ -259,6 +283,18 @@ export function translateUiText(source, language = configRegistry.get(ConfigKey.
   if (match) return `${match[1]} nodes`;
   match = text.match(/^吸附 (.+) · (.+)px$/);
   if (match) return `Snap ${match[1]} · ${match[2]}px`;
+  match = text.match(/^目前按項目基礎吸附 (.+) 計算：UV 像素 = round\(Cube 尺寸 × (.+) ÷ 16\)，再由大到小自左上角打包。$/);
+  if (match) return `Using project base snap ${match[1]}: UV pixels = round(Cube size × ${match[2]} ÷ 16), then packed largest-first from the top-left.`;
+  match = text.match(/^正在準備 (\d+) 個面…$/);
+  if (match) return `Preparing ${match[1]} faces…`;
+  match = text.match(/^已(剔除|恢復) (\d+) 個面$/);
+  if (match) return `${match[1] === '剔除' ? 'Culled' : 'Restored'} ${match[2]} faces`;
+  match = text.match(/^全部面已剔除，已刪除 (\d+) 個 Cube$/);
+  if (match) return `All faces were culled; deleted ${match[1]} cubes`;
+  match = text.match(/^已將貼圖套用到 (\d+) 個 Cube 的(.+)$/);
+  if (match) return `Applied the texture to ${match[1]} cubes' ${match[2]}`;
+  match = text.match(/^已將貼圖套用到(.+)$/);
+  if (match) return `Applied the texture to the ${match[1]}`;
   match = text.match(/^標準吸附 (.+) · (.+)px$/);
   if (match) return `Standard snap ${match[1]} · ${match[2]}px`;
   match = text.match(/^關閉 (.+)$/);

@@ -45,6 +45,8 @@
       <symbol id="icon-locked" viewBox="0 0 135.99 176.46"><rect y="73.44" width="135.99" height="103.02" rx="15" ry="15"/><rect x="18.5" y="50.5" width="18.61" height="33.8"/><rect x="98.88" y="50.5" width="18.61" height="33.8"/><path d="M67.99,0C40.66,0,18.5,22.16,18.5,49.5c0,15.66,7.28,29.62,18.64,38.69v-37.57c-.01-.37-.03-.74-.03-1.12s.02-.75.03-1.12v-.09h0c.64-16.49,14.2-29.67,30.85-29.67s30.22,13.18,30.85,29.67h.03v39.88c11.34-9.07,18.61-23.01,18.61-38.67C117.49,22.16,95.33,0,67.99,0Z"/></symbol>
       <symbol id="icon-uv-update" viewBox="0 0 148.19 155.23"><rect width="21.43" height="21.43"/><rect x="126.76" width="21.43" height="21.43"/><rect y="133.8" width="21.43" height="21.43"/><rect x="126.76" y="133.8" width="21.43" height="21.43"/><path d="M137.47 125.72V29.51M29.51 144.52h89.17M10.71 29.51v96.21M118.68 10.71H29.51" fill="none" stroke="currentColor" stroke-width="11"/><rect x="23.11" y="83.12" width="50.76" height="14.71" rx="7.36" ry="7.36" transform="translate(78.18 -7.79) rotate(45)"/><rect x="43.27" y="70.26" width="87.13" height="14.71" rx="7.36" ry="7.36" transform="translate(-29.45 84.14) rotate(-45)"/></symbol>
       <symbol id="icon-unuv-update" viewBox="0 0 148.19 155.23"><rect width="21.43" height="21.43"/><rect x="126.76" width="21.43" height="21.43"/><rect y="133.8" width="21.43" height="21.43"/><rect x="126.76" y="133.8" width="21.43" height="21.43"/><path d="M137.47 125.72V29.51M29.51 144.52h89.17M10.71 29.51v96.21M118.68 10.71H29.51" fill="none" stroke="currentColor" stroke-width="11"/><rect x="20.77" y="70.26" width="106.64" height="14.71" rx="7.36" ry="7.36" transform="translate(-33.18 75.13) rotate(-45)"/><rect x="20.77" y="70.26" width="106.64" height="14.71" rx="7.36" ry="7.36" transform="translate(76.58 -29.66) rotate(45)"/></symbol>
+      <symbol id="icon-uv-normalize" viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4V4Zm10 0h6v6h-2V6h-4V4ZM4 14h2v4h4v2H4v-6Zm14 0h2v6h-6v-2h4v-4Z"/><path d="M8 8h8v8H8z" opacity=".55"/></symbol>
+      <symbol id="icon-unuv-normalize" viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4V4Zm10 0h6v6h-2V6h-4V4ZM4 14h2v4h4v2H4v-6Zm14 0h2v6h-6v-2h4v-4Z" opacity=".48"/><path d="m5 3 16 16-2 2L3 5l2-2Z"/></symbol>
     </defs>
   </svg>
   <div class="app-shell">
@@ -63,6 +65,7 @@
       </nav>
       <div class="mode-tabs" role="tablist">
         <button class="mode-tab active" data-mode="edit"><span>◇</span> 編輯</button>
+        <button class="mode-tab" data-mode="uv" id="uvModeTab" hidden><span>▱</span> UV</button>
         <button class="mode-tab" data-mode="paint"><span>◒</span> 繪畫</button>
         <button class="mode-tab" data-mode="animate"><span>⌁</span> 動畫</button>
       </div>
@@ -86,7 +89,9 @@
         <button class="tool" data-tool="vertexSnap" title="頂點捕捉" aria-label="頂點捕捉"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 183.19 158.67"><circle cx="26.74" cy="56.55" r="26.74"/><path d="M40.44,27.39c-1.29-9.15,34.51-34.36,67-25.55,23.87,6.47,43.2,30.55,38.83,40.85-3.77,8.89-27.14,12.09-32.4,4.89-.75-1.03-.8-1.81-1.26-3.27-3.13-9.81-14.12-15.05-15.91-15.9-16.32-7.78-40.82.17-46.81,4.02-.59.38-2.54,1.71-4.63,1.21-2.94-.71-4.61-4.7-4.83-6.24Z"/><path d="M133.67,89.17l-30.71-32.38c-3.57-3.76-1.57-9.97,3.52-10.95l47.18-9.1c5.09-.98,9.25,4.05,7.34,8.86l-16.47,41.48c-1.77,4.45-7.56,5.57-10.86,2.09Z"/><path d="M153.39,75.77l-7.78,19.59c-1.77,4.45-7.56,5.57-10.86,2.09l-16.33-17.21c-12.03,7.48-20.04,20.81-20.04,36.02,0,23.42,18.98,42.4,42.4,42.4s42.4-18.98,42.4-42.4c0-19.03-12.53-35.13-29.8-40.49Z"/></svg></button>
         <button class="tool" data-tool="knife" title="刀具切割" aria-label="刀具切割"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 186.43 167.88"><rect x="108.09" y="-1.84" width="50.7" height="113.72" rx="9.86" ry="9.86" transform="translate(71.97 -75.57) rotate(42.39)"/><path d="M81.17,88.28c-3.74-3.41-9.53-3.15-12.94.59L0,163.62c25.67,9.52,66.11,3.06,104.54-19.13,6.34-3.66,12.34-7.59,17.95-11.71.89-3.22-.02-6.8-2.65-9.2l-38.68-35.3Z"/></svg></button>
         <button class="tool" data-tool="faceSelect" title="面選擇" aria-label="面選擇"><span>▱</span></button>
-        <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆" aria-label="畫筆"><span>◍</span></button>
+        <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆（B）" aria-label="畫筆"><span>◍</span></button>
+        <button class="tool mode-only paint-tool" data-tool="eraser" title="橡皮擦（E）" aria-label="橡皮擦"><span>▰</span></button>
+        <button class="tool mode-only paint-tool" data-tool="eyedropper" title="取色器（I）" aria-label="取色器"><span>⌖</span></button>
       </div>
       <div class="toolbar-lane tool-options-lane" id="toolOptionsLane" aria-label="目前工具參數" hidden>
         <span class="lane-caption" id="toolContext">工具參數</span>
@@ -121,6 +126,11 @@
         </div>
         <span class="tool-status" id="vertexSnapStatus" hidden>先選來源頂點</span>
         <span class="tool-status" id="knifeStatus" hidden>選擇切割點</span>
+        <div class="paint-tool-options" id="paintToolOptions" hidden>
+          <label class="paint-color-control" title="繪畫顏色"><span>顏色</span><input id="paintColor" type="color" value="#91ad52" /></label>
+          <label title="筆刷尺寸"><span>尺寸</span><input id="paintBrushSize" type="number" min="1" max="64" step="1" value="1" /></label>
+          <label class="paint-opacity-control" title="筆刷透明度"><span>透明度</span><input id="paintBrushOpacity" type="range" min="1" max="100" step="1" value="100" /><output id="paintBrushOpacityOutput">100%</output></label>
+        </div>
         <button class="toolbar-option" id="snapButton" data-action="cycleSnap" title="左鍵下一檔，右鍵上一檔">吸附 1.0</button>
       </div>
       <div class="toolbar-lane global-options-lane" aria-label="全局選項">
@@ -139,7 +149,8 @@
           <div class="panel-heading-actions"></div>
         </div>
         <div class="panel-control-strip texture-control-strip" aria-label="貼圖操作">
-          <button data-action="addTexture" title="導入貼圖">＋ 導入</button>
+          <button data-action="createTexture" title="新建貼圖">＋ 新建</button>
+          <button data-action="addTexture" title="導入貼圖">↥ 導入</button>
           <button data-action="addTextureGroup" title="新增貼圖組">▰＋ 組</button>
         </div>
         <div class="texture-face-selector" aria-label="UV 面選擇">
@@ -156,6 +167,7 @@
             <canvas id="textureCanvas" width="1" height="1"></canvas>
           </div>
           <svg class="texture-uv-overlay" id="textureUvOverlay" aria-label="UV 編輯區"></svg>
+          <div class="texture-brush-cursor" id="textureBrushCursor" hidden></div>
           <span>無貼圖</span>
         </div>
         <div class="texture-uv-fields" aria-label="選中 UV 參數">
@@ -174,6 +186,7 @@
         <div class="uv-preview-viewport" id="uvPreviewViewport">
           <canvas id="uvPreviewCanvas" aria-label="選中部分 UV 預覽"></canvas>
           <svg class="uv-preview-face-overlay" id="uvPreviewFaceOverlay" aria-hidden="true"></svg>
+          <svg class="texture-drop-face-overlay" id="uvTextureDropFaceOverlay" aria-hidden="true" hidden></svg>
           <div class="uv-preview-size" id="uvPreviewSize">—</div>
           <div class="uv-preview-empty" id="uvPreviewEmpty">選擇 Cube、Shape 或貝塞爾</div>
         </div>
@@ -182,6 +195,7 @@
           <button type="button" data-uv-face-action="rotate" title="順時針旋轉 90°">↻ 90°</button>
           <button type="button" data-uv-face-action="mirror-x" title="左右鏡像">↔</button>
           <button type="button" data-uv-face-action="mirror-y" title="上下鏡像">↕</button>
+          <button type="button" data-uv-face-action="cull" title="剔除／恢復面">⊘</button>
         </div>
         <div class="uv-preview-options" aria-label="UV 預覽選項">
           <label title="完全開啟或關閉預覽渲染"><input id="uvPreviewEnabled" type="checkbox" checked /><span>啟用預覽</span></label>
@@ -216,7 +230,8 @@
           <div class="selection-marquee" id="selectionMarquee" aria-hidden="true" hidden></div>
           <svg class="locator-overlay" id="locatorOverlay" aria-label="Locator 標記" hidden></svg>
           <svg class="face-selection-overlay" id="faceSelectionOverlay" aria-label="選中面標記" hidden></svg>
-          <svg class="mirror-guide-overlay" id="mirrorGuideOverlay" aria-label="組鏡像輔助網格" hidden></svg>
+          <svg class="texture-drop-face-overlay" id="sceneTextureDropFaceOverlay" aria-hidden="true" hidden></svg>
+          <svg class="mirror-guide-overlay" id="mirrorGuideOverlay" aria-label="對稱修改器輔助網格" hidden></svg>
           <svg class="transform-gizmo" id="transformGizmo" aria-label="變換手柄" hidden></svg>
           <div class="transform-tooltip" id="transformTooltip" role="status" hidden></div>
           <div class="viewport-render-menu" id="viewportRenderMenu">
@@ -224,6 +239,7 @@
               <svg data-icon-mode="wireframe" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4L12 2.8Zm0 0v9.3m8-4.7-8 4.7-8-4.7m8 4.7v9.1"/></svg>
               <svg data-icon-mode="solid" viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/></svg>
               <svg data-icon-mode="textured" viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/><path class="texture-mark" d="m5.7 10.3 2 1.1v2.3l-2-1.1v-2.3Zm4 2.3 2 1.1V16l-2-1.1v-2.3Zm-4 2.3 2 1.1v2.3l-2-1.1v-2.3Z"/></svg>
+              <svg data-icon-mode="normal" viewBox="0 0 24 24" aria-hidden="true"><path class="normal-face normal-z" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="normal-face normal-x" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="normal-face normal-y" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/></svg>
             </button>
             <div class="render-mode-popover" id="renderModeMenu" role="menu" hidden>
               <button type="button" data-render-mode="wireframe" role="menuitem" title="線框">
@@ -234,6 +250,9 @@
               </button>
               <button class="active" type="button" data-render-mode="textured" role="menuitem" title="紋理">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/><path class="texture-mark" d="m5.7 10.3 2 1.1v2.3l-2-1.1v-2.3Zm4 2.3 2 1.1V16l-2-1.1v-2.3Zm-4 2.3 2 1.1v2.3l-2-1.1v-2.3Z"/></svg><span>紋理</span>
+              </button>
+              <button type="button" data-render-mode="normal" role="menuitem" title="法向">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path class="normal-face normal-z" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="normal-face normal-x" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="normal-face normal-y" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/></svg><span>法向</span>
               </button>
             </div>
           </div>
@@ -348,6 +367,7 @@
             <div class="settings-page-heading"><strong>一般</strong><span>介面、視口與編輯行為</span></div>
             <div class="theme-grid">
               <label class="config-select-label"><span>介面語言<small>application.language</small></span><select id="languageSelect" aria-label="介面語言"><option value="zh-Hant">繁體中文</option><option value="zh-Hans">简体中文</option><option value="en">English</option></select></label>
+              <label class="config-toggle-label"><span>獨立 UV 編輯模式<small>editor.separate-uv-mode</small></span><input type="checkbox" data-config-key="editor.separate-uv-mode" /></label>
               <label class="config-toggle-label"><span>對稱編輯<small>editor.symmetry</small></span><input type="checkbox" data-config-key="editor.symmetry" /></label>
               <label class="config-toggle-label"><span>鎖定透明度<small>paint.alpha-lock</small></span><input type="checkbox" data-config-key="paint.alpha-lock" /></label>
             </div>
@@ -392,6 +412,41 @@
         </div>
       </div>
       <div class="dialog-actions"><button type="button" data-action="resetTheme">恢復預設</button><button class="primary-button" value="ok">完成</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="textureCreateDialog" class="theme-dialog texture-create-dialog">
+    <form method="dialog" id="textureCreateForm">
+      <div class="dialog-heading"><div><span class="eyebrow">NEW TEXTURE</span><h2>新建貼圖</h2></div><button value="cancel" class="close-button">×</button></div>
+      <div class="texture-create-grid">
+        <label class="wide"><span>類型</span><select id="textureCreateType"><option value="template">紋理模板</option><option value="solid">純色模板</option><option value="blank">空白貼圖</option></select></label>
+        <label class="wide"><span>名稱</span><input id="textureCreateName" type="text" value="texture.png" required /></label>
+        <div class="texture-basic-options" id="textureBasicOptions">
+          <label><span>寬度</span><input id="textureCreateWidth" type="number" min="1" max="8192" step="1" value="64" /></label>
+          <label><span>高度</span><input id="textureCreateHeight" type="number" min="1" max="8192" step="1" value="64" /></label>
+          <label class="wide" id="textureColorField"><span>填充顏色</span><input id="textureCreateColor" type="color" value="#ffffff" /></label>
+        </div>
+        <div class="texture-template-options" id="textureTemplateOptions">
+          <label class="config-toggle-label"><span>僅分配選中元素<small>只重排目前選取範圍的 UV</small></span><input id="textureTemplateSelectedOnly" type="checkbox" /></label>
+          <label class="config-toggle-label"><span>啟用箱型 UV<small>按 Cube 建立連續六面展開</small></span><input id="textureTemplateBoxUv" type="checkbox" /></label>
+          <label class="config-toggle-label"><span>使用 2 冪尺寸<small>默認開啟</small></span><input id="textureTemplatePowerOfTwo" type="checkbox" checked /></label>
+          <label class="config-toggle-label"><span>保持多紋理佔用<small>不同來源的面維持獨立佔位</small></span><input id="textureTemplateKeepMulti" type="checkbox" checked /></label>
+          <label class="config-toggle-label"><span>填充間隔<small>UV 面之間保留像素</small></span><input id="textureTemplatePaddingEnabled" type="checkbox" checked /></label>
+          <label class="config-number-label"><span>間隔像素</span><input id="textureTemplatePadding" type="number" min="0" max="64" step="1" value="1" /></label>
+          <label class="config-number-label"><span>尺寸倍數<small>關閉 2 冪時使用</small></span><input id="textureTemplateMultiple" type="number" min="1" max="1024" step="1" value="4" /></label>
+        </div>
+      </div>
+      <p class="texture-template-summary" id="textureTemplateSummary">UV 尺寸會按照項目基礎吸附分辨率四捨五入，並由大到小自左上角打包。</p>
+      <div class="dialog-actions"><button value="cancel" type="button" data-action="cancelTextureCreate">取消</button><button class="primary-button" type="submit">建立</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="textureProgressDialog" class="theme-dialog texture-progress-dialog" aria-labelledby="textureGenerationStatus">
+    <form>
+      <div class="dialog-heading"><div><span class="eyebrow">GENERATING TEXTURE</span><h2>正在建立貼圖</h2></div><output id="textureGenerationCounter">0 / 0</output></div>
+      <strong id="textureGenerationStatus">正在準備 UV…</strong>
+      <progress id="textureGenerationProgress" max="1" value="0"></progress>
+      <small>進度按照需要處理的面數計算</small>
     </form>
   </dialog>
 

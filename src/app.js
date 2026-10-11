@@ -1,7 +1,8 @@
-import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
+import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
 import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
 import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
-import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate } from './render/webgl-renderer.js';
+import { modifierRegistry } from './config/modifiers.js';
+import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate, isCubeFaceCulled } from './render/webgl-renderer.js';
 import { DockManager } from './ui/dock-manager.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -14,8 +15,10 @@ const TOOL_REGISTRY = Object.freeze({
   pivot: { modes: ['edit'] },
   vertexSnap: { modes: ['edit'] },
   knife: { modes: ['edit'] },
-  faceSelect: { modes: ['edit'] },
-  brush: { modes: ['paint'] }
+  faceSelect: { modes: ['edit', 'uv'] },
+  brush: { modes: ['paint'] },
+  eraser: { modes: ['paint'] },
+  eyedropper: { modes: ['paint'] }
 });
 
 const state = {
@@ -24,7 +27,11 @@ const state = {
   selectedUids: new Set(),
   selectionAnchorUid: null,
   selectedCurveNodeIndex: null,
+  selectedModifierUid: null,
+  inspectorPage: 'basic',
+  collapsedModifiers: new Set(),
   mode: 'edit',
+  separateUvMode: configRegistry.get(ConfigKey.SEPARATE_UV_MODE),
   tool: 'move',
   filePath: null,
   dirty: false,
@@ -75,6 +82,11 @@ const state = {
   textureAssets: [],
   textureGroups: [],
   activeTextureUid: null,
+  paintColor: '#91ad52',
+  paintBrushSize: 1,
+  paintBrushOpacity: 100,
+  paintHistory: [],
+  paintFuture: [],
   selectedUvFaces: new Set(),
   textureView: { zoom: 1, panX: 0, panY: 0 },
   uvPreviewAutoFocusTexture: true,
@@ -90,10 +102,10 @@ const state = {
 };
 
 const DOCK_PANEL_DEFINITIONS = Object.freeze([
-  { id: 'texture', index: 0, modes: ['edit', 'paint'], hotspotFocus: true, defaultDock: 'left', defaultOrder: 0, defaultPosition: { x: 24, y: 104 }, defaultSize: { width: 236, height: 620 }, defaultCollapsed: false },
-  { id: 'uvPreview', index: 1, modes: ['edit', 'paint', 'animate'], defaultDock: 'left', defaultOrder: 1, defaultPosition: { x: 24, y: 520 }, defaultSize: { width: 236, height: 260 }, defaultCollapsed: false },
-  { id: 'inspector', index: 2, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 0, defaultPosition: { x: 920, y: 104 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
-  { id: 'outliner', index: 3, modes: ['edit', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 1, defaultPosition: { x: 920, y: 460 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
+  { id: 'texture', index: 0, modes: ['edit', 'uv', 'paint'], hotspotFocus: true, defaultDock: 'left', defaultOrder: 0, defaultPosition: { x: 24, y: 104 }, defaultSize: { width: 236, height: 620 }, defaultCollapsed: false },
+  { id: 'uvPreview', index: 1, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'left', defaultOrder: 1, defaultPosition: { x: 24, y: 520 }, defaultSize: { width: 236, height: 260 }, defaultCollapsed: false },
+  { id: 'inspector', index: 2, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 0, defaultPosition: { x: 920, y: 104 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
+  { id: 'outliner', index: 3, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 1, defaultPosition: { x: 920, y: 460 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
   { id: 'bottom', index: 4, modes: ['paint', 'animate'], defaultDock: 'bottom', defaultOrder: 0, defaultPosition: { x: 280, y: 620 }, defaultSize: { width: 720, height: 176 }, defaultCollapsed: false }
 ]);
 
@@ -150,6 +162,19 @@ let selectionExpansionCache = null;
 let selectionTransformContextCache = null;
 let focusedDockHotspot = null;
 let textureUvDrag = null;
+let texturePaintDrag = null;
+let texturePaintSyncFrame = null;
+let texturePaintSyncTarget = null;
+let textureFaceDropTarget = null;
+let textureLoadRevision = 0;
+const textureAtlasCanvas = document.createElement('canvas');
+const textureAtlasCtx = textureAtlasCanvas.getContext('2d');
+const textureAtlasPatchCanvas = document.createElement('canvas');
+const textureAtlasPatchCtx = textureAtlasPatchCanvas.getContext('2d');
+let textureAtlasEntries = [];
+let textureAtlasLayoutByUid = new Map();
+let textureAtlasRevision = 0;
+let textureAtlasRebuildFrame = null;
 let textureViewLayout = null;
 let textureFocusFrame = null;
 let textureUvEntryCache = null;
@@ -159,9 +184,9 @@ let mirrorGuideHideTimer = null;
 let subdivisionSession = null;
 
 const PROJECT_SESSION_KEYS = Object.freeze([
-  'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'filePath', 'dirty', 'history', 'future',
+  'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
-  'target', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'timelineFrame',
+  'target', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
   'selectedUvFaces', 'textureView'
 ]);
 
@@ -183,6 +208,7 @@ function createProjectSession(project, options = {}) {
     selectedUids: new Set(selectedUid ? [selectedUid] : []),
     selectionAnchorUid: selectedUid,
     selectedCurveNodeIndex: null,
+    selectedModifierUid: null,
     filePath: options.filePath || null,
     dirty: options.dirty ?? false,
     history: [],
@@ -201,6 +227,8 @@ function createProjectSession(project, options = {}) {
     textureAssets,
     textureGroups: [],
     activeTextureUid: preferredTexture?._uid || null,
+    paintHistory: [],
+    paintFuture: [],
     selectedUvFaces: new Set(),
     textureView: { zoom: 1, panX: 0, panY: 0 },
     timelineFrame: 0
@@ -251,6 +279,9 @@ function updateProjectStateLabel() {
 }
 
 function restoreProjectTextureView() {
+  textureAtlasRevision++;
+  textureAtlasEntries = [];
+  textureAtlasLayoutByUid = new Map();
   renderTextureList();
   if (!state.textureAssets.length) {
     renderTexture();
@@ -426,19 +457,46 @@ function restore(serialized) {
     : state.selectedUid;
   const restoredSelection = state.project.getNode(state.selectedUid);
   if (!isBezierElement(restoredSelection) || state.selectedCurveNodeIndex >= restoredSelection.nodes.length) state.selectedCurveNodeIndex = null;
+  if (!restoredSelection?.modifiers?.some(modifier => modifier.uid === state.selectedModifierUid)) state.selectedModifierUid = null;
   if (state.vertexSnapSource && !state.project.getNode(state.vertexSnapSource.rootUid)) state.vertexSnapSource = null;
   if (state.knifeSelection && !state.project.getNode(state.knifeSelection.uid)) cancelKnifeSelection(false);
   markDirty(true);
   renderAll();
 }
 
+function restoreTexturePaintHistory(sourceStack, targetStack) {
+  while (sourceStack.length) {
+    const entry = sourceStack.pop();
+    const asset = state.textureAssets.find(texture => texture._uid === entry.uid);
+    if (!asset) continue;
+    targetStack.push({
+      uid: asset._uid,
+      source: asset.source,
+      width: asset.uvWidth || textureCanvas.width,
+      height: asset.uvHeight || textureCanvas.height
+    });
+    if (targetStack.length > 60) targetStack.shift();
+    asset.source = entry.source;
+    asset.uvWidth = entry.width;
+    asset.uvHeight = entry.height;
+    state.activeTextureUid = asset._uid;
+    renderTextureList();
+    loadTextureSource(asset.source, asset.name);
+    markDirty();
+    return true;
+  }
+  return false;
+}
+
 function undo() {
+  if (state.mode === 'paint' && restoreTexturePaintHistory(state.paintHistory, state.paintFuture)) return;
   if (!state.history.length) return toast('沒有可撤銷的操作');
   state.future.push(state.project.serialize());
   restore(state.history.pop());
 }
 
 function redo() {
+  if (state.mode === 'paint' && restoreTexturePaintHistory(state.paintFuture, state.paintHistory)) return;
   if (!state.future.length) return toast('沒有可重做的操作');
   state.history.push(state.project.serialize());
   restore(state.future.pop());
@@ -495,13 +553,12 @@ function selectionAffectsMirrorPreview() {
   const selectedSet = new Set(selectedIds);
   for (const uidValue of selectedIds) {
     const node = state.project.getNode(uidValue);
-    if (node?.mirrorControllerFor) return true;
-    if (node?.type === 'group' && node.mirror?.enabled) return true;
+    if (getModifier(node, 'symmetry')?.enabled) return true;
   }
-  // Moving an ancestor group also moves an enabled mirror group and its
-  // controller even though that mirror group is not itself selected.
-  return state.project.groups.some(group => group.mirror?.enabled
-    && state.project.getGroupChain(group.uid).some(parent => selectedSet.has(parent.uid)));
+  // Moving an ancestor also moves the embedded symmetry frame even though the
+  // modifier owner itself is not selected.
+  return [...state.project.groups, ...state.project.elements].some(owner => getModifier(owner, 'symmetry')?.enabled
+    && state.project.getGroupChain(owner.uid).some(parent => selectedSet.has(parent.uid)));
 }
 
 function invalidateSelectionRenderGeometry(geometryChanged = true) {
@@ -519,10 +576,16 @@ function invalidateSelectionRenderGeometry(geometryChanged = true) {
 
 function updateSelectionLabels() {
   const item = selected();
+  const modifierAnchorSelected = item?.modifiers?.find(modifier => modifier.uid === state.selectedModifierUid);
+  const curveNodeSelected = isBezierElement(item) && Number.isInteger(state.selectedCurveNodeIndex)
+    && item.nodes[state.selectedCurveNodeIndex];
   const format = modelFormatRegistry.get(state.project.formatId);
-  $('#selectionType').textContent = item?.type || format?.name || 'Scene';
-  $('#selectionName').textContent = state.selectedUids.size > 1 ? `已選 ${state.selectedUids.size} 項` : item?.name || state.project.name;
-  $('#uidChip').textContent = item?.uid || '—';
+  $('#selectionType').textContent = modifierAnchorSelected ? 'modifier_anchor'
+    : curveNodeSelected ? 'curve_node' : item?.type || format?.name || 'Scene';
+  $('#selectionName').textContent = modifierAnchorSelected ? '對稱軸點'
+    : curveNodeSelected ? `節點 ${state.selectedCurveNodeIndex + 1}`
+    : state.selectedUids.size > 1 ? `已選 ${state.selectedUids.size} 項` : item?.name || state.project.name;
+  $('#uidChip').textContent = modifierAnchorSelected?.uid || curveNodeSelected?.uid || item?.uid || '—';
   const selectedCount = selectedElementUids().length;
   const counter = $('#outlinerSelectionCount');
   if (counter) counter.textContent = `${selectedCount}/${state.project.elements.filter(element => !element.subdivisionOwnerUid).length}`;
@@ -534,16 +597,24 @@ function renderOutliner() {
     const node = state.project.getNode(uidValue);
     if (!node) return false;
     if (!filter || node.name.toLowerCase().includes(filter) || node.uid.toLowerCase().includes(filter)) return true;
-    return node.type === 'group' && node.children.some(matches);
+    if (node.type === 'group') return node.children.some(matches);
+    return isBezierElement(node) && node.nodes.some((curveNode, index) => curveNode.uid.toLowerCase().includes(filter)
+      || `節點 ${index + 1}`.includes(filter));
   };
   const rows = [];
   const collectNode = (uidValue, depth = 0) => {
     const node = state.project.getNode(uidValue);
     if (!node || !matches(uidValue)) return;
     const group = node.type === 'group';
-    const collapsed = group && state.collapsedGroups.has(node.uid);
-    rows.push({ node, depth, group, collapsed });
+    const curve = isBezierElement(node);
+    const container = group || curve;
+    const collapsed = container && state.collapsedGroups.has(node.uid);
+    rows.push({ node, depth, group, curve, container, collapsed });
     if (group && !collapsed) node.children.forEach(child => collectNode(child, depth + 1));
+    if (curve && !collapsed) node.nodes.forEach((curveNode, nodeIndex) => rows.push({
+      node: curveNode, depth: depth + 1, group: false, curve: false, container: false, collapsed: false,
+      curveNode: true, curveOwner: node, nodeIndex
+    }));
   };
   state.project.outliner.forEach(uidValue => collectNode(uidValue));
   state.outlinerRows = rows;
@@ -567,11 +638,19 @@ function renderOutlinerWindow() {
   const windowNode = $('.outliner-virtual-window', outliner);
   if (!windowNode) return;
   windowNode.style.transform = `translateY(${start * rowHeight}px)`;
-  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, group, collapsed }) => `<button class="outliner-item ${state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) ? 'active' : ''}" data-uid="${node.uid}" draggable="true" style="padding-left:${5 + depth * 13}px">
-      ${group ? openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure', `data-disclosure="${node.uid}"`) : '<span></span>'}
+  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, container, collapsed, curveNode, curveOwner, nodeIndex }) => {
+    if (curveNode) {
+      const active = state.selectedUid === curveOwner.uid && state.selectedCurveNodeIndex === nodeIndex;
+      return `<button class="outliner-item curve-node-row ${active ? 'active' : ''}" data-uid="${curveOwner.uid}" data-curve-node-index="${nodeIndex}" draggable="false" style="padding-left:${5 + depth * 13}px">
+        <span></span><span class="kind curve-node-kind">◆</span><span class="item-name">節點 ${nodeIndex + 1}</span><span></span>
+      </button>`;
+    }
+    return `<button class="outliner-item ${state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''}" data-uid="${node.uid}" draggable="true" style="padding-left:${5 + depth * 13}px">
+      ${container ? openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure', `data-disclosure="${node.uid}"`) : '<span></span>'}
       <span class="kind">${outlinerKindMarkup(node)}</span>
       <span class="item-name">${escapeHtml(node.name)}</span>${outlinerStateMarkup(node)}
-    </button>`).join('');
+    </button>`;
+  }).join('');
 }
 
 function stateIconMarkup(id) {
@@ -588,6 +667,19 @@ function nodeAutoUvEnabled(node) {
   return node.autoUv !== false;
 }
 
+function isUvCapable(node) {
+  return Boolean(node && (node.type === 'cube' || isShapeElement(node) || isBezierElement(node) || node.type === 'group'));
+}
+
+function nodeUvNormalizedEnabled(node) {
+  if (node.type === 'group') {
+    const descendants = state.project.getDescendantElementUids(node.uid)
+      .map(uidValue => state.project.getNode(uidValue)).filter(isUvCapable);
+    return descendants.length ? descendants.every(child => child.uvNormalized !== false) : node.uvNormalized !== false;
+  }
+  return node.uvNormalized !== false;
+}
+
 function outlinerFlag(node, key, enabled, onIcon, offIcon, onTitle, offTitle, available = true) {
   return `<span class="outliner-flag ${enabled ? '' : 'is-off'} ${available ? '' : 'unavailable'}" role="button"
       data-node-toggle="${key}" data-node-uid="${node.uid}" title="${enabled ? onTitle : offTitle}">
@@ -601,6 +693,7 @@ function outlinerStateMarkup(node) {
   const autoUvAvailable = node.type === 'cube' || isShapeElement(node) || isBezierElement(node) || node.type === 'group';
   return [
     outlinerFlag(node, 'autoUv', nodeAutoUvEnabled(node), 'icon-uv-update', 'icon-unuv-update', '自動 UV', '不自動更新 UV', autoUvAvailable),
+    outlinerFlag(node, 'uvNormalized', nodeUvNormalizedEnabled(node), 'icon-uv-normalize', 'icon-unuv-normalize', 'UV 歸一化', '保留原 UV 像素', isUvCapable(node)),
     outlinerFlag(node, 'exported', node.exported !== false, 'icon-save', 'icon-unsave', '參與後續格式轉換', '不參與後續格式轉換'),
     outlinerFlag(node, 'locked', node.locked === true, 'icon-locked', 'icon-unlocked', '鎖定', '解鎖'),
     visible
@@ -680,7 +773,7 @@ function subdivisionPatch(owner, cube, index) {
   }
   const inflateDelta = Number(cube.inflate || 0) - Number(base.inflate || 0);
   if (Math.abs(inflateDelta) > 1e-8) patch.inflateDelta = inflateDelta;
-  for (const field of ['name', 'uvMode', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
+  for (const field of ['name', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
     if (JSON.stringify(cube[field]) !== JSON.stringify(base[field])) patch[field] = structuredClone(cube[field]);
   }
   return Object.keys(patch).length ? patch : null;
@@ -710,6 +803,7 @@ function enterSubdivisionEdit(owner) {
   });
   if (!cubes.length) return toast('這個 Shape 目前沒有可編輯的 Cube');
   subdivisionSession = { ownerUid: owner.uid, cubes };
+  if (state.tool === 'knife') setTool('move');
   state.project.elements.push(...cubes);
   state.project.invalidateHierarchyIndex();
   sceneRenderer.invalidateLockState();
@@ -719,6 +813,7 @@ function enterSubdivisionEdit(owner) {
   state.selectedUvFaces = new Set();
   invalidateAllRenderGeometry();
   renderAll('all');
+  updateToolVisibility();
   toast('已進入細分編輯；其他物件已虛化');
 }
 
@@ -736,6 +831,7 @@ function exitSubdivisionEdit(render = true) {
   state.selectionAnchorUid = state.selectedUid;
   state.selectedUvFaces = new Set();
   invalidateAllRenderGeometry();
+  updateToolVisibility();
   if (render) renderAll('all');
 }
 
@@ -744,80 +840,77 @@ function discardSubdivisionEdits(target) {
   target.subdivisionEdits = {};
 }
 
-function curveNodeEditorMarkup(item) {
-  return `<div class="curve-node-list">${item.nodes.map((node, index) => {
-    const displayedRotation = node.autoTangent ? item.resolvedNodeState(index).rotation : node.rotation;
-    return `
-    <section class="curve-node-card ${state.selectedCurveNodeIndex === index ? 'active' : ''}" data-curve-node-card="${index}">
-      <button type="button" class="curve-node-title" data-select-curve-node="${index}">節點 ${index + 1}</button>
-      ${vectorField('位置', `curve-node:${index}:position`, node.position)}
-      ${vectorField('旋轉', `curve-node:${index}:rotation`, displayedRotation)}
-      <div class="option-row"><span>自動切線</span><label class="switch"><input type="checkbox" data-curve-node-auto="${index}" ${node.autoTangent ? 'checked' : ''}/><i></i></label></div>
-      ${item.dimension === 3 ? `<div class="option-row"><span>滾動角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-curve-node-roll="${index}" value="${round(node.roll || 0)}" /></div></div>` : ''}
-      <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-curve-node-toggle="${index}" ${node.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
-      ${node.handlesEnabled ? `<div class="option-row"><span>對稱手柄</span><label class="switch"><input type="checkbox" data-curve-node-symmetric="${index}" ${node.symmetricHandles ? 'checked' : ''}/><i></i></label></div>` : ''}
-      ${node.handlesEnabled ? `${vectorField('前手柄', `curve-node:${index}:handleIn`, node.handleIn)}${vectorField('後手柄', `curve-node:${index}:handleOut`, node.handleOut)}` : ''}
-      <button type="button" class="curve-node-remove" data-remove-curve-node="${index}" ${item.nodes.length <= 2 ? 'disabled' : ''}>刪除節點</button>
+function curveNodeInspectorMarkup(item, index) {
+  const node = item.nodes[index];
+  if (!node) return '';
+  const displayedRotation = node.autoTangent ? item.resolvedNodeState(index).rotation : node.rotation;
+  return `<div class="field-section curve-node-card active" data-curve-node-card="${index}">
+    <div class="field-title"><span>節點 ${index + 1}</span><span>${item.dimension === 2 ? '2D' : '3D'}</span></div>
+    ${vectorField('位置', `curve-node:${index}:position`, node.position)}
+    ${vectorField('旋轉', `curve-node:${index}:rotation`, displayedRotation)}
+    <div class="option-row"><span>自動切線</span><label class="switch"><input type="checkbox" data-curve-node-auto="${index}" ${node.autoTangent ? 'checked' : ''}/><i></i></label></div>
+    ${item.dimension === 3 ? `<div class="option-row"><span>滾動角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-curve-node-roll="${index}" value="${round(node.roll || 0)}" /></div></div>` : ''}
+    <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-curve-node-toggle="${index}" ${node.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
+    ${node.handlesEnabled ? `<div class="option-row"><span>對稱手柄</span><label class="switch"><input type="checkbox" data-curve-node-symmetric="${index}" ${node.symmetricHandles ? 'checked' : ''}/><i></i></label></div>` : ''}
+    ${node.handlesEnabled ? `${vectorField('前手柄', `curve-node:${index}:handleIn`, node.handleIn)}${vectorField('後手柄', `curve-node:${index}:handleOut`, node.handleOut)}` : ''}
+    <button type="button" class="curve-node-remove" data-remove-curve-node="${index}" ${item.nodes.length <= 2 ? 'disabled' : ''}>刪除節點</button>
+  </div>`;
+}
+
+function modifierVectorField(label, modifier, property, values) {
+  return `<div class="vector-field modifier-vector-field"><span>${label}</span><div class="axis-inputs">${['X', 'Y', 'Z'].map((axis, index) =>
+    `<label><b>${axis}</b><input type="number" step="0.1" data-modifier-vector="${property}" data-modifier-uid="${modifier.uid}" data-axis="${index}" value="${round(values[index])}" /></label>`).join('')}</div></div>`;
+}
+
+function symmetryModifierMarkup(owner, modifier) {
+  const radial = modifier.mode === 'radial' || modifier.mode === 'mandala';
+  const editingAnchor = state.selectedModifierUid === modifier.uid;
+  return `<div class="modifier-settings">
+    <div class="option-row"><span>鏡像模式</span><select data-modifier-field="mode" data-modifier-uid="${modifier.uid}">
+      <option value="axes" ${modifier.mode === 'axes' ? 'selected' : ''}>XYZ 鏡像</option>
+      <option value="radial" ${modifier.mode === 'radial' ? 'selected' : ''}>徑向旋轉</option>
+      <option value="mandala" ${modifier.mode === 'mandala' ? 'selected' : ''}>曼陀羅</option>
+    </select></div>
+    ${modifier.mode === 'axes' ? `<div class="option-row group-mirror-axes"><span>啟用軸</span>
+      ${['x', 'y', 'z'].map(axis => `<label class="axis-${axis}"><input type="checkbox" data-modifier-axis="${axis}" data-modifier-uid="${modifier.uid}" ${modifier.axes[axis] ? 'checked' : ''}/><b>${axis.toUpperCase()}</b></label>`).join('')}
+    </div>` : ''}
+    ${radial ? `
+      <div class="option-row"><span>${modifier.mode === 'mandala' ? '對稱軸數量' : '複製數量'}</span><div class="number-wrap" style="width:68px"><input type="number" min="1" max="256" step="1" data-modifier-field="copies" data-modifier-uid="${modifier.uid}" value="${modifier.copies}" /></div></div>
+      <div class="option-row"><span>角度分布</span><select data-modifier-field="distribution" data-modifier-uid="${modifier.uid}"><option value="full" ${modifier.distribution === 'full' ? 'selected' : ''}>360° 均分</option><option value="range" ${modifier.distribution === 'range' ? 'selected' : ''}>限制範圍</option></select></div>
+      ${modifier.distribution === 'range' ? `
+        <div class="option-row"><span>起始角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-modifier-field="rangeStart" data-modifier-uid="${modifier.uid}" value="${round(modifier.rangeStart)}" /></div></div>
+        <div class="option-row"><span>結束角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-modifier-field="rangeEnd" data-modifier-uid="${modifier.uid}" value="${round(modifier.rangeEnd)}" /></div></div>` : ''}` : ''}
+    <div class="option-row"><span>導出時建立父組</span><label class="switch"><input type="checkbox" data-modifier-field="wrapParent" data-modifier-uid="${modifier.uid}" ${modifier.wrapParent ? 'checked' : ''}/><i></i></label></div>
+    <div class="field-title"><span>內嵌軸點</span><button type="button" class="modifier-anchor-edit ${editingAnchor ? 'active' : ''}" data-edit-modifier-anchor="${modifier.uid}">${editingAnchor ? '結束軸點編輯' : '在主視圖編輯'}</button></div>
+    <p class="modifier-anchor-note">不進入場景層級；可在主視圖點擊標記後移動或旋轉。</p>
+    ${modifierVectorField('位置', modifier, 'anchor.position', modifier.anchor.position)}
+    ${modifierVectorField('旋轉', modifier, 'anchor.rotation', modifier.anchor.rotation)}
+  </div>`;
+}
+
+function modifierPanelMarkup(owner) {
+  const modifiers = owner.modifiers || [];
+  const available = modifierRegistry.listFor(owner.type).filter(definition =>
+    definition.allowMultiple !== false || !modifiers.some(modifier => modifier.type === definition.id));
+  const cards = modifiers.map((modifier, index) => {
+    const definition = modifierRegistry.get(modifier.type);
+    const collapsed = state.collapsedModifiers.has(modifier.uid);
+    return `<section class="modifier-card ${modifier.enabled ? '' : 'disabled'}" data-modifier-card="${modifier.uid}">
+      <div class="modifier-card-heading">
+        <button type="button" class="modifier-collapse" data-modifier-collapse="${modifier.uid}" title="展開或折疊">${openIconMarkup(collapsed ? 'right' : 'down')}</button>
+        <label class="switch" title="啟用修改器"><input type="checkbox" data-modifier-enabled="${modifier.uid}" ${modifier.enabled ? 'checked' : ''}/><i></i></label>
+        <strong>${escapeHtml(definition?.label || modifier.type)}</strong>
+        <button type="button" data-modifier-move="up" data-modifier-uid="${modifier.uid}" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" data-modifier-move="down" data-modifier-uid="${modifier.uid}" ${index === modifiers.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="danger" data-modifier-remove="${modifier.uid}">×</button>
+      </div>
+      ${collapsed ? '' : modifier.type === 'symmetry' ? symmetryModifierMarkup(owner, modifier) : ''}
     </section>`;
-  }).join('')}</div>`;
-}
-
-function groupMirrorController(group) {
-  if (group?.type !== 'group' || !group.mirror?.controllerUid) return null;
-  const controller = state.project.getNode(group.mirror.controllerUid);
-  return controller?.type === 'node' ? controller : null;
-}
-
-function ensureGroupMirrorController(group) {
-  let controller = groupMirrorController(group);
-  if (controller) return controller;
-  controller = new NodeElement({
-    name: `${group.name}_mirror_axis`,
-    position: [...group.pivot],
-    rotation: [0, 0, 0],
-    exported: false,
-    mirrorControllerFor: group.uid
-  });
-  state.project.elements.push(controller);
-  group.children.push(controller.uid);
-  group.mirror.controllerUid = controller.uid;
-  state.project.invalidateHierarchyIndex();
-  return controller;
-}
-
-function removeGroupMirrorController(group) {
-  const uidValue = group?.mirror?.controllerUid;
-  if (!uidValue) return;
-  group.children = group.children.filter(childUid => childUid !== uidValue);
-  state.project.elements = state.project.elements.filter(element => element.uid !== uidValue);
-  group.mirror.controllerUid = null;
-  state.project.invalidateHierarchyIndex();
-}
-
-function groupMirrorInspectorMarkup(group) {
-  const mirror = group.mirror;
-  if (!mirror) return '';
-  const enabled = mirror.enabled === true;
-  const radial = mirror.mode === 'radial' || mirror.mode === 'mandala';
-  return `<div class="field-title"><span>組鏡像</span><span>${enabled ? 'ENABLED' : 'OFF'}</span></div>
-    <div class="option-row"><span>啟用組鏡像</span><label class="switch"><input type="checkbox" data-group-mirror-enabled ${enabled ? 'checked' : ''}/><i></i></label></div>
-    ${enabled ? `
-      <div class="option-row"><span>鏡像模式</span><select data-group-mirror-mode>
-        <option value="axes" ${mirror.mode === 'axes' ? 'selected' : ''}>XYZ 鏡像</option>
-        <option value="radial" ${mirror.mode === 'radial' ? 'selected' : ''}>徑向旋轉</option>
-        <option value="mandala" ${mirror.mode === 'mandala' ? 'selected' : ''}>曼陀羅</option>
-      </select></div>
-      ${mirror.mode === 'axes' ? `<div class="option-row group-mirror-axes"><span>啟用軸</span>
-        ${['x', 'y', 'z'].map(axis => `<label class="axis-${axis}"><input type="checkbox" data-group-mirror-axis="${axis}" ${mirror.axes[axis] ? 'checked' : ''}/><b>${axis.toUpperCase()}</b></label>`).join('')}
-      </div>` : ''}
-      ${radial ? `
-        <div class="option-row"><span>${mirror.mode === 'mandala' ? '對稱軸數量' : '複製數量'}</span><div class="number-wrap" style="width:68px"><input type="number" min="1" max="256" step="1" data-group-mirror-copies value="${mirror.copies}" /></div></div>
-        <div class="option-row"><span>角度分布</span><select data-group-mirror-distribution><option value="full" ${mirror.distribution === 'full' ? 'selected' : ''}>360° 均分</option><option value="range" ${mirror.distribution === 'range' ? 'selected' : ''}>限制範圍</option></select></div>
-        ${mirror.distribution === 'range' ? `
-          <div class="option-row"><span>起始角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-group-mirror-range="start" value="${round(mirror.rangeStart)}" /></div></div>
-          <div class="option-row"><span>結束角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-group-mirror-range="end" value="${round(mirror.rangeEnd)}" /></div></div>` : ''}` : ''}
-      <div class="option-row"><span>導出時建立父組</span><label class="switch"><input type="checkbox" data-group-mirror-wrap ${mirror.wrapParent ? 'checked' : ''}/><i></i></label></div>
-      <div class="option-row"><span>控制軸點</span><strong style="color:var(--accent)">${escapeHtml(groupMirrorController(group)?.name || '未建立')}</strong></div>` : ''}`;
+  }).join('');
+  return `<div class="field-section modifier-page">
+    <div class="modifier-add-row"><select data-modifier-add-type>${available.map(definition => `<option value="${definition.id}">${escapeHtml(definition.label)}</option>`).join('')}</select><button type="button" data-action="addModifier" ${available.length ? '' : 'disabled'}>＋ 新增修改器</button></div>
+    ${cards || '<p class="modifier-empty">這個物件目前沒有修改器。</p>'}
+  </div>`;
 }
 
 function renderInspector() {
@@ -826,11 +919,16 @@ function renderInspector() {
     inspector.innerHTML = '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。</p></div>';
     return;
   }
+  if (isBezierElement(item) && Number.isInteger(state.selectedCurveNodeIndex) && item.nodes[state.selectedCurveNodeIndex]) {
+    inspector.innerHTML = `<nav class="inspector-tabs"><button type="button" class="active">節點</button></nav>${curveNodeInspectorMarkup(item, state.selectedCurveNodeIndex)}`;
+    bindInspector();
+    return;
+  }
   const items = inspectorBatchNodes();
   const rotation = item.rotation || [0, 0, 0];
   const editOwner = subdivisionOwner(item);
   const typeLabel = editOwner ? 'Shape 細分 Cube' : isShapeElement(item) ? '多邊形柱體' : item.type === 'locator' ? 'Locator'
-    : item.type === 'node' ? item.mirrorControllerFor ? '鏡像軸點' : '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
+    : item.type === 'node' ? '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
       : item.type === 'bezier3d' ? '三維貝塞爾' : item.type === 'group' ? '組' : '立方體';
   const details = item.type === 'cube' ? `
       <div class="field-title"><span>幾何</span><button data-action="resetTransform">重置</button></div>
@@ -838,8 +936,7 @@ function renderInspector() {
       ${vectorField('尺寸', 'size', item.size, items)}
       ${vectorField('樞軸', 'pivot', item.pivot, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
-      ${scalarField('膨脹', 'inflate', item.inflate, items)}
-      <div class="option-row"><span>UV 模式</span><select data-field="uvMode"><option value="box" ${item.uvMode === 'box' ? 'selected' : ''}>箱型 UV</option><option value="face" ${item.uvMode === 'face' ? 'selected' : ''}>逐面 UV</option></select></div>`
+      ${scalarField('膨脹', 'inflate', item.inflate, items)}`
     : isShapeElement(item) ? `
       <div class="field-title"><span>多邊形柱體</span><span>POLYGON PRISM</span></div>
       ${vectorField('位置', 'origin', item.origin, items)}
@@ -859,7 +956,7 @@ function renderInspector() {
       ${vectorField('位置', 'position', item.position, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}`
     : item.type === 'node' ? `
-      <div class="field-title"><span>${item.mirrorControllerFor ? '組鏡像軸點' : '節點'}</span><span>只可移動／旋轉</span></div>
+      <div class="field-title"><span>節點</span><span>只可移動／旋轉</span></div>
       ${vectorField('位置', 'position', item.position, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
       <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-field="handlesEnabled" ${item.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
@@ -874,16 +971,22 @@ function renderInspector() {
       ${item.parameters.segmentationMode === 'angle'
         ? parameterField('角度步長', 'angleStep', item.parameters.angleStep, .1, items)
         : parameterField('距離步長', 'segmentLength', item.parameters.segmentLength, .1, items)}
-      <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>
-      ${curveNodeEditorMarkup(item)}`
+      <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
     : `
       <div class="field-title"><span>組屬性</span></div>
       ${vectorField('樞軸', 'pivot', item.pivot, items)}
       ${scalarField('膨脹', 'inflate', item.inflate, items)}
-      <div class="option-row"><span>直接子項</span><strong style="color:var(--accent)">${item.children.length}</strong></div>
-      ${groupMirrorInspectorMarkup(item)}`;
-  inspector.innerHTML = `
-    <div class="field-section">
+      <div class="option-row"><span>直接子項</span><strong style="color:var(--accent)">${item.children.length}</strong></div>`;
+  const appearanceCapable = item.type === 'cube' || isShapeElement(item) || isBezierElement(item) || item.type === 'group';
+  const pages = [
+    { id: 'basic', label: '基礎' },
+    ...(appearanceCapable ? [{ id: 'appearance', label: '外觀' }] : []),
+    ...(isUvCapable(item) ? [{ id: 'uv', label: 'UV' }] : []),
+    ...(modifierRegistry.listFor(item.type).length || item.modifiers?.length ? [{ id: 'modifiers', label: '修改器' }] : [])
+  ];
+  if (!pages.some(page => page.id === state.inspectorPage)) state.inspectorPage = 'basic';
+  const tabs = `<nav class="inspector-tabs" aria-label="物件屬性分類">${pages.map(page => `<button type="button" data-inspector-page="${page.id}" class="${state.inspectorPage === page.id ? 'active' : ''}">${page.label}</button>`).join('')}</nav>`;
+  const basicPage = `<div class="field-section">
       <div class="field-title"><span>基本</span><span>${items.length > 1 ? `多選 ${items.length}` : typeLabel}</span></div>
       <input class="name-field" data-field="name" value="${escapeAttribute(item.name)}" aria-label="名稱" />
       <div class="option-row"><span>可見</span><label class="switch"><input type="checkbox" data-field="visible" ${item.visible ? 'checked' : ''}/><i></i></label></div>
@@ -901,13 +1004,22 @@ function renderInspector() {
       <p>正在非破壞地編輯 Shape 生成的 Cube。</p>
       <button type="button" data-action="exitSubdivisionEdit">完成細分編輯</button>
     </div>` : ''}
-    ${item.type === 'cube' || isShapeElement(item) || isBezierElement(item) || item.type === 'group' ? `
-    <div class="field-section">
+    ${editOwner ? '' : `<div class="field-section"><button class="danger-button" data-action="deleteSelected">${items.length > 1 ? '刪除選中項' : `刪除${item.type === 'group' ? '組及其內容' : '物件'}`}</button></div>`}`;
+  const appearancePage = `<div class="field-section">
       <div class="field-title"><span>外觀</span><span>預覽色</span></div>
       ${item.color ? `<div class="option-row"><span>材質色</span><input type="color" data-field="color" value="${item.color}" /></div>` : ''}
       <div class="option-row"><span>面陰影</span><label class="switch"><input type="checkbox" data-field="shade" ${item.shade !== false ? 'checked' : ''}/><i></i></label></div>
-    </div>` : ''}
-    ${editOwner ? '' : `<div class="field-section"><button class="danger-button" data-action="deleteSelected">${items.length > 1 ? '刪除選中項' : `刪除${item.type === 'group' ? '組及其內容' : '物件'}`}</button></div>`}`;
+    </div>`;
+  const uvPage = `<div class="field-section">
+      <div class="field-title"><span>UV</span><span>${item.uvMode === 'face' ? 'PER FACE' : 'BOX'}</span></div>
+      <div class="option-row"><span>UV 模式</span><select data-field="uvMode"><option value="box" ${item.uvMode !== 'face' ? 'selected' : ''}>箱型 UV</option><option value="face" ${item.uvMode === 'face' ? 'selected' : ''}>逐面 UV</option></select></div>
+      <div class="option-row"><span>UV 歸一化</span><label class="switch"><input type="checkbox" data-field="uvNormalized" ${item.uvNormalized !== false ? 'checked' : ''}/><i></i></label></div>
+    </div>`;
+  const content = state.inspectorPage === 'appearance' ? appearancePage
+    : state.inspectorPage === 'uv' ? uvPage
+      : state.inspectorPage === 'modifiers' ? modifierPanelMarkup(item)
+        : basicPage;
+  inspector.innerHTML = `${tabs}${content}`;
   bindInspector();
 }
 
@@ -950,13 +1062,14 @@ function setNodeAutoUv(node, enabled) {
     for (const uidValue of state.project.getDescendantElementUids(node.uid)) {
       const child = state.project.getNode(uidValue);
       if (child?.type === 'cube') setNodeAutoUv(child, enabled);
-      else if (child && ['shape', 'bezier2d', 'bezier3d'].includes(child.type)) child.autoUv = enabled;
+      else if (isShapeElement(child) || isBezierElement(child)) child.autoUv = enabled;
     }
   }
 }
 
 function setNodeFlag(node, key, value) {
   if (!node) return;
+  if ((key === 'uvMode' || key === 'uvNormalized') && !isUvCapable(node)) return;
   if (key === 'visible') return setNodeVisibility(node, value);
   if (key === 'autoUv') return setNodeAutoUv(node, value);
   if (key === 'shade' && node.type === 'locator') return;
@@ -979,11 +1092,11 @@ function bindInspector() {
       const targets = key === 'name' ? [item]
         : key === 'shade' ? items.filter(node => node.type === 'cube' || isShapeElement(node) || isBezierElement(node) || node.type === 'group')
         : key === 'inflate' ? items.filter(node => ['cube', 'group'].includes(node.type))
-        : key === 'uvMode' ? items.filter(node => node.type === 'cube')
+        : key === 'uvMode' || key === 'uvNormalized' ? items.filter(isUvCapable)
         : key === 'color' ? items.filter(node => typeof node.color === 'string')
         : items.filter(node => key in node);
       for (const target of targets) {
-        if (['visible', 'shade', 'autoUv', 'exported', 'locked'].includes(key)) setNodeFlag(target, key, value);
+        if (['visible', 'shade', 'autoUv', 'uvMode', 'uvNormalized', 'exported', 'locked'].includes(key)) setNodeFlag(target, key, value);
         else {
           target[key] = value;
           if (key === 'symmetricHandles' && value && target.type === 'node') {
@@ -1036,6 +1149,7 @@ function bindInspector() {
           const delta = nextValue - target.position[axis];
           target.position[axis] = nextValue;
           target.pivot[axis] += delta;
+          translateModifierAnchors(target, [0, 1, 2].map(index => index === axis ? delta : 0));
         } else if (field === 'pivot' && ['cube', 'group'].includes(target.type)) {
           const nextPivot = [...target.pivot];
           nextPivot[axis] = nextValue;
@@ -1044,7 +1158,13 @@ function bindInspector() {
           const nextHandle = [...target[field]];
           nextHandle[axis] = nextValue;
           setCurveHandle(target, field, nextHandle, false);
-        } else target[field][axis] = nextValue;
+        } else {
+          const delta = nextValue - target[field][axis];
+          target[field][axis] = nextValue;
+          if (field === 'position' || field === 'origin') {
+            translateModifierAnchors(target, [0, 1, 2].map(index => index === axis ? delta : 0));
+          }
+        }
       }
       const displayedValue = item.type === 'cube' && field === 'size' && !state.allowNegativeSize ? Math.max(0, value) : value;
       if (displayedValue !== value) input.value = String(displayedValue);
@@ -1074,50 +1194,92 @@ function bindInspector() {
     input.addEventListener('change', apply);
     input.addEventListener('blur', () => { snapshotTaken = false; });
   });
-  $('[data-group-mirror-enabled]', inspector)?.addEventListener('change', event => {
-    if (item.type !== 'group') return;
+  $$('[data-inspector-page]', inspector).forEach(button => button.addEventListener('click', () => {
+    state.inspectorPage = button.dataset.inspectorPage;
+    renderInspector();
+  }));
+  const modifierByUid = uidValue => item.modifiers?.find(modifier => modifier.uid === uidValue);
+  $('[data-action="addModifier"]', inspector)?.addEventListener('click', () => {
+    const type = $('[data-modifier-add-type]', inspector)?.value;
+    if (!type) return;
     snapshot();
-    item.mirror.enabled = event.target.checked;
-    if (item.mirror.enabled) ensureGroupMirrorController(item);
-    else removeGroupMirrorController(item);
+    const modifier = addModifier(item, type);
+    if (!modifier) return;
+    state.selectedModifierUid = modifier.uid;
+    state.selectedCurveNodeIndex = null;
     sceneRenderer.invalidateMirrorGeometry();
-    markDirty(); renderAll('selection');
+    markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
   });
-  $('[data-group-mirror-mode]', inspector)?.addEventListener('change', event => {
-    if (item.type !== 'group') return;
-    snapshot();
-    item.mirror.mode = ['radial', 'mandala'].includes(event.target.value) ? event.target.value : 'axes';
-    ensureGroupMirrorController(item);
-    markDirty(); renderAll('selection');
-  });
-  $$('[data-group-mirror-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
-    if (item.type !== 'group') return;
-    snapshot();
-    item.mirror.axes[toggle.dataset.groupMirrorAxis] = toggle.checked;
-    markDirty(); renderAll('selection');
+  $$('[data-modifier-collapse]', inspector).forEach(button => button.addEventListener('click', () => {
+    const uidValue = button.dataset.modifierCollapse;
+    state.collapsedModifiers.has(uidValue) ? state.collapsedModifiers.delete(uidValue) : state.collapsedModifiers.add(uidValue);
+    renderInspector();
   }));
-  $('[data-group-mirror-distribution]', inspector)?.addEventListener('change', event => {
-    if (item.type !== 'group') return;
-    snapshot(); item.mirror.distribution = event.target.value === 'range' ? 'range' : 'full';
-    markDirty(); renderAll('selection');
-  });
-  $('[data-group-mirror-wrap]', inspector)?.addEventListener('change', event => {
-    if (item.type !== 'group') return;
-    snapshot(); item.mirror.wrapParent = event.target.checked;
-    markDirty(); renderScene();
-  });
-  $('[data-group-mirror-copies]', inspector)?.addEventListener('change', event => {
-    if (item.type !== 'group') return;
-    const value = Math.max(1, Math.min(256, Math.round(Number(event.target.value) || 1)));
-    snapshot(); item.mirror.copies = value; event.target.value = String(value);
-    markDirty(); sceneRenderer.invalidateMirrorGeometry(); renderScene();
-  });
-  $$('[data-group-mirror-range]', inspector).forEach(input => input.addEventListener('change', () => {
-    if (item.type !== 'group' || !Number.isFinite(Number(input.value))) return;
-    snapshot();
-    item.mirror[input.dataset.groupMirrorRange === 'start' ? 'rangeStart' : 'rangeEnd'] = Number(input.value);
-    markDirty(); sceneRenderer.invalidateMirrorGeometry(); renderScene();
+  $$('[data-modifier-enabled]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    const modifier = modifierByUid(toggle.dataset.modifierEnabled);
+    if (!modifier) return;
+    snapshot(); modifier.enabled = toggle.checked;
+    if (!modifier.enabled && state.selectedModifierUid === modifier.uid) state.selectedModifierUid = null;
+    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
   }));
+  $$('[data-modifier-remove]', inspector).forEach(button => button.addEventListener('click', () => {
+    snapshot();
+    item.modifiers = (item.modifiers || []).filter(modifier => modifier.uid !== button.dataset.modifierRemove);
+    if (state.selectedModifierUid === button.dataset.modifierRemove) state.selectedModifierUid = null;
+    state.collapsedModifiers.delete(button.dataset.modifierRemove);
+    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
+  }));
+  $$('[data-edit-modifier-anchor]', inspector).forEach(button => button.addEventListener('click', () => {
+    const modifier = modifierByUid(button.dataset.editModifierAnchor);
+    if (!modifier?.enabled) return;
+    state.selectedModifierUid = state.selectedModifierUid === modifier.uid ? null : modifier.uid;
+    state.selectedCurveNodeIndex = null;
+    if (state.selectedModifierUid && !['move', 'rotate', 'pivot'].includes(state.tool)) {
+      setTool('move');
+      return;
+    }
+    renderInspector(); renderScene(); updateSelectionLabels();
+  }));
+  $$('[data-modifier-move]', inspector).forEach(button => button.addEventListener('click', () => {
+    const index = item.modifiers?.findIndex(modifier => modifier.uid === button.dataset.modifierUid) ?? -1;
+    const target = index + (button.dataset.modifierMove === 'up' ? -1 : 1);
+    if (index < 0 || target < 0 || target >= item.modifiers.length) return;
+    snapshot(); [item.modifiers[index], item.modifiers[target]] = [item.modifiers[target], item.modifiers[index]];
+    markDirty(); renderInspector();
+  }));
+  $$('[data-modifier-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    const modifier = modifierByUid(toggle.dataset.modifierUid);
+    if (!modifier) return;
+    snapshot(); modifier.axes[toggle.dataset.modifierAxis] = toggle.checked;
+    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
+  }));
+  $$('[data-modifier-field]', inspector).forEach(input => input.addEventListener('change', () => {
+    const modifier = modifierByUid(input.dataset.modifierUid);
+    if (!modifier) return;
+    const key = input.dataset.modifierField;
+    let value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+    if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
+    if (!Number.isFinite(value) && input.type === 'number') return;
+    snapshot(); modifier[key] = value;
+    sceneRenderer.invalidateMirrorGeometry(); markDirty();
+    if (key === 'mode' || key === 'distribution') renderInspector();
+    renderScene();
+  }));
+  $$('[data-modifier-vector]', inspector).forEach(input => {
+    let snapshotTaken = false;
+    const apply = () => {
+      const modifier = modifierByUid(input.dataset.modifierUid);
+      const value = Number(input.value);
+      if (!modifier || !Number.isFinite(value)) return;
+      if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      const [scope, property] = input.dataset.modifierVector.split('.');
+      modifier[scope][property][Number(input.dataset.axis)] = value;
+      sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('change', apply);
+    input.addEventListener('blur', () => { snapshotTaken = false; });
+  });
   $('[data-shape-snap-mode]', inspector)?.addEventListener('change', event => {
     snapshot();
     for (const target of items.filter(isShapeElement)) target.parameters.snapMode = event.target.value;
@@ -1148,8 +1310,9 @@ function bindInspector() {
     markDirty(); renderAll('selection');
   });
   $$('[data-select-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
+    state.selectedModifierUid = null;
     state.selectedCurveNodeIndex = Number(button.dataset.selectCurveNode);
-    renderInspector(); renderScene();
+    renderInspector(); renderScene(); updateSelectionLabels();
   }));
   $$('[data-curve-node-toggle]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const node = item.nodes?.[Number(toggle.dataset.curveNodeToggle)];
@@ -1254,6 +1417,7 @@ function clearSelection() {
   state.selectedUid = null;
   state.selectionAnchorUid = null;
   state.selectedCurveNodeIndex = null;
+  state.selectedModifierUid = null;
   state.vertexSnapSource = null;
   if (state.tool === 'knife') cancelKnifeSelection(false);
   refreshSelectionUi();
@@ -1274,7 +1438,9 @@ function selectItem(uid, { revealInOutliner = false, toggle = false, range = fal
     const end = rows.findIndex(row => row.node.uid === uid);
     if (start >= 0 && end >= 0) {
       const extended = new Set(state.selectedUids);
-      rows.slice(Math.min(start, end), Math.max(start, end) + 1).forEach(row => extended.add(row.node.uid));
+      rows.slice(Math.min(start, end), Math.max(start, end) + 1)
+        .filter(row => !row.curveNode)
+        .forEach(row => extended.add(row.node.uid));
       state.selectedUids = extended;
     } else state.selectedUids = new Set([...state.selectedUids, uid]);
   } else if (toggle) {
@@ -1288,7 +1454,10 @@ function selectItem(uid, { revealInOutliner = false, toggle = false, range = fal
     state.selectionAnchorUid = uid;
   }
   state.selectedUid = state.selectedUids.has(uid) ? uid : [...state.selectedUids].at(-1) || null;
-  if (state.selectedUid !== previousSelectedUid) state.selectedCurveNodeIndex = null;
+  state.selectedModifierUid = null;
+  if (state.selectedUid !== previousSelectedUid) {
+    state.selectedCurveNodeIndex = null;
+  }
   if (state.project.getNode(state.selectedUid)?.type !== 'bezier2d' && state.project.getNode(state.selectedUid)?.type !== 'bezier3d') {
     state.selectedCurveNodeIndex = null;
   }
@@ -1517,17 +1686,7 @@ function deleteSelected() {
     return toast('細分 Cube 由 Shape 管理，不能單獨刪除');
   }
   snapshot();
-  selectedIds.forEach(uidValue => {
-    const node = state.project.getNode(uidValue);
-    if (node?.mirrorControllerFor) {
-      const owner = state.project.getNode(node.mirrorControllerFor);
-      if (owner?.type === 'group') {
-        owner.mirror.enabled = false;
-        owner.mirror.controllerUid = null;
-      }
-    }
-    state.project.removeNode(uidValue);
-  });
+  selectedIds.forEach(uidValue => state.project.removeNode(uidValue));
   state.selectedUid = null;
   state.selectedUids = new Set();
   state.selectionAnchorUid = null;
@@ -1765,10 +1924,25 @@ function getUvPreviewProject() {
 
   // Visibility and locking are editor concerns. This isolated preview always
   // shows the selected geometry while inheriting its real transform and UVs.
-  const elements = sourceElements.map(element => Object.assign(Object.create(element), {
-    visible: true,
-    locked: false
-  }));
+  const previewTexture = faceTextureReference(activeTextureAsset()) || '__cubebricks_uv_preview__';
+  const elements = sourceElements.map(element => {
+    const preview = Object.assign(Object.create(element), { visible: true, locked: false });
+    if (element.type !== 'cube') return preview;
+    const sourceFaces = element.faces || {};
+    preview.faces = Object.fromEntries(CUBE_FACE_NAMES.map(faceName => {
+      const sourceFace = sourceFaces[faceName];
+      if (!isCubeFaceCulled(sourceFace)) return [faceName, sourceFace ? { ...sourceFace } : sourceFace];
+      const storedTexture = effectiveFaceTextureReference(sourceFace);
+      return [faceName, {
+        ...(sourceFace && typeof sourceFace === 'object' ? sourceFace : {}),
+        enabled: true,
+        texture: storedTexture ?? previewTexture,
+        uv: Array.isArray(sourceFace?.uv) ? [...sourceFace.uv] : [...getBlockbenchBoxUv(element, faceName)],
+        rotation: Number(sourceFace?.rotation) || 0
+      }];
+    }));
+    return preview;
+  });
   const groups = state.project.groups.map(group => Object.assign(Object.create(group), { locked: false }));
   const project = {
     elements,
@@ -1860,6 +2034,61 @@ function setUvPreviewPlaceholder(message, visible) {
 }
 
 const UV_FACE_LABELS = Object.freeze({ north: '北面', south: '南面', east: '東面', west: '西面', up: '上面', down: '下面' });
+const CULLED_FACE_TEXTURE_KEY = '_cubebricksCulledTexture';
+
+function effectiveFaceTextureReference(face) {
+  if (!face || typeof face !== 'object') return undefined;
+  if (face.texture !== null && face.texture !== undefined) return face.texture;
+  if (Object.prototype.hasOwnProperty.call(face, CULLED_FACE_TEXTURE_KEY)) {
+    const stored = face[CULLED_FACE_TEXTURE_KEY];
+    return stored === null ? undefined : stored;
+  }
+  return undefined;
+}
+
+function ensureCubeFaceRecord(cube, faceName) {
+  if (!cube.faces) cube.faces = {};
+  const existing = cube.faces[faceName];
+  if (existing && typeof existing === 'object') {
+    if (!Array.isArray(existing.uv) || existing.uv.length < 4) existing.uv = [...getBlockbenchBoxUv(cube, faceName)];
+    return existing;
+  }
+  const face = {
+    uv: [...getBlockbenchBoxUv(cube, faceName)],
+    rotation: 0
+  };
+  if (existing === null) face.texture = null;
+  cube.faces[faceName] = face;
+  return face;
+}
+
+function setCubeFaceCulled(cube, faceName, culled) {
+  const face = ensureCubeFaceRecord(cube, faceName);
+  if (culled) {
+    if (!Object.prototype.hasOwnProperty.call(face, CULLED_FACE_TEXTURE_KEY) && face.texture !== null) {
+      face[CULLED_FACE_TEXTURE_KEY] = face.texture === undefined ? null : face.texture;
+    }
+    face.texture = null;
+    delete face.enabled;
+    return;
+  }
+  if (!isCubeFaceCulled(face)) return;
+  if (Object.prototype.hasOwnProperty.call(face, CULLED_FACE_TEXTURE_KEY)) {
+    const stored = face[CULLED_FACE_TEXTURE_KEY];
+    if (stored === null || stored === undefined) delete face.texture;
+    else face.texture = stored;
+    delete face[CULLED_FACE_TEXTURE_KEY];
+  } else {
+    const activeReference = faceTextureReference(activeTextureAsset());
+    if (activeReference === undefined || activeReference === null) delete face.texture;
+    else face.texture = activeReference;
+  }
+  delete face.enabled;
+}
+
+function cubeHasOnlyCulledFaces(cube) {
+  return CUBE_FACE_NAMES.every(faceName => isCubeFaceCulled(cube.faces?.[faceName]));
+}
 
 function textureOrderedFacePoints(points, uv, rotation) {
   const slots = createBlockbenchFaceUvSlots(uv, rotation);
@@ -1938,12 +2167,15 @@ function selectedUvFaceData(create = false) {
     if (!create) return { cube, face: {}, uv: getBlockbenchBoxUv(cube, selection.faceName) };
     cube.faces = {};
   }
-  if (!cube.faces[selection.faceName]) {
+  if (!Object.prototype.hasOwnProperty.call(cube.faces, selection.faceName)) {
     if (!create) return { cube, face: {}, uv: getBlockbenchBoxUv(cube, selection.faceName) };
     cube.faces[selection.faceName] = { uv: getBlockbenchBoxUv(cube, selection.faceName), rotation: 0 };
   }
-  const face = cube.faces[selection.faceName];
-  if (face === null) return null;
+  let face = cube.faces[selection.faceName];
+  if (face === null) {
+    if (create) face = ensureCubeFaceRecord(cube, selection.faceName);
+    else return { cube, face: { texture: null }, uv: getBlockbenchBoxUv(cube, selection.faceName), culled: true };
+  }
   return { cube, face, uv: face.uv?.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, selection.faceName) };
 }
 
@@ -1965,10 +2197,13 @@ function updateUvFaceUi() {
   const [u1, v1, u2, v2] = data.uv;
   const rotation = ((Math.round(Number(data.face.rotation) || 0) % 360) + 360) % 360;
   const mirrorX = u2 < u1, mirrorY = v2 < v1;
-  label.textContent = `${data.cube.name} · ${UV_FACE_LABELS[selection.faceName] || selection.faceName}`;
+  const culled = isCubeFaceCulled(data.cube.faces?.[selection.faceName]);
+  label.textContent = `${data.cube.name} · ${UV_FACE_LABELS[selection.faceName] || selection.faceName}${culled ? ' · 已剔除' : ''}`;
   size.textContent = `${formatNumber(Math.abs(u2 - u1))} × ${formatNumber(Math.abs(v2 - v1))} px`;
   $('[data-uv-face-action="mirror-x"]').classList.toggle('active', mirrorX);
   $('[data-uv-face-action="mirror-y"]').classList.toggle('active', mirrorY);
+  $('[data-uv-face-action="cull"]').classList.toggle('active', culled);
+  $('[data-uv-face-action="cull"]').title = culled ? '恢復面' : '剔除面';
   const points = selection.points || [];
   const projected = points.map(point => uvPreviewRenderer.projectPoint(point));
   if (projected.length !== 4 || projected.some(point => point.behind || point.depth < -1 || point.depth > 1)) {
@@ -1985,6 +2220,10 @@ function updateUvFaceUi() {
 }
 
 function editSelectedUvFace(action) {
+  if (action === 'cull') {
+    toggleSelectedUvFacesCull();
+    return;
+  }
   const data = selectedUvFaceData(true);
   if (!data) return toast('請先在 UV 預覽中選擇 Cube 的面');
   snapshot();
@@ -1997,6 +2236,46 @@ function editSelectedUvFace(action) {
   uvPreviewProjectCache = null;
   invalidateSelectionRenderGeometry();
   renderScene();
+}
+
+function toggleSelectedUvFacesCull() {
+  const selection = state.uvPreviewSelectedFace;
+  const current = selectedUvFaceData(false);
+  if (!selection || !current) return toast('請先在 UV 預覽中選擇 Cube 的面');
+  const currentKey = uvFaceKey(selection.uid, selection.faceName);
+  const keys = state.selectedUvFaces.has(currentKey) && state.selectedUvFaces.size
+    ? [...state.selectedUvFaces]
+    : [currentKey];
+  const targets = keys.map(parseUvFaceKey).filter(Boolean).map(entry => ({
+    ...entry,
+    cube: state.project.getNode(entry.uid)
+  })).filter(entry => entry.cube?.type === 'cube' && CUBE_FACE_NAMES.includes(entry.faceName));
+  if (!targets.length) return;
+  const culled = !isCubeFaceCulled(current.cube.faces?.[selection.faceName]);
+  snapshot();
+  targets.forEach(entry => setCubeFaceCulled(entry.cube, entry.faceName, culled));
+
+  const removed = new Set();
+  for (const cube of new Set(targets.map(entry => entry.cube))) {
+    if (!cubeHasOnlyCulledFaces(cube)) continue;
+    removed.add(cube.uid);
+    state.project.removeNode(cube.uid);
+  }
+  if (removed.size) {
+    state.selectedUids = new Set([...state.selectedUids].filter(uidValue => !removed.has(uidValue)));
+    if (removed.has(state.selectedUid)) state.selectedUid = [...state.selectedUids].at(-1) || null;
+    if (removed.has(state.selectionAnchorUid)) state.selectionAnchorUid = state.selectedUid;
+    state.selectedUvFaces = new Set([...state.selectedUvFaces].filter(key => {
+      const parsed = parseUvFaceKey(key);
+      return parsed && !removed.has(parsed.uid);
+    }));
+    if (removed.has(state.uvPreviewSelectedFace?.uid)) state.uvPreviewSelectedFace = null;
+  }
+  markDirty();
+  uvPreviewProjectCache = null;
+  renderAll();
+  if (removed.size) toast(removed.size > 1 ? `全部面已剔除，已刪除 ${removed.size} 個 Cube` : '全部面已剔除，Cube 已刪除');
+  else toast(culled ? `已剔除 ${targets.length} 個面` : `已恢復 ${targets.length} 個面`);
 }
 
 function renderUvPreview() {
@@ -2017,7 +2296,8 @@ function renderUvPreview() {
   }
   setUvPreviewPlaceholder('', false);
   if (uvPreviewTextureDirty) {
-    uvPreviewRenderer.setTexture(textureCanvas);
+    if (textureAtlasEntries.length) uvPreviewRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
+    else uvPreviewRenderer.setTexture(textureCanvas);
     uvPreviewTextureDirty = false;
   }
   cache.project.textureSize = state.project.textureSize;
@@ -2108,35 +2388,33 @@ function renderScene() {
 }
 
 function selectedMirrorGuideGroup() {
-  const item = selected();
-  if (item?.type === 'group' && item.mirror?.enabled) return item;
-  if (item?.type === 'node' && item.mirrorControllerFor) {
-    const group = state.project.getNode(item.mirrorControllerFor);
-    if (group?.type === 'group' && group.mirror?.enabled) return group;
-  }
-  return null;
+  const owner = selected();
+  const modifier = getModifier(owner, 'symmetry');
+  return modifier?.enabled ? { owner, modifier } : null;
 }
 
-function mirrorControllerWorldFrame(group) {
-  const controller = groupMirrorController(group);
-  if (!controller) return null;
-  const chain = state.project.getGroupChain(controller.uid);
+function mirrorControllerWorldFrame(owner, modifier) {
+  if (!owner || !modifier?.anchor) return null;
+  const chain = state.project.getGroupChain(owner.uid);
+  const pivot = owner.type === 'group' || owner.type === 'cube' ? owner.pivot : owner.origin || owner.position || [0, 0, 0];
+  const ownerRotation = owner.rotation || [0, 0, 0];
+  const offset = modifier.anchor.position.map((value, axis) => value - pivot[axis]);
+  const localOrigin = rotateVector(offset, ownerRotation).map((value, axis) => value + pivot[axis]);
   const rotateDirection = direction => normalize3(applyGroupTransforms(
-    rotateVector(direction, controller.rotation || [0, 0, 0]),
+    rotateVector(rotateVector(direction, modifier.anchor.rotation || [0, 0, 0]), ownerRotation),
     chain.map(parent => ({ pivot: [0, 0, 0], rotation: parent.rotation || [0, 0, 0] }))
   ));
   return {
-    controller,
-    origin: getTransformPivot(controller),
+    origin: applyGroupTransforms(localOrigin, chain),
     axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(rotateDirection)
   };
 }
 
-function groupMirrorAngles(mirror) {
-  const count = Math.max(1, Math.min(256, Math.round(Number(mirror.copies) || 1)));
-  if (mirror.distribution !== 'range') return Array.from({ length: count }, (_, index) => index * 360 / count);
-  const start = Number(mirror.rangeStart) || 0;
-  const end = Number(mirror.rangeEnd) || 0;
+function symmetryModifierAngles(modifier) {
+  const count = Math.max(1, Math.min(256, Math.round(Number(modifier.copies) || 1)));
+  if (modifier.distribution !== 'range') return Array.from({ length: count }, (_, index) => index * 360 / count);
+  const start = Number(modifier.rangeStart) || 0;
+  const end = Number(modifier.rangeEnd) || 0;
   if (count === 1) return [start];
   return Array.from({ length: count }, (_, index) => start + (end - start) * index / (count - 1));
 }
@@ -2196,29 +2474,30 @@ function mirrorInfiniteLineMarkup(origin, direction, width, height, className, r
   return `<line class="mirror-guide ${className} ${ray ? 'mirror-ray' : 'mirror-axis-line'}" x1="${clipped[0][0]}" y1="${clipped[0][1]}" x2="${clipped[1][0]}" y2="${clipped[1][1]}"/>`;
 }
 
-function renderMirrorGuide(group) {
+function renderMirrorGuide(entry) {
   const overlay = $('#mirrorGuideOverlay');
-  const frame = mirrorControllerWorldFrame(group);
+  const { owner, modifier } = entry;
+  const frame = mirrorControllerWorldFrame(owner, modifier);
   if (!frame) { overlay.innerHTML = ''; return false; }
   const rect = sceneCanvas.getBoundingClientRect();
   const width = rect.width, height = rect.height;
   overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
   const [xAxis, yAxis, zAxis] = frame.axes;
   const markup = [];
-  if (group.mirror.mode === 'axes') {
+  if (modifier.mode === 'axes') {
     const definitions = [
       ['x', xAxis, yAxis, zAxis],
       ['y', yAxis, zAxis, xAxis],
       ['z', zAxis, xAxis, yAxis]
     ];
     for (const [axisName, normal, first, second] of definitions) {
-      if (!group.mirror.axes[axisName]) continue;
+      if (!modifier.axes[axisName]) continue;
       markup.push(mirrorGridPlaneMarkup(frame.origin, first, second, `axis-${axisName}`));
       markup.push(mirrorInfiniteLineMarkup(frame.origin, normal, width, height, `axis-${axisName}`));
     }
   } else {
     markup.push(mirrorInfiniteLineMarkup(frame.origin, yAxis, width, height, 'radial-axis'));
-    const angles = groupMirrorAngles(group.mirror);
+    const angles = symmetryModifierAngles(modifier);
     for (const degrees of angles) {
       const radians = degrees * Math.PI / 180;
       const radial = normalize3(xAxis.map((value, axis) => value * Math.cos(radians) + zAxis[axis] * Math.sin(radians)));
@@ -2238,21 +2517,22 @@ function updateMirrorGuideOverlay() {
     clearTimeout(mirrorGuideHideTimer);
     mirrorGuideHoldTimer = null;
     mirrorGuideHideTimer = null;
-    mirrorGuideGroupUid = activeGroup.uid;
+    mirrorGuideGroupUid = activeGroup.owner.uid;
     const visible = renderMirrorGuide(activeGroup);
     overlay.toggleAttribute('hidden', !visible);
     if (visible) requestAnimationFrame(() => overlay.classList.add('visible'));
     return;
   }
-  const previous = mirrorGuideGroupUid && state.project.getNode(mirrorGuideGroupUid);
-  if (!previous?.mirror?.enabled) {
+  const previousOwner = mirrorGuideGroupUid && state.project.getNode(mirrorGuideGroupUid);
+  const previousModifier = getModifier(previousOwner, 'symmetry');
+  if (!previousModifier?.enabled) {
     overlay.classList.remove('visible');
     overlay.setAttribute('hidden', '');
     overlay.innerHTML = '';
     mirrorGuideGroupUid = null;
     return;
   }
-  renderMirrorGuide(previous);
+  renderMirrorGuide({ owner: previousOwner, modifier: previousModifier });
   if (mirrorGuideHoldTimer || mirrorGuideHideTimer) return;
   mirrorGuideHoldTimer = setTimeout(() => {
     mirrorGuideHoldTimer = null;
@@ -2648,6 +2928,12 @@ function activeCurveNodeContext() {
   return node ? { curve, node, index: state.selectedCurveNodeIndex } : null;
 }
 
+function activeModifierAnchorContext() {
+  const owner = selected();
+  const modifier = owner?.modifiers?.find(entry => entry.uid === state.selectedModifierUid);
+  return modifier?.enabled && modifier.type === 'symmetry' ? { owner, modifier } : null;
+}
+
 function bakeCurveNodeTangent(curve, index) {
   const node = curve?.nodes?.[index];
   if (!node?.autoTangent || !isBezierElement(curve)) return node;
@@ -2683,6 +2969,21 @@ function getCurveNodeTransformAxes(context) {
     }
     return normalize3(applyGroupTransforms(direction, chain));
   });
+}
+
+function getModifierAnchorTransformAxes(context) {
+  const units = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  if (state.transformSpace === 'global') return units;
+  const owner = context.owner;
+  const chain = [...state.project.getGroupChain(owner.uid), {
+    pivot: [0, 0, 0],
+    rotation: owner.rotation || [0, 0, 0]
+  }];
+  const rotationChain = chain.map(entry => ({ pivot: [0, 0, 0], rotation: entry.rotation || [0, 0, 0] }));
+  const transformDirection = direction => normalize3(applyGroupTransforms(direction, rotationChain));
+  const parentAxes = units.map(transformDirection);
+  if (state.transformSpace !== 'self') return parentAxes;
+  return units.map(unit => transformDirection(rotateVector(unit, context.modifier.anchor.rotation || [0, 0, 0])));
 }
 
 function addScaled3(point, direction, amount) {
@@ -2959,6 +3260,20 @@ function pivotMarkerMarkup(origin) {
   </g>`;
 }
 
+function modifierAnchorMarkerMarkup(entry, active = false) {
+  const frame = mirrorControllerWorldFrame(entry.owner, entry.modifier);
+  if (!frame) return '';
+  const point = projectViewportPoint(frame.origin);
+  if (point.behind || point.depth < -1 || point.depth > 1) return '';
+  const radius = active ? 11 : 9;
+  return `<g class="${active ? '' : 'gizmo-control '}modifier-anchor-marker ${active ? 'active' : ''}" ${active ? '' : `data-kind="modifier-anchor" data-modifier-uid="${entry.modifier.uid}" ${gizmoDepthAttributes('point', [point], 'center')}`}>
+    ${active ? '' : `<circle class="gizmo-hit-point" cx="${point.x}" cy="${point.y}" r="18"/>`}
+    <path class="gizmo-visible modifier-anchor-ring" d="M${point.x},${point.y - radius} L${point.x + radius},${point.y} L${point.x},${point.y + radius} L${point.x - radius},${point.y} Z"/>
+    <path class="gizmo-visible modifier-anchor-axis" d="M${point.x - 14},${point.y} H${point.x + 14} M${point.x},${point.y - 14} V${point.y + 14}"/>
+    <circle class="gizmo-visible modifier-anchor-core" cx="${point.x}" cy="${point.y}" r="3.4"/>
+  </g>`;
+}
+
 function curveEditorOverlayMarkup(curve) {
   if (!isBezierElement(curve)) return '';
   const nodes = sceneRenderer.getCurveNodeWorldPoints(state.project, curve.uid);
@@ -3162,51 +3477,62 @@ function updateTransformGizmo() {
   const rect = sceneCanvas.getBoundingClientRect();
   const width = rect.width, height = rect.height;
   const curveOverlay = curveEditorOverlayMarkup(item);
+  const symmetryEntry = selectedMirrorGuideGroup();
+  const modifierAnchorContext = activeModifierAnchorContext();
+  const modifierAnchorMarker = symmetryEntry
+    ? modifierAnchorMarkerMarkup(symmetryEntry, modifierAnchorContext?.modifier.uid === symmetryEntry.modifier.uid)
+    : '';
+  const editorOverlay = curveOverlay + modifierAnchorMarker;
   if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)) {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
-    if (curveOverlay && item && !isEffectivelyLocked(item.uid)) {
+    if (editorOverlay && item && !isEffectivelyLocked(item.uid)) {
       gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-      gizmo.innerHTML = curveOverlay;
+      gizmo.innerHTML = editorOverlay;
       gizmo.removeAttribute('hidden');
     } else { gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; }
     return;
   }
   const curveNodeContext = activeCurveNodeContext();
   const selectionContext = getSelectionTransformContext();
-  if (state.tool === 'resize' && (curveNodeContext || (!selectionContext.multiple && item.type !== 'cube' && !isShapeElement(item)))) {
+  if (state.tool === 'resize' && (modifierAnchorContext || curveNodeContext || (!selectionContext.multiple && item.type !== 'cube' && !isShapeElement(item)))) {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
-    if (curveOverlay) {
+    if (editorOverlay) {
       gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-      gizmo.innerHTML = curveOverlay;
+      gizmo.innerHTML = editorOverlay;
       gizmo.removeAttribute('hidden');
     } else { gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; }
     return;
   }
   if (state.tool === 'vertexSnap') {
     renderVertexSnapGizmo(gizmo, width, height);
-    gizmo.insertAdjacentHTML('beforeend', curveOverlay);
+    gizmo.insertAdjacentHTML('beforeend', editorOverlay);
     return;
   }
   if (state.tool === 'pivot' && selectionContext.multiple && !selectionContext.commonGroup) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
   }
   const transformItem = state.tool === 'pivot' && selectionContext.multiple ? selectionContext.commonGroup : item;
-  if (state.tool === 'pivot' && !curveNodeContext && !['cube', 'group', 'node'].includes(transformItem?.type)) {
+  if (state.tool === 'pivot' && !modifierAnchorContext && !curveNodeContext && !['cube', 'group', 'node'].includes(transformItem?.type)) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
   }
-  const pivot = curveNodeContext
+  const modifierFrame = modifierAnchorContext
+    ? mirrorControllerWorldFrame(modifierAnchorContext.owner, modifierAnchorContext.modifier)
+    : null;
+  const pivot = modifierFrame?.origin || (curveNodeContext
     ? sceneRenderer.getCurveNodeWorldPoints(state.project, item.uid)[curveNodeContext.index]?.point
-    : selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item);
-  const geometryCenter = curveNodeContext ? pivot : selectionContext.multiple
+    : selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item));
+  const geometryCenter = modifierAnchorContext || curveNodeContext ? pivot : selectionContext.multiple
     ? selectionContext.center || pivot
     : sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center
       || sceneRenderer.getGeometryCenter(state.project, item.uid)
       || pivot;
-  const gizmoOrigin = curveNodeContext || item.type === 'node' || ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
+  const gizmoOrigin = modifierAnchorContext || curveNodeContext || item.type === 'node' || ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
   const center = projectViewportPoint(gizmoOrigin);
   state.gizmoCenter = { x: center.x, y: center.y };
   state.gizmoOrigin = [...gizmoOrigin];
-  const axes = curveNodeContext ? getCurveNodeTransformAxes(curveNodeContext) : getSelectionTransformAxes(selectionContext, item);
+  const axes = modifierAnchorContext ? getModifierAnchorTransformAxes(modifierAnchorContext)
+    : curveNodeContext ? getCurveNodeTransformAxes(curveNodeContext)
+      : getSelectionTransformAxes(selectionContext, item);
   const classes = ['x', 'y', 'z'];
   const cameraFrame = sceneRenderer.getCameraFrame();
   const pixelSample = projectViewportPoint(addScaled3(gizmoOrigin, cameraFrame.right, 1));
@@ -3287,7 +3613,7 @@ function updateTransformGizmo() {
     active?.classList.add('active');
     state.dragging.handleElement = active;
   }
-  gizmo.insertAdjacentHTML('beforeend', curveOverlay);
+  gizmo.insertAdjacentHTML('beforeend', editorOverlay);
   gizmo.removeAttribute('hidden');
 }
 
@@ -3316,19 +3642,26 @@ function textureUvEntries() {
   if (textureUvEntryCache?.project === state.project
     && textureUvEntryCache.selection === state.selectedUids
     && textureUvEntryCache.selectionSize === state.selectedUids.size
+    && textureUvEntryCache.activeTextureUid === state.activeTextureUid
     && textureUvEntryCache.hierarchyRevision === state.project.hierarchyRevision) return textureUvEntryCache.entries;
   const entries = [];
+  const activeAsset = activeTextureAsset();
+  const activeReferences = activeAsset
+    ? new Set(textureAtlasReferences(activeAsset, state.textureAssets.indexOf(activeAsset))
+      .flatMap(reference => [reference, reference.startsWith('#') ? reference.slice(1) : `#${reference}`]))
+    : null;
   for (const uidValue of expansion.elementUids) {
     const cube = state.project.getNode(uidValue);
     if (cube?.type !== 'cube') continue;
     for (const faceName of CUBE_FACE_NAMES) {
       const face = cube.faces?.[faceName];
-      if (face === null || face?.enabled === false) continue;
+      const textureReference = effectiveFaceTextureReference(face);
+      if (activeReferences && !activeReferences.has(String(textureReference))) continue;
       let uv = Array.isArray(face?.uv) && face.uv.length >= 4
         ? face.uv.map(Number)
         : getBlockbenchBoxUv(cube, faceName).map(Number);
       if (!uv.every(Number.isFinite)) uv = getBlockbenchBoxUv(cube, faceName).map(Number);
-      entries.push({ key: uvFaceKey(cube.uid, faceName), uid: cube.uid, cube, faceName, face, uv });
+      entries.push({ key: uvFaceKey(cube.uid, faceName), uid: cube.uid, cube, faceName, face, uv, culled: isCubeFaceCulled(face) });
     }
   }
   const byKey = new Map(entries.map(entry => [entry.key, entry]));
@@ -3338,6 +3671,7 @@ function textureUvEntries() {
     project: state.project,
     selection: state.selectedUids,
     selectionSize: state.selectedUids.size,
+    activeTextureUid: state.activeTextureUid,
     hierarchyRevision: state.project.hierarchyRevision,
     entries,
     byKey,
@@ -3394,6 +3728,8 @@ function renderTextureUvOverlay(selectionOnly = false) {
   if (!overlay || !textureViewLayout) return;
   const layout = textureViewLayout;
   const entries = textureUvEntries();
+  const visibleEntries = entries.filter(entry => !entry.culled);
+  const culledEntries = entries.filter(entry => entry.culled);
   const selectedEntries = selectedTextureUvEntries(entries);
   const selectedPath = textureUvPath(selectedEntries, layout);
   const bounds = normalizedUvBounds(selectedEntries);
@@ -3412,15 +3748,18 @@ function renderTextureUvOverlay(selectionOnly = false) {
     boundsMarkup = `<rect class="texture-uv-bounds" x="${left}" y="${top}" width="${right - left}" height="${bottom - top}"/>${positions.map(([name, x, y]) => `<rect class="texture-uv-handle" data-uv-handle="${name}" x="${Math.round(x - handleSize / 2)}" y="${Math.round(y - handleSize / 2)}" width="${handleSize}" height="${handleSize}"/>`).join('')}`;
   }
   let allPathNode = overlay.querySelector('.texture-uv-all');
+  let culledPathNode = overlay.querySelector('.texture-uv-culled');
   let selectedPathNode = overlay.querySelector('.texture-uv-selected');
   let selectionUi = overlay.querySelector('.texture-uv-selection-ui');
-  if (!selectionOnly || !allPathNode || !selectedPathNode || !selectionUi) {
+  if (!selectionOnly || !allPathNode || !culledPathNode || !selectedPathNode || !selectionUi) {
     overlay.setAttribute('viewBox', `0 0 ${layout.viewportWidth} ${layout.viewportHeight}`);
-    overlay.innerHTML = '<path class="texture-uv-all"/><path class="texture-uv-selected"/><g class="texture-uv-selection-ui"></g><rect class="texture-uv-alt-box" hidden/>';
+    overlay.innerHTML = '<path class="texture-uv-all"/><path class="texture-uv-culled"/><path class="texture-uv-selected"/><g class="texture-uv-selection-ui"></g><rect class="texture-uv-alt-box" hidden/>';
     allPathNode = overlay.querySelector('.texture-uv-all');
+    culledPathNode = overlay.querySelector('.texture-uv-culled');
     selectedPathNode = overlay.querySelector('.texture-uv-selected');
     selectionUi = overlay.querySelector('.texture-uv-selection-ui');
-    allPathNode.setAttribute('d', textureUvPath(entries, layout));
+    allPathNode.setAttribute('d', textureUvPath(visibleEntries, layout));
+    culledPathNode.setAttribute('d', textureUvPath(culledEntries, layout));
   }
   selectedPathNode.setAttribute('d', selectedPath);
   selectionUi.innerHTML = boundsMarkup;
@@ -3659,14 +3998,481 @@ function applyTextureUvDrag(event) {
   scheduleSceneRender();
 }
 
+const paintBrushOffsetCache = new Map();
+
+function activeTextureAsset() {
+  return state.textureAssets.find(asset => asset._uid === state.activeTextureUid) || null;
+}
+
+function setPaintColor(color, notify = false) {
+  if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
+  state.paintColor = String(color).toLowerCase();
+  $('#paintColor').value = state.paintColor;
+  if (notify) toast(`繪畫顏色 ${state.paintColor}`);
+}
+
+function paintBrushOffsets(size) {
+  const normalized = clamp(Math.round(size) || 1, 1, 64);
+  if (paintBrushOffsetCache.has(normalized)) return paintBrushOffsetCache.get(normalized);
+  const offsets = [];
+  const center = (normalized - 1) / 2;
+  const radius = normalized / 2;
+  for (let y = 0; y < normalized; y++) {
+    for (let x = 0; x < normalized; x++) {
+      if (normalized <= 2 || Math.hypot(x - center, y - center) <= radius) {
+        offsets.push([x - Math.floor(center), y - Math.floor(center)]);
+      }
+    }
+  }
+  paintBrushOffsetCache.set(normalized, offsets);
+  return offsets;
+}
+
+function paintPointFromEvent(event) {
+  const point = clientToTextureUv(event.clientX, event.clientY);
+  return [Math.floor(point[0]), Math.floor(point[1])];
+}
+
+function paintPointInside(point) {
+  return point[0] >= 0 && point[1] >= 0 && point[0] < textureCanvas.width && point[1] < textureCanvas.height;
+}
+
+function updateTextureBrushCursor(event) {
+  const cursor = $('#textureBrushCursor');
+  const preview = $('#texturePreview');
+  const paintTool = state.mode === 'paint' && ['brush', 'eraser', 'eyedropper'].includes(state.tool);
+  if (!paintTool || !event || !textureViewLayout) {
+    cursor.hidden = true;
+    preview.style.cursor = '';
+    return;
+  }
+  const point = clientToTextureUv(event.clientX, event.clientY);
+  if (point[0] < 0 || point[1] < 0 || point[0] >= textureCanvas.width || point[1] >= textureCanvas.height) {
+    cursor.hidden = true;
+    preview.style.cursor = '';
+    return;
+  }
+  const previewRect = preview.getBoundingClientRect();
+  const diameter = state.tool === 'eyedropper' ? 7 : Math.max(3, state.paintBrushSize * textureViewLayout.scale);
+  cursor.style.left = `${event.clientX - previewRect.left}px`;
+  cursor.style.top = `${event.clientY - previewRect.top}px`;
+  cursor.style.width = `${diameter}px`;
+  cursor.style.height = `${diameter}px`;
+  cursor.classList.toggle('eraser', state.tool === 'eraser');
+  cursor.hidden = false;
+  preview.style.cursor = 'none';
+}
+
+function syncPaintedTextureNow() {
+  if (texturePaintSyncFrame !== null) cancelAnimationFrame(texturePaintSyncFrame);
+  texturePaintSyncFrame = null;
+  const target = texturePaintSyncTarget;
+  texturePaintSyncTarget = null;
+  if (!target) return;
+  syncRendererTextureAsset(target.asset, target.canvas);
+  scheduleSceneRender();
+  if (uvPreviewIsActive()) renderUvPreview();
+}
+
+function queuePaintedTextureSync(asset, canvas) {
+  texturePaintSyncTarget = { asset, canvas };
+  if (texturePaintSyncFrame !== null) return;
+  texturePaintSyncFrame = requestAnimationFrame(syncPaintedTextureNow);
+}
+
+function drawPaintSegment(drag, from, to) {
+  const { canvas, context, asset, tool } = drag;
+  const size = clamp(Math.round(state.paintBrushSize) || 1, 1, 64);
+  const opacity = clamp(Number(state.paintBrushOpacity) || 100, 1, 100) / 100;
+  const offsets = paintBrushOffsets(size);
+  const dx = to[0] - from[0], dy = to[1] - from[1];
+  const steps = Math.max(1, Math.max(Math.abs(dx), Math.abs(dy)));
+  context.save();
+  context.imageSmoothingEnabled = false;
+  context.globalAlpha = opacity;
+  context.globalCompositeOperation = tool === 'eraser'
+    ? 'destination-out'
+    : state.alphaLock ? 'source-atop' : 'source-over';
+  context.fillStyle = state.paintColor;
+  for (let step = 0; step <= steps; step++) {
+    const ratio = step / steps;
+    const centerX = Math.round(from[0] + dx * ratio);
+    const centerY = Math.round(from[1] + dy * ratio);
+    for (const [offsetX, offsetY] of offsets) {
+      const x = centerX + offsetX, y = centerY + offsetY;
+      const insideClip = !drag.clip || (x >= drag.clip.minU && y >= drag.clip.minV && x < drag.clip.maxU && y < drag.clip.maxV);
+      if (insideClip && x >= 0 && y >= 0 && x < canvas.width && y < canvas.height) context.fillRect(x, y, 1, 1);
+    }
+  }
+  context.restore();
+  queuePaintedTextureSync(asset, canvas);
+}
+
+function pushTexturePaintHistory(asset, canvas = textureCanvas) {
+  state.paintHistory.push({
+    uid: asset._uid,
+    source: canvas.toDataURL('image/png'),
+    width: canvas.width,
+    height: canvas.height
+  });
+  if (state.paintHistory.length > 60) state.paintHistory.shift();
+  state.paintFuture.length = 0;
+}
+
+function commitPaintedTextureAsset(asset, canvas) {
+  if (!asset || !canvas) return;
+  asset.source = canvas.toDataURL('image/png');
+  asset.uvWidth = canvas.width;
+  asset.uvHeight = canvas.height;
+  asset.kind = 'PNG';
+  if (asset._uid === state.activeTextureUid && canvas !== textureCanvas) {
+    textureCanvas.width = canvas.width;
+    textureCanvas.height = canvas.height;
+    textureCtx.imageSmoothingEnabled = false;
+    textureCtx.clearRect(0, 0, canvas.width, canvas.height);
+    textureCtx.drawImage(canvas, 0, 0);
+    updateTexturePreviewFrame(canvas.width, canvas.height);
+  }
+  syncRendererTextureAsset(asset, canvas);
+  const item = $$('.texture-item').find(node => node.dataset.textureUid === asset._uid);
+  const thumbnail = item?.querySelector('.texture-thumb');
+  if (thumbnail) thumbnail.style.backgroundImage = `url("${asset.source}")`;
+  markDirty();
+}
+
+function startTexturePaintPointer(event) {
+  const asset = activeTextureAsset();
+  if (!asset) {
+    toast('請先建立或導入一張貼圖');
+    return;
+  }
+  const point = paintPointFromEvent(event);
+  if (!paintPointInside(point)) return;
+  if (state.tool === 'eyedropper') {
+    const pixel = textureCtx.getImageData(point[0], point[1], 1, 1).data;
+    setPaintColor(`#${[pixel[0], pixel[1], pixel[2]].map(value => value.toString(16).padStart(2, '0')).join('')}`, true);
+    updateToolOptions();
+    return;
+  }
+  if (state.tool === 'eraser' && state.alphaLock) {
+    toast('鎖定透明度時橡皮擦不會改變貼圖');
+    return;
+  }
+  pushTexturePaintHistory(asset);
+  texturePaintDrag = {
+    pointerId: event.pointerId, uid: asset._uid, asset,
+    canvas: textureCanvas, context: textureCtx, tool: state.tool, last: point
+  };
+  $('#texturePreview').setPointerCapture(event.pointerId);
+  drawPaintSegment(texturePaintDrag, point, point);
+}
+
+function moveTexturePaintPointer(event) {
+  if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
+  const point = paintPointFromEvent(event);
+  drawPaintSegment(texturePaintDrag, texturePaintDrag.last, point);
+  texturePaintDrag.last = point;
+  return true;
+}
+
+function endTexturePaintPointer(event) {
+  if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
+  const preview = $('#texturePreview');
+  if (preview.hasPointerCapture?.(event.pointerId)) preview.releasePointerCapture(event.pointerId);
+  const drag = texturePaintDrag;
+  const asset = state.textureAssets.find(entry => entry._uid === drag.uid);
+  texturePaintDrag = null;
+  syncPaintedTextureNow();
+  if (asset) {
+    commitPaintedTextureAsset(asset, drag.canvas);
+  }
+  return true;
+}
+
+function faceTextureReference(asset) {
+  return asset?.uuid || asset?.id || asset?._uid;
+}
+
+function draggedTextureAsset(event) {
+  if (state.textureDrag?.type === 'asset') {
+    return state.textureAssets.find(asset => asset._uid === state.textureDrag.id) || null;
+  }
+  const transfer = event?.dataTransfer?.getData('text/x-cubebricks-texture') || '';
+  if (!transfer.startsWith('asset:')) return null;
+  return state.textureAssets.find(asset => asset._uid === transfer.slice(6)) || null;
+}
+
+function clearTextureFaceDropTarget() {
+  textureFaceDropTarget = null;
+  viewport.classList.remove('texture-face-drop-active');
+  uvPreviewViewport.classList.remove('texture-face-drop-active');
+  for (const selector of ['#sceneTextureDropFaceOverlay', '#uvTextureDropFaceOverlay']) {
+    const overlay = $(selector);
+    if (!overlay) continue;
+    overlay.innerHTML = '';
+    overlay.setAttribute('hidden', '');
+  }
+}
+
+function showTextureFaceDropTarget(surface, renderer, hit, overlaySelector) {
+  clearTextureFaceDropTarget();
+  if (!hit?.faceName || !hit.facePoints?.length) return;
+  textureFaceDropTarget = { surface, hit };
+  surface.classList.add('texture-face-drop-active');
+  const overlay = $(overlaySelector);
+  const projected = hit.facePoints.map(point => renderer.projectPoint(point));
+  if (!overlay || projected.length !== 4 || projected.some(point => point.behind || point.depth < -1 || point.depth > 1)) return;
+  const width = surface.clientWidth, height = surface.clientHeight;
+  const perimeter = [projected[0], projected[1], projected[3], projected[2]];
+  overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  overlay.innerHTML = `<path d="M${perimeter.map(point => `${point.x},${point.y}`).join(' L')} Z"/>`;
+  overlay.removeAttribute('hidden');
+}
+
+function textureDropCubes(hit) {
+  const hitCube = hit && state.project.getNode(hit.uid);
+  if (hitCube?.type !== 'cube') return [];
+  const expansion = getSelectionExpansion();
+  if (!expansion.elementSet.has(hit.uid)) return [hitCube];
+  const cubes = expansion.elementUids
+    .map(uidValue => state.project.getNode(uidValue))
+    .filter(element => element?.type === 'cube');
+  return cubes.length ? cubes : [hitCube];
+}
+
+function applyTextureAssetToFace(asset, hit) {
+  if (!asset || !hit?.faceName || !CUBE_FACE_NAMES.includes(hit.faceName)) return false;
+  const cubes = textureDropCubes(hit);
+  if (!cubes.length) return false;
+  const reference = faceTextureReference(asset);
+  snapshot();
+  for (const cube of cubes) {
+    const face = ensureCubeFaceRecord(cube, hit.faceName);
+    face.texture = reference;
+    delete face.enabled;
+    delete face[CULLED_FACE_TEXTURE_KEY];
+    cube.autoUv = false;
+  }
+  markDirty();
+  uvPreviewProjectCache = null;
+  invalidateAllRenderGeometry();
+  renderTextureList();
+  renderOutliner();
+  renderInspector();
+  renderScene();
+  updateTextureStageTransform();
+  toast(cubes.length > 1
+    ? `已將貼圖套用到 ${cubes.length} 個 Cube 的${UV_FACE_LABELS[hit.faceName] || hit.faceName}`
+    : `已將貼圖套用到${UV_FACE_LABELS[hit.faceName] || hit.faceName}`);
+  return true;
+}
+
+function bindTextureFaceDropSurface(surface, canvas, renderer, projectProvider, overlaySelector) {
+  surface.addEventListener('dragover', event => {
+    const asset = draggedTextureAsset(event);
+    if (!asset) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    const project = projectProvider();
+    if (!project) return clearTextureFaceDropTarget();
+    const rect = canvas.getBoundingClientRect();
+    const hit = renderer.pickDetailed(project, event.clientX - rect.left, event.clientY - rect.top, true);
+    if (hit?.faceName) showTextureFaceDropTarget(surface, renderer, hit, overlaySelector);
+    else clearTextureFaceDropTarget();
+  });
+  surface.addEventListener('dragleave', event => {
+    if (event.relatedTarget && surface.contains(event.relatedTarget)) return;
+    clearTextureFaceDropTarget();
+  });
+  surface.addEventListener('drop', event => {
+    const asset = draggedTextureAsset(event);
+    if (!asset) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const project = projectProvider();
+    const rect = canvas.getBoundingClientRect();
+    const hit = textureFaceDropTarget?.surface === surface
+      ? textureFaceDropTarget.hit
+      : renderer.pickDetailed(project, event.clientX - rect.left, event.clientY - rect.top, true);
+    clearTextureFaceDropTarget();
+    if (!applyTextureAssetToFace(asset, hit)) toast('請把貼圖拖到 Cube 面上');
+    state.textureDrag = null;
+  });
+}
+
+function facePaintTarget(hit, assignMissing = false) {
+  if (!hit?.faceName) return null;
+  const cube = state.project.getNode(hit.uid);
+  if (cube?.type !== 'cube') return null;
+  const existingFace = cube.faces?.[hit.faceName];
+  let asset = textureAssetForReference(existingFace?.texture);
+  if (!asset && existingFace?.texture !== undefined && existingFace?.texture !== null) return null;
+  if (!asset) asset = activeTextureAsset();
+  if (!asset) return null;
+  if (assignMissing && existingFace?.texture === undefined) {
+    snapshot();
+    freezeCubeUvs(cube, true);
+    cube.faces[hit.faceName].texture = faceTextureReference(asset);
+    invalidateAllRenderGeometry();
+    markDirty();
+  }
+  return { cube, faceName: hit.faceName, asset };
+}
+
+function barycentricPoint(point, a, b, c) {
+  const v0 = b.map((value, axis) => value - a[axis]);
+  const v1 = c.map((value, axis) => value - a[axis]);
+  const v2 = point.map((value, axis) => value - a[axis]);
+  const d00 = dot3(v0, v0), d01 = dot3(v0, v1), d11 = dot3(v1, v1);
+  const d20 = dot3(v2, v0), d21 = dot3(v2, v1);
+  const denominator = d00 * d11 - d01 * d01;
+  if (Math.abs(denominator) < 1e-10) return null;
+  const second = (d11 * d20 - d01 * d21) / denominator;
+  const third = (d00 * d21 - d01 * d20) / denominator;
+  const first = 1 - second - third;
+  return first >= -1e-4 && second >= -1e-4 && third >= -1e-4 ? [first, second, third] : null;
+}
+
+function facePaintUvPoint(hit, target, canvas) {
+  if (!hit?.point || !hit.facePoints?.length || !target || !canvas) return null;
+  const face = target.cube.faces?.[target.faceName] || {};
+  const rectangle = Array.isArray(face.uv) && face.uv.length >= 4
+    ? face.uv
+    : getBlockbenchBoxUv(target.cube, target.faceName);
+  if (!rectangle) return null;
+  const slots = createBlockbenchFaceUvSlots(rectangle, face.rotation || 0);
+  const triangles = [[0, 2, 1], [2, 3, 1]];
+  for (const indices of triangles) {
+    const weights = barycentricPoint(hit.point,
+      hit.facePoints[indices[0]], hit.facePoints[indices[1]], hit.facePoints[indices[2]]);
+    if (!weights) continue;
+    const uv = [0, 1].map(axis => indices.reduce((sum, slot, index) => sum + slots[slot][axis] * weights[index], 0));
+    const point = [Math.floor(uv[0]), Math.floor(uv[1])];
+    if (point[0] >= 0 && point[1] >= 0 && point[0] < canvas.width && point[1] < canvas.height) return point;
+  }
+  return null;
+}
+
+function cloneCanvas(source) {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.naturalWidth || source.width;
+  canvas.height = source.naturalHeight || source.height;
+  const context = canvas.getContext('2d');
+  context.imageSmoothingEnabled = false;
+  context.drawImage(source, 0, 0);
+  return { canvas, context };
+}
+
+async function paintCanvasForAsset(asset) {
+  const image = await loadTextureAssetImage(asset);
+  return image ? cloneCanvas(image) : null;
+}
+
+function scenePaintHit(clientX, clientY, drag = null) {
+  const rect = sceneCanvas.getBoundingClientRect();
+  const hit = sceneRenderer.pickDetailed(state.project, clientX - rect.left, clientY - rect.top, true);
+  if (!hit?.faceName) return null;
+  if (drag && (hit.uid !== drag.uid || hit.faceName !== drag.faceName)) return null;
+  return hit;
+}
+
+function finishScenePaintDrag(drag) {
+  if (!drag || drag.finished || !drag.canvas) return;
+  drag.finished = true;
+  syncPaintedTextureNow();
+  commitPaintedTextureAsset(drag.asset, drag.canvas);
+  if (state.activeTextureUid !== drag.asset._uid) {
+    const index = state.textureAssets.findIndex(asset => asset._uid === drag.asset._uid);
+    if (index >= 0) activateProjectTexture(index);
+  }
+  renderScene();
+}
+
+function moveScenePaintDrag(event, drag = state.dragging) {
+  if (!drag || drag.type !== 'texture-paint-3d') return false;
+  drag.latestClient = [event.clientX, event.clientY];
+  if (!drag.ready) return true;
+  const hit = scenePaintHit(event.clientX, event.clientY, drag);
+  const point = hit && facePaintUvPoint(hit, drag, drag.canvas);
+  if (!point) {
+    drag.last = null;
+    return true;
+  }
+  drawPaintSegment(drag, drag.last || point, point);
+  drag.last = point;
+  return true;
+}
+
+function startScenePaintPointer(event, x, y) {
+  const hit = sceneRenderer.pickDetailed(state.project, x, y, true);
+  const target = facePaintTarget(hit, state.tool !== 'eyedropper');
+  if (!target) {
+    toast(hit?.faceName ? '這個面沒有可用的貼圖' : '請指向一個 Cube 面');
+    return true;
+  }
+  if (state.tool === 'eraser' && state.alphaLock) {
+    toast('鎖定透明度時橡皮擦不會改變貼圖');
+    return true;
+  }
+  event.preventDefault();
+  if (state.tool === 'eyedropper') {
+    paintCanvasForAsset(target.asset).then(result => {
+      const point = result && facePaintUvPoint(hit, target, result.canvas);
+      if (!point) return;
+      const pixel = result.context.getImageData(point[0], point[1], 1, 1).data;
+      setPaintColor(`#${[pixel[0], pixel[1], pixel[2]].map(value => value.toString(16).padStart(2, '0')).join('')}`, true);
+      updateToolOptions();
+    });
+    return true;
+  }
+  sceneCanvas.setPointerCapture(event.pointerId);
+  const drag = {
+    type: 'texture-paint-3d', pointerId: event.pointerId, uid: hit.uid, faceName: hit.faceName,
+    asset: target.asset, cube: target.cube, tool: state.tool,
+    initialHit: hit, latestClient: [event.clientX, event.clientY],
+    canvas: null, context: null, last: null, ready: false, ended: false, canceled: false, finished: false
+  };
+  const face = target.cube.faces?.[target.faceName] || {};
+  const faceUv = Array.isArray(face.uv) && face.uv.length >= 4
+    ? face.uv : getBlockbenchBoxUv(target.cube, target.faceName);
+  drag.clip = {
+    minU: Math.floor(Math.min(faceUv[0], faceUv[2])), minV: Math.floor(Math.min(faceUv[1], faceUv[3])),
+    maxU: Math.ceil(Math.max(faceUv[0], faceUv[2])), maxV: Math.ceil(Math.max(faceUv[1], faceUv[3]))
+  };
+  state.dragging = drag;
+  paintCanvasForAsset(target.asset).then(result => {
+    if (!result || drag.canceled) return;
+    drag.canvas = result.canvas;
+    drag.context = result.context;
+    pushTexturePaintHistory(drag.asset, drag.canvas);
+    drag.ready = true;
+    const initial = facePaintUvPoint(drag.initialHit, drag, drag.canvas);
+    if (initial) {
+      drawPaintSegment(drag, initial, initial);
+      drag.last = initial;
+    }
+    if (!drag.ended) {
+      const [clientX, clientY] = drag.latestClient;
+      moveScenePaintDrag({ clientX, clientY }, drag);
+    } else finishScenePaintDrag(drag);
+  });
+  return true;
+}
+
 function startTexturePointer(event) {
   if (![0, 1].includes(event.button)) return;
   event.preventDefault();
   cancelTextureFocus();
   setDockHotspotFocus('texture');
   const preview = $('#texturePreview');
+  if (state.mode === 'paint' && event.button === 0 && ['brush', 'eraser', 'eyedropper'].includes(state.tool)) {
+    startTexturePaintPointer(event);
+    return;
+  }
   preview.setPointerCapture(event.pointerId);
   if (event.button === 1) {
+    $('#textureBrushCursor').hidden = true;
+    preview.style.cursor = '';
     textureUvDrag = { kind: 'pan', pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
     preview.classList.add('is-panning');
     return;
@@ -3704,6 +4510,9 @@ function startTexturePointer(event) {
 }
 
 function moveTexturePointer(event) {
+  updateTextureBrushCursor(event);
+  if (moveTexturePaintPointer(event)) return;
+  if (state.mode === 'paint' && ['brush', 'eraser', 'eyedropper'].includes(state.tool) && !textureUvDrag) return;
   if (!textureUvDrag) {
     updateTextureUvCursor(event);
     return;
@@ -3737,6 +4546,10 @@ function moveTexturePointer(event) {
 }
 
 function endTexturePointer(event) {
+  if (endTexturePaintPointer(event)) {
+    updateTextureBrushCursor(event);
+    return;
+  }
   if (!textureUvDrag || textureUvDrag.pointerId !== event.pointerId) return;
   const drag = textureUvDrag;
   textureUvDrag = null;
@@ -3807,6 +4620,7 @@ function wheelTextureView(event) {
   else if (textureViewLayout.textureHeight * textureViewLayout.scale > textureViewLayout.viewportHeight + 1) state.textureView.panY -= event.deltaY;
   snapTexturePan();
   updateTextureStageTransform();
+  updateTextureBrushCursor(event);
 }
 
 function setUvCoordinate(coordinate, value) {
@@ -3832,17 +4646,139 @@ function syncTexturePreviewPriority() {
   element.style.setProperty('--texture-preview-priority-height', `${previewHeight}px`);
 }
 
-function syncRendererTexture(source) {
-  sceneRenderer.setTexture(source);
+function nextPowerOfTwo(value) {
+  return 2 ** Math.ceil(Math.log2(Math.max(1, value)));
+}
+
+function drawTextureAtlasEntry(source, entry) {
+  if (!source || !entry) return;
+  const { x, y, width, height } = entry;
+  textureAtlasCtx.clearRect(x - 1, y - 1, width + 2, height + 2);
+  textureAtlasCtx.drawImage(source, 0, 0, source.width, source.height, x, y, width, height);
+  textureAtlasCtx.drawImage(source, 0, 0, source.width, 1, x, y - 1, width, 1);
+  textureAtlasCtx.drawImage(source, 0, source.height - 1, source.width, 1, x, y + height, width, 1);
+  textureAtlasCtx.drawImage(source, 0, 0, 1, source.height, x - 1, y, 1, height);
+  textureAtlasCtx.drawImage(source, source.width - 1, 0, 1, source.height, x + width, y, 1, height);
+  textureAtlasCtx.drawImage(source, 0, 0, 1, 1, x - 1, y - 1, 1, 1);
+  textureAtlasCtx.drawImage(source, source.width - 1, 0, 1, 1, x + width, y - 1, 1, 1);
+  textureAtlasCtx.drawImage(source, 0, source.height - 1, 1, 1, x - 1, y + height, 1, 1);
+  textureAtlasCtx.drawImage(source, source.width - 1, source.height - 1, 1, 1, x + width, y + height, 1, 1);
+}
+
+function textureAtlasPatch(entry) {
+  const width = entry.width + 2, height = entry.height + 2;
+  textureAtlasPatchCanvas.width = width;
+  textureAtlasPatchCanvas.height = height;
+  textureAtlasPatchCtx.imageSmoothingEnabled = false;
+  textureAtlasPatchCtx.clearRect(0, 0, width, height);
+  textureAtlasPatchCtx.drawImage(textureAtlasCanvas, entry.x - 1, entry.y - 1, width, height, 0, 0, width, height);
+  return textureAtlasPatchCanvas;
+}
+
+function textureAtlasReferences(asset, index) {
+  return [asset._uid, asset.uuid, asset.id, String(index), asset.name]
+    .filter(value => value !== undefined && value !== null)
+    .map(String);
+}
+
+function rebuildTextureAtlas() {
+  if (textureAtlasRebuildFrame !== null) return;
+  textureAtlasRebuildFrame = requestAnimationFrame(() => {
+    textureAtlasRebuildFrame = null;
+    rebuildTextureAtlasNow();
+  });
+}
+
+async function rebuildTextureAtlasNow() {
+  const revision = ++textureAtlasRevision;
+  const records = (await Promise.all(state.textureAssets.map(async (asset, index) => {
+    const image = await loadTextureAssetImage(asset);
+    if (!image) return null;
+    return { asset, index, image, width: image.naturalWidth || image.width, height: image.naturalHeight || image.height };
+  }))).filter(Boolean);
+  if (revision !== textureAtlasRevision) return false;
+  if (!records.length) {
+    textureAtlasEntries = [];
+    textureAtlasLayoutByUid = new Map();
+    sceneRenderer.setTexture(textureCanvas);
+    uvPreviewRenderer.setTexture(textureCanvas);
+    return false;
+  }
+  const totalArea = records.reduce((sum, record) => sum + (record.width + 2) * (record.height + 2), 0);
+  const widest = Math.max(...records.map(record => record.width + 2));
+  const atlasWidth = nextPowerOfTwo(Math.max(widest, Math.ceil(Math.sqrt(totalArea))));
+  const sorted = [...records].sort((left, right) => right.height - left.height || right.width - left.width);
+  let cursorX = 0, cursorY = 0, rowHeight = 0;
+  const packed = [];
+  for (const record of sorted) {
+    const outerWidth = record.width + 2, outerHeight = record.height + 2;
+    if (cursorX > 0 && cursorX + outerWidth > atlasWidth) {
+      cursorX = 0;
+      cursorY += rowHeight;
+      rowHeight = 0;
+    }
+    packed.push({
+      uid: record.asset._uid, x: cursorX + 1, y: cursorY + 1,
+      width: record.width, height: record.height,
+      references: textureAtlasReferences(record.asset, record.index),
+      default: record.asset.useAsDefault === true || record.index === 0,
+      source: record.image
+    });
+    cursorX += outerWidth;
+    rowHeight = Math.max(rowHeight, outerHeight);
+  }
+  const atlasHeight = nextPowerOfTwo(cursorY + rowHeight);
+  textureAtlasCanvas.width = atlasWidth;
+  textureAtlasCanvas.height = atlasHeight;
+  textureAtlasCtx.imageSmoothingEnabled = false;
+  textureAtlasCtx.clearRect(0, 0, atlasWidth, atlasHeight);
+  packed.forEach(entry => drawTextureAtlasEntry(entry.source, entry));
+  textureAtlasEntries = packed.map(({ source, ...entry }) => entry);
+  textureAtlasLayoutByUid = new Map(textureAtlasEntries.map(entry => [entry.uid, entry]));
+  sceneRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
+  uvPreviewRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
+  scheduleSceneRender();
+  refreshUvPreview();
+  return true;
+}
+
+function syncRendererTextureAsset(asset, source) {
+  const atlasEntry = asset && textureAtlasLayoutByUid.get(asset._uid);
+  let atlasPatch = null;
+  if (atlasEntry && source?.width === atlasEntry.width && source?.height === atlasEntry.height) {
+    drawTextureAtlasEntry(source, atlasEntry);
+    atlasPatch = textureAtlasPatch(atlasEntry);
+    if (!sceneRenderer.updateTextureAtlasRegion(atlasPatch, atlasEntry.x - 1, atlasEntry.y - 1)) {
+      sceneRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
+    }
+  } else if (state.textureAssets.length) {
+    if (source) sceneRenderer.setTexture(source);
+    rebuildTextureAtlas();
+  }
+  else {
+    textureAtlasRevision++;
+    textureAtlasEntries = [];
+    textureAtlasLayoutByUid = new Map();
+    sceneRenderer.setTexture(source);
+  }
   uvPreviewTextureDirty = true;
   uvPreviewRenderDirty = true;
   if (uvPreviewIsActive()) {
-    uvPreviewRenderer.setTexture(source);
+    if (atlasEntry && source?.width === atlasEntry.width && source?.height === atlasEntry.height) {
+      if (!uvPreviewRenderer.updateTextureAtlasRegion(atlasPatch, atlasEntry.x - 1, atlasEntry.y - 1)) {
+        uvPreviewRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
+      }
+    } else if (source) uvPreviewRenderer.setTexture(source);
     uvPreviewTextureDirty = false;
   }
 }
 
+function syncRendererTexture(source) {
+  syncRendererTextureAsset(activeTextureAsset(), source);
+}
+
 function renderTexture() {
+  textureLoadRevision++;
   const width = Math.max(1, Number(state.project.textureSize?.[0]) || 16);
   const height = Math.max(1, Number(state.project.textureSize?.[1]) || 16);
   textureCanvas.width = width;
@@ -3881,7 +4817,10 @@ function renderPalette() {
         : `<div class="palette-row">${row.colors.map(color => `<button class="swatch" data-color="${color}" style="background:${color}" title="${color}"></button>`).join('')}</div>`}
     </div>`).join('');
 
-  $$('.swatch').forEach(swatch => swatch.addEventListener('click', () => { snapshot(); applyPaletteColor(swatch.dataset.color); }));
+  $$('.swatch').forEach(swatch => swatch.addEventListener('click', () => {
+    if (state.mode !== 'paint') snapshot();
+    applyPaletteColor(swatch.dataset.color);
+  }));
   $$('[data-gradient-row]').forEach(toggle => toggle.addEventListener('change', () => {
     paletteRows[Number(toggle.dataset.gradientRow)].gradient = toggle.checked;
     renderPalette();
@@ -3893,7 +4832,10 @@ function renderPalette() {
   }));
   $$('[data-gradient-picker]').forEach(picker => {
     picker.addEventListener('pointerdown', event => {
-      event.preventDefault(); snapshot(); picker.setPointerCapture(event.pointerId); pickGradientColor(picker, event);
+      event.preventDefault();
+      if (state.mode !== 'paint') snapshot();
+      picker.setPointerCapture(event.pointerId);
+      pickGradientColor(picker, event);
     });
     picker.addEventListener('pointermove', event => { if (picker.hasPointerCapture(event.pointerId)) pickGradientColor(picker, event); });
   });
@@ -3929,6 +4871,10 @@ function sampleGradient(colors, ratio) {
 }
 
 function applyPaletteColor(color, notify = true) {
+  if (state.mode === 'paint') {
+    setPaintColor(color, notify);
+    return;
+  }
   const item = selected();
   if (!item) return toast('先選擇一個物件');
   item.color = color;
@@ -3994,11 +4940,476 @@ function addTextureGroup() {
   toast('已新增貼圖組');
 }
 
+const TEMPLATE_FACE_COLORS = Object.freeze({
+  up: { fill: '#ecf8fd', outline: '#b4d4e1' },
+  down: { fill: '#6e788c', outline: '#536174' },
+  east: { fill: '#7bffa3', outline: '#43e88d' },
+  north: { fill: '#7bd4ff', outline: '#5bbcf4' },
+  west: { fill: '#ffa7a4', outline: '#f48686' },
+  south: { fill: '#fff899', outline: '#f8dd72' }
+});
+
+function textureAssetForReference(reference) {
+  if (reference === null || reference === undefined) return null;
+  const raw = String(reference);
+  const normalized = raw.startsWith('#') ? raw.slice(1) : raw;
+  return state.textureAssets.find((asset, index) => [asset._uid, asset.uuid, asset.id, String(index), asset.name]
+    .filter(value => value !== undefined && value !== null).some(value => String(value) === normalized || String(value) === raw)) || null;
+}
+
+function remapNumericFaceTextureReferences(previousAssets) {
+  if (!previousAssets?.length) return;
+  for (const element of state.project.elements) {
+    if (!element.faces) continue;
+    for (const face of Object.values(element.faces)) {
+      if (!face || (typeof face.texture !== 'number' && !/^\d+$/.test(String(face.texture)))) continue;
+      const previous = previousAssets[Number(face.texture)];
+      if (!previous) continue;
+      const nextIndex = state.textureAssets.indexOf(previous);
+      if (nextIndex < 0) delete face.texture;
+      else face.texture = typeof face.texture === 'number' ? nextIndex : String(nextIndex);
+    }
+  }
+  invalidateAllRenderGeometry();
+}
+
+function loadTextureAssetImage(asset) {
+  return new Promise(resolve => {
+    if (!asset?.source) return resolve(null);
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = asset.source;
+  });
+}
+
+function templateCubeTargets(selectedOnly = false) {
+  const targets = [];
+  const selected = selectedOnly ? getSelectionExpansion().elementSet : null;
+  for (const element of state.project.elements) {
+    if (element.subdivisionOwnerUid) continue;
+    if (element.type === 'cube') {
+      if (selected && !selected.has(element.uid)) continue;
+      targets.push({ cube: element, owner: null, index: -1 });
+      continue;
+    }
+    if (!isProceduralShape(element)) continue;
+    const cubes = subdivisionSession?.ownerUid === element.uid ? subdivisionSession.cubes : element.toCubes();
+    cubes.forEach((cube, index) => {
+      if (!selected || selected.has(element.uid) || selected.has(cube.uid)) targets.push({ cube, owner: element, index });
+    });
+  }
+  return targets;
+}
+
+function facePixelSize(cube, faceName, subdivisions) {
+  const axisPairs = {
+    north: [0, 1], south: [0, 1], east: [2, 1], west: [2, 1], up: [0, 2], down: [0, 2]
+  };
+  const axes = axisPairs[faceName];
+  if (cube.uvNormalized !== false) return axes.map(axis => Math.max(0, Math.round(Math.abs(Number(cube.size[axis]) || 0) * subdivisions / 16)));
+  const face = cube.faces?.[faceName];
+  const uv = Array.isArray(face?.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
+  return [Math.max(0, Math.round(Math.abs(Number(uv[2]) - Number(uv[0])))), Math.max(0, Math.round(Math.abs(Number(uv[3]) - Number(uv[1]))))];
+}
+
+function minimumTemplatePackingSide(rectangles, padding) {
+  if (!rectangles.length) return 1;
+  const dimensions = rectangles.map(entry => ({
+    width: Math.max(1, entry.width) + padding,
+    height: Math.max(1, entry.height) + padding
+  }));
+  const totalArea = dimensions.reduce((sum, entry) => sum + entry.width * entry.height, 0);
+  return Math.max(
+    Math.ceil(Math.sqrt(totalArea)),
+    ...dimensions.map(entry => Math.max(entry.width, entry.height))
+  );
+}
+
+function packTemplateRectangles(rectangles, padding, fixedSide = null) {
+  if (!rectangles.length) return { placements: new Map(), side: 1 };
+  const sorted = [...rectangles].sort((left, right) => right.width * right.height - left.width * left.height
+    || Math.max(right.width, right.height) - Math.max(left.width, left.height));
+  const paddedWidth = entry => Math.max(1, entry.width) + padding;
+  const paddedHeight = entry => Math.max(1, entry.height) + padding;
+  const totalArea = sorted.reduce((sum, entry) => sum + paddedWidth(entry) * paddedHeight(entry), 0);
+  const widest = Math.max(...sorted.map(paddedWidth));
+  const tallest = Math.max(...sorted.map(paddedHeight));
+  const totalWidth = sorted.reduce((sum, entry) => sum + paddedWidth(entry), 0);
+  const lowerBound = Math.max(widest, tallest, Math.ceil(Math.sqrt(totalArea)));
+  const upperBound = Math.max(totalWidth, tallest);
+
+  const strategies = ['diagonal', 'area'];
+  const packIntoSquare = (side, strategy) => {
+    const freeRectangles = [{ x: 0, y: 0, width: side, height: side }];
+    const placements = new Map();
+    for (const entry of sorted) {
+      const width = paddedWidth(entry), height = paddedHeight(entry);
+      let choice = null;
+      for (const free of freeRectangles) {
+        if (width > free.width || height > free.height) continue;
+        const areaWaste = free.width * free.height - width * height;
+        const shortWaste = Math.min(free.width - width, free.height - height);
+        const longWaste = Math.max(free.width - width, free.height - height);
+        const scores = {
+          area: [areaWaste, shortWaste, Math.max(free.x, free.y), free.y, free.x],
+          'short-side': [shortWaste, longWaste, areaWaste, free.y, free.x],
+          diagonal: [Math.max(free.x, free.y), free.x + free.y, areaWaste, shortWaste],
+          'top-left': [free.y, free.x, areaWaste, shortWaste]
+        };
+        const score = scores[strategy];
+        if (!choice || score.some((value, index) => value < choice.score[index]
+          && score.slice(0, index).every((prior, priorIndex) => prior === choice.score[priorIndex]))) {
+          choice = { free, score };
+        }
+      }
+      if (!choice) return null;
+      const used = { x: choice.free.x, y: choice.free.y, width, height };
+      placements.set(entry, { x: used.x, y: used.y });
+      const split = [];
+      for (const free of freeRectangles) {
+        const separated = used.x >= free.x + free.width || used.x + used.width <= free.x
+          || used.y >= free.y + free.height || used.y + used.height <= free.y;
+        if (separated) {
+          split.push(free);
+          continue;
+        }
+        if (used.x > free.x) split.push({ x: free.x, y: free.y, width: used.x - free.x, height: free.height });
+        if (used.x + used.width < free.x + free.width) split.push({
+          x: used.x + used.width, y: free.y,
+          width: free.x + free.width - used.x - used.width, height: free.height
+        });
+        if (used.y > free.y) split.push({ x: free.x, y: free.y, width: free.width, height: used.y - free.y });
+        if (used.y + used.height < free.y + free.height) split.push({
+          x: free.x, y: used.y + used.height,
+          width: free.width, height: free.y + free.height - used.y - used.height
+        });
+      }
+      freeRectangles.length = 0;
+      for (let index = 0; index < split.length; index++) {
+        const candidate = split[index];
+        if (candidate.width <= 0 || candidate.height <= 0) continue;
+        const contained = split.some((other, otherIndex) => {
+          if (otherIndex === index) return false;
+          const inside = candidate.x >= other.x && candidate.y >= other.y
+            && candidate.x + candidate.width <= other.x + other.width
+            && candidate.y + candidate.height <= other.y + other.height;
+          const identical = candidate.x === other.x && candidate.y === other.y
+            && candidate.width === other.width && candidate.height === other.height;
+          return inside && (!identical || otherIndex < index);
+        });
+        if (!contained) freeRectangles.push(candidate);
+      }
+    }
+    const compactness = sorted.reduce((score, entry) => {
+      const placement = placements.get(entry);
+      const width = paddedWidth(entry), height = paddedHeight(entry);
+      return score + (placement.y * side + placement.x) * width * height;
+    }, 0);
+    return { placements, side, score: side * side, compactness };
+  };
+
+  const packAtSide = side => {
+    let preferred = null;
+    for (const strategy of strategies) {
+      const packed = packIntoSquare(side, strategy);
+      if (packed && (!preferred || packed.compactness < preferred.compactness)) preferred = packed;
+    }
+    return preferred;
+  };
+
+  if (fixedSide !== null) return packAtSide(Math.max(lowerBound, Math.ceil(fixedSide)));
+
+  let low = lowerBound, high = upperBound, best = packAtSide(high);
+  while (low <= high) {
+    const side = Math.floor((low + high) / 2);
+    const packed = packAtSide(side);
+    if (packed) {
+      best = packed;
+      high = side - 1;
+    } else {
+      low = side + 1;
+    }
+  }
+  return best;
+}
+
+function beginTextureGenerationProgress(totalFaces) {
+  const dialog = $('#textureProgressDialog');
+  const progressBar = $('#textureGenerationProgress');
+  const status = $('#textureGenerationStatus');
+  const counter = $('#textureGenerationCounter');
+  const total = Math.max(1, Number(totalFaces) || 1);
+  const startedAt = performance.now();
+  const refreshEvery = Math.max(1, Math.ceil(total / 100));
+  let processed = 0, nextRefresh = 0, shown = false, finished = false;
+  progressBar.max = total;
+  progressBar.value = 0;
+  counter.textContent = `0 / ${totalFaces}`;
+  dialog.oncancel = event => event.preventDefault();
+
+  const refresh = async (label, force = false) => {
+    if (finished || (!force && processed < nextRefresh)) return;
+    nextRefresh = processed + refreshEvery;
+    progressBar.value = Math.min(total, processed);
+    status.textContent = label;
+    counter.textContent = `${Math.min(totalFaces, processed)} / ${totalFaces}`;
+    if (!shown && (totalFaces >= 180 || performance.now() - startedAt >= 180)) {
+      if (!dialog.open) dialog.showModal();
+      shown = dialog.open;
+    }
+    if (shown || force) await new Promise(resolve => setTimeout(resolve, 0));
+  };
+
+  return {
+    prepare(label) { return refresh(label, true); },
+    advance(label) { processed++; return refresh(label); },
+    finish() {
+      finished = true;
+      progressBar.value = total;
+      if (dialog.open) dialog.close();
+    }
+  };
+}
+
+function alignedTextureSide(side, powerOfTwo, multiple) {
+  const size = Math.max(1, Math.ceil(side));
+  if (powerOfTwo) return 2 ** Math.ceil(Math.log2(size));
+  const unit = Math.max(1, Math.round(multiple) || 4);
+  return Math.ceil(size / unit) * unit;
+}
+
+function drawTemplateFace(ctx, entry, destination, sourceImages) {
+  const { width, height, sourceUv, sourceAsset, faceName } = entry;
+  if (width <= 0 || height <= 0) return;
+  const image = sourceAsset ? sourceImages.get(sourceAsset._uid) : null;
+  if (image && sourceUv) {
+    const left = Math.min(sourceUv[0], sourceUv[2]);
+    const top = Math.min(sourceUv[1], sourceUv[3]);
+    const sourceWidth = Math.abs(sourceUv[2] - sourceUv[0]);
+    const sourceHeight = Math.abs(sourceUv[3] - sourceUv[1]);
+    if (sourceWidth > 0 && sourceHeight > 0) {
+      ctx.drawImage(image, left, top, sourceWidth, sourceHeight, destination.x, destination.y, width, height);
+      return;
+    }
+  }
+  const faceColors = TEMPLATE_FACE_COLORS[faceName] || { fill: '#b7b7b7', outline: '#9f9f9f' };
+  ctx.fillStyle = faceColors.fill;
+  ctx.fillRect(destination.x, destination.y, width, height);
+  ctx.strokeStyle = faceColors.outline;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(destination.x + .5, destination.y + .5, Math.max(0, width - 1), Math.max(0, height - 1));
+}
+
+function faceDestinationUv(entry, destination) {
+  const source = entry.sourceUv || [0, 0, entry.width, entry.height];
+  const uForward = source[2] >= source[0], vForward = source[3] >= source[1];
+  return [
+    uForward ? destination.x : destination.x + entry.width,
+    vForward ? destination.y : destination.y + entry.height,
+    uForward ? destination.x + entry.width : destination.x,
+    vForward ? destination.y + entry.height : destination.y
+  ];
+}
+
+function syncGeneratedTemplateEdits(targets) {
+  const owners = new Set(targets.map(target => target.owner).filter(Boolean));
+  for (const owner of owners) {
+    const ownerTargets = targets.filter(target => target.owner === owner);
+    const edits = { ...(owner.subdivisionEdits || {}) };
+    for (const target of ownerTargets) {
+      const patch = subdivisionPatch(owner, target.cube, target.index);
+      if (patch) edits[target.index] = patch;
+      else delete edits[target.index];
+    }
+    owner.subdivisionEdits = edits;
+  }
+  if (subdivisionSession) syncSubdivisionEdits();
+}
+
+function registerGeneratedTexture(canvas, name, kind) {
+  const id = `texture_${crypto.randomUUID()}`;
+  const asset = {
+    _uid: id, uuid: id, id, name: name.toLowerCase().endsWith('.png') ? name : `${name}.png`,
+    source: canvas.toDataURL('image/png'), uvWidth: canvas.width, uvHeight: canvas.height,
+    kind, groupId: null, useAsDefault: state.textureAssets.length === 0
+  };
+  state.textureAssets.push(asset);
+  state.activeTextureUid = asset._uid;
+  state.project.textureSize = [canvas.width, canvas.height];
+  renderTextureList();
+  activateProjectTexture(state.textureAssets.length - 1);
+  markDirty();
+  return asset;
+}
+
+async function createTextureTemplate(options) {
+  const targets = templateCubeTargets(options.selectedOnly);
+  if (!targets.length) return toast('目前沒有可建立模板的 Cube');
+  const faceCount = targets.reduce((count, target) => count + CUBE_FACE_NAMES.filter(faceName => {
+    const face = target.cube.faces?.[faceName];
+    return !isCubeFaceCulled(face);
+  }).length, 0);
+  if (!faceCount) return toast('目前沒有可建立模板的面');
+  const progress = beginTextureGenerationProgress(faceCount);
+  try {
+  snapshot();
+  await progress.prepare(`正在準備 ${faceCount} 個面…`);
+  const subdivisions = activeSnapSubdivisions();
+  const padding = options.paddingEnabled ? Math.max(0, Math.round(options.padding)) : 0;
+  const sourceAssets = new Set();
+  const rectangles = [];
+  const assignments = [];
+  const sharedEntries = new Map();
+  const addFaceEntry = (target, faceName, width, height, boxEntry = null, offset = null) => {
+    const cube = target.cube;
+    const face = cube.faces?.[faceName];
+    const sourceUv = Array.isArray(face?.uv) && face.uv.length >= 4 ? [...face.uv] : [...getBlockbenchBoxUv(cube, faceName)];
+    const sourceAsset = textureAssetForReference(face?.texture);
+    if (sourceAsset) sourceAssets.add(sourceAsset);
+    const duplicateKey = !options.keepMultiTexture && !boxEntry
+      ? `${sourceAsset?._uid || 'color'}:${faceName}:${sourceUv.join(',')}:${width}x${height}` : null;
+    let entry = duplicateKey ? sharedEntries.get(duplicateKey) : null;
+    if (!entry) {
+      entry = boxEntry || { width, height, faceName, sourceUv, sourceAsset, targets: [] };
+      if (!boxEntry) rectangles.push(entry);
+      if (duplicateKey) sharedEntries.set(duplicateKey, entry);
+    }
+    const assignment = { target, faceName, width, height, sourceUv, sourceAsset, entry, offset };
+    entry.targets.push(assignment);
+    assignments.push(assignment);
+  };
+  for (const target of targets) {
+    const cube = target.cube;
+    const dimensions = cube.size.map(value => Math.max(0, Math.round(Math.abs(Number(value) || 0) * subdivisions / 16)));
+    if (options.boxUv && cube.uvNormalized !== false) {
+      const [x, y, z] = dimensions;
+      const boxEntry = { width: 2 * (x + z), height: y + z, faceName: 'north', sourceUv: null, sourceAsset: null, targets: [] };
+      rectangles.push(boxEntry);
+      const offsets = {
+        east: [0, z, z, y], north: [z, z, x, y], west: [z + x, z, z, y], south: [z + x + z, z, x, y],
+        up: [z, 0, x, z], down: [z + x, 0, x, z]
+      };
+      for (const faceName of CUBE_FACE_NAMES) {
+        const face = cube.faces?.[faceName];
+        if (isCubeFaceCulled(face)) continue;
+        const [ox, oy, width, height] = offsets[faceName];
+        addFaceEntry(target, faceName, width, height, boxEntry, { x: ox, y: oy });
+      }
+    } else {
+      for (const faceName of CUBE_FACE_NAMES) {
+        const face = cube.faces?.[faceName];
+        if (isCubeFaceCulled(face)) continue;
+        const [width, height] = facePixelSize(cube, faceName, subdivisions);
+        addFaceEntry(target, faceName, width, height);
+      }
+    }
+  }
+  await progress.prepare('正在讀取已有紋理…');
+  const sourceImages = new Map(await Promise.all([...sourceAssets].map(async asset => [asset._uid, await loadTextureAssetImage(asset)])));
+  await progress.prepare('正在由大到小排列 UV…');
+  let packingSide = minimumTemplatePackingSide(rectangles, padding);
+  let packed = null;
+  while (!packed && packingSide <= 8192) {
+    packed = packTemplateRectangles(rectangles, padding, packingSide);
+    if (!packed) packingSide += Math.max(1, Math.ceil(packingSide * .06));
+  }
+  const side = alignedTextureSide(packingSide, options.powerOfTwo, options.multiple);
+  if (!packed || side > 8192) {
+    state.history.pop();
+    return toast(`模板尺寸 ${side} × ${side} 過大，請降低吸附分辨率或間隔`);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = side; canvas.height = side;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, side, side);
+  for (const assignment of assignments) {
+    const placement = packed.placements.get(assignment.entry);
+    if (placement) {
+      const destination = assignment.offset
+        ? { x: placement.x + assignment.offset.x, y: placement.y + assignment.offset.y }
+        : { x: placement.x, y: placement.y };
+      drawTemplateFace(ctx, { ...assignment, faceName: assignment.faceName }, destination, sourceImages);
+      const cube = assignment.target.cube;
+      cube.faces ||= {};
+      const previous = cube.faces[assignment.faceName] || {};
+      cube.faces[assignment.faceName] = { ...previous, uv: faceDestinationUv(assignment, destination) };
+    }
+    await progress.advance('正在繪製並分配 UV…');
+  }
+  const asset = registerGeneratedTexture(canvas, options.name, 'TEMPLATE');
+  state.project.uvMode = options.boxUv ? 'box' : 'face';
+  for (const target of targets) {
+    target.cube.uvMode = options.boxUv ? 'box' : 'face';
+    target.cube.autoUv = false;
+    if (target.owner) {
+      target.owner.uvMode = target.cube.uvMode;
+      target.owner.autoUv = false;
+    }
+    for (const assignment of assignments.filter(entry => entry.target === target)) {
+      target.cube.faces[assignment.faceName].texture = `#${asset.id}`;
+    }
+    const boxAssignment = assignments.find(assignment => assignment.target === target && assignment.offset);
+    if (boxAssignment && assignments.filter(assignment => assignment.target === target).length === CUBE_FACE_NAMES.length) {
+      const placement = packed.placements.get(boxAssignment.entry);
+      target.cube.uv = [placement.x, placement.y];
+    }
+  }
+  syncGeneratedTemplateEdits(targets);
+  invalidateAllRenderGeometry();
+  renderAll('all');
+  toast(`已建立 ${side} × ${side} 紋理模板`);
+  } finally {
+    progress.finish();
+  }
+}
+
+function createSimpleTexture(options) {
+  snapshot();
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(options.width));
+  canvas.height = Math.max(1, Math.round(options.height));
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (options.type === 'solid') {
+    ctx.fillStyle = options.color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  registerGeneratedTexture(canvas, options.name, options.type === 'solid' ? 'SOLID' : 'BLANK');
+  renderScene();
+  toast(`已建立 ${canvas.width} × ${canvas.height} ${options.type === 'solid' ? '純色模板' : '空白貼圖'}`);
+}
+
+function updateTextureCreateDialog() {
+  const type = $('#textureCreateType').value;
+  $('#textureTemplateOptions').hidden = type !== 'template';
+  $('#textureBasicOptions').hidden = type === 'template';
+  $('#textureColorField').hidden = type !== 'solid';
+  $('#textureTemplateSummary').hidden = type !== 'template';
+  $('#textureTemplateMultiple').disabled = $('#textureTemplatePowerOfTwo').checked;
+  $('#textureTemplatePadding').disabled = !$('#textureTemplatePaddingEnabled').checked;
+}
+
+function openTextureCreateDialog() {
+  $('#textureCreateWidth').value = String(state.project.textureSize?.[0] || 64);
+  $('#textureCreateHeight').value = String(state.project.textureSize?.[1] || 64);
+  $('#textureTemplateBoxUv').checked = state.project.uvMode === 'box';
+  $('#textureTemplateSelectedOnly').checked = false;
+  $('#textureTemplateSelectedOnly').disabled = selectedElementUids().length === 0;
+  const subdivisions = activeSnapSubdivisions();
+  $('#textureTemplateSummary').textContent = `目前按項目基礎吸附 ${formatNumber(subdivisions)} 計算：UV 像素 = round(Cube 尺寸 × ${formatNumber(subdivisions)} ÷ 16)，再由大到小自左上角打包。`;
+  updateTextureCreateDialog();
+  $('#textureCreateDialog').showModal();
+}
+
 function importTexture(file) {
   if (!file) return;
+  const revision = ++textureLoadRevision;
   const url = URL.createObjectURL(file);
   const image = new Image();
   image.onload = () => {
+    if (revision !== textureLoadRevision) return;
     textureCanvas.width = image.naturalWidth;
     textureCanvas.height = image.naturalHeight;
     textureCtx.imageSmoothingEnabled = false;
@@ -4009,9 +5420,10 @@ function importTexture(file) {
     updateTexturePreviewFrame(image.naturalWidth, image.naturalHeight);
     const asset = { _uid: textureUid(), name: file.name, source: url, uvWidth: image.naturalWidth, uvHeight: image.naturalHeight,
       kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null };
-    state.textureAssets.unshift(asset);
+    state.textureAssets.push(asset);
     state.activeTextureUid = asset._uid;
     renderTextureList();
+    rebuildTextureAtlas();
     toast(`已導入貼圖 ${file.name}`);
   };
   image.onerror = () => { URL.revokeObjectURL(url); toast('無法讀取這張圖片'); };
@@ -4019,8 +5431,10 @@ function importTexture(file) {
 }
 
 function loadTextureSource(source, name) {
+  const revision = ++textureLoadRevision;
   const image = new Image();
   image.onload = () => {
+    if (revision !== textureLoadRevision) return;
     textureCanvas.width = image.naturalWidth;
     textureCanvas.height = image.naturalHeight;
     textureCtx.imageSmoothingEnabled = false;
@@ -4058,28 +5472,57 @@ function activateProjectTexture(index) {
   loadTextureSource(asset.source, asset.name);
 }
 
+function toolSupportsMode(tool, mode = state.mode) {
+  const registered = TOOL_REGISTRY[tool]?.modes.includes(mode);
+  if (!registered) return false;
+  if (tool === 'faceSelect') return state.separateUvMode ? mode === 'uv' : mode === 'edit';
+  return mode !== 'uv';
+}
+
+function applyModePanelVisibility() {
+  if (!dockManager) return;
+  if (state.separateUvMode && state.mode === 'edit') {
+    for (const id of ['texture', 'uvPreview']) {
+      const panel = dockManager.get(id);
+      if (panel) panel.element.hidden = true;
+    }
+    dockManager.refreshZones();
+  }
+}
+
 function setMode(mode) {
+  if (mode === 'uv' && !state.separateUvMode) mode = 'edit';
   state.mode = mode;
+  document.body.dataset.editorMode = mode;
+  if (mode !== 'paint') {
+    $('#textureBrushCursor').hidden = true;
+    $('#texturePreview').style.cursor = '';
+  }
   if (mode !== 'animate' && state.timelinePlaying) stopTimeline();
   dockManager?.setMode(mode);
+  applyModePanelVisibility();
   $$('.mode-tab').forEach(button => button.classList.toggle('active', button.dataset.mode === mode));
   updateToolVisibility();
-  if (!TOOL_REGISTRY[state.tool]?.modes.includes(mode)) setTool(mode === 'paint' ? 'brush' : 'move');
-  $('#viewLabel').textContent = mode === 'paint' ? '貼圖預覽' : mode === 'animate' ? '動畫預覽' : '實體著色';
+  if (!toolSupportsMode(state.tool, mode)) setTool(mode === 'paint' ? 'brush' : mode === 'uv' ? 'faceSelect' : 'move');
+  $('#viewLabel').textContent = mode === 'paint' ? '三維繪畫' : mode === 'uv' ? 'UV 編輯' : mode === 'animate' ? '動畫預覽' : '實體著色';
   if (mode === 'paint') activateDock('palette');
   if (mode === 'animate') activateDock('timeline');
-  toast({ edit: '編輯模式', paint: '繪畫模式', animate: '動畫模式' }[mode]);
+  toast({ edit: '編輯模式', uv: 'UV 編輯模式', paint: '繪畫模式', animate: '動畫模式' }[mode]);
 }
 
 function updateToolVisibility() {
   $$('.tool[data-tool]').forEach(button => {
-    const definition = TOOL_REGISTRY[button.dataset.tool];
-    button.hidden = !definition || !definition.modes.includes(state.mode);
+    button.hidden = !toolSupportsMode(button.dataset.tool);
+    button.disabled = button.dataset.tool === 'knife' && Boolean(subdivisionSession);
+    button.setAttribute('aria-disabled', String(button.disabled));
   });
 }
 
 function setTool(tool) {
-  if (!TOOL_REGISTRY[tool]?.modes.includes(state.mode)) return;
+  if (!toolSupportsMode(tool) || (tool === 'knife' && subdivisionSession)) {
+    if (tool === 'knife' && subdivisionSession) toast('細分編輯期間不能使用刀具');
+    return;
+  }
   if (tool !== 'vertexSnap') state.vertexSnapSource = null;
   if (tool !== 'knife') cancelKnifeSelection(false);
   state.tool = tool;
@@ -4091,7 +5534,11 @@ function setTool(tool) {
 
 function updateToolOptions() {
   const lane = $('#toolOptionsLane');
-  const labels = { move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇' };
+  const labels = {
+    move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇',
+    brush: '畫筆', eraser: '橡皮擦', eyedropper: '取色器'
+  };
+  const paintTool = ['brush', 'eraser', 'eyedropper'].includes(state.tool);
   lane.hidden = !labels[state.tool];
   $('#transformSpaceControl').hidden = !['move', 'rotate', 'pivot'].includes(state.tool);
   $('#rotationModeControl').hidden = state.tool !== 'rotate' || state.transformSpace !== 'self';
@@ -4102,9 +5549,17 @@ function updateToolOptions() {
   $('#vertexSnapStatus').hidden = state.tool !== 'vertexSnap';
   $('#vertexSnapStatus').textContent = state.vertexSnapSource ? '再選目標頂點' : '先選來源頂點';
   $('#knifeStatus').hidden = state.tool !== 'knife';
+  $('#paintToolOptions').hidden = !paintTool;
+  $('#paintBrushSize').disabled = state.tool === 'eyedropper';
+  $('#paintBrushOpacity').disabled = state.tool === 'eyedropper';
+  $('#snapButton').hidden = paintTool;
   const knifePreview = getKnifePreviewLabel();
   $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
   if (!lane.hidden) $('#toolContext').textContent = labels[state.tool];
+  if (document.activeElement !== $('#paintColor')) $('#paintColor').value = state.paintColor;
+  if (document.activeElement !== $('#paintBrushSize')) $('#paintBrushSize').value = String(state.paintBrushSize);
+  if (document.activeElement !== $('#paintBrushOpacity')) $('#paintBrushOpacity').value = String(state.paintBrushOpacity);
+  $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
   updateTransformSpaceButtons();
   updateRotationModeButtons();
   updateScaleHandleModeButtons();
@@ -4113,7 +5568,7 @@ function updateToolOptions() {
   $$('[data-vertex-rotation-mode]').forEach(button => button.classList.toggle('active', button.dataset.vertexRotationMode === state.vertexSnapRotationMode));
 }
 
-const renderModeLabels = Object.freeze({ wireframe: '線框', solid: '體塊', textured: '紋理' });
+const renderModeLabels = Object.freeze({ wireframe: '線框', solid: '體塊', textured: '紋理', normal: '法向' });
 
 function updateRenderModeControl() {
   const label = renderModeLabels[state.renderMode] || renderModeLabels.textured;
@@ -4146,13 +5601,44 @@ async function openProject() {
   } catch (error) { toast(`打開失敗：${error.message}`); }
 }
 
+async function serializableTextureAssets() {
+  return Promise.all(state.textureAssets.map(async texture => {
+    if (!String(texture.source || '').startsWith('blob:')) return texture;
+    const blob = await fetch(texture.source).then(response => response.blob());
+    const source = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error('貼圖轉換失敗'));
+      reader.readAsDataURL(blob);
+    });
+    return { ...texture, source };
+  }));
+}
+
+function serializeCbmodel(textureAssets = []) {
+  const data = JSON.parse(state.project.serialize());
+  data.textures = textureAssets.map((texture, index) => ({
+    uuid: texture.uuid || texture._uid || `texture_${index + 1}`,
+    id: texture.id || String(index),
+    name: texture.name || `texture_${index + 1}.png`,
+    source: texture.source,
+    uv_width: texture.uvWidth || state.project.textureSize[0],
+    uv_height: texture.uvHeight || state.project.textureSize[1],
+    use_as_default: texture.useAsDefault === true,
+    group_id: texture.groupId || null,
+    kind: texture.kind || 'IMAGE'
+  }));
+  return JSON.stringify(data, null, 2);
+}
+
 function loadProjectContent(content, filePath = '', resolvedTextures = []) {
   const data = JSON.parse(content);
   const project = filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format ? importBlockbench(data) : new CubeBricksProject(data);
   const savedPath = filePath.toLowerCase().endsWith('.cbmodel') ? filePath : null;
   const embeddedTextures = (data.textures || []).filter(texture => typeof texture.source === 'string' && texture.source.startsWith('data:image/')).map(texture => ({
     uuid: texture.uuid, id: texture.id, name: texture.name || 'embedded_texture.png', source: texture.source,
-    uvWidth: texture.uv_width, uvHeight: texture.uv_height, useAsDefault: texture.use_as_default === true
+    uvWidth: texture.uv_width, uvHeight: texture.uv_height, useAsDefault: texture.use_as_default === true,
+    groupId: texture.group_id || null, kind: texture.kind || 'IMAGE'
   }));
   addProjectTab(project, {
     filePath: savedPath,
@@ -4166,7 +5652,7 @@ function loadProjectContent(content, filePath = '', resolvedTextures = []) {
 
 async function saveProject(saveAs = false) {
   try {
-    const content = state.project.serialize();
+    const content = serializeCbmodel(await serializableTextureAssets());
     if (window.cubeBricksDesktop) {
       const result = await window.cubeBricksDesktop.saveProject({ filePath: saveAs ? null : state.filePath, name: state.project.name, content });
       if (!result) return;
@@ -4180,18 +5666,8 @@ async function saveProject(saveAs = false) {
 
 async function exportProject() {
   try {
-    const textureAssets = await Promise.all(state.textureAssets.map(async texture => {
-      if (!String(texture.source || '').startsWith('blob:')) return texture;
-      const blob = await fetch(texture.source).then(response => response.blob());
-      const source = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error || new Error('貼圖轉換失敗'));
-        reader.readAsDataURL(blob);
-      });
-      return { ...texture, source };
-    }));
-    const cbmodelContent = state.project.serialize();
+    const textureAssets = await serializableTextureAssets();
+    const cbmodelContent = serializeCbmodel(textureAssets);
     const bbmodelContent = JSON.stringify(exportBlockbench(state.project, textureAssets), null, 2);
     if (window.cubeBricksDesktop?.exportProject) {
       const result = await window.cubeBricksDesktop.exportProject({
@@ -4372,6 +5848,17 @@ function applyRegisteredConfig(id, value, notify = false) {
     languageSelect.value = value; applyLanguage(value);
     if (notify) toast(`介面語言：${getLanguageLabel(value)}`);
   }
+  if (id === ConfigKey.SEPARATE_UV_MODE) {
+    state.separateUvMode = value;
+    $('#uvModeTab').hidden = !value;
+    if (!value && state.mode === 'uv') setMode('edit');
+    else {
+      updateToolVisibility();
+      dockManager?.setMode(state.mode);
+      applyModePanelVisibility();
+      if (!toolSupportsMode(state.tool)) setTool(state.mode === 'uv' ? 'faceSelect' : 'move');
+    }
+  }
   if (id === ConfigKey.SNAP) {
     state.settingsSnap = value;
     updateSnapButton();
@@ -4448,6 +5935,7 @@ function initializeDockSystem() {
     }
   });
   dockManager.setMode(state.mode);
+  applyModePanelVisibility();
 }
 
 let contextMenuSource = null;
@@ -4590,12 +6078,33 @@ function bindContextMenus() {
       ] });
       return;
     }
+    if (item.dataset.curveNodeIndex !== undefined) {
+      const curve = state.project.getNode(item.dataset.uid);
+      const index = Number(item.dataset.curveNodeIndex);
+      if (!isBezierElement(curve) || !curve.nodes[index]) return;
+      state.selectedUid = curve.uid;
+      state.selectedUids = new Set([curve.uid]);
+      state.selectionAnchorUid = curve.uid;
+      state.selectedModifierUid = null;
+      state.selectedCurveNodeIndex = index;
+      refreshSelectionUi();
+      showContextMenu(event, { title: `節點 ${index + 1}`, source: item, items: [
+        { icon: '×', label: '刪除節點', danger: true, action: () => {
+          if (curve.nodes.length <= 2) return toast('曲線至少需要兩個節點');
+          snapshot(); discardSubdivisionEdits(curve); curve.nodes.splice(index, 1);
+          state.selectedCurveNodeIndex = Math.min(index, curve.nodes.length - 1);
+          markDirty(); renderAll('selection');
+        } }
+      ] });
+      return;
+    }
     const uidValue = item.dataset.uid;
     const source = outliner.querySelector(`[data-uid="${uidValue}"]`);
     showElementContextMenu(event, uidValue, source);
   });
   outliner.addEventListener('dblclick', event => {
     const row = event.target.closest('.outliner-item');
+    if (row?.dataset.curveNodeIndex !== undefined) return;
     const node = row && state.project.getNode(row.dataset.uid);
     if (!isProceduralShape(node)) return;
     event.preventDefault();
@@ -4627,9 +6136,18 @@ function bindContextMenus() {
         { icon: '▰', label: '移到新貼圖組', action: addTextureGroup },
         { separator: true },
         { icon: '×', label: '刪除貼圖', danger: true, action: () => {
+          const previousAssets = [...state.textureAssets];
           state.textureAssets = state.textureAssets.filter(entry => entry._uid !== asset?._uid);
+          remapNumericFaceTextureReferences(previousAssets);
           if (state.activeTextureUid === asset?._uid) state.activeTextureUid = null;
-          renderTextureList(); renderTexture(); renderScene();
+          renderTextureList();
+          if (state.textureAssets.length) {
+            const nextIndex = Math.max(0, state.textureAssets.findIndex(entry => entry._uid === state.activeTextureUid));
+            activateProjectTexture(nextIndex);
+          } else renderTexture();
+          rebuildTextureAtlas();
+          markDirty();
+          renderScene();
         } }
       ] });
     }
@@ -4955,7 +6473,8 @@ function bindEvents() {
   texturePreview.addEventListener('pointerup', endTexturePointer);
   texturePreview.addEventListener('pointercancel', endTexturePointer);
   texturePreview.addEventListener('pointerleave', () => {
-    if (!textureUvDrag) texturePreview.style.cursor = '';
+    if (!texturePaintDrag) $('#textureBrushCursor').hidden = true;
+    if (!textureUvDrag && !texturePaintDrag) texturePreview.style.cursor = '';
   });
   texturePreview.addEventListener('auxclick', event => event.preventDefault());
   texturePreview.addEventListener('wheel', wheelTextureView, { passive: false });
@@ -4977,6 +6496,15 @@ function bindEvents() {
   $$('[data-uv-coordinate]').forEach(input => input.addEventListener('change', () => {
     setUvCoordinate(Number(input.dataset.uvCoordinate), Number(input.value));
   }));
+  $('#paintColor').addEventListener('input', event => setPaintColor(event.target.value));
+  $('#paintBrushSize').addEventListener('input', event => {
+    state.paintBrushSize = clamp(Math.round(Number(event.target.value)) || 1, 1, 64);
+    event.target.value = String(state.paintBrushSize);
+  });
+  $('#paintBrushOpacity').addEventListener('input', event => {
+    state.paintBrushOpacity = clamp(Math.round(Number(event.target.value)) || 100, 1, 100);
+    $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
+  });
   new ResizeObserver(() => {
     syncTexturePreviewPriority();
     updateTextureStageTransform();
@@ -5068,6 +6596,34 @@ function bindEvents() {
     renderScene();
   });
   $('[data-action="addTexture"]').addEventListener('click', () => textureInput.click());
+  $('[data-action="createTexture"]').addEventListener('click', openTextureCreateDialog);
+  $('#textureCreateType').addEventListener('change', updateTextureCreateDialog);
+  $('#textureTemplatePowerOfTwo').addEventListener('change', updateTextureCreateDialog);
+  $('#textureTemplatePaddingEnabled').addEventListener('change', updateTextureCreateDialog);
+  $('[data-action="cancelTextureCreate"]').addEventListener('click', () => $('#textureCreateDialog').close());
+  $('#textureCreateForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const type = $('#textureCreateType').value;
+    const name = $('#textureCreateName').value.trim() || 'texture.png';
+    $('#textureCreateDialog').close();
+    if (type === 'template') {
+      await createTextureTemplate({
+        name,
+        selectedOnly: $('#textureTemplateSelectedOnly').checked,
+        boxUv: $('#textureTemplateBoxUv').checked,
+        powerOfTwo: $('#textureTemplatePowerOfTwo').checked,
+        keepMultiTexture: $('#textureTemplateKeepMulti').checked,
+        paddingEnabled: $('#textureTemplatePaddingEnabled').checked,
+        padding: Number($('#textureTemplatePadding').value) || 0,
+        multiple: Number($('#textureTemplateMultiple').value) || 4
+      });
+    } else createSimpleTexture({
+      type, name,
+      width: Number($('#textureCreateWidth').value) || 1,
+      height: Number($('#textureCreateHeight').value) || 1,
+      color: $('#textureCreateColor').value
+    });
+  });
   $('[data-action="playTimeline"]').addEventListener('click', playTimeline);
   $('[data-action="stopTimeline"]').addEventListener('click', stopTimeline);
   $('[data-action="addPaletteRow"]').addEventListener('click', addPaletteRow);
@@ -5081,6 +6637,18 @@ function bindEvents() {
   outliner.addEventListener('click', event => {
     const button = event.target.closest('[data-uid]');
     if (!button) { clearSelection(); return; }
+    if (button.dataset.curveNodeIndex !== undefined) {
+      const curve = state.project.getNode(button.dataset.uid);
+      if (!isBezierElement(curve)) return;
+      sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
+      state.selectedUid = curve.uid;
+      state.selectedUids = new Set([curve.uid]);
+      state.selectionAnchorUid = curve.uid;
+      state.selectedModifierUid = null;
+      state.selectedCurveNodeIndex = Number(button.dataset.curveNodeIndex);
+      refreshSelectionUi();
+      return;
+    }
     const flag = event.target.closest('[data-node-toggle]');
     if (flag && !flag.classList.contains('unavailable')) {
       event.preventDefault();
@@ -5088,6 +6656,7 @@ function bindEvents() {
       const node = state.project.getNode(flag.dataset.nodeUid);
       const key = flag.dataset.nodeToggle;
       const current = key === 'autoUv' ? nodeAutoUvEnabled(node)
+        : key === 'uvNormalized' ? nodeUvNormalizedEnabled(node)
         : key === 'locked' ? node.locked === true
         : node[key] !== false;
       const targets = state.selectedUids.has(node.uid) && state.selectedUids.size > 1
@@ -5111,12 +6680,14 @@ function bindEvents() {
       state.collapsedGroups.has(uidValue) ? state.collapsedGroups.delete(uidValue) : state.collapsedGroups.add(uidValue);
       renderOutliner(); return;
     }
+    state.selectedCurveNodeIndex = null;
     selectItem(button.dataset.uid, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey });
   });
   outliner.addEventListener('dragstart', event => {
     if (event.target.closest('[data-node-toggle]')) { event.preventDefault(); return; }
     const item = event.target.closest('.outliner-item');
     if (!item) return;
+    if (item.dataset.curveNodeIndex !== undefined) { event.preventDefault(); return; }
     if (!state.selectedUids.has(item.dataset.uid)) {
       sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
       state.selectedUid = item.dataset.uid;
@@ -5142,6 +6713,7 @@ function bindEvents() {
     clearOutlinerDropState({ keepDragging: true });
     const item = event.target.closest('.outliner-item');
     if (!item) return;
+    if (item.dataset.curveNodeIndex !== undefined) return;
     const node = state.project.getNode(item.dataset.uid);
     const rect = item.getBoundingClientRect();
     const ratio = (event.clientY - rect.top) / rect.height;
@@ -5153,6 +6725,11 @@ function bindEvents() {
     if (!state.outlinerDragUids?.length) return;
     event.preventDefault();
     const item = event.target.closest('.outliner-item');
+    if (item?.dataset.curveNodeIndex !== undefined) {
+      clearOutlinerDropState();
+      removeOutlinerDragGhost();
+      return;
+    }
     const targetUid = item?.dataset.uid || null;
     const zone = item?.dataset.dropZone || 'after';
     clearOutlinerDropState();
@@ -5182,6 +6759,9 @@ function bindEvents() {
     textureInput.value = '';
   });
   $('[data-action="addTextureGroup"]').addEventListener('click', addTextureGroup);
+  bindTextureFaceDropSurface(viewport, sceneCanvas, sceneRenderer, () => state.project, '#sceneTextureDropFaceOverlay');
+  bindTextureFaceDropSurface(uvPreviewViewport, uvPreviewCanvas, uvPreviewRenderer,
+    () => uvPreviewIsActive() ? getUvPreviewProject().project : null, '#uvTextureDropFaceOverlay');
   $('#textureList').addEventListener('click', event => {
     const groupToggle = event.target.closest('[data-texture-group-toggle]');
     if (groupToggle) {
@@ -5198,7 +6778,7 @@ function bindEvents() {
     if (!item && !group) return;
     state.textureDrag = item ? { type: 'asset', id: item.dataset.textureUid } : { type: 'group', id: group.dataset.textureGroup };
     (item || group).classList.add('is-dragging');
-    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.effectAllowed = item ? 'copyMove' : 'move';
     event.dataTransfer.setData('text/x-cubebricks-texture', `${state.textureDrag.type}:${state.textureDrag.id}`);
   });
   $('#textureList').addEventListener('dragover', event => {
@@ -5217,6 +6797,7 @@ function bindEvents() {
     event.preventDefault();
     const item = event.target.closest('.texture-item');
     const groupNode = !item && event.target.closest('.texture-group');
+    const previousAssets = [...state.textureAssets];
     if (state.textureDrag.type === 'asset') {
       const asset = state.textureAssets.find(entry => entry._uid === state.textureDrag.id);
       if (asset && item && item.dataset.textureUid !== asset._uid) {
@@ -5234,9 +6815,16 @@ function bindEvents() {
       state.textureGroups.splice(state.textureGroups.indexOf(target) + 1, 0, moving);
     }
     state.textureDrag = null;
+    remapNumericFaceTextureReferences(previousAssets);
+    renderTextureList();
+    rebuildTextureAtlas();
+    markDirty();
+  });
+  $('#textureList').addEventListener('dragend', () => {
+    state.textureDrag = null;
+    clearTextureFaceDropTarget();
     renderTextureList();
   });
-  $('#textureList').addEventListener('dragend', () => { state.textureDrag = null; renderTextureList(); });
   $$('[data-view-axis]').forEach(button => button.addEventListener('click', () => {
     cancelCameraFocus();
     const axis = button.dataset.viewAxis;
@@ -5255,6 +6843,16 @@ function bindEvents() {
     const handle = resolveGizmoHandle(event);
     if (!handle) return;
     event.preventDefault(); event.stopPropagation();
+    if (handle.dataset.kind === 'modifier-anchor') {
+      const modifier = selected()?.modifiers?.find(entry => entry.uid === handle.dataset.modifierUid);
+      if (!modifier?.enabled) return;
+      state.selectedModifierUid = modifier.uid;
+      state.selectedCurveNodeIndex = null;
+      state.inspectorPage = 'modifiers';
+      if (!['move', 'rotate', 'pivot'].includes(state.tool)) setTool('move');
+      else { renderInspector(); renderScene(); updateSelectionLabels(); }
+      return;
+    }
     if (handle.dataset.kind === 'vertex') {
       useVertexSnapPoint(state.vertexSnapPoints?.[Number(handle.dataset.vertexIndex)]);
       return;
@@ -5315,6 +6913,14 @@ function bindEvents() {
       if (focusedDockHotspot === 'texture') event.shiftKey ? resetTextureView() : focusSelectedTextureUvs();
       else event.shiftKey ? focusSceneOrigin() : focusSelected();
     }
+    if (state.mode === 'paint' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      const paintShortcuts = { b: 'brush', e: 'eraser', i: 'eyedropper' };
+      const paintTool = paintShortcuts[event.key.toLowerCase()];
+      if (paintTool) {
+        event.preventDefault();
+        setTool(paintTool);
+      }
+    }
     const shortcuts = { '1': 'move', '2': 'resize', '3': 'rotate', '4': 'pivot', '5': 'vertexSnap', '6': 'knife', '7': 'faceSelect' }; if (shortcuts[event.key]) setTool(shortcuts[event.key]);
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
   });
@@ -5361,6 +6967,7 @@ function startCurveHandleDrag(event, curve, hit) {
   event.preventDefault();
   event.stopPropagation();
   sceneCanvas.setPointerCapture(event.pointerId);
+  state.selectedModifierUid = null;
   if (isBezierElement(curve)) state.selectedCurveNodeIndex = hit.index;
   const frame = sceneRenderer.getCameraFrame();
   const plane = curve.dimension === 2
@@ -5374,6 +6981,8 @@ function startCurveHandleDrag(event, curve, hit) {
     property: hit.property, plane, snapshotTaken: false
   };
   sceneCanvas.classList.add('is-curve-handle');
+  state.outlinerWindowStart = -1;
+  renderOutlinerWindow();
   renderInspector();
   renderScene();
 }
@@ -5386,6 +6995,10 @@ function onPointerDown(event) {
     return;
   }
   if (event.button !== 0) return;
+  if (state.mode === 'paint' && ['brush', 'eraser', 'eyedropper'].includes(state.tool)) {
+    startScenePaintPointer(event, x, y);
+    return;
+  }
   const suppressBlankDeselect = Boolean(focusedDockHotspot);
   if (focusedDockHotspot) setDockHotspotFocus(null);
   if (state.tool === 'knife') {
@@ -5438,7 +7051,10 @@ function onPointerDown(event) {
     const nodeHit = sceneRenderer.pickCurveNode(state.project, activeCurve.uid, x, y);
     if (nodeHit) {
       event.preventDefault();
+      state.selectedModifierUid = null;
       state.selectedCurveNodeIndex = nodeHit.index;
+      state.outlinerWindowStart = -1;
+      renderOutlinerWindow();
       renderInspector();
       renderScene();
       return;
@@ -5921,6 +7537,27 @@ function nodeTransformAnchor(node) {
   return node.position || node.origin;
 }
 
+function captureModifierAnchors(node) {
+  return new Map((node.modifiers || []).flatMap(modifier => Array.isArray(modifier.anchor?.position)
+    ? [[modifier.uid, [...modifier.anchor.position]]]
+    : []));
+}
+
+function translateModifierAnchorsFromSnapshot(node, anchors, delta) {
+  for (const modifier of node.modifiers || []) {
+    const start = anchors?.get(modifier.uid);
+    if (!start || !Array.isArray(modifier.anchor?.position)) continue;
+    modifier.anchor.position = start.map((value, axis) => value + delta[axis]);
+  }
+}
+
+function translateModifierAnchors(node, delta) {
+  for (const modifier of node.modifiers || []) {
+    if (!Array.isArray(modifier.anchor?.position)) continue;
+    modifier.anchor.position = modifier.anchor.position.map((value, axis) => value + delta[axis]);
+  }
+}
+
 function captureTransformTarget(node) {
   const owner = subdivisionOwner(node);
   const chain = state.project.getGroupChain(owner?.uid || node.uid);
@@ -5946,12 +7583,14 @@ function captureTransformTarget(node) {
     size: node.size ? [...node.size] : null,
     radius: node.parameters?.radius,
     height: node.parameters?.height,
+    modifierAnchors: captureModifierAnchors(node),
     groupMembers: node.type === 'group' ? captureGroupMembers(node) : []
   };
 }
 
 function translateCapturedTarget(target, delta) {
   const { node } = target;
+  translateModifierAnchorsFromSnapshot(node, target.modifierAnchors, delta);
   if (node.type === 'cube') {
     node.position = target.position.map((value, axis) => value + delta[axis]);
     node.pivot = target.pivot.map((value, axis) => value + delta[axis]);
@@ -5966,6 +7605,7 @@ function translateCapturedTarget(target, delta) {
       } else if (member.node.origin) member.node.origin = member.position.map((value, axis) => value + delta[axis]);
       else if (member.node.position) member.node.position = member.position.map((value, axis) => value + delta[axis]);
       else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
+      translateModifierAnchorsFromSnapshot(member.node, member.modifierAnchors, delta);
     });
   }
 }
@@ -6046,7 +7686,11 @@ function applyTargetRotation(target, worldAxis, degrees, { separate = false, sel
 function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign = 1, handleElement = null,
   axisKey = axisIndex === null ? 'free' : String(axisIndex), axisIndices = axisIndex === null ? [] : [axisIndex], axisSigns = [sign]) {
   if (event.button !== 0) return;
-  const selectionContext = getSelectionTransformContext();
+  const modifierAnchorContext = activeModifierAnchorContext();
+  const baseSelectionContext = getSelectionTransformContext();
+  const selectionContext = modifierAnchorContext
+    ? { nodes: [modifierAnchorContext.owner], multiple: false, commonGroup: null, center: null, pivot: null }
+    : baseSelectionContext;
   const curveNodeContext = activeCurveNodeContext();
   let item = selected();
   if (state.tool === 'pivot' && selectionContext.multiple) item = selectionContext.commonGroup;
@@ -6069,7 +7713,9 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   }
   const itemSubdivisionOwner = subdivisionOwner(item);
   const parentChain = state.project.getGroupChain(itemSubdivisionOwner?.uid || item.uid);
-  const chain = curveNodeContext
+  const chain = modifierAnchorContext
+    ? [...parentChain, { pivot: item.type === 'group' || item.type === 'cube' ? item.pivot : item.origin || item.position || [0, 0, 0], rotation: item.rotation || [0, 0, 0] }]
+    : curveNodeContext
     ? [...parentChain, { pivot: item.origin, rotation: item.rotation || [0, 0, 0] }]
     : itemSubdivisionOwner
       ? [...parentChain, { pivot: [0, 0, 0], rotation: itemSubdivisionOwner.rotation || [0, 0, 0] }]
@@ -6140,12 +7786,14 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
       && ['move', 'rotate'].includes(state.tool),
     baseSelectionCenter: selectionContext.center ? [...selectionContext.center] : null,
     baseSelectionPivot: selectionContext.pivot ? [...selectionContext.pivot] : null,
-    position: curveNodeContext ? [...curveNodeContext.node.position]
+    position: modifierAnchorContext ? [...modifierAnchorContext.modifier.anchor.position]
+      : curveNodeContext ? [...curveNodeContext.node.position]
       : item.position ? [...item.position] : item.origin ? [...item.origin] : item.pivot ? [...item.pivot] : [0, 0, 0],
-    pivot: curveNodeContext ? [...curveNodeContext.node.position]
+    pivot: modifierAnchorContext ? [...modifierAnchorContext.modifier.anchor.position]
+      : curveNodeContext ? [...curveNodeContext.node.position]
       : item.pivot ? [...item.pivot] : item.type === 'node' ? [...item.position] : null,
     size: item.size ? [...item.size] : null,
-    rotation: [...(curveNodeContext
+    rotation: [...(modifierAnchorContext ? modifierAnchorContext.modifier.anchor.rotation : curveNodeContext
       ? curveNodeContext.node.autoTangent
         ? curveNodeContext.curve.resolvedNodeState(curveNodeContext.index).rotation
         : curveNodeContext.node.rotation
@@ -6153,9 +7801,11 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
     nodeRoll: curveNodeContext?.node.roll || 0,
     radius: item.parameters?.radius,
     height: item.parameters?.height,
+    modifierAnchors: captureModifierAnchors(item),
     uvFrozen: false,
     groupMembers: item.type === 'group' ? captureGroupMembers(item) : [],
-    curveNodeContext
+    curveNodeContext,
+    modifierAnchorContext
   };
   sceneRenderer.beginTransformGhost();
   $('#transformTooltip').hidden = true;
@@ -6163,6 +7813,10 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
 }
 
 function onPointerMove(event) {
+  if (state.dragging?.type === 'texture-paint-3d') {
+    moveScenePaintDrag(event);
+    return;
+  }
   if (state.tool === 'knife' && !state.dragging) {
     updateKnifeHover(event);
     return;
@@ -6304,6 +7958,15 @@ function scheduleTransformUpdate(drag) {
 function endPointerDrag(event) {
   if (!state.dragging) return;
   const finishedDrag = state.dragging;
+  if (finishedDrag.type === 'texture-paint-3d') {
+    const captureTarget = event.currentTarget;
+    if (captureTarget.hasPointerCapture?.(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
+    finishedDrag.ended = true;
+    finishedDrag.canceled = event.type === 'pointercancel' && !finishedDrag.ready;
+    state.dragging = null;
+    if (finishedDrag.ready && !finishedDrag.canceled) finishScenePaintDrag(finishedDrag);
+    return;
+  }
   if (finishedDrag.type === 'transform') {
     if (transformUpdateFrame !== null) cancelAnimationFrame(transformUpdateFrame);
     transformUpdateFrame = null;
@@ -6343,7 +8006,8 @@ function endPointerDrag(event) {
   }
   if (finishedDrag.type === 'transform' && finishedDrag.snapshotTaken) {
     sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
-    syncInspectorValues();
+    if (finishedDrag.modifierAnchorContext) renderInspector();
+    else syncInspectorValues();
   }
   sceneRenderer.endTransformGhost();
   $('#transformTooltip').hidden = true;
@@ -6433,11 +8097,13 @@ function applyTransformDrag(drag, dx, dy, event) {
     const nextPivot = drag.axis || drag.kind === 'plane'
       ? drag.pivot.map((value, axis) => value + delta[axis])
       : drag.pivot.map((value, axis) => snapValue(value + delta[axis], event));
-    if (drag.curveNodeContext) {
+    if (drag.modifierAnchorContext) {
+      drag.modifierAnchorContext.modifier.anchor.position = nextPivot;
+    } else if (drag.curveNodeContext) {
       drag.curveNodeContext.node.position = nextPivot.map((value, axis) => drag.curveNodeContext.curve.dimension === 2 && axis === 1 ? 0 : value);
     } else if (item.type === 'node') item.position = nextPivot;
     else setPivotPreservingGeometry(state.project, item, nextPivot);
-    drag.tooltipText = `${drag.curveNodeContext || item.type === 'node' ? '節點' : '樞軸'} ${nextPivot.map(formatNumber).join(' / ')}`;
+    drag.tooltipText = `${drag.modifierAnchorContext ? '對稱軸點' : drag.curveNodeContext || item.type === 'node' ? '節點' : '樞軸'} ${nextPivot.map(formatNumber).join(' / ')}`;
   }
   if (drag.tool === 'move' && drag.targets.length > 1) {
     let distances = [];
@@ -6522,17 +8188,27 @@ function applyTransformDrag(drag, dx, dy, event) {
       ? drag.position.map((value, axis) => value + delta[axis])
       : drag.position.map((value, axis) => snapValue(value + delta[axis], event));
     if (drag.kind !== 'plane') drag.tooltipText = `距離 ${formatSigned(Math.hypot(...next.map((value, axis) => value - drag.position[axis])))} px`;
-    if (drag.curveNodeContext) {
+    if (drag.modifierAnchorContext) {
+      drag.modifierAnchorContext.modifier.anchor.position = next;
+    } else if (drag.curveNodeContext) {
       drag.curveNodeContext.node.position = next.map((value, axis) => drag.curveNodeContext.curve.dimension === 2 && axis === 1 ? 0 : value);
     } else if (item.type === 'cube') {
       const applied = next.map((value, axis) => value - drag.position[axis]);
       item.position = next;
       item.pivot = drag.pivot.map((value, axis) => value + applied[axis]);
-    } else if (item.origin) item.origin = next;
-    else if (item.position) item.position = next;
+      translateModifierAnchorsFromSnapshot(item, drag.modifierAnchors, applied);
+    } else if (item.origin) {
+      item.origin = next;
+      translateModifierAnchorsFromSnapshot(item, drag.modifierAnchors, next.map((value, axis) => value - drag.position[axis]));
+    }
+    else if (item.position) {
+      item.position = next;
+      translateModifierAnchorsFromSnapshot(item, drag.modifierAnchors, next.map((value, axis) => value - drag.position[axis]));
+    }
     else if (item.type === 'group') {
       const delta = next.map((value, axis) => value - drag.position[axis]);
       item.pivot = next;
+      translateModifierAnchorsFromSnapshot(item, drag.modifierAnchors, delta);
       drag.groupMembers.forEach(member => {
         if (member.node.type === 'cube') {
           member.node.position = member.position.map((value, axis) => value + delta[axis]);
@@ -6540,6 +8216,7 @@ function applyTransformDrag(drag, dx, dy, event) {
         } else if (member.node.origin) member.node.origin = member.position.map((value, axis) => value + delta[axis]);
         else if (member.node.position) member.node.position = member.position.map((value, axis) => value + delta[axis]);
         else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
+        translateModifierAnchorsFromSnapshot(member.node, member.modifierAnchors, delta);
       });
     }
   }
@@ -6735,13 +8412,13 @@ function applyTransformDrag(drag, dx, dy, event) {
     if (drag.axis) {
       const snappedDelta = snapAngle(angle, angleStep);
       if (drag.rotationMode === 'euler' && drag.kind === 'rotate') {
-        const target = drag.curveNodeContext?.node || item;
+        const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || item;
         target.rotation = [...drag.rotation];
         target.rotation[drag.axisIndex] = drag.rotation[drag.axisIndex] + snappedDelta;
       } else {
         const turn = quaternionFromAxisAngle(drag.rotationAxis, snappedDelta);
         const current = quaternionFromEuler(drag.rotation);
-        const target = drag.curveNodeContext?.node || item;
+        const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || item;
         target.rotation = eulerFromQuaternion(state.transformSpace === 'self' && drag.kind !== 'rotate-view'
           ? quaternionMultiply(current, turn)
           : quaternionMultiply(turn, current));
@@ -6753,7 +8430,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       if (drag.curveNodeContext) drag.curveNodeContext.node.autoTangent = false;
       drag.tooltipText = `角度 ${formatSigned(snappedDelta)}°`;
     } else {
-      const target = drag.curveNodeContext?.node || item;
+      const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || item;
       target.rotation = [snapAngle(drag.rotation[0] - dy * .4, angleStep), snapAngle(drag.rotation[1] + dx * .4, angleStep), drag.rotation[2]];
       if (drag.curveNodeContext?.curve.dimension === 2) {
         target.rotation[0] = 0;
@@ -6779,11 +8456,11 @@ function captureGroupMembers(group) {
   const visit = uidValue => {
     const node = state.project.getNode(uidValue); if (!node) return;
     if (node.type === 'group') {
-      if (node !== group) members.push({ node, position: [...node.pivot] });
+      if (node !== group) members.push({ node, position: [...node.pivot], modifierAnchors: captureModifierAnchors(node) });
       node.children.forEach(visit);
-    } else if (node.type === 'cube') members.push({ node, position: [...node.position], pivot: [...node.pivot] });
-    else if (node.position) members.push({ node, position: [...node.position] });
-    else members.push({ node, position: [...node.origin] });
+    } else if (node.type === 'cube') members.push({ node, position: [...node.position], pivot: [...node.pivot], modifierAnchors: captureModifierAnchors(node) });
+    else if (node.position) members.push({ node, position: [...node.position], modifierAnchors: captureModifierAnchors(node) });
+    else members.push({ node, position: [...node.origin], modifierAnchors: captureModifierAnchors(node) });
   };
   group.children.forEach(visit);
   return members;

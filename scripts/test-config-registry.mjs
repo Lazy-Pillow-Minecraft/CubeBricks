@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { ConfigRegistry, ConfigScope, ConfigType } from '../src/core/config-registry.js';
 import { ConfigKey, configRegistry as appConfigRegistry, migrateConfigDefaults, translateUiText } from '../src/config/app-config.js';
+import { modifierRegistry } from '../src/config/modifiers.js';
 
 const memory = new Map();
 const storage = {
@@ -37,6 +38,11 @@ assert.equal(appConfigRegistry.getDefinition(ConfigKey.LOCKED_DEFAULT_ALPHA).def
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.LOCKED_HOVER_FADE).defaultValue, true);
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.LOCKED_HOVER_ALPHA).defaultValue, 50);
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.LOCKED_HOVER_RADIUS).defaultValue, 120);
+assert.equal(appConfigRegistry.getDefinition(ConfigKey.SEPARATE_UV_MODE).defaultValue, false);
+assert.equal(modifierRegistry.supports('symmetry', 'group'), true);
+assert.equal(modifierRegistry.supports('symmetry', 'cube'), true);
+assert.equal(modifierRegistry.supports('symmetry', 'node'), false);
+assert.equal(modifierRegistry.get('symmetry').allowMultiple, false);
 
 const legacyMemory = new Map([['cubebricks.config', JSON.stringify({
   version: 2,
@@ -64,7 +70,7 @@ assert.equal(translateUiText('僅在此預覽中讓模型慢速轉動', 'zh-Hans
 const uiSource = ['src/index.html', 'src/app.js', 'src/ui/dock-manager.js']
   .map(file => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'))
   .join('\n');
-const traditionalUiGlyphs = new Set([...'體開關閉陰顯圖層編輯繪畫動導檔儲復設覽縮態級軸長圍線僅鎖稱變換擇組場間輸項參數塊刪見幾樞脹狀徑邊質預選語網負許顏圓強調還應過這臺電腦獨當與後會啟連續離內實視點擊進階構則個處從標題樣細節類別載務優勢據墊疊寬釋權傳統築擁護隱響極遠習萬屬為時種並註冊觀對滾輪鍵頂單銷欄轉筆蓋暫輔側區紋帶巢匯總來歐貼範覺緒沒漸無讀張敗認義著請須於繞齊適豎橫詳資訊虛']);
+const traditionalUiGlyphs = new Set([...'體開關閉陰顯圖層編輯繪畫動導檔儲復設覽縮態級軸長圍線僅鎖稱變換擇組場間輸項參數塊刪見幾樞脹狀徑邊質預選語網負許顏圓強調還應過這臺電腦獨當與後會啟連續離內實視點擊進階構則個處從標題樣細節類別載務優勢據墊疊寬釋權傳統築擁護隱響極遠習萬屬為時種並註冊觀對滾輪鍵頂單銷欄轉筆蓋暫輔側區紋帶巢匯總來歐貼範覺緒沒漸無讀張敗認義著請須於繞齊適豎橫詳資訊虛礎鏡羅東順針']);
 const simplifiedUiSource = translateUiText(uiSource, 'zh-Hans');
 const leftovers = [...new Set([...simplifiedUiSource].filter(character => traditionalUiGlyphs.has(character)))];
 assert.deepEqual(leftovers, [], `Simplified UI still contains Traditional Chinese glyphs: ${leftovers.join(' ')}`);
