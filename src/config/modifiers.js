@@ -5,8 +5,8 @@ export const modifierRegistry = new ModifierRegistry();
 modifierRegistry.register({
   id: 'symmetry',
   label: '對稱',
-  allowMultiple: false,
-  targets: ['group', 'cube', 'polygon_prism', 'bezier2d', 'bezier3d', 'locator'],
+  allowMultiple: true,
+  targets: ['group', 'cube', 'polygon_prism', 'dodecahedron', 'truncated_icosahedron', 'bezier2d', 'bezier3d', 'locator'],
   createDefault: () => ({
     mode: 'axes',
     axes: { x: true, y: false, z: false },

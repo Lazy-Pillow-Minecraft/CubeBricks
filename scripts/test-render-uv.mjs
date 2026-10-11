@@ -5,6 +5,7 @@ import {
   createBlockbenchFaceUvSlots,
   createBlockbenchFaceUvs,
   getBlockbenchBoxUv,
+  getCubeFaceDisplayColor,
   getEffectiveInflate,
   getMinecraftRenderType,
   getSurfaceRenderMode,
@@ -25,6 +26,8 @@ assert.equal(isCubeFaceCulled({ texture: null }), true, 'a null texture marks a 
 assert.equal(isCubeFaceCulled({ texture: '#skin' }), false, 'a textured face remains renderable');
 assert.equal(getSurfaceRenderMode('normal'), 4, 'normal display uses the texture-free normal shader branch');
 assert.equal(getSurfaceRenderMode('textured'), 2, 'textured display keeps the texture sampling branch');
+assert.deepEqual(getCubeFaceDisplayColor('#336699', 'north'), [0.2, 0.4, 0.6],
+  'solid display keeps the element display colour even when a face has no texture');
 
 assert.equal(screenPolygonIntersectsRect([
   { x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, addModifier, buildModifierRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
+import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, addModifier, bakeModifier, buildModifierRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
 import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
 import { ModelFormatRegistry } from '../src/core/model-format-registry.js';
 import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/config/model-formats.js';
+import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from '../src/assets/player-reference.js';
 
 assert.equal(modelFormatRegistry.list().length, 8, 'built-in model formats are registered');
 assert.deepEqual(modelFormatRegistry.list().filter(format => format.status === 'placeholder').map(format => format.id),
@@ -23,6 +24,30 @@ assert.deepEqual(bedrockProject.snap, { subdivisions: 16 });
 const bedrockRoundTrip = new CubeBricksProject(JSON.parse(bedrockProject.serialize()));
 assert.equal(bedrockRoundTrip.formatId, ModelFormatId.BEDROCK_ENTITY, 'project format survives a cbmodel round trip');
 assert.deepEqual(bedrockRoundTrip.snap, { subdivisions: 16 }, 'project standard snap survives a cbmodel round trip');
+const referenceProject = new CubeBricksProject({ referenceImages: {
+  general: { name: 'layout.png', source: 'data:image/png;base64,AA==', naturalWidth: 320, naturalHeight: 180, offset: [14, -9], scale: .75 },
+  x: [
+    { name: 'side.png', source: 'data:image/png;base64,BB==', naturalWidth: 128, naturalHeight: 256, offset: [2, 3], scale: .0625 },
+    { name: 'detail.png', source: 'data:image/png;base64,CC==', naturalWidth: 64, naturalHeight: 64, offset: [-4, 8], scale: .125 }
+  ]
+} });
+const referenceRoundTrip = new CubeBricksProject(JSON.parse(referenceProject.serialize()));
+assert.deepEqual(referenceRoundTrip.referenceImages.general[0].offset, [14, -9],
+  'legacy single general-view references migrate into a list and survive a cbmodel round trip');
+assert.equal(referenceRoundTrip.referenceImages.x[0].scale, .0625, 'axis-view reference scale survives a cbmodel round trip');
+assert.equal(referenceRoundTrip.referenceImages.x.length, 2, 'each view can store multiple independent reference images');
+assert.deepEqual(referenceRoundTrip.referenceImages.y, [], 'axis reference lists stay independent');
+const playerReference = createPlayerReferenceProject();
+assert.equal(playerReference.elements.length, 12, 'player reference keeps the supplied base and outer-layer cubes');
+assert.equal(playerReference.groups.length, 8, 'player reference keeps its render-only pose hierarchy');
+assert.equal(playerReference.outliner.length, 1, 'player reference has one isolated render root');
+assert.deepEqual(playerReference.elements[0].position, [26.07136, 22.7476, 4.90878],
+  'player reference preserves the supplied bbmodel coordinates instead of recentering them');
+assert.ok(playerReference.elements[0].size.every(value => Math.abs(value - 7.4984) < 1e-9),
+  'player reference uses the replacement bbmodel dimensions');
+assert.deepEqual(playerReference.groups.find(group => group.uid === 'player_reference_root')?.pivot, [28.03969, 11.5, 8.65798],
+  'player reference preserves the supplied root pivot');
+assert.match(DEFAULT_PLAYER_REFERENCE_TEXTURE, /^data:image\/png;base64,/, 'player reference texture is bundled without a bbmodel asset');
 
 const filledPrism = new Shape({ parameters: { radius: 4, height: 8, sides: 8, cubeSize: 1, snapMode: 'cube' } });
 assert.equal(filledPrism.type, 'polygon_prism', 'polygon prisms use their own registered element marker');
@@ -44,6 +69,28 @@ const inwardDepthPrism = new Shape({ parameters: { radius: 5, height: 8, sides: 
 const inwardDepthCubes = inwardDepthPrism.toCubes();
 assert.ok(inwardDepthCubes.every(cube => Math.abs(cube.size[2] - 2) < 1e-7),
   'inner-radius depth mode interprets the value as each cube inward extension distance');
+
+const dodecahedron = new Shape({ type: 'dodecahedron', name: 'dodecahedron', origin: [2, 3, 4], pivot: [1, 5, 2], parameters: { radius: 6, snapMode: 'edge' } });
+assert.equal(dodecahedron.shapeType, 'dodecahedron', 'regular dodecahedra keep their own registered Shape type');
+assert.equal(dodecahedron.toCubes().length, 60, 'a dodecahedron fits five cube plates across each of twelve faces');
+assert.ok(dodecahedron.toCubes().every(cube => cube.size.every(Number.isFinite) && cube.rotation.every(Number.isFinite)),
+  'dodecahedron cube fitting produces finite geometry and rotations');
+const dodecahedronEdges = dodecahedron.toCubes().map(cube => cube.size[0]);
+assert.ok(Math.max(...dodecahedronEdges) - Math.min(...dodecahedronEdges) < 1e-7,
+  'every dodecahedron face is built from a regular pentagon instead of crossed diagonal edges');
+
+const football = new Shape({ type: 'truncated_icosahedron', name: 'football', parameters: { radius: 8, snapMode: 'radius' } });
+const footballCubes = football.toCubes();
+assert.equal(football.shapeType, 'truncated_icosahedron', 'football Shapes use the truncated-icosahedron marker');
+assert.equal(footballCubes.length, 120,
+  'football hexagons merge their three opposite edge pairs while pentagons keep five cube plates');
+const footballEdges = footballCubes.map(cube => cube.size[0]);
+assert.ok(Math.max(...footballEdges) - Math.min(...footballEdges) < 1e-7,
+  'every generated football edge has the same fitted length');
+const shapeRoundTrip = new CubeBricksProject({ elements: [dodecahedron, football], outliner: [dodecahedron.uid, football.uid] });
+const restoredShapes = new CubeBricksProject(JSON.parse(shapeRoundTrip.serialize()));
+assert.deepEqual(restoredShapes.getNode(dodecahedron.uid).pivot, [1, 5, 2], 'Shape pivots survive a cbmodel round trip');
+assert.equal(restoredShapes.getNode(football.uid).shapeType, 'truncated_icosahedron', 'football Shape type survives a cbmodel round trip');
 
 const editedPrism = new Shape({
   uid: 'edited_prism',
@@ -244,16 +291,73 @@ const objectSymmetry = addModifier(objectMirrorCube, 'symmetry', {
   enabled: true, axes: { x: true, y: false, z: false }, wrapParent: false
 });
 assert.ok(objectSymmetry, 'compatible scene objects can attach a symmetry modifier');
-assert.equal(addModifier(objectMirrorCube, 'symmetry'), null,
-  'single-instance modifiers cannot be attached twice');
+const secondObjectSymmetry = addModifier(objectMirrorCube, 'symmetry', {
+  enabled: true, axes: { x: false, y: false, z: true }, wrapParent: false
+});
+assert.ok(secondObjectSymmetry, 'symmetry modifiers can be attached repeatedly as an ordered stack');
 const objectMirrorProject = new CubeBricksProject({ elements: [objectMirrorCube], outliner: [objectMirrorCube.uid] });
 const objectMirrorPreview = buildModifierRenderInstances(objectMirrorProject);
-assert.equal(objectMirrorPreview.length, 1, 'object symmetry reuses one reflected viewport instance beside the source');
-assert.deepEqual(objectMirrorPreview[0].sourceUids, [objectMirrorCube.uid],
-  'object symmetry points directly at the existing object mesh range');
+assert.equal(objectMirrorPreview.length, 3,
+  'the second symmetry modifier consumes both results of the first modifier');
+assert.ok(objectMirrorPreview.every(instance => instance.sourceUids[0] === objectMirrorCube.uid),
+  'stacked object symmetry continues to reuse the existing object mesh range');
 const objectMirrorExport = exportBlockbench(objectMirrorProject);
-assert.equal(objectMirrorExport.outliner.length, 2, 'object symmetry expands into two bbmodel instance groups');
-assert.equal(objectMirrorExport.elements.length, 2, 'object symmetry exports one cube per instance');
+assert.equal(objectMirrorExport.outliner.length, 4,
+  'stacked object symmetry expands into the Cartesian product of both modifiers');
+assert.equal(objectMirrorExport.elements.length, 4, 'stacked object symmetry exports one cube per final result');
+
+const childStackCube = new Cube({ uid: 'child-stack-cube', position: [2, 0, 3], size: [1, 2, 1], pivot: [0, 0, 0] });
+addModifier(childStackCube, 'symmetry', {
+  enabled: true, axes: { x: true, y: false, z: false }, wrapParent: false,
+  anchor: { position: [0, 0, 0] }
+});
+const parentStackGroup = new Group({ uid: 'parent-stack-group', name: 'stack_parent', children: [childStackCube.uid] });
+addModifier(parentStackGroup, 'symmetry', {
+  enabled: true, axes: { x: false, y: false, z: true }, wrapParent: false,
+  anchor: { position: [0, 0, 0] }
+});
+const nestedStackProject = new CubeBricksProject({
+  elements: [childStackCube], groups: [parentStackGroup], outliner: [parentStackGroup.uid]
+});
+assert.equal(buildModifierRenderInstances(nestedStackProject).length, 3,
+  'group modifiers consume the already evaluated child modifier results in the viewport');
+const nestedStackExport = exportBlockbench(nestedStackProject);
+assert.equal(nestedStackExport.outliner.length, 2,
+  'an unwrapped group modifier keeps one group for each of its own final branches');
+assert.ok(nestedStackExport.outliner.every(group => group.children.length === 2),
+  'each group branch contains both results produced by the child modifier');
+assert.equal(nestedStackExport.elements.length, 4,
+  'group export expands child and group modifier results instead of reading the raw child only');
+
+const orderedStackCube = new Cube({ uid: 'ordered-stack-cube', position: [2, 0, 0], size: [1, 1, 1], pivot: [0, 0, 0] });
+addModifier(orderedStackCube, 'symmetry', {
+  enabled: true, axes: { x: true, y: false, z: false }, wrapParent: false,
+  anchor: { position: [0, 0, 0] }
+});
+addModifier(orderedStackCube, 'symmetry', {
+  enabled: true, axes: { x: true, y: false, z: false }, wrapParent: false,
+  anchor: { position: [10, 0, 0] }
+});
+const orderedStackProject = new CubeBricksProject({ elements: [orderedStackCube], outliner: [orderedStackCube.uid] });
+assert.ok(buildModifierRenderInstances(orderedStackProject).some(instance =>
+  instance.matrix.every((row, rowIndex) => row.every((value, columnIndex) => Math.abs(value - (rowIndex === columnIndex ? 1 : 0)) < 1e-9))
+  && Math.abs(instance.translation[0] - 20) < 1e-9),
+  'later modifiers transform the geometry produced by earlier modifiers in stack order');
+
+const bakeSource = new Cube({ uid: 'bake-source', name: 'bake_source', position: [2, 0, 0], size: [2, 2, 2], pivot: [0, 0, 0] });
+const bakedFirstModifier = addModifier(bakeSource, 'symmetry', {
+  enabled: true, axes: { x: true, y: false, z: false }, anchor: { position: [0, 0, 0] }
+});
+const preservedSecondModifier = addModifier(bakeSource, 'symmetry', {
+  enabled: true, axes: { x: false, y: false, z: true }, anchor: { position: [0, 0, 0] }
+});
+const bakeProject = new CubeBricksProject({ elements: [bakeSource], outliner: [bakeSource.uid] });
+const bakeResult = bakeModifier(bakeProject, bakeProject.getNode(bakeSource.uid), bakedFirstModifier.uid);
+assert.ok(bakeResult && bakeProject.getNode(bakeResult.rootUid)?.type === 'group', 'baking creates a real grouped result');
+assert.equal(bakeProject.getNode(bakeSource.uid), null, 'baking replaces the procedural source instead of leaving doubled geometry');
+assert.equal(bakeProject.elements.filter(element => element.type === 'cube').length, 2, 'a single-axis symmetry bakes exactly two physical cubes');
+assert.deepEqual(bakeProject.getNode(bakeResult.rootUid).modifiers.map(modifier => modifier.uid), [preservedSecondModifier.uid],
+  'baking one modifier preserves the other modifier in the stack');
 
 symmetryModifier.mode = 'radial';
 symmetryModifier.copies = 4;
@@ -426,6 +530,13 @@ const cubeCornerBefore = rotatePoint(pivotCube.position, pivotCube.pivot, pivotC
 setPivotPreservingGeometry(pivotProject, pivotCube, [6, -2, 8]);
 const cubeCornerAfter = rotatePoint(pivotCube.position, pivotCube.pivot, pivotCube.rotation);
 assert.ok(almostEqual(cubeCornerBefore, cubeCornerAfter), 'moving a cube pivot must not move its geometry');
+
+const pivotShape = new Shape({ type: 'dodecahedron', origin: [3, -2, 5], pivot: [4, 1, 2], rotation: [17, 31, -9], parameters: { radius: 4 } });
+const pivotShapeProject = new CubeBricksProject({ elements: [pivotShape], outliner: [pivotShape.uid] });
+const shapePointBefore = rotatePoint(pivotShape.toBaseCubes()[0].position.map((value, axis) => value + pivotShape.origin[axis]), pivotShape.pivot, pivotShape.rotation);
+setPivotPreservingGeometry(pivotShapeProject, pivotShape, [-2, 6, 3]);
+const shapePointAfter = rotatePoint(pivotShape.toBaseCubes()[0].position.map((value, axis) => value + pivotShape.origin[axis]), pivotShape.pivot, pivotShape.rotation);
+assert.ok(almostEqual(shapePointBefore, shapePointAfter), 'moving a Shape pivot must not move its generated geometry');
 
 const childCube = new Cube({ position: [2, 0, 0], size: [2, 2, 2], pivot: [3, 1, 1] });
 const pivotGroup = new Group({ pivot: [0, 0, 0], rotation: [0, 55, 0], children: [childCube.uid] });

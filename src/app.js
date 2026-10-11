@@ -1,9 +1,10 @@
-import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
+import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, bakeModifier, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
 import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
 import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
 import { modifierRegistry } from './config/modifiers.js';
 import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate, isCubeFaceCulled } from './render/webgl-renderer.js';
 import { DockManager } from './ui/dock-manager.js';
+import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from './assets/player-reference.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -18,8 +19,15 @@ const TOOL_REGISTRY = Object.freeze({
   faceSelect: { modes: ['edit', 'uv'] },
   brush: { modes: ['paint'] },
   eraser: { modes: ['paint'] },
+  line: { modes: ['paint'] },
+  rectangle: { modes: ['paint'] },
+  ellipse: { modes: ['paint'] },
+  fill: { modes: ['paint'] },
   eyedropper: { modes: ['paint'] }
 });
+const PAINT_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse', 'fill', 'eyedropper']);
+const PAINT_STROKE_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse']);
+const PAINT_SHAPE_TOOLS = Object.freeze(['line', 'rectangle', 'ellipse']);
 
 const state = {
   project: new CubeBricksProject({ name: 'untitled' }),
@@ -50,6 +58,7 @@ const state = {
   vertexSnapRotationMode: 'pivot',
   projection: configRegistry.get(ConfigKey.PROJECTION),
   previewShade: configRegistry.get(ConfigKey.PREVIEW_SHADE),
+  playerReference: configRegistry.get(ConfigKey.SHOW_PLAYER_REFERENCE),
   geometryOnly: configRegistry.get(ConfigKey.SHOW_GEOMETRY_ONLY),
   settingsSnap: configRegistry.get(ConfigKey.SNAP),
   allowNegativeSize: configRegistry.get(ConfigKey.ALLOW_NEGATIVE_SIZE),
@@ -73,6 +82,11 @@ const state = {
   yaw: -Math.PI * 3 / 4,
   pitch: Math.PI / 6,
   target: [0, 0, 0],
+  axisView: null,
+  axisViewSign: 1,
+  axisViewCameras: { x: null, y: null, z: null },
+  generalCamera: null,
+  referenceImageSelection: { general: null, x: null, y: null, z: null },
   history: [],
   future: [],
   hitAreas: [],
@@ -84,7 +98,16 @@ const state = {
   activeTextureUid: null,
   paintColor: '#91ad52',
   paintBrushSize: 1,
+  paintBrushShape: 'square',
+  paintBrushAa: false,
+  paintBrushDepth: 0,
   paintBrushOpacity: 100,
+  paintBucketScope: 'face',
+  paintBucketSingleFace: true,
+  paintColorPickerMode: 'square',
+  paintColorPickerHue: .218,
+  paintColorPickerSaturation: .526,
+  paintColorPickerValue: .678,
   paintHistory: [],
   paintFuture: [],
   selectedUvFaces: new Set(),
@@ -131,6 +154,11 @@ const themeDialog = $('#themeDialog');
 const languageSelect = $('#languageSelect');
 const fileInput = $('#fileInput');
 const textureInput = $('#textureInput');
+const referenceImageInput = $('#referenceImageInput');
+const referenceImageLayer = $('#referenceImageLayer');
+const referenceImageHint = $('#referenceImageHint');
+const playerReferenceTextureInput = $('#playerReferenceTextureInput');
+const playerReferenceProject = createPlayerReferenceProject();
 let toastTimer;
 let outlinerFrame = null;
 let outlinerDragGhost = null;
@@ -164,7 +192,7 @@ let focusedDockHotspot = null;
 let textureUvDrag = null;
 let texturePaintDrag = null;
 let texturePaintSyncFrame = null;
-let texturePaintSyncTarget = null;
+const texturePaintSyncTargets = new Map();
 let textureFaceDropTarget = null;
 let textureLoadRevision = 0;
 const textureAtlasCanvas = document.createElement('canvas');
@@ -182,11 +210,17 @@ let mirrorGuideGroupUid = null;
 let mirrorGuideHoldTimer = null;
 let mirrorGuideHideTimer = null;
 let subdivisionSession = null;
+let referenceImageEditing = false;
+let referenceImageDrag = null;
+let referenceImportViewKey = 'general';
+let axisWidgetDrag = null;
+let suppressAxisWidgetClick = false;
+let playerReferenceTextureRevision = 0;
 
 const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
-  'target', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
+  'target', 'axisView', 'axisViewSign', 'axisViewCameras', 'generalCamera', 'referenceImageSelection', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
   'selectedUvFaces', 'textureView'
 ]);
 
@@ -223,6 +257,11 @@ function createProjectSession(project, options = {}) {
     yaw: -Math.PI * 3 / 4,
     pitch: Math.PI / 6,
     target: [0, 0, 0],
+    axisView: null,
+    axisViewSign: 1,
+    axisViewCameras: { x: null, y: null, z: null },
+    generalCamera: null,
+    referenceImageSelection: { general: null, x: null, y: null, z: null },
     collapsedGroups: new Set(),
     textureAssets,
     textureGroups: [],
@@ -300,6 +339,8 @@ function activateProjectTab(tabId, { render = true } = {}) {
   activeProjectTabId = tabId;
   for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
   state.dragging = null;
+  referenceImageEditing = false;
+  referenceImageDrag = null;
   state.hitAreas = [];
   state.lockedHoverPoint = null;
   state.lockedHoverStrength = 0;
@@ -466,22 +507,34 @@ function restore(serialized) {
 
 function restoreTexturePaintHistory(sourceStack, targetStack) {
   while (sourceStack.length) {
-    const entry = sourceStack.pop();
-    const asset = state.textureAssets.find(texture => texture._uid === entry.uid);
-    if (!asset) continue;
-    targetStack.push({
-      uid: asset._uid,
-      source: asset.source,
-      width: asset.uvWidth || textureCanvas.width,
-      height: asset.uvHeight || textureCanvas.height
-    });
-    if (targetStack.length > 60) targetStack.shift();
-    asset.source = entry.source;
-    asset.uvWidth = entry.width;
-    asset.uvHeight = entry.height;
-    state.activeTextureUid = asset._uid;
+    const first = sourceStack.pop();
+    const entries = [first];
+    if (first.group) while (sourceStack.at(-1)?.group === first.group) entries.push(sourceStack.pop());
+    let activeAsset = null;
+    for (const entry of entries) {
+      const asset = state.textureAssets.find(texture => texture._uid === entry.uid);
+      if (!asset) continue;
+      targetStack.push({
+        uid: asset._uid, source: asset.source,
+        width: asset.uvWidth || textureCanvas.width,
+        height: asset.uvHeight || textureCanvas.height,
+        group: entry.group || null
+      });
+      asset.source = entry.source;
+      asset.uvWidth = entry.width;
+      asset.uvHeight = entry.height;
+      activeAsset ||= asset;
+    }
+    while (targetStack.length > 60) targetStack.shift();
+    if (!activeAsset) continue;
+    state.activeTextureUid = activeAsset._uid;
     renderTextureList();
-    loadTextureSource(asset.source, asset.name);
+    loadTextureSource(activeAsset.source, activeAsset.name);
+    // A grouped stroke may touch several independent texture assets. Rebuild
+    // the atlas as a unit so undo/redo cannot leave non-active faces showing
+    // the previous GPU copy.
+    rebuildTextureAtlas();
+    invalidateAllRenderGeometry();
     markDirty();
     return true;
   }
@@ -553,11 +606,11 @@ function selectionAffectsMirrorPreview() {
   const selectedSet = new Set(selectedIds);
   for (const uidValue of selectedIds) {
     const node = state.project.getNode(uidValue);
-    if (getModifier(node, 'symmetry')?.enabled) return true;
+    if (node?.modifiers?.some(modifier => modifier.type === 'symmetry' && modifier.enabled)) return true;
   }
   // Moving an ancestor also moves the embedded symmetry frame even though the
   // modifier owner itself is not selected.
-  return [...state.project.groups, ...state.project.elements].some(owner => getModifier(owner, 'symmetry')?.enabled
+  return [...state.project.groups, ...state.project.elements].some(owner => owner.modifiers?.some(modifier => modifier.type === 'symmetry' && modifier.enabled)
     && state.project.getGroupChain(owner.uid).some(parent => selectedSet.has(parent.uid)));
 }
 
@@ -703,7 +756,7 @@ function outlinerStateMarkup(node) {
 function outlinerKindMarkup(node) {
   if (node.type === 'node') return '<span class="outliner-curve-kind" aria-hidden="true">●</span>';
   if (node.type === 'bezier2d' || node.type === 'bezier3d') return `<span class="outliner-curve-kind" aria-hidden="true">⌁${node.type === 'bezier2d' ? '²' : '³'}</span>`;
-  if (isShapeElement(node)) return '<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-polygon-prism"></use></svg>';
+  if (isShapeElement(node)) return `<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-${node.shapeType === 'truncated_icosahedron' ? 'truncated-icosahedron' : node.shapeType === 'dodecahedron' ? 'dodecahedron' : 'polygon-prism'}"></use></svg>`;
   if (node.type !== 'locator') return `<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-${node.type}"></use></svg>`;
   return `<svg class="outliner-kind-icon" aria-hidden="true" viewBox="0 0 197.49 189.08">${LOCATOR_ICON_SHAPES}</svg>`;
 }
@@ -752,7 +805,7 @@ function isBezierElement(item) {
 }
 
 function isShapeElement(item) {
-  return item?.type === 'polygon_prism' || item?.type === 'shape';
+  return Boolean(item && ['shape', 'polygon_prism', 'dodecahedron', 'truncated_icosahedron'].includes(item.type));
 }
 
 function isProceduralShape(item) {
@@ -793,6 +846,7 @@ function syncSubdivisionEdits() {
 
 function enterSubdivisionEdit(owner) {
   if (!isProceduralShape(owner)) return;
+  if (state.mode === 'paint') return toast('繪畫模式可直接在 Shape 上繪畫，不使用細分編輯');
   if (subdivisionSession?.ownerUid === owner.uid) return;
   if (subdivisionSession) exitSubdivisionEdit(false);
   const cubes = owner.toCubes().map((cube, index) => {
@@ -900,6 +954,7 @@ function modifierPanelMarkup(owner) {
         <button type="button" class="modifier-collapse" data-modifier-collapse="${modifier.uid}" title="展開或折疊">${openIconMarkup(collapsed ? 'right' : 'down')}</button>
         <label class="switch" title="啟用修改器"><input type="checkbox" data-modifier-enabled="${modifier.uid}" ${modifier.enabled ? 'checked' : ''}/><i></i></label>
         <strong>${escapeHtml(definition?.label || modifier.type)}</strong>
+        <button type="button" data-modifier-bake="${modifier.uid}" title="只烘焙這個修改器" ${modifier.enabled ? '' : 'disabled'}>烘焙</button>
         <button type="button" data-modifier-move="up" data-modifier-uid="${modifier.uid}" ${index === 0 ? 'disabled' : ''}>↑</button>
         <button type="button" data-modifier-move="down" data-modifier-uid="${modifier.uid}" ${index === modifiers.length - 1 ? 'disabled' : ''}>↓</button>
         <button type="button" class="danger" data-modifier-remove="${modifier.uid}">×</button>
@@ -913,7 +968,197 @@ function modifierPanelMarkup(owner) {
   </div>`;
 }
 
+function rgbToHsv(rgb) {
+  const [red, green, blue] = rgb.map(channel => clamp(Number(channel) || 0, 0, 255) / 255);
+  const maximum = Math.max(red, green, blue), minimum = Math.min(red, green, blue);
+  const range = maximum - minimum;
+  let hue = 0;
+  if (range > 1e-8) {
+    if (maximum === red) hue = ((green - blue) / range) % 6;
+    else if (maximum === green) hue = (blue - red) / range + 2;
+    else hue = (red - green) / range + 4;
+    hue /= 6;
+    if (hue < 0) hue += 1;
+  }
+  return [hue, maximum <= 1e-8 ? 0 : range / maximum, maximum];
+}
+
+function hsvToRgb(hue, saturation, value) {
+  const h = ((Number(hue) % 1) + 1) % 1 * 6;
+  const s = clamp(Number(saturation) || 0, 0, 1), v = clamp(Number(value) || 0, 0, 1);
+  const chroma = v * s, intermediate = chroma * (1 - Math.abs(h % 2 - 1)), offset = v - chroma;
+  const segments = [[chroma, intermediate, 0], [intermediate, chroma, 0], [0, chroma, intermediate],
+    [0, intermediate, chroma], [intermediate, 0, chroma], [chroma, 0, intermediate]];
+  return segments[Math.min(5, Math.floor(h))].map(channel => Math.round((channel + offset) * 255));
+}
+
+function rgbToHex(rgb) {
+  return `#${rgb.map(channel => clamp(Math.round(Number(channel) || 0), 0, 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+const COLOR_CONTROL_INSET = 2;
+
+function insetControlRatio(clientCoordinate, start, length) {
+  return clamp((clientCoordinate - start - COLOR_CONTROL_INSET)
+    / Math.max(1, length - COLOR_CONTROL_INSET * 2), 0, 1);
+}
+
+function insetControlPosition(ratio) {
+  const normalized = clamp(ratio, 0, 1);
+  return `calc(${normalized * 100}% + ${COLOR_CONTROL_INSET - normalized * COLOR_CONTROL_INSET * 2}px)`;
+}
+
+function updatePaintColorPickerVisual() {
+  const surface = $('[data-color-picker-surface]');
+  if (!surface) return;
+  const rgb = hexToRgb(state.paintColor);
+  // Keep HSV as independent picker coordinates. Reading them back from rounded
+  // 8-bit RGB on every pointermove causes severe jitter near black or grey.
+  const hue = state.paintColorPickerHue;
+  const saturation = state.paintColorPickerSaturation;
+  const value = state.paintColorPickerValue;
+  const hueColor = rgbToHex(hsvToRgb(hue, 1, 1));
+  const brightColor = rgbToHex(hsvToRgb(hue, saturation, 1));
+  surface.style.setProperty('--picker-hue', hueColor);
+  surface.style.setProperty('--picker-darkness', String(1 - value));
+  const marker = surface.querySelector('.color-picker-marker');
+  let markerX = saturation, markerY = 1 - value;
+  if (state.paintColorPickerMode === 'circle') {
+    const angle = hue * Math.PI * 2;
+    markerX = .5 + Math.cos(angle) * saturation * .5;
+    markerY = .5 + Math.sin(angle) * saturation * .5;
+  } else if (state.paintColorPickerMode === 'triangle') {
+    markerX = .5 - value * .5 + saturation * value;
+  }
+  marker?.style.setProperty('left', insetControlPosition(markerX));
+  marker?.style.setProperty('top', insetControlPosition(markerY));
+  const hueRail = $('[data-color-hue]', inspector);
+  hueRail?.style.setProperty('--picker-bright', brightColor);
+  const hueMarker = $('.color-hue-marker', inspector);
+  if (hueMarker) hueMarker.style.top = insetControlPosition(state.paintColorPickerMode === 'circle' ? 1 - value : hue);
+  const preview = $('.color-picker-current', inspector);
+  if (preview) preview.style.background = state.paintColor;
+  ['r', 'g', 'b'].forEach((channel, index) => {
+    const input = $(`[data-paint-channel="${channel}"]`, inspector);
+    if (input && document.activeElement !== input) input.value = String(rgb[index]);
+  });
+  const hex = $('[data-paint-hex]', inspector);
+  if (hex && document.activeElement !== hex) hex.value = state.paintColor;
+}
+
+function colorPickerPoint(surface, event) {
+  const rect = surface.getBoundingClientRect();
+  let x = insetControlRatio(event.clientX, rect.left, rect.width);
+  const y = insetControlRatio(event.clientY, rect.top, rect.height);
+  const currentSaturation = state.paintColorPickerSaturation;
+  const currentValue = state.paintColorPickerValue;
+  if (state.paintColorPickerMode === 'circle') {
+    const dx = x - .5, dy = y - .5, distance = Math.hypot(dx, dy);
+    return {
+      hue: distance > 1e-5 ? ((Math.atan2(dy, dx) / (Math.PI * 2)) + 1) % 1 : state.paintColorPickerHue,
+      saturation: clamp(distance * 2, 0, 1), value: currentValue
+    };
+  }
+  if (state.paintColorPickerMode === 'triangle') {
+    const value = 1 - y;
+    const halfWidth = value * .5;
+    x = clamp(x, .5 - halfWidth, .5 + halfWidth);
+    return {
+      hue: state.paintColorPickerHue,
+      saturation: value > 1e-5 ? clamp((x - (.5 - halfWidth)) / value, 0, 1) : currentSaturation,
+      value
+    };
+  }
+  return { hue: state.paintColorPickerHue, saturation: x, value: 1 - y };
+}
+
+function bindPaintColorPicker() {
+  const surface = $('[data-color-picker-surface]', inspector);
+  const hueRail = $('[data-color-hue]', inspector);
+  const useSurface = event => {
+    const point = colorPickerPoint(surface, event);
+    state.paintColorPickerHue = point.hue;
+    state.paintColorPickerSaturation = point.saturation;
+    state.paintColorPickerValue = point.value;
+    setPaintColor(rgbToHex(hsvToRgb(point.hue, point.saturation, point.value)), false, true);
+  };
+  const useHue = event => {
+    const rect = hueRail.getBoundingClientRect();
+    const position = insetControlRatio(event.clientY, rect.top, rect.height);
+    const saturation = state.paintColorPickerSaturation;
+    const value = state.paintColorPickerValue;
+    if (state.paintColorPickerMode === 'circle') {
+      state.paintColorPickerValue = 1 - position;
+      setPaintColor(rgbToHex(hsvToRgb(state.paintColorPickerHue, saturation, state.paintColorPickerValue)), false, true);
+    } else {
+      state.paintColorPickerHue = position >= 1 ? 0 : position;
+      setPaintColor(rgbToHex(hsvToRgb(state.paintColorPickerHue, saturation, value)), false, true);
+    }
+  };
+  const bindPointer = (node, handler) => {
+    node.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      node.setPointerCapture(event.pointerId);
+      handler(event);
+    });
+    node.addEventListener('pointermove', event => { if (node.hasPointerCapture(event.pointerId)) handler(event); });
+  };
+  bindPointer(surface, useSurface);
+  bindPointer(hueRail, useHue);
+  $$('[data-color-picker-mode]', inspector).forEach(button => button.addEventListener('click', () => {
+    state.paintColorPickerMode = button.dataset.colorPickerMode;
+    renderInspector();
+  }));
+  $$('[data-paint-channel]', inspector).forEach(input => input.addEventListener('change', () => {
+    const rgb = ['r', 'g', 'b'].map(channel => Number($(`[data-paint-channel="${channel}"]`, inspector)?.value) || 0);
+    setPaintColor(rgbToHex(rgb));
+  }));
+  $('[data-paint-hex]', inspector)?.addEventListener('change', event => setPaintColor(event.target.value));
+  $('[data-action="paintEyedropper"]', inspector)?.addEventListener('click', () => setTool('eyedropper'));
+  $('[data-action="addPaintSwatch"]', inspector)?.addEventListener('click', () => {
+    const row = paletteRows[0];
+    if (row && !row.colors.includes(state.paintColor)) row.colors.push(state.paintColor);
+    renderPalette();
+    toast(`已加入色卡 ${state.paintColor}`);
+  });
+  updatePaintColorPickerVisual();
+}
+
+function renderPaintColorPicker() {
+  $('#inspectorHeading').textContent = '選色器';
+  $('#inspectorMetaStrip').hidden = true;
+  const mode = ['square', 'circle', 'triangle'].includes(state.paintColorPickerMode) ? state.paintColorPickerMode : 'square';
+  inspector.innerHTML = `<div class="paint-color-picker">
+    <nav class="color-picker-modes" aria-label="選色器形態">
+      <button type="button" data-color-picker-mode="square" class="${mode === 'square' ? 'active' : ''}">方形</button>
+      <button type="button" data-color-picker-mode="circle" class="${mode === 'circle' ? 'active' : ''}">圓形</button>
+      <button type="button" data-color-picker-mode="triangle" class="${mode === 'triangle' ? 'active' : ''}">三角形</button>
+    </nav>
+    <div class="color-picker-stage mode-${mode}">
+      <div class="color-picker-surface" data-color-picker-surface><i class="color-picker-marker"></i></div>
+      <div class="color-hue-rail" data-color-hue><i class="color-hue-marker"></i></div>
+    </div>
+    <div class="color-picker-values">
+      <label>R<input type="number" min="0" max="255" step="1" data-paint-channel="r"></label>
+      <label>G<input type="number" min="0" max="255" step="1" data-paint-channel="g"></label>
+      <label>B<input type="number" min="0" max="255" step="1" data-paint-channel="b"></label>
+    </div>
+    <div class="color-picker-footer">
+      <i class="color-picker-current"></i><input type="text" maxlength="7" data-paint-hex value="${state.paintColor}">
+      <button type="button" data-action="addPaintSwatch" title="加入色卡">＋</button>
+      <button type="button" data-action="paintEyedropper" title="取色器">⌖</button>
+    </div>
+  </div>`;
+  bindPaintColorPicker();
+}
+
 function renderInspector() {
+  if (state.mode === 'paint') {
+    renderPaintColorPicker();
+    return;
+  }
+  $('#inspectorHeading').textContent = '物件屬性';
+  $('#inspectorMetaStrip').hidden = false;
   const item = selected();
   if (!item) {
     inspector.innerHTML = '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。</p></div>';
@@ -927,7 +1172,9 @@ function renderInspector() {
   const items = inspectorBatchNodes();
   const rotation = item.rotation || [0, 0, 0];
   const editOwner = subdivisionOwner(item);
-  const typeLabel = editOwner ? 'Shape 細分 Cube' : isShapeElement(item) ? '多邊形柱體' : item.type === 'locator' ? 'Locator'
+  const typeLabel = editOwner ? 'Shape 細分 Cube' : isShapeElement(item)
+    ? item.shapeType === 'truncated_icosahedron' ? '足球（截角二十面體）' : item.shapeType === 'dodecahedron' ? '正十二面體' : '多邊形柱體'
+    : item.type === 'locator' ? 'Locator'
     : item.type === 'node' ? '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
       : item.type === 'bezier3d' ? '三維貝塞爾' : item.type === 'group' ? '組' : '立方體';
   const details = item.type === 'cube' ? `
@@ -937,19 +1184,27 @@ function renderInspector() {
       ${vectorField('樞軸', 'pivot', item.pivot, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
       ${scalarField('膨脹', 'inflate', item.inflate, items)}`
-    : isShapeElement(item) ? `
+    : isShapeElement(item) ? item.shapeType !== 'polygon_prism' ? `
+      <div class="field-title"><span>${item.shapeType === 'truncated_icosahedron' ? '足球（截角二十面體）' : '正十二面體'}</span><span>${item.shapeType === 'truncated_icosahedron' ? 'TRUNCATED ICOSAHEDRON' : 'REGULAR DODECAHEDRON'}</span></div>
+      ${vectorField('位置', 'origin', item.origin, items)}
+      ${vectorField('樞軸', 'pivot', item.pivot, items)}
+      ${vectorField('旋轉', 'rotation', rotation, items)}
+      ${parameterField('半徑', 'radius', item.parameters.radius, .1, items)}
+      <div class="option-row"><span>單邊邊長</span><strong style="color:var(--accent)">${formatNumber(polyhedronEdgeLength(item, item.parameters.radius))} px</strong></div>
+      <div class="option-row"><span>尺寸擬合</span><select data-shape-snap-mode><option value="edge" ${item.parameters.snapMode !== 'radius' ? 'selected' : ''}>擬合單邊邊長</option><option value="radius" ${item.parameters.snapMode === 'radius' ? 'selected' : ''}>擬合整體半徑</option></select></div>
+      <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>` : `
       <div class="field-title"><span>多邊形柱體</span><span>POLYGON PRISM</span></div>
       ${vectorField('位置', 'origin', item.origin, items)}
+      ${vectorField('樞軸', 'pivot', item.pivot, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
       ${parameterField('半徑', 'radius', item.parameters.radius, .1, items)}
       ${parameterField('高度', 'height', item.parameters.height, .1, items)}
       ${parameterField('邊數', 'sides', item.parameters.sides, 1, items)}
-      ${parameterField('Cube 吸附單位', 'cubeSize', item.parameters.cubeSize, .0625, items)}
       <div class="option-row"><span>啟用內半徑</span><label class="switch"><input type="checkbox" data-shape-inner-radius ${item.parameters.innerRadiusEnabled ? 'checked' : ''}/><i></i></label></div>
       ${item.parameters.innerRadiusEnabled ? `
         <div class="option-row"><span>內半徑模式</span><select data-shape-inner-radius-mode><option value="radius" ${item.parameters.innerRadiusMode !== 'depth' ? 'selected' : ''}>實際內半徑</option><option value="depth" ${item.parameters.innerRadiusMode === 'depth' ? 'selected' : ''}>Cube 向內延伸</option></select></div>
         ${parameterField(item.parameters.innerRadiusMode === 'depth' ? '向內延伸距離' : '實際內半徑', 'innerRadius', item.parameters.innerRadius, .1, items)}` : ''}
-      <div class="option-row"><span>柱體吸附</span><select data-shape-snap-mode><option value="cube" ${item.parameters.snapMode === 'cube' ? 'selected' : ''}>按內含 Cube 邊長</option><option value="bounds" ${item.parameters.snapMode === 'bounds' ? 'selected' : ''}>按整體邊長</option></select></div>
+      <div class="option-row"><span>尺寸擬合</span><select data-shape-snap-mode><option value="edge" ${item.parameters.snapMode !== 'radius' ? 'selected' : ''}>擬合多邊形邊長</option><option value="radius" ${item.parameters.snapMode === 'radius' ? 'selected' : ''}>擬合整體半徑</option></select></div>
       <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
     : item.type === 'locator' ? `
       <div class="field-title"><span>Locator 變換</span><button data-action="resetTransform">重置</button></div>
@@ -1150,7 +1405,7 @@ function bindInspector() {
           target.position[axis] = nextValue;
           target.pivot[axis] += delta;
           translateModifierAnchors(target, [0, 1, 2].map(index => index === axis ? delta : 0));
-        } else if (field === 'pivot' && ['cube', 'group'].includes(target.type)) {
+        } else if (field === 'pivot' && (['cube', 'group'].includes(target.type) || isShapeElement(target))) {
           const nextPivot = [...target.pivot];
           nextPivot[axis] = nextValue;
           setPivotPreservingGeometry(state.project, target, nextPivot);
@@ -1161,6 +1416,7 @@ function bindInspector() {
         } else {
           const delta = nextValue - target[field][axis];
           target[field][axis] = nextValue;
+          if (field === 'origin' && isShapeElement(target)) target.pivot[axis] += delta;
           if (field === 'position' || field === 'origin') {
             translateModifierAnchors(target, [0, 1, 2].map(index => index === axis ? delta : 0));
           }
@@ -1229,6 +1485,20 @@ function bindInspector() {
     state.collapsedModifiers.delete(button.dataset.modifierRemove);
     sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
   }));
+  $$('[data-modifier-bake]', inspector).forEach(button => button.addEventListener('click', () => {
+    const modifierUid = button.dataset.modifierBake;
+    snapshot();
+    const result = bakeModifier(state.project, item, modifierUid);
+    if (!result) return toast('這個修改器目前無法烘焙');
+    state.selectedModifierUid = null;
+    state.collapsedModifiers.delete(modifierUid);
+    state.selectedUid = result.rootUid;
+    state.selectedUids = new Set([result.rootUid]);
+    state.selectionAnchorUid = result.rootUid;
+    sceneRenderer.invalidateMirrorGeometry();
+    invalidateAllRenderGeometry();
+    markDirty(); renderAll(); toast('已烘焙選中的修改器');
+  }));
   $$('[data-edit-modifier-anchor]', inspector).forEach(button => button.addEventListener('click', () => {
     const modifier = modifierByUid(button.dataset.editModifierAnchor);
     if (!modifier?.enabled) return;
@@ -1245,7 +1515,7 @@ function bindInspector() {
     const target = index + (button.dataset.modifierMove === 'up' ? -1 : 1);
     if (index < 0 || target < 0 || target >= item.modifiers.length) return;
     snapshot(); [item.modifiers[index], item.modifiers[target]] = [item.modifiers[target], item.modifiers[index]];
-    markDirty(); renderInspector();
+    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene();
   }));
   $$('[data-modifier-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const modifier = modifierByUid(toggle.dataset.modifierUid);
@@ -1282,7 +1552,7 @@ function bindInspector() {
   });
   $('[data-shape-snap-mode]', inspector)?.addEventListener('change', event => {
     snapshot();
-    for (const target of items.filter(isShapeElement)) target.parameters.snapMode = event.target.value;
+    for (const target of items.filter(isShapeElement)) target.parameters.snapMode = event.target.value === 'radius' ? 'radius' : 'edge';
     markDirty(); renderAll('selection');
   });
   $('[data-shape-inner-radius]', inspector)?.addEventListener('change', event => {
@@ -1599,13 +1869,15 @@ function addCube() {
   markDirty(); renderAll(); toast('已新增 Cube');
 }
 
-function addShape() {
+function addShape(shapeType = 'polygon_prism') {
   snapshot();
-  const shape = new Shape({ name: 'polygon_prism', origin: [0, 2, 0] });
+  const type = ['dodecahedron', 'truncated_icosahedron'].includes(shapeType) ? shapeType : 'polygon_prism';
+  const shape = new Shape({ type, shapeType: type, name: type, origin: [0, 2, 0], pivot: [0, 2, 0] });
   state.project.elements.push(shape);
   insertNewNodeUid(shape.uid);
   selectCreatedNode(shape.uid);
-  markDirty(); renderAll(); toast('已新增程序化 Shape');
+  const label = type === 'truncated_icosahedron' ? '足球（截角二十面體）' : type === 'dodecahedron' ? '正十二面體' : '多邊形柱體';
+  markDirty(); renderAll(); toast(`已新增${label} Shape`);
 }
 
 function addLocator() {
@@ -1732,7 +2004,7 @@ function instantiateClipboard(payload, renameRoots = false) {
     if (renameRoots && rootSet.has(oldUid)) data.name = `${data.name || data.type} 副本`;
     let node;
     if (data.type === 'group') node = new Group({ ...data, children: [] });
-    else if (data.type === 'shape' || data.type === 'polygon_prism') node = new Shape(data);
+    else if (data.type === 'shape' || data.type === 'polygon_prism' || data.type === 'dodecahedron' || data.type === 'truncated_icosahedron') node = new Shape(data);
     else if (data.type === 'locator') node = new Locator(data);
     else if (data.type === 'node') node = new NodeElement(data);
     else if (data.type === 'bezier2d') node = new BezierElement(data, 2);
@@ -1926,7 +2198,7 @@ function getUvPreviewProject() {
   // shows the selected geometry while inheriting its real transform and UVs.
   const previewTexture = faceTextureReference(activeTextureAsset()) || '__cubebricks_uv_preview__';
   const elements = sourceElements.map(element => {
-    const preview = Object.assign(Object.create(element), { visible: true, locked: false });
+    const preview = Object.assign(Object.create(element), { visible: true, locked: false, modifiers: [] });
     if (element.type !== 'cube') return preview;
     const sourceFaces = element.faces || {};
     preview.faces = Object.fromEntries(CUBE_FACE_NAMES.map(faceName => {
@@ -1943,7 +2215,9 @@ function getUvPreviewProject() {
     }));
     return preview;
   });
-  const groups = state.project.groups.map(group => Object.assign(Object.create(group), { locked: false }));
+  const groups = state.project.groups.map(group => Object.assign(Object.create(group), { locked: false, modifiers: [] }));
+  const previewNodes = new Map([...elements, ...groups].map(node => [node.uid, node]));
+  const previewGroups = new Map(groups.map(group => [group.uid, group]));
   const project = {
     elements,
     groups,
@@ -1951,8 +2225,9 @@ function getUvPreviewProject() {
     textureSize: state.project.textureSize,
     renderType: state.uvPreviewFaceColors ? 'solid' : state.project.renderType,
     cullFaces: state.project.cullFaces,
-    getNode: uidValue => state.project.getNode(uidValue),
-    getGroupChain: uidValue => state.project.getGroupChain(uidValue),
+    getNode: uidValue => previewNodes.get(uidValue) || null,
+    getGroupChain: uidValue => state.project.getGroupChain(uidValue)
+      .map(group => previewGroups.get(group.uid) || group),
     getDescendantElementUids: uidValue => state.project.getDescendantElementUids(uidValue)
   };
   uvPreviewProjectCache = {
@@ -2373,8 +2648,12 @@ function refreshUvPreview(force = true) {
 function renderScene() {
   if (sceneRenderFrame !== null) cancelAnimationFrame(sceneRenderFrame);
   sceneRenderFrame = null;
-  sceneRenderer.render(state.project, state.selectedUid, {
+  const hidePaintSelection = state.mode === 'paint';
+  sceneRenderer.render(state.project, hidePaintSelection ? null : state.selectedUid, {
     ...state,
+    selectedUids: hidePaintSelection ? new Set() : state.selectedUids,
+    selectedUvFaces: hidePaintSelection ? new Set() : state.selectedUvFaces,
+    projection: currentProjection(),
     subdivisionEditOwnerUid: subdivisionSession?.ownerUid || null,
     lockedDefaultAlpha: subdivisionSession ? 12 : state.lockedDefaultAlpha,
     lockedHoverFade: subdivisionSession ? false : state.lockedHoverFade,
@@ -2384,19 +2663,22 @@ function renderScene() {
   updateMirrorGuideOverlay();
   updateTransformGizmo();
   updateAxisWidget();
+  updateReferenceImageLayer();
   refreshUvPreview(false);
 }
 
 function selectedMirrorGuideGroup() {
   const owner = selected();
-  const modifier = getModifier(owner, 'symmetry');
+  const modifier = owner?.modifiers?.find(entry => entry.uid === state.selectedModifierUid
+    && entry.type === 'symmetry' && entry.enabled)
+    || owner?.modifiers?.find(entry => entry.type === 'symmetry' && entry.enabled);
   return modifier?.enabled ? { owner, modifier } : null;
 }
 
 function mirrorControllerWorldFrame(owner, modifier) {
   if (!owner || !modifier?.anchor) return null;
   const chain = state.project.getGroupChain(owner.uid);
-  const pivot = owner.type === 'group' || owner.type === 'cube' ? owner.pivot : owner.origin || owner.position || [0, 0, 0];
+  const pivot = owner.type === 'group' || owner.type === 'cube' || isShapeElement(owner) ? owner.pivot : owner.origin || owner.position || [0, 0, 0];
   const ownerRotation = owner.rotation || [0, 0, 0];
   const offset = modifier.anchor.position.map((value, axis) => value - pivot[axis]);
   const localOrigin = rotateVector(offset, ownerRotation).map((value, axis) => value + pivot[axis]);
@@ -2576,7 +2858,7 @@ function renderLockedHoverFrame() {
 
 function updateLocatorOverlay() {
   const overlay = $('#locatorOverlay');
-  const selectedElements = getSelectionExpansion().elementSet;
+  const selectedElements = state.mode === 'paint' ? new Set() : getSelectionExpansion().elementSet;
   const rect = sceneCanvas.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
@@ -2723,6 +3005,425 @@ function focusSceneOrigin() {
   animateCameraFocus([0, 0, 0]);
 }
 
+function currentProjection() {
+  return state.axisView ? 'orthographic' : state.projection;
+}
+
+function captureCameraState() {
+  return {
+    zoom: state.zoom,
+    panX: state.panX,
+    panY: state.panY,
+    yaw: state.yaw,
+    pitch: state.pitch,
+    target: [...state.target]
+  };
+}
+
+function applyCameraState(camera) {
+  if (!camera) return;
+  state.zoom = Number(camera.zoom) || 1;
+  state.panX = Number(camera.panX) || 0;
+  state.panY = Number(camera.panY) || 0;
+  state.yaw = Number(camera.yaw) || 0;
+  state.pitch = Number(camera.pitch) || 0;
+  state.target = Array.isArray(camera.target) ? [...camera.target] : [0, 0, 0];
+}
+
+function axisViewOrientation(axis, sign = 1) {
+  if (axis === 'x') return { yaw: sign > 0 ? Math.PI / 2 : -Math.PI / 2, pitch: 0 };
+  if (axis === 'y') return { yaw: 0, pitch: sign > 0 ? Math.PI / 2 - .001 : -Math.PI / 2 + .001 };
+  return { yaw: sign > 0 ? 0 : Math.PI, pitch: 0 };
+}
+
+function updateProjectionControls() {
+  const projection = currentProjection();
+  $$('[data-projection]').forEach(button => {
+    button.classList.toggle('active', button.dataset.projection === projection);
+    button.disabled = Boolean(state.axisView);
+    button.title = state.axisView ? '三軸視圖固定使用正交投影' : '';
+  });
+}
+
+function enterAxisView(axis) {
+  if (!['x', 'y', 'z'].includes(axis)) return;
+  cancelCameraFocus();
+  bakeCameraPan();
+  const previousAxis = state.axisView;
+  if (!previousAxis) state.generalCamera = captureCameraState();
+  else state.axisViewCameras[previousAxis] = captureCameraState();
+  if (previousAxis === axis) {
+    state.axisViewSign *= -1;
+  } else {
+    const general = state.generalCamera || captureCameraState();
+    const saved = state.axisViewCameras[axis];
+    applyCameraState(saved || {
+      ...general,
+      zoom: mapProjectionZoom(general.zoom, state.projection, 'orthographic'),
+      panX: 0,
+      panY: 0,
+      target: [...general.target]
+    });
+    state.axisView = axis;
+    state.axisViewSign = 1;
+  }
+  const orientation = axisViewOrientation(axis, state.axisViewSign);
+  state.yaw = orientation.yaw;
+  state.pitch = orientation.pitch;
+  updateProjectionControls();
+  setReferenceImageEditing(false);
+  renderScene();
+}
+
+function exitAxisView({ render = true } = {}) {
+  if (!state.axisView) return false;
+  state.axisViewCameras[state.axisView] = captureCameraState();
+  applyCameraState(state.generalCamera || captureCameraState());
+  state.axisView = null;
+  state.axisViewSign = 1;
+  state.generalCamera = null;
+  updateProjectionControls();
+  setReferenceImageEditing(false);
+  if (render) renderScene();
+  return true;
+}
+
+function referenceViewKey() {
+  return state.axisView || 'general';
+}
+
+function referenceImageStore() {
+  state.project.referenceImages ||= { general: [], x: [], y: [], z: [] };
+  for (const key of ['general', 'x', 'y', 'z']) {
+    const stored = state.project.referenceImages[key];
+    const records = Array.isArray(stored) ? stored : stored ? [stored] : [];
+    for (const record of records) record.uid ||= `reference_${crypto.randomUUID().slice(0, 8)}`;
+    state.project.referenceImages[key] = records;
+  }
+  return state.project.referenceImages;
+}
+
+function referenceImagesForView(key = referenceViewKey()) {
+  return referenceImageStore()[key];
+}
+
+function currentReferenceImage(key = referenceViewKey()) {
+  const records = referenceImagesForView(key);
+  if (!records.length) {
+    state.referenceImageSelection[key] = null;
+    return null;
+  }
+  let record = records.find(entry => entry.uid === state.referenceImageSelection[key]);
+  if (!record) {
+    record = records.at(-1);
+    state.referenceImageSelection[key] = record.uid;
+  }
+  return record;
+}
+
+function axisReferenceBasis(axis) {
+  if (axis === 'x') return { horizontal: [0, 0, -1], vertical: [0, 1, 0] };
+  if (axis === 'y') return { horizontal: [1, 0, 0], vertical: [0, 0, -1] };
+  return { horizontal: [1, 0, 0], vertical: [0, 1, 0] };
+}
+
+function referenceDefaultScale(record, key = referenceViewKey()) {
+  if (key !== 'general') return 16 / Math.max(1, record.naturalWidth, record.naturalHeight);
+  const width = Math.max(1, viewport.clientWidth * .68);
+  const height = Math.max(1, viewport.clientHeight * .68);
+  return Math.min(width / record.naturalWidth, height / record.naturalHeight);
+}
+
+function updateReferenceImageControls() {
+  const key = referenceViewKey();
+  const records = referenceImagesForView(key);
+  const record = currentReferenceImage(key);
+  const labels = { general: '一般視圖參考圖', x: 'X 軸視圖參考圖', y: 'Y 軸視圖參考圖', z: 'Z 軸視圖參考圖' };
+  $('#referenceImageViewLabel').textContent = labels[key];
+  $('#referenceImageName').textContent = record ? `${record.name} · ${records.indexOf(record) + 1}/${records.length}` : '尚未導入';
+  $('#referenceImageList').innerHTML = records.length
+    ? records.map((entry, index) => `<button type="button" class="reference-image-entry ${entry === record ? 'active' : ''}" data-reference-select="${escapeHtml(entry.uid)}" title="${escapeHtml(entry.name)}"><span>${index + 1}</span><b>${escapeHtml(entry.name)}</b></button>`).join('')
+    : '<small class="reference-image-empty">這個視圖還沒有參考圖</small>';
+  const control = $('[data-action="referenceImage"]');
+  control.classList.toggle('active', records.length > 0);
+  control.classList.toggle('editing', referenceImageEditing && Boolean(record));
+  $$('[data-reference-action="edit"], [data-reference-action="reset"], [data-reference-action="remove"]')
+    .forEach(button => { button.disabled = !record; });
+  const editButton = $('[data-reference-action="edit"]');
+  if (editButton) editButton.textContent = referenceImageEditing ? '結束調整' : '調整位置與尺寸';
+}
+
+function applyReferenceImageTransform(element, record, key) {
+  if (key === 'general') {
+    const scale = record.scale;
+    const x = viewport.clientWidth / 2 + record.offset[0] - record.naturalWidth * scale / 2;
+    const y = viewport.clientHeight / 2 + record.offset[1] - record.naturalHeight * scale / 2;
+    element.style.transform = `matrix(${scale},0,0,${scale},${x},${y})`;
+    return;
+  }
+  const basis = axisReferenceBasis(key);
+  const origin = [0, 0, 0];
+  const centerWorld = origin.map((value, index) => value
+    + basis.horizontal[index] * record.offset[0]
+    + basis.vertical[index] * record.offset[1]);
+  const center = sceneRenderer.projectPoint(centerWorld);
+  const horizontal = sceneRenderer.projectPoint(basis.horizontal);
+  const vertical = sceneRenderer.projectPoint(basis.vertical);
+  const base = sceneRenderer.projectPoint(origin);
+  const a = (horizontal.x - base.x) * record.scale;
+  const b = (horizontal.y - base.y) * record.scale;
+  const c = -(vertical.x - base.x) * record.scale;
+  const d = -(vertical.y - base.y) * record.scale;
+  const x = center.x - a * record.naturalWidth / 2 - c * record.naturalHeight / 2;
+  const y = center.y - b * record.naturalWidth / 2 - d * record.naturalHeight / 2;
+  element.style.transform = `matrix(${a},${b},${c},${d},${x},${y})`;
+}
+
+function updateReferenceImageLayer() {
+  const key = referenceViewKey();
+  const records = referenceImagesForView(key);
+  const selected = currentReferenceImage(key);
+  if (!records.length) {
+    referenceImageLayer.hidden = true;
+    referenceImageLayer.querySelectorAll('img').forEach(image => image.remove());
+    updateReferenceImageControls();
+    return;
+  }
+  referenceImageLayer.hidden = false;
+  referenceImageLayer.classList.toggle('editing', referenceImageEditing && Boolean(selected));
+  const existing = new Map([...referenceImageLayer.querySelectorAll('img')].map(image => [image.dataset.referenceUid, image]));
+  for (const record of records) {
+    let image = existing.get(record.uid);
+    if (!image) {
+      image = document.createElement('img');
+      image.dataset.referenceUid = record.uid;
+      image.alt = record.name;
+      image.draggable = false;
+      referenceImageLayer.insertBefore(image, referenceImageHint);
+    }
+    existing.delete(record.uid);
+    if (image.getAttribute('src') !== record.source) image.src = record.source;
+    image.width = record.naturalWidth;
+    image.height = record.naturalHeight;
+    image.classList.toggle('selected', record === selected);
+    applyReferenceImageTransform(image, record, key);
+  }
+  existing.forEach(image => image.remove());
+  updateReferenceImageControls();
+}
+
+function setReferenceImageEditing(value) {
+  referenceImageEditing = Boolean(value && currentReferenceImage());
+  referenceImageDrag = null;
+  referenceImageLayer.classList.remove('dragging');
+  updateReferenceImageLayer();
+}
+
+function setReferenceImageMenu(open) {
+  $('#referenceImageMenu').hidden = !open;
+  $('[data-action="referenceImage"]').setAttribute('aria-expanded', String(open));
+  if (open) updateReferenceImageControls();
+}
+
+function beginReferenceImageImport() {
+  referenceImportViewKey = referenceViewKey();
+  referenceImageInput.value = '';
+  referenceImageInput.click();
+  setReferenceImageMenu(false);
+}
+
+function resetReferenceImage() {
+  const record = currentReferenceImage();
+  if (!record) return;
+  snapshot();
+  record.offset = [0, 0];
+  record.scale = referenceDefaultScale(record);
+  markDirty();
+  updateReferenceImageLayer();
+}
+
+function removeReferenceImage() {
+  const key = referenceViewKey();
+  const records = referenceImagesForView(key);
+  const record = currentReferenceImage(key);
+  if (!record) return;
+  snapshot();
+  const index = records.indexOf(record);
+  records.splice(index, 1);
+  const next = records[Math.min(index, records.length - 1)] || null;
+  state.referenceImageSelection[key] = next?.uid || null;
+  if (!next) referenceImageEditing = false;
+  markDirty();
+  updateReferenceImageLayer();
+}
+
+function readReferenceImageFile(file, key) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = reject;
+      image.onload = () => {
+        const record = {
+          uid: `reference_${crypto.randomUUID().slice(0, 8)}`,
+          name: file.name || 'reference.png',
+          source: String(reader.result),
+          naturalWidth: Math.max(1, image.naturalWidth || image.width),
+          naturalHeight: Math.max(1, image.naturalHeight || image.height),
+          offset: [0, 0],
+          scale: 1
+        };
+        record.scale = referenceDefaultScale(record, key);
+        resolve(record);
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function loadReferenceImageFiles(files, key) {
+  if (!['general', 'x', 'y', 'z'].includes(key)) return;
+  const candidates = [...(files || [])];
+  if (!candidates.length) return;
+  const settled = await Promise.allSettled(candidates.map(file => readReferenceImageFile(file, key)));
+  const records = settled.filter(result => result.status === 'fulfilled').map(result => result.value);
+  if (!records.length) return toast('無法讀取這些參考圖');
+  snapshot();
+  referenceImagesForView(key).push(...records);
+  state.referenceImageSelection[key] = records.at(-1).uid;
+  referenceImageEditing = key === referenceViewKey();
+  markDirty();
+  updateReferenceImageLayer();
+  if (settled.some(result => result.status === 'rejected')) toast(`已導入 ${records.length} 張參考圖，部分檔案無法讀取`);
+  else toast(`已導入${key === 'general' ? '一般視圖' : key.toUpperCase() + ' 軸視圖'}參考圖 · ${records.length} 張`);
+}
+
+function updatePlayerReferenceTexture(setting = configRegistry.get(ConfigKey.PLAYER_REFERENCE_TEXTURE)) {
+  const customSource = typeof setting?.source === 'string' ? setting.source : '';
+  const source = customSource || DEFAULT_PLAYER_REFERENCE_TEXTURE;
+  const name = customSource ? (setting.name || '自定義玩家紋理') : '內置玩家紋理';
+  const preview = $('#playerReferenceTexturePreview');
+  const label = $('#playerReferenceTextureName');
+  if (preview) preview.src = source;
+  if (label) label.textContent = name;
+  const revision = ++playerReferenceTextureRevision;
+  const image = new Image();
+  image.onload = () => {
+    if (revision !== playerReferenceTextureRevision) return;
+    sceneRenderer.setPlayerReference(playerReferenceProject, image);
+    renderScene();
+  };
+  image.onerror = () => {
+    if (revision !== playerReferenceTextureRevision) return;
+    if (!customSource) return toast('無法讀取內置玩家紋理');
+    toast('無法讀取自定義玩家紋理，已回退內置紋理');
+    updatePlayerReferenceTexture({ name: '內置玩家紋理', source: '' });
+  };
+  image.src = source;
+}
+
+function importPlayerReferenceTexture(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onerror = () => toast('無法讀取這張玩家紋理');
+  reader.onload = () => {
+    const image = new Image();
+    image.onerror = () => toast('這個檔案不是可用的 PNG 玩家紋理');
+    image.onload = () => {
+      if (image.naturalWidth !== image.naturalHeight || image.naturalWidth < 64) {
+        toast('玩家紋理必須是至少 64×64 的正方形圖片');
+        return;
+      }
+      configRegistry.set(ConfigKey.PLAYER_REFERENCE_TEXTURE, {
+        name: file.name || '自定義玩家紋理.png',
+        source: String(reader.result)
+      }, { source: 'player-reference-settings' });
+      toast(`玩家參考紋理：${file.name || '已導入'}`);
+    };
+    image.src = String(reader.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function referenceDragBasis() {
+  if (!state.axisView) return null;
+  const basis = axisReferenceBasis(state.axisView);
+  const origin = sceneRenderer.projectPoint([0, 0, 0]);
+  const horizontal = sceneRenderer.projectPoint(basis.horizontal);
+  const vertical = sceneRenderer.projectPoint(basis.vertical);
+  return {
+    horizontal: [horizontal.x - origin.x, horizontal.y - origin.y],
+    vertical: [vertical.x - origin.x, vertical.y - origin.y]
+  };
+}
+
+function beginReferenceImageDrag(event) {
+  if (!referenceImageEditing || !currentReferenceImage() || ![0, 1].includes(event.button)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  referenceImageLayer.setPointerCapture(event.pointerId);
+  const record = currentReferenceImage();
+  referenceImageDrag = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    offset: [...record.offset],
+    uid: record.uid,
+    key: referenceViewKey(),
+    basis: referenceDragBasis(),
+    snapshotTaken: false
+  };
+  referenceImageLayer.classList.add('dragging');
+}
+
+function moveReferenceImageDrag(event) {
+  const drag = referenceImageDrag;
+  if (!drag || drag.pointerId !== event.pointerId || drag.key !== referenceViewKey()) return;
+  const dx = event.clientX - drag.x;
+  const dy = event.clientY - drag.y;
+  if (!drag.snapshotTaken && Math.hypot(dx, dy) < .5) return;
+  if (!drag.snapshotTaken) {
+    snapshot();
+    drag.snapshotTaken = true;
+  }
+  const record = currentReferenceImage();
+  if (!record || record.uid !== drag.uid) return;
+  if (!drag.basis) {
+    record.offset = [drag.offset[0] + dx, drag.offset[1] + dy];
+  } else {
+    const [hx, hy] = drag.basis.horizontal;
+    const [vx, vy] = drag.basis.vertical;
+    const determinant = hx * vy - hy * vx;
+    if (Math.abs(determinant) < .000001) return;
+    const horizontalDelta = (dx * vy - dy * vx) / determinant;
+    const verticalDelta = (hx * dy - hy * dx) / determinant;
+    record.offset = [drag.offset[0] + horizontalDelta, drag.offset[1] + verticalDelta];
+  }
+  markDirty();
+  updateReferenceImageLayer();
+}
+
+function endReferenceImageDrag(event) {
+  if (!referenceImageDrag || referenceImageDrag.pointerId !== event.pointerId) return;
+  if (referenceImageLayer.hasPointerCapture?.(event.pointerId)) referenceImageLayer.releasePointerCapture(event.pointerId);
+  referenceImageDrag = null;
+  referenceImageLayer.classList.remove('dragging');
+}
+
+function scaleReferenceImage(event) {
+  if (!referenceImageEditing) return;
+  const record = currentReferenceImage();
+  if (!record) return;
+  event.preventDefault();
+  snapshot();
+  const factor = event.deltaY > 0 ? .9 : 1.1;
+  record.scale = Math.max(.00001, Math.min(100, record.scale * factor));
+  markDirty();
+  updateReferenceImageLayer();
+}
+
 function updateAxisWidget() {
   const cp = Math.cos(state.pitch), sp = Math.sin(state.pitch), cy = Math.cos(state.yaw), sy = Math.sin(state.yaw);
   const forward = [-sy * cp, -sp, -cy * cp];
@@ -2740,7 +3441,69 @@ function updateAxisWidget() {
     button.style.left = `${x}px`; button.style.top = `${y}px`;
     button.style.zIndex = depth > 0 ? '2' : '1';
     button.style.opacity = String(.6 + Math.max(0, depth) * .4);
+    const active = state.axisView === name;
+    button.classList.toggle('active', active);
+    button.dataset.direction = active ? (state.axisViewSign > 0 ? '+' : '−') : '';
   }
+  $('#viewHint').innerHTML = state.axisView
+    ? '<kbd>中鍵</kbd> 平移 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>拖動輪盤</kbd> 一般視圖'
+    : '<kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心';
+  updateProjectionControls();
+}
+
+function beginAxisWidgetDrag(event) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  cancelCameraFocus();
+  const widget = event.currentTarget;
+  widget.setPointerCapture(event.pointerId);
+  axisWidgetDrag = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    moved: false,
+    sourceAxis: event.target.closest('[data-view-axis]')?.dataset.viewAxis || null,
+    yaw: state.yaw,
+    pitch: state.pitch
+  };
+}
+
+function moveAxisWidgetDrag(event) {
+  const drag = axisWidgetDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  const dx = event.clientX - drag.x;
+  const dy = event.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+  if (!drag.moved) {
+    drag.moved = true;
+    if (state.axisView) {
+      exitAxisView({ render: false });
+      drag.yaw = state.yaw;
+      drag.pitch = state.pitch;
+    }
+    $('.axis-widget').classList.add('dragging');
+    sceneCanvas.classList.add('is-orbiting');
+  }
+  const fullTurn = Math.PI * 2;
+  state.yaw = ((drag.yaw - dx * .01) % fullTurn + fullTurn) % fullTurn;
+  state.pitch = Math.max(-Math.PI / 2 + .001, Math.min(Math.PI / 2 - .001, drag.pitch + dy * .01));
+  renderScene();
+}
+
+function endAxisWidgetDrag(event) {
+  if (!axisWidgetDrag || axisWidgetDrag.pointerId !== event.pointerId) return;
+  const moved = axisWidgetDrag.moved;
+  const sourceAxis = axisWidgetDrag.sourceAxis;
+  const widget = event.currentTarget;
+  if (widget.hasPointerCapture?.(event.pointerId)) widget.releasePointerCapture(event.pointerId);
+  axisWidgetDrag = null;
+  widget.classList.remove('dragging');
+  sceneCanvas.classList.remove('is-orbiting');
+  if (moved || sourceAxis) {
+    suppressAxisWidgetClick = true;
+    setTimeout(() => { suppressAxisWidgetClick = false; }, 0);
+  }
+  if (!moved && sourceAxis) enterAxisView(sourceAxis);
 }
 
 function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
@@ -2824,11 +3587,13 @@ function eulerFromQuaternion(q) {
 function getTransformPivot(item) {
   const owner = subdivisionOwner(item);
   if (owner) {
-    const parentPoint = rotateVector(item.pivot || [0, 0, 0], owner.rotation || [0, 0, 0])
-      .map((value, axis) => value + owner.origin[axis]);
+    const ownerPivot = (owner.pivot || owner.origin).map((value, axis) => value - owner.origin[axis]);
+    const localPoint = item.pivot || [0, 0, 0];
+    const parentPoint = rotateVector(localPoint.map((value, axis) => value - ownerPivot[axis]), owner.rotation || [0, 0, 0])
+      .map((value, axis) => value + ownerPivot[axis] + owner.origin[axis]);
     return applyGroupTransforms(parentPoint, state.project.getGroupChain(owner.uid));
   }
-  const local = item.type === 'cube' || item.type === 'group' ? item.pivot : item.position || item.origin;
+  const local = item.type === 'cube' || item.type === 'group' || isShapeElement(item) ? item.pivot : item.position || item.origin;
   return applyGroupTransforms(local, state.project.getGroupChain(item.uid));
 }
 
@@ -3429,7 +4194,7 @@ function renderVertexSnapGizmo(gizmo, width, height) {
       points.push({ uid: item.uid, nodeIndex: entry.index, point: entry.point, pointType: 'curveNode', projected });
     }
   }
-  if (state.vertexSnapMode === 'move' && ['cube', 'group'].includes(item.type)) {
+  if (state.vertexSnapMode === 'move' && (['cube', 'group'].includes(item.type) || isShapeElement(item))) {
     const pivotPoint = getTransformPivot(item);
     const projected = projectViewportPoint(pivotPoint);
     if (!projected.behind && projected.x >= -14 && projected.y >= -14 && projected.x <= width + 14 && projected.y <= height + 14) {
@@ -3473,6 +4238,12 @@ function renderVertexSnapGizmo(gizmo, width, height) {
 
 function updateTransformGizmo() {
   const gizmo = $('#transformGizmo');
+  if (state.mode === 'paint') {
+    state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
+    gizmo.setAttribute('hidden', '');
+    gizmo.innerHTML = '';
+    return;
+  }
   const item = selected();
   const rect = sceneCanvas.getBoundingClientRect();
   const width = rect.width, height = rect.height;
@@ -3512,7 +4283,8 @@ function updateTransformGizmo() {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
   }
   const transformItem = state.tool === 'pivot' && selectionContext.multiple ? selectionContext.commonGroup : item;
-  if (state.tool === 'pivot' && !modifierAnchorContext && !curveNodeContext && !['cube', 'group', 'node'].includes(transformItem?.type)) {
+  if (state.tool === 'pivot' && !modifierAnchorContext && !curveNodeContext
+    && !['cube', 'group', 'node'].includes(transformItem?.type) && !isShapeElement(transformItem)) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
   }
   const modifierFrame = modifierAnchorContext
@@ -3552,7 +4324,9 @@ function updateTransformGizmo() {
         extent = sceneRenderer.getSelectionProjectionExtent(state.project, state.selectedUids, gizmoOrigin, axis) ?? 0;
       } else extent = item.type === 'cube'
         ? Math.abs(item.size[index]) / 2
-        : index === 1 ? Math.abs(item.parameters.height) / 2 : Math.abs(item.parameters.radius);
+        : item.shapeType !== 'polygon_prism' || index !== 1
+          ? Math.abs(item.parameters.radius)
+          : Math.abs(item.parameters.height) / 2;
       positiveDistance = extent + pixelWorld * GIZMO_HEAD_GAP_PIXELS;
       negativeDistance = positiveDistance;
     }
@@ -3999,32 +4773,56 @@ function applyTextureUvDrag(event) {
 }
 
 const paintBrushOffsetCache = new Map();
+const PAINT_FACE_LAYOUTS = Object.freeze({
+  south: [7, 6, 4, 5], north: [2, 3, 1, 0], east: [6, 2, 5, 1],
+  west: [3, 7, 0, 4], up: [3, 2, 7, 6], down: [4, 5, 0, 1]
+});
+const PAINT_FACE_EDGES = Object.freeze([[0, 1], [1, 3], [2, 3], [0, 2]]);
 
 function activeTextureAsset() {
   return state.textureAssets.find(asset => asset._uid === state.activeTextureUid) || null;
 }
 
-function setPaintColor(color, notify = false) {
+function setPaintColor(color, notify = false, preservePickerHue = false) {
   if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
   state.paintColor = String(color).toLowerCase();
+  const [hue, saturation, value] = rgbToHsv(hexToRgb(state.paintColor));
+  if (!preservePickerHue) {
+    if (saturation > 1e-4 && value > 1e-4) state.paintColorPickerHue = hue;
+    state.paintColorPickerSaturation = saturation;
+    state.paintColorPickerValue = value;
+  }
   $('#paintColor').value = state.paintColor;
+  updatePaintColorPickerVisual();
   if (notify) toast(`繪畫顏色 ${state.paintColor}`);
 }
 
-function paintBrushOffsets(size) {
+function paintBrushOffsets(size, shape = state.paintBrushShape, antialias = state.paintBrushAa) {
   const normalized = clamp(Math.round(size) || 1, 1, 64);
-  if (paintBrushOffsetCache.has(normalized)) return paintBrushOffsetCache.get(normalized);
+  const key = `${normalized}:${shape}:${antialias ? 1 : 0}`;
+  if (paintBrushOffsetCache.has(key)) return paintBrushOffsetCache.get(key);
   const offsets = [];
   const center = (normalized - 1) / 2;
   const radius = normalized / 2;
   for (let y = 0; y < normalized; y++) {
     for (let x = 0; x < normalized; x++) {
-      if (normalized <= 2 || Math.hypot(x - center, y - center) <= radius) {
-        offsets.push([x - Math.floor(center), y - Math.floor(center)]);
+      let coverage = 1;
+      if (shape === 'circle' && normalized > 1) {
+        if (antialias) {
+          let inside = 0;
+          for (let sampleY = 0; sampleY < 4; sampleY++) for (let sampleX = 0; sampleX < 4; sampleX++) {
+            const px = x - center + (sampleX + .5) / 4 - .5;
+            const py = y - center + (sampleY + .5) / 4 - .5;
+            if (Math.hypot(px, py) <= radius) inside++;
+          }
+          coverage = inside / 16;
+          if (coverage <= 0) continue;
+        } else if (Math.hypot(x - center, y - center) > radius) continue;
       }
+      offsets.push([x - Math.floor(center), y - Math.floor(center), coverage]);
     }
   }
-  paintBrushOffsetCache.set(normalized, offsets);
+  paintBrushOffsetCache.set(key, offsets);
   return offsets;
 }
 
@@ -4037,10 +4835,160 @@ function paintPointInside(point) {
   return point[0] >= 0 && point[1] >= 0 && point[0] < textureCanvas.width && point[1] < textureCanvas.height;
 }
 
+function faceUvPixelSlots(cube, faceName) {
+  const face = cube?.faces?.[faceName] || {};
+  const rectangle = Array.isArray(face.uv) && face.uv.length >= 4
+    ? face.uv : getBlockbenchBoxUv(cube, faceName);
+  return rectangle ? createBlockbenchFaceUvSlots(rectangle, face.rotation || 0) : null;
+}
+
+function paintFaceEdgeNeighbors(cube, faceName) {
+  const layout = PAINT_FACE_LAYOUTS[faceName];
+  const slots = faceUvPixelSlots(cube, faceName);
+  if (!layout || !slots) return [];
+  const neighbors = [];
+  for (const [firstSlot, secondSlot] of PAINT_FACE_EDGES) {
+    const firstCorner = layout[firstSlot], secondCorner = layout[secondSlot];
+    for (const [candidateName, candidateLayout] of Object.entries(PAINT_FACE_LAYOUTS)) {
+      if (candidateName === faceName) continue;
+      const candidateSlots = faceUvPixelSlots(cube, candidateName);
+      if (!candidateSlots) continue;
+      const pair = PAINT_FACE_EDGES.find(([a, b]) => {
+        const corners = [candidateLayout[a], candidateLayout[b]];
+        return corners.includes(firstCorner) && corners.includes(secondCorner);
+      });
+      if (!pair) continue;
+      const [candidateFirst, candidateSecond] = pair;
+      const forward = candidateLayout[candidateFirst] === firstCorner;
+      const targetStart = candidateSlots[forward ? candidateFirst : candidateSecond];
+      const targetEnd = candidateSlots[forward ? candidateSecond : candidateFirst];
+      const center = candidateSlots.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
+      const midpoint = [(targetStart[0] + targetEnd[0]) / 2, (targetStart[1] + targetEnd[1]) / 2];
+      const inwardRaw = [center[0] - midpoint[0], center[1] - midpoint[1]];
+      const inwardLength = Math.hypot(...inwardRaw) || 1;
+      neighbors.push({
+        faceName: candidateName,
+        sourceStart: slots[firstSlot], sourceEnd: slots[secondSlot],
+        targetStart, targetEnd,
+        inward: inwardRaw.map(value => value / inwardLength)
+      });
+      break;
+    }
+  }
+  return neighbors;
+}
+
+function prepareHolisticPaintSurface(surface) {
+  const base = surface?.baseSurface || surface;
+  if (!base?.canvas || !base.context) return null;
+  if (base.strokeImage && base.strokeImage.width === base.canvas.width && base.strokeImage.height === base.canvas.height) return base;
+  base.strokeImage = base.context.getImageData(0, 0, base.canvas.width, base.canvas.height);
+  base.strokeBasePixels = new Uint8ClampedArray(base.strokeImage.data);
+  base.strokeCoverage = new Uint8Array(base.canvas.width * base.canvas.height);
+  base.strokeDirty = null;
+  return base;
+}
+
+function extendPaintDirtyRect(surface, x, y) {
+  const dirty = surface.strokeDirty;
+  if (!dirty) surface.strokeDirty = { minX: x, minY: y, maxX: x, maxY: y };
+  else {
+    dirty.minX = Math.min(dirty.minX, x); dirty.minY = Math.min(dirty.minY, y);
+    dirty.maxX = Math.max(dirty.maxX, x); dirty.maxY = Math.max(dirty.maxY, y);
+  }
+}
+
+function flushHolisticPaintSurface(surface) {
+  const base = surface?.baseSurface || surface;
+  const dirty = base?.strokeDirty;
+  if (!base?.strokeImage || !dirty) return;
+  base.context.putImageData(base.strokeImage, 0, 0,
+    dirty.minX, dirty.minY, dirty.maxX - dirty.minX + 1, dirty.maxY - dirty.minY + 1);
+  base.strokeDirty = null;
+}
+
+function compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity) {
+  const base = prepareHolisticPaintSurface(surface);
+  if (!base) return false;
+  const pixel = y * base.canvas.width + x;
+  const coverageByte = Math.round(clamp(coverage, 0, 1) * 255);
+  if (coverageByte <= base.strokeCoverage[pixel]) return true;
+  base.strokeCoverage[pixel] = coverageByte;
+  const blend = opacity * coverageByte / 255;
+  const offset = pixel * 4;
+  const source = base.strokeBasePixels;
+  const output = base.strokeImage.data;
+  const sourceAlpha = source[offset + 3] / 255;
+  if (tool === 'eraser') {
+    output[offset] = source[offset]; output[offset + 1] = source[offset + 1]; output[offset + 2] = source[offset + 2];
+    output[offset + 3] = Math.round(source[offset + 3] * (1 - blend));
+  } else if (state.alphaLock) {
+    const color = paintColorBytes();
+    for (let channel = 0; channel < 3; channel++) output[offset + channel] = Math.round(source[offset + channel] * (1 - blend) + color[channel] * blend);
+    output[offset + 3] = source[offset + 3];
+  } else {
+    const color = paintColorBytes();
+    const outputAlpha = blend + sourceAlpha * (1 - blend);
+    for (let channel = 0; channel < 3; channel++) output[offset + channel] = outputAlpha <= 0 ? 0 : Math.round(
+      (color[channel] * blend + source[offset + channel] * sourceAlpha * (1 - blend)) / outputAlpha);
+    output[offset + 3] = Math.round(outputAlpha * 255);
+  }
+  extendPaintDirtyRect(base, x, y);
+  return true;
+}
+
+function drawPaintPixel(surface, x, y, coverage, tool, opacity) {
+  if (!surface?.canvas || !surface.context || x < 0 || y < 0 || x >= surface.canvas.width || y >= surface.canvas.height) return;
+  if (surface.rootDrag?.holisticStroke && compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity)) return;
+  const context = surface.context;
+  context.globalAlpha = opacity * coverage;
+  context.globalCompositeOperation = tool === 'eraser'
+    ? 'destination-out' : state.alphaLock ? 'source-atop' : 'source-over';
+  context.fillStyle = state.paintColor;
+  context.fillRect(x, y, 1, 1);
+}
+
+function touchScenePaintSurface(surface) {
+  const root = surface?.rootDrag;
+  if (!root || root.historyAssets.has(surface.asset._uid)) return;
+  root.historyAssets.add(surface.asset._uid);
+  root.touchedSurfaces.add(surface.baseSurface || surface);
+  pushTexturePaintHistory(surface.asset, surface.canvas, root.historyGroup);
+}
+
+function paintBrushDepthPixel(drag, x, y, coverage, opacity) {
+  const depth = clamp(Math.round(Number(state.paintBrushDepth)) || 0, 0, 32);
+  if (!depth || drag.tool !== 'brush' || !drag.paintFace?.cube || !drag.depthTargets) return;
+  const point = [x + .5, y + .5];
+  const edges = drag.depthEdges || (drag.depthEdges = paintFaceEdgeNeighbors(drag.paintFace.cube, drag.paintFace.faceName));
+  for (const edge of edges) {
+    const surface = drag.depthTargets.get(edge.faceName);
+    if (!surface) continue;
+    const edgeVector = [edge.sourceEnd[0] - edge.sourceStart[0], edge.sourceEnd[1] - edge.sourceStart[1]];
+    const lengthSquared = edgeVector[0] ** 2 + edgeVector[1] ** 2;
+    if (lengthSquared < 1e-8) continue;
+    const ratio = clamp(((point[0] - edge.sourceStart[0]) * edgeVector[0]
+      + (point[1] - edge.sourceStart[1]) * edgeVector[1]) / lengthSquared, 0, 1);
+    const closest = [edge.sourceStart[0] + edgeVector[0] * ratio, edge.sourceStart[1] + edgeVector[1] * ratio];
+    if (Math.hypot(point[0] - closest[0], point[1] - closest[1]) > .76) continue;
+    touchScenePaintSurface(surface);
+    const targetEdge = [edge.targetEnd[0] - edge.targetStart[0], edge.targetEnd[1] - edge.targetStart[1]];
+    const edgePoint = [edge.targetStart[0] + targetEdge[0] * ratio, edge.targetStart[1] + targetEdge[1] * ratio];
+    surface.context.save();
+    surface.context.imageSmoothingEnabled = false;
+    for (let layer = 0; layer < depth; layer++) {
+      const targetX = Math.floor(edgePoint[0] + edge.inward[0] * (layer + .5));
+      const targetY = Math.floor(edgePoint[1] + edge.inward[1] * (layer + .5));
+      drawPaintPixel(surface, targetX, targetY, coverage, drag.tool, opacity);
+    }
+    surface.context.restore();
+  }
+}
+
 function updateTextureBrushCursor(event) {
   const cursor = $('#textureBrushCursor');
   const preview = $('#texturePreview');
-  const paintTool = state.mode === 'paint' && ['brush', 'eraser', 'eyedropper'].includes(state.tool);
+  const paintTool = state.mode === 'paint' && PAINT_TOOLS.includes(state.tool);
   if (!paintTool || !event || !textureViewLayout) {
     cursor.hidden = true;
     preview.style.cursor = '';
@@ -4053,12 +5001,13 @@ function updateTextureBrushCursor(event) {
     return;
   }
   const previewRect = preview.getBoundingClientRect();
-  const diameter = state.tool === 'eyedropper' ? 7 : Math.max(3, state.paintBrushSize * textureViewLayout.scale);
+  const diameter = ['eyedropper', 'fill'].includes(state.tool) ? 7 : Math.max(3, state.paintBrushSize * textureViewLayout.scale);
   cursor.style.left = `${event.clientX - previewRect.left}px`;
   cursor.style.top = `${event.clientY - previewRect.top}px`;
   cursor.style.width = `${diameter}px`;
   cursor.style.height = `${diameter}px`;
   cursor.classList.toggle('eraser', state.tool === 'eraser');
+  cursor.classList.toggle('square', ['brush', 'eraser'].includes(state.tool) && state.paintBrushShape === 'square');
   cursor.hidden = false;
   preview.style.cursor = 'none';
 }
@@ -4066,54 +5015,256 @@ function updateTextureBrushCursor(event) {
 function syncPaintedTextureNow() {
   if (texturePaintSyncFrame !== null) cancelAnimationFrame(texturePaintSyncFrame);
   texturePaintSyncFrame = null;
-  const target = texturePaintSyncTarget;
-  texturePaintSyncTarget = null;
-  if (!target) return;
-  syncRendererTextureAsset(target.asset, target.canvas);
+  const targets = [...texturePaintSyncTargets.values()];
+  texturePaintSyncTargets.clear();
+  if (!targets.length) return;
+  targets.forEach(target => syncRendererTextureAsset(target.asset, target.canvas));
   scheduleSceneRender();
   if (uvPreviewIsActive()) renderUvPreview();
 }
 
 function queuePaintedTextureSync(asset, canvas) {
-  texturePaintSyncTarget = { asset, canvas };
+  texturePaintSyncTargets.set(asset._uid, { asset, canvas });
   if (texturePaintSyncFrame !== null) return;
   texturePaintSyncFrame = requestAnimationFrame(syncPaintedTextureNow);
 }
 
-function drawPaintSegment(drag, from, to) {
+function drawPaintSegment(drag, from, to, sync = true) {
   const { canvas, context, asset, tool } = drag;
   const size = clamp(Math.round(state.paintBrushSize) || 1, 1, 64);
   const opacity = clamp(Number(state.paintBrushOpacity) || 100, 1, 100) / 100;
   const offsets = paintBrushOffsets(size);
   const dx = to[0] - from[0], dy = to[1] - from[1];
   const steps = Math.max(1, Math.max(Math.abs(dx), Math.abs(dy)));
+  touchScenePaintSurface(drag);
   context.save();
   context.imageSmoothingEnabled = false;
-  context.globalAlpha = opacity;
-  context.globalCompositeOperation = tool === 'eraser'
-    ? 'destination-out'
-    : state.alphaLock ? 'source-atop' : 'source-over';
-  context.fillStyle = state.paintColor;
   for (let step = 0; step <= steps; step++) {
     const ratio = step / steps;
     const centerX = Math.round(from[0] + dx * ratio);
     const centerY = Math.round(from[1] + dy * ratio);
-    for (const [offsetX, offsetY] of offsets) {
+    for (const [offsetX, offsetY, coverage] of offsets) {
       const x = centerX + offsetX, y = centerY + offsetY;
       const insideClip = !drag.clip || (x >= drag.clip.minU && y >= drag.clip.minV && x < drag.clip.maxU && y < drag.clip.maxV);
-      if (insideClip && x >= 0 && y >= 0 && x < canvas.width && y < canvas.height) context.fillRect(x, y, 1, 1);
+      if (insideClip && x >= 0 && y >= 0 && x < canvas.width && y < canvas.height) {
+        drawPaintPixel(drag, x, y, coverage, tool, opacity);
+        paintBrushDepthPixel(drag, x, y, coverage, opacity);
+      }
     }
   }
   context.restore();
-  queuePaintedTextureSync(asset, canvas);
+  flushHolisticPaintSurface(drag);
+  if (drag.depthTargets) for (const surface of new Set(drag.depthTargets.values())) flushHolisticPaintSurface(surface);
+  if (sync) queuePaintedTextureSync(asset, canvas);
+  if (sync && drag.depthTargets) {
+    for (const surface of new Set(drag.depthTargets.values())) {
+      if (drag.rootDrag?.historyAssets.has(surface.asset._uid)) queuePaintedTextureSync(surface.asset, surface.canvas);
+    }
+  }
 }
 
-function pushTexturePaintHistory(asset, canvas = textureCanvas) {
+function drawPaintShape(drag, to) {
+  if (!drag?.baseImage || !drag.start || !PAINT_SHAPE_TOOLS.includes(drag.tool)) return;
+  drag.context.putImageData(drag.baseImage, 0, 0);
+  const [startX, startY] = drag.start;
+  const [endX, endY] = to;
+  if (drag.tool === 'line') drawPaintSegment(drag, drag.start, to, false);
+  else if (drag.tool === 'rectangle') {
+    const corners = [[startX, startY], [endX, startY], [endX, endY], [startX, endY], [startX, startY]];
+    for (let index = 0; index < corners.length - 1; index++) drawPaintSegment(drag, corners[index], corners[index + 1], false);
+  } else {
+    const center = [(startX + endX) / 2, (startY + endY) / 2];
+    const radius = [Math.abs(endX - startX) / 2, Math.abs(endY - startY) / 2];
+    const steps = Math.max(16, Math.ceil(Math.PI * Math.max(radius[0], radius[1]) * 2));
+    let previous = [Math.round(center[0] + radius[0]), Math.round(center[1])];
+    for (let index = 1; index <= steps; index++) {
+      const angle = index / steps * Math.PI * 2;
+      const next = [Math.round(center[0] + Math.cos(angle) * radius[0]), Math.round(center[1] + Math.sin(angle) * radius[1])];
+      drawPaintSegment(drag, previous, next, false);
+      previous = next;
+    }
+  }
+  queuePaintedTextureSync(drag.asset, drag.canvas);
+}
+
+function paintUvBounds(cube, faceName, canvas) {
+  const face = cube.faces?.[faceName] || {};
+  const uv = Array.isArray(face.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
+  return {
+    minU: clamp(Math.floor(Math.min(uv[0], uv[2])), 0, canvas.width),
+    minV: clamp(Math.floor(Math.min(uv[1], uv[3])), 0, canvas.height),
+    maxU: clamp(Math.ceil(Math.max(uv[0], uv[2])), 0, canvas.width),
+    maxV: clamp(Math.ceil(Math.max(uv[1], uv[3])), 0, canvas.height)
+  };
+}
+
+function fillPaintRects(result, asset, rectangles) {
+  const opacity = clamp(Number(state.paintBrushOpacity) || 100, 1, 100) / 100;
+  result.context.save();
+  result.context.imageSmoothingEnabled = false;
+  result.context.globalAlpha = opacity;
+  result.context.globalCompositeOperation = state.alphaLock ? 'source-atop' : 'source-over';
+  result.context.fillStyle = state.paintColor;
+  rectangles.forEach(rectangle => result.context.fillRect(
+    rectangle.minU, rectangle.minV,
+    Math.max(0, rectangle.maxU - rectangle.minU), Math.max(0, rectangle.maxV - rectangle.minV)));
+  result.context.restore();
+  queuePaintedTextureSync(asset, result.canvas);
+}
+
+function paintColorBytes() {
+  const value = state.paintColor.slice(1);
+  return [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16));
+}
+
+function blendPaintPixel(data, offset, color, opacity) {
+  const destinationAlpha = data[offset + 3] / 255;
+  if (state.alphaLock && destinationAlpha <= 0) return;
+  if (state.alphaLock) {
+    for (let channel = 0; channel < 3; channel++) data[offset + channel] = Math.round(data[offset + channel] * (1 - opacity) + color[channel] * opacity);
+    return;
+  }
+  const outputAlpha = opacity + destinationAlpha * (1 - opacity);
+  for (let channel = 0; channel < 3; channel++) data[offset + channel] = outputAlpha <= 0 ? 0 : Math.round(
+    (color[channel] * opacity + data[offset + channel] * destinationAlpha * (1 - opacity)) / outputAlpha);
+  data[offset + 3] = Math.round(outputAlpha * 255);
+}
+
+function replacePaintColor(result, point, contiguous, clip = null) {
+  const { canvas, context } = result;
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const startX = clamp(Math.floor(point[0]), 0, canvas.width - 1);
+  const startY = clamp(Math.floor(point[1]), 0, canvas.height - 1);
+  const startOffset = (startY * canvas.width + startX) * 4;
+  const target = [...image.data.slice(startOffset, startOffset + 4)];
+  const matches = pixel => {
+    const offset = pixel * 4;
+    return image.data[offset] === target[0] && image.data[offset + 1] === target[1]
+      && image.data[offset + 2] === target[2] && image.data[offset + 3] === target[3];
+  };
+  const insideClip = (x, y) => !clip || (x >= clip.minU && y >= clip.minV && x < clip.maxU && y < clip.maxV);
+  const color = paintColorBytes();
+  const opacity = clamp(Number(state.paintBrushOpacity) || 100, 1, 100) / 100;
+  if (!contiguous) {
+    for (let pixel = 0; pixel < canvas.width * canvas.height; pixel++) {
+      const x = pixel % canvas.width, y = Math.floor(pixel / canvas.width);
+      if (insideClip(x, y) && matches(pixel)) blendPaintPixel(image.data, pixel * 4, color, opacity);
+    }
+  } else {
+    const visited = new Uint8Array(canvas.width * canvas.height);
+    const pending = [startY * canvas.width + startX];
+    while (pending.length) {
+      const pixel = pending.pop();
+      const x = pixel % canvas.width, y = Math.floor(pixel / canvas.width);
+      if (visited[pixel] || !insideClip(x, y) || !matches(pixel)) continue;
+      visited[pixel] = 1;
+      blendPaintPixel(image.data, pixel * 4, color, opacity);
+      if (x > 0) pending.push(pixel - 1);
+      if (x + 1 < canvas.width) pending.push(pixel + 1);
+      if (y > 0) pending.push(pixel - canvas.width);
+      if (y + 1 < canvas.height) pending.push(pixel + canvas.width);
+    }
+  }
+  context.putImageData(image, 0, 0);
+}
+
+function allTextureUvEntriesForAsset(asset) {
+  const references = new Set(textureAtlasReferences(asset, state.textureAssets.indexOf(asset))
+    .flatMap(reference => [reference, reference.startsWith('#') ? reference.slice(1) : `#${reference}`]));
+  const entries = [];
+  for (const cube of state.project.elements.filter(element => element.type === 'cube')) {
+    for (const faceName of CUBE_FACE_NAMES) {
+      const face = cube.faces?.[faceName];
+      if (isCubeFaceCulled(face) || !references.has(String(effectiveFaceTextureReference(face)))) continue;
+      const uv = Array.isArray(face?.uv) && face.uv.length >= 4 ? face.uv.map(Number) : getBlockbenchBoxUv(cube, faceName).map(Number);
+      entries.push({ cube, faceName, uv });
+    }
+  }
+  return entries;
+}
+
+async function paintBucketAsset(asset, point, rectangles = null, contiguous = false, clip = null) {
+  const result = asset._uid === state.activeTextureUid
+    ? { canvas: textureCanvas, context: textureCtx }
+    : await paintCanvasForAsset(asset);
+  if (!result) return false;
+  pushTexturePaintHistory(asset, result.canvas);
+  if (rectangles) fillPaintRects(result, asset, rectangles);
+  else {
+    replacePaintColor(result, point, contiguous, clip);
+    queuePaintedTextureSync(asset, result.canvas);
+  }
+  syncPaintedTextureNow();
+  commitPaintedTextureAsset(asset, result.canvas);
+  return true;
+}
+
+async function paintBucketElement(cube) {
+  const byAsset = new Map();
+  for (const faceName of CUBE_FACE_NAMES) {
+    const existing = cube.faces?.[faceName];
+    if (isCubeFaceCulled(existing)) continue;
+    const asset = textureAssetForReference(existing?.texture);
+    if (!asset) continue;
+    const list = byAsset.get(asset) || [];
+    list.push(faceName);
+    byAsset.set(asset, list);
+  }
+  let painted = 0;
+  for (const [asset, faceNames] of byAsset) {
+    const result = asset._uid === state.activeTextureUid
+      ? { canvas: textureCanvas, context: textureCtx }
+      : await paintCanvasForAsset(asset);
+    if (!result) continue;
+    pushTexturePaintHistory(asset, result.canvas);
+    fillPaintRects(result, asset, faceNames.map(faceName => paintUvBounds(cube, faceName, result.canvas)));
+    syncPaintedTextureNow();
+    commitPaintedTextureAsset(asset, result.canvas);
+    painted++;
+  }
+  if (painted) {
+    invalidateAllRenderGeometry();
+    markDirty();
+    renderScene();
+  }
+  return painted > 0;
+}
+
+async function applyTextureBucket(asset, point, hitEntry = null) {
+  if (state.paintBucketScope === 'element') {
+    if (!hitEntry?.cube) return toast('請指向一個元素的貼圖面');
+    if (!await paintBucketElement(hitEntry.cube)) toast('這個元素沒有可繪畫的貼圖');
+    return;
+  }
+  if (state.paintBucketScope === 'face') {
+    if (!hitEntry?.cube || !hitEntry.faceName) return toast('請指向一個貼圖面');
+    const result = asset._uid === state.activeTextureUid
+      ? { canvas: textureCanvas, context: textureCtx }
+      : await paintCanvasForAsset(asset);
+    if (!result) return;
+    pushTexturePaintHistory(asset, result.canvas);
+    fillPaintRects(result, asset, [paintUvBounds(hitEntry.cube, hitEntry.faceName, result.canvas)]);
+    syncPaintedTextureNow();
+    commitPaintedTextureAsset(asset, result.canvas);
+    return;
+  }
+  const singleFaceClip = state.paintBucketSingleFace && hitEntry?.cube && hitEntry.faceName
+    ? paintUvBounds(hitEntry.cube, hitEntry.faceName, asset._uid === state.activeTextureUid ? textureCanvas : {
+      width: asset.uvWidth || state.project.textureSize?.[0] || 16,
+      height: asset.uvHeight || state.project.textureSize?.[1] || 16
+    })
+    : null;
+  if (state.paintBucketSingleFace && !singleFaceClip) return toast('單面局限時請先指向一個貼圖面');
+  await paintBucketAsset(asset, point, null, state.paintBucketScope === 'contiguous', singleFaceClip);
+}
+
+function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null) {
   state.paintHistory.push({
     uid: asset._uid,
     source: canvas.toDataURL('image/png'),
     width: canvas.width,
-    height: canvas.height
+    height: canvas.height,
+    group
   });
   if (state.paintHistory.length > 60) state.paintHistory.shift();
   state.paintFuture.length = 0;
@@ -4140,6 +5291,23 @@ function commitPaintedTextureAsset(asset, canvas) {
   markDirty();
 }
 
+function replayTexturePaintPoints(drag) {
+  const points = drag.pendingPoints.splice(0);
+  for (const point of points) {
+    if (PAINT_SHAPE_TOOLS.includes(drag.tool)) drawPaintShape(drag, point);
+    else drawPaintSegment(drag, drag.last || point, point);
+    drag.last = point;
+  }
+}
+
+function finishTexturePaintDrag(drag) {
+  if (!drag || drag.finished) return;
+  drag.finished = true;
+  syncPaintedTextureNow();
+  const surfaces = drag.touchedSurfaces?.size ? [...drag.touchedSurfaces] : [drag];
+  for (const surface of surfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
+}
+
 function startTexturePaintPointer(event) {
   const asset = activeTextureAsset();
   if (!asset) {
@@ -4148,6 +5316,11 @@ function startTexturePaintPointer(event) {
   }
   const point = paintPointFromEvent(event);
   if (!paintPointInside(point)) return;
+  const hit = textureUvHit(allTextureUvEntriesForAsset(asset), point);
+  if (state.tool === 'fill') {
+    applyTextureBucket(asset, point, hit);
+    return;
+  }
   if (state.tool === 'eyedropper') {
     const pixel = textureCtx.getImageData(point[0], point[1], 1, 1).data;
     setPaintColor(`#${[pixel[0], pixel[1], pixel[2]].map(value => value.toString(16).padStart(2, '0')).join('')}`, true);
@@ -4158,34 +5331,46 @@ function startTexturePaintPointer(event) {
     toast('鎖定透明度時橡皮擦不會改變貼圖');
     return;
   }
-  pushTexturePaintHistory(asset);
+  const historyGroup = crypto.randomUUID();
+  pushTexturePaintHistory(asset, textureCanvas, historyGroup);
   texturePaintDrag = {
     pointerId: event.pointerId, uid: asset._uid, asset,
-    canvas: textureCanvas, context: textureCtx, tool: state.tool, last: point
+    canvas: textureCanvas, context: textureCtx, tool: state.tool, start: point, last: point,
+    baseImage: PAINT_SHAPE_TOOLS.includes(state.tool) ? textureCtx.getImageData(0, 0, textureCanvas.width, textureCanvas.height) : null,
+    historyGroup, historyAssets: new Set([asset._uid]), touchedSurfaces: new Set(), pendingPoints: [point],
+    holisticStroke: ['brush', 'eraser'].includes(state.tool), assignmentSnapshotTaken: false,
+    ready: true, ended: false, finished: false
   };
+  texturePaintDrag.rootDrag = texturePaintDrag;
+  texturePaintDrag.baseSurface = texturePaintDrag;
+  texturePaintDrag.touchedSurfaces.add(texturePaintDrag);
   $('#texturePreview').setPointerCapture(event.pointerId);
-  drawPaintSegment(texturePaintDrag, point, point);
+  replayTexturePaintPoints(texturePaintDrag);
 }
 
 function moveTexturePaintPointer(event) {
   if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
   const point = paintPointFromEvent(event);
-  drawPaintSegment(texturePaintDrag, texturePaintDrag.last, point);
+  if (!texturePaintDrag.ready) {
+    texturePaintDrag.pendingPoints.push(point);
+    return true;
+  }
+  if (PAINT_SHAPE_TOOLS.includes(texturePaintDrag.tool)) drawPaintShape(texturePaintDrag, point);
+  else drawPaintSegment(texturePaintDrag, texturePaintDrag.last, point);
   texturePaintDrag.last = point;
   return true;
 }
 
 function endTexturePaintPointer(event) {
   if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
+  const drag = texturePaintDrag;
+  texturePaintDrag = null;
   const preview = $('#texturePreview');
   if (preview.hasPointerCapture?.(event.pointerId)) preview.releasePointerCapture(event.pointerId);
-  const drag = texturePaintDrag;
-  const asset = state.textureAssets.find(entry => entry._uid === drag.uid);
-  texturePaintDrag = null;
-  syncPaintedTextureNow();
-  if (asset) {
-    commitPaintedTextureAsset(asset, drag.canvas);
-  }
+  drag.ended = true;
+  // A lost capture ends at the last received sample. Keeping that partial
+  // stroke is safer than leaving the canvas and texture asset out of sync.
+  if (drag.ready) finishTexturePaintDrag(drag);
   return true;
 }
 
@@ -4300,9 +5485,10 @@ function bindTextureFaceDropSurface(surface, canvas, renderer, projectProvider, 
   });
 }
 
-function facePaintTarget(hit, assignMissing = false) {
+function facePaintTarget(hit, assignMissing = false, assignmentContext = null) {
   if (!hit?.faceName) return null;
-  const cube = state.project.getNode(hit.uid);
+  const hitNode = state.project.getNode(hit.uid);
+  const cube = hit.cube?.type === 'cube' ? hit.cube : hitNode;
   if (cube?.type !== 'cube') return null;
   const existingFace = cube.faces?.[hit.faceName];
   let asset = textureAssetForReference(existingFace?.texture);
@@ -4310,13 +5496,52 @@ function facePaintTarget(hit, assignMissing = false) {
   if (!asset) asset = activeTextureAsset();
   if (!asset) return null;
   if (assignMissing && existingFace?.texture === undefined) {
-    snapshot();
+    if (!assignmentContext?.assignmentSnapshotTaken) {
+      snapshot();
+      if (assignmentContext) assignmentContext.assignmentSnapshotTaken = true;
+    }
     freezeCubeUvs(cube, true);
     cube.faces[hit.faceName].texture = faceTextureReference(asset);
+    persistGeneratedPaintCube(cube);
     invalidateAllRenderGeometry();
     markDirty();
   }
-  return { cube, faceName: hit.faceName, asset };
+  return { cube, faceName: hit.faceName, asset, owner: cube.subdivisionOwnerUid ? state.project.getNode(cube.subdivisionOwnerUid) : null };
+}
+
+function persistGeneratedPaintCube(cube) {
+  const owner = cube?.subdivisionOwnerUid && state.project.getNode(cube.subdivisionOwnerUid);
+  const index = Number(cube?.subdivisionIndex);
+  if (!owner?.toBaseCubes || !Number.isInteger(index) || index < 0) return;
+  const edits = { ...(owner.subdivisionEdits || {}) };
+  const patch = subdivisionPatch(owner, cube, index);
+  if (patch) edits[index] = patch;
+  else delete edits[index];
+  owner.subdivisionEdits = edits;
+}
+
+function adjacentPaintFaceAsset(cube, faceName, preferredAsset, assignmentContext = null) {
+  const existingFace = cube.faces?.[faceName];
+  if (isCubeFaceCulled(existingFace)) return null;
+  const assignedAsset = textureAssetForReference(existingFace?.texture);
+  if (assignedAsset) return assignedAsset;
+  // Preserve an explicit unknown texture reference instead of silently
+  // replacing it. Only genuinely unassigned faces inherit the stroke texture.
+  if (existingFace?.texture !== undefined || !preferredAsset) return null;
+  if (!assignmentContext?.assignmentSnapshotTaken) {
+    snapshot();
+    if (assignmentContext) assignmentContext.assignmentSnapshotTaken = true;
+  }
+  freezeCubeUvs(cube, true);
+  const face = ensureCubeFaceRecord(cube, faceName);
+  face.texture = faceTextureReference(preferredAsset);
+  delete face.enabled;
+  delete face[CULLED_FACE_TEXTURE_KEY];
+  cube.autoUv = false;
+  persistGeneratedPaintCube(cube);
+  invalidateAllRenderGeometry();
+  markDirty();
+  return preferredAsset;
 }
 
 function barycentricPoint(point, a, b, c) {
@@ -4372,13 +5597,148 @@ function scenePaintHit(clientX, clientY, drag = null) {
   const rect = sceneCanvas.getBoundingClientRect();
   const hit = sceneRenderer.pickDetailed(state.project, clientX - rect.left, clientY - rect.top, true);
   if (!hit?.faceName) return null;
-  if (drag && (hit.uid !== drag.uid || hit.faceName !== drag.faceName)) return null;
+  if (drag && (hit.uid !== drag.uid
+    || (hit.cubeUid || hit.uid) !== (drag.cubeUid || drag.uid)
+    || hit.faceName !== drag.faceName)) return null;
   return hit;
 }
 
+function ensureScenePaintAssetSurface(drag, asset) {
+  if (drag.assetSurfaces.has(asset._uid)) return Promise.resolve(drag.assetSurfaces.get(asset._uid));
+  if (drag.assetSurfacePromises.has(asset._uid)) return drag.assetSurfacePromises.get(asset._uid);
+  const promise = paintCanvasForAsset(asset).then(result => {
+    drag.assetSurfacePromises.delete(asset._uid);
+    if (!result) return null;
+    const surface = { ...result, asset, rootDrag: drag };
+    surface.baseSurface = surface;
+    drag.assetSurfaces.set(asset._uid, surface);
+    return surface;
+  });
+  drag.assetSurfacePromises.set(asset._uid, promise);
+  return promise;
+}
+
+async function sceneBrushSurfaceForHit(drag, hit) {
+  const target = facePaintTarget(hit, true, drag);
+  if (!target) return null;
+  const base = await ensureScenePaintAssetSurface(drag, target.asset);
+  if (!base) return null;
+  const clip = paintUvBounds(target.cube, target.faceName, base.canvas);
+  const surface = {
+    ...base, baseSurface: base, rootDrag: drag, clip,
+    cube: target.cube, faceName: target.faceName,
+    paintFace: { cube: target.cube, faceName: target.faceName },
+    depthTargets: new Map()
+  };
+  if (state.paintBrushDepth > 0) {
+    const neighborNames = new Set(paintFaceEdgeNeighbors(target.cube, target.faceName).map(edge => edge.faceName));
+    for (const faceName of neighborNames) {
+      const asset = adjacentPaintFaceAsset(target.cube, faceName, target.asset, drag);
+      if (!asset) continue;
+      const neighborSurface = await ensureScenePaintAssetSurface(drag, asset);
+      if (neighborSurface) surface.depthTargets.set(faceName, neighborSurface);
+    }
+  }
+  return surface;
+}
+
+function queueSceneBrushHit(drag, hit) {
+  drag.queue = drag.queue.then(async () => {
+    if (drag.canceled || !hit?.faceName) {
+      drag.last = null;
+      drag.lastFaceKey = null;
+      return;
+    }
+    const surface = await sceneBrushSurfaceForHit(drag, hit);
+    if (!surface || drag.canceled) {
+      drag.last = null;
+      drag.lastFaceKey = null;
+      return;
+    }
+    const point = facePaintUvPoint(hit, surface, surface.canvas);
+    if (!point) {
+      drag.last = null;
+      drag.lastFaceKey = null;
+      return;
+    }
+    // Procedural Shapes expose many generated Cubes through one owner UID.
+    // Include the concrete generated Cube in the key so a stroke never draws
+    // a UV-space line between unrelated cubes that happen to share a face name.
+    const faceKey = `${sceneBrushHitKey(hit)}::${surface.asset._uid}`;
+    drawPaintSegment(surface, drag.lastFaceKey === faceKey && drag.last ? drag.last : point, point);
+    drag.last = point;
+    drag.lastFaceKey = faceKey;
+  });
+  return drag.queue;
+}
+
+function sceneBrushHitKey(hit) {
+  return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.faceName}` : '';
+}
+
+function sceneBrushBoundary(from, to) {
+  const fromKey = sceneBrushHitKey(from.hit), toKey = sceneBrushHitKey(to.hit);
+  if (!fromKey || !toKey || fromKey === toKey) return null;
+  let left = from, right = to;
+  for (let iteration = 0; iteration < 9; iteration++) {
+    const x = (left.x + right.x) / 2, y = (left.y + right.y) / 2;
+    const hit = scenePaintHit(x, y);
+    const sample = { x, y, hit };
+    if (sceneBrushHitKey(hit) === fromKey) left = sample;
+    else right = sample;
+  }
+  return { before: left.hit, after: right.hit };
+}
+
+function queueSceneBrushPointer(drag, clientX, clientY) {
+  const current = { x: clientX, y: clientY, hit: scenePaintHit(clientX, clientY) };
+  const previous = drag.lastPointerSample;
+  if (!previous) {
+    drag.lastPointerSample = current;
+    queueSceneBrushHit(drag, current.hit);
+    return;
+  }
+  const distance = Math.hypot(clientX - previous.x, clientY - previous.y);
+  const sampleCount = Math.max(1, Math.min(24, Math.ceil(distance / 10)));
+  let prior = previous;
+  for (let index = 1; index <= sampleCount; index++) {
+    const ratio = index / sampleCount;
+    const sample = index === sampleCount ? current : {
+      x: previous.x + (clientX - previous.x) * ratio,
+      y: previous.y + (clientY - previous.y) * ratio
+    };
+    if (!sample.hit) sample.hit = scenePaintHit(sample.x, sample.y);
+    if (sceneBrushHitKey(prior.hit) !== sceneBrushHitKey(sample.hit)) {
+      const boundary = sceneBrushBoundary(prior, sample);
+      if (boundary) {
+        queueSceneBrushHit(drag, boundary.before);
+        queueSceneBrushHit(drag, boundary.after);
+      } else queueSceneBrushHit(drag, sample.hit);
+    }
+    if (index === sampleCount) queueSceneBrushHit(drag, sample.hit);
+    prior = sample;
+  }
+  drag.lastPointerSample = current;
+}
+
 function finishScenePaintDrag(drag) {
-  if (!drag || drag.finished || !drag.canvas) return;
+  if (!drag || drag.finished) return;
   drag.finished = true;
+  if (drag.multiSurface) {
+    drag.queue.then(() => {
+      if (drag.canceled) return;
+      syncPaintedTextureNow();
+      for (const surface of drag.touchedSurfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
+      const lastSurface = [...drag.touchedSurfaces].at(-1);
+      if (lastSurface && state.activeTextureUid !== lastSurface.asset._uid) {
+        const index = state.textureAssets.findIndex(asset => asset._uid === lastSurface.asset._uid);
+        if (index >= 0) activateProjectTexture(index);
+      }
+      renderScene();
+    });
+    return;
+  }
+  if (!drag.canvas) return;
   syncPaintedTextureNow();
   commitPaintedTextureAsset(drag.asset, drag.canvas);
   if (state.activeTextureUid !== drag.asset._uid) {
@@ -4391,21 +5751,27 @@ function finishScenePaintDrag(drag) {
 function moveScenePaintDrag(event, drag = state.dragging) {
   if (!drag || drag.type !== 'texture-paint-3d') return false;
   drag.latestClient = [event.clientX, event.clientY];
+  if (drag.multiSurface) {
+    queueSceneBrushPointer(drag, event.clientX, event.clientY);
+    return true;
+  }
   if (!drag.ready) return true;
   const hit = scenePaintHit(event.clientX, event.clientY, drag);
   const point = hit && facePaintUvPoint(hit, drag, drag.canvas);
   if (!point) {
-    drag.last = null;
+    if (!PAINT_SHAPE_TOOLS.includes(drag.tool)) drag.last = null;
     return true;
   }
-  drawPaintSegment(drag, drag.last || point, point);
+  if (PAINT_SHAPE_TOOLS.includes(drag.tool)) drawPaintShape(drag, point);
+  else drawPaintSegment(drag, drag.last || point, point);
   drag.last = point;
   return true;
 }
 
 function startScenePaintPointer(event, x, y) {
   const hit = sceneRenderer.pickDetailed(state.project, x, y, true);
-  const target = facePaintTarget(hit, state.tool !== 'eyedropper');
+  const assignmentContext = {};
+  const target = facePaintTarget(hit, state.tool !== 'eyedropper', assignmentContext);
   if (!target) {
     toast(hit?.faceName ? '這個面沒有可用的貼圖' : '請指向一個 Cube 面');
     return true;
@@ -4415,6 +5781,13 @@ function startScenePaintPointer(event, x, y) {
     return true;
   }
   event.preventDefault();
+  if (state.tool === 'fill') {
+    paintCanvasForAsset(target.asset).then(result => {
+      const point = result && facePaintUvPoint(hit, target, result.canvas);
+      if (point) applyTextureBucket(target.asset, point, { cube: target.cube, faceName: target.faceName });
+    });
+    return true;
+  }
   if (state.tool === 'eyedropper') {
     paintCanvasForAsset(target.asset).then(result => {
       const point = result && facePaintUvPoint(hit, target, result.canvas);
@@ -4426,11 +5799,27 @@ function startScenePaintPointer(event, x, y) {
     return true;
   }
   sceneCanvas.setPointerCapture(event.pointerId);
+  if (state.tool === 'brush') {
+    const drag = {
+      type: 'texture-paint-3d', multiSurface: true, pointerId: event.pointerId, tool: 'brush',
+      latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
+      assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(), touchedSurfaces: new Set(),
+      historyGroup: crypto.randomUUID(), last: null, lastFaceKey: null,
+      holisticStroke: true, lastPointerSample: { x: event.clientX, y: event.clientY, hit },
+      assignmentSnapshotTaken: assignmentContext.assignmentSnapshotTaken === true,
+      ready: true, ended: false, canceled: false, finished: false
+    };
+    state.dragging = drag;
+    queueSceneBrushHit(drag, hit);
+    return true;
+  }
   const drag = {
-    type: 'texture-paint-3d', pointerId: event.pointerId, uid: hit.uid, faceName: hit.faceName,
+    type: 'texture-paint-3d', pointerId: event.pointerId, uid: hit.uid,
+    cubeUid: hit.cubeUid || hit.uid, faceName: hit.faceName,
     asset: target.asset, cube: target.cube, tool: state.tool,
     initialHit: hit, latestClient: [event.clientX, event.clientY],
-    canvas: null, context: null, last: null, ready: false, ended: false, canceled: false, finished: false
+    canvas: null, context: null, last: null, ready: false, ended: false, canceled: false, finished: false,
+    holisticStroke: state.tool === 'eraser'
   };
   const face = target.cube.faces?.[target.faceName] || {};
   const faceUv = Array.isArray(face.uv) && face.uv.length >= 4
@@ -4448,7 +5837,11 @@ function startScenePaintPointer(event, x, y) {
     drag.ready = true;
     const initial = facePaintUvPoint(drag.initialHit, drag, drag.canvas);
     if (initial) {
-      drawPaintSegment(drag, initial, initial);
+      drag.start = initial;
+      if (PAINT_SHAPE_TOOLS.includes(drag.tool)) {
+        drag.baseImage = drag.context.getImageData(0, 0, drag.canvas.width, drag.canvas.height);
+        drawPaintShape(drag, initial);
+      } else drawPaintSegment(drag, initial, initial);
       drag.last = initial;
     }
     if (!drag.ended) {
@@ -4465,7 +5858,7 @@ function startTexturePointer(event) {
   cancelTextureFocus();
   setDockHotspotFocus('texture');
   const preview = $('#texturePreview');
-  if (state.mode === 'paint' && event.button === 0 && ['brush', 'eraser', 'eyedropper'].includes(state.tool)) {
+  if (state.mode === 'paint' && event.button === 0 && PAINT_TOOLS.includes(state.tool)) {
     startTexturePaintPointer(event);
     return;
   }
@@ -4512,7 +5905,7 @@ function startTexturePointer(event) {
 function moveTexturePointer(event) {
   updateTextureBrushCursor(event);
   if (moveTexturePaintPointer(event)) return;
-  if (state.mode === 'paint' && ['brush', 'eraser', 'eyedropper'].includes(state.tool) && !textureUvDrag) return;
+  if (state.mode === 'paint' && PAINT_TOOLS.includes(state.tool) && !textureUvDrag) return;
   if (!textureUvDrag) {
     updateTextureUvCursor(event);
     return;
@@ -4543,6 +5936,20 @@ function moveTexturePointer(event) {
   }
   if (textureUvDrag.kind === 'select') return;
   applyTextureUvDrag(event);
+}
+
+function onTexturePointerMove(event) {
+  if (event.pointerType === 'pen' && texturePaintDrag
+    && typeof event.getCoalescedEvents === 'function') {
+    const samples = event.getCoalescedEvents();
+    if (samples.length) {
+      event.preventDefault();
+      for (const sample of samples) moveTexturePaintPointer(sample);
+      updateTextureBrushCursor(event);
+      return;
+    }
+  }
+  moveTexturePointer(event);
 }
 
 function endTexturePointer(event) {
@@ -4813,7 +6220,7 @@ function renderPalette() {
         <button class="delete-palette-row" data-delete-row="${index}" title="刪除此行">×</button>
       </div>
       ${row.gradient
-        ? `<div class="gradient-picker" data-gradient-picker="${index}" style="background:linear-gradient(90deg, ${row.colors.join(', ')})"><i class="gradient-marker" style="left:${row.marker * 100}%"></i></div>`
+        ? `<div class="gradient-picker" data-gradient-picker="${index}" style="background:linear-gradient(90deg, ${row.colors.join(', ')})"><i class="gradient-marker" style="left:${insetControlPosition(row.marker)}"></i></div>`
         : `<div class="palette-row">${row.colors.map(color => `<button class="swatch" data-color="${color}" style="background:${color}" title="${color}"></button>`).join('')}</div>`}
     </div>`).join('');
 
@@ -4854,9 +6261,9 @@ function addPaletteRow() {
 function pickGradientColor(picker, event) {
   const index = Number(picker.dataset.gradientPicker);
   const rect = picker.getBoundingClientRect();
-  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const ratio = insetControlRatio(event.clientX, rect.left, rect.width);
   paletteRows[index].marker = ratio;
-  picker.querySelector('.gradient-marker').style.left = `${ratio * 100}%`;
+  picker.querySelector('.gradient-marker').style.left = insetControlPosition(ratio);
   applyPaletteColor(sampleGradient(paletteRows[index].colors, ratio), false);
 }
 
@@ -5007,10 +6414,26 @@ function facePixelSize(cube, faceName, subdivisions) {
     north: [0, 1], south: [0, 1], east: [2, 1], west: [2, 1], up: [0, 2], down: [0, 2]
   };
   const axes = axisPairs[faceName];
-  if (cube.uvNormalized !== false) return axes.map(axis => Math.max(0, Math.round(Math.abs(Number(cube.size[axis]) || 0) * subdivisions / 16)));
+  const roundedPixelLength = value => {
+    const length = Math.abs(Number(value) || 0);
+    return length > 0 ? Math.max(1, Math.round(length)) : 0;
+  };
+  if (cube.uvNormalized !== false) return axes.map(axis => roundedPixelLength(Math.abs(Number(cube.size[axis]) || 0) * subdivisions / 16));
   const face = cube.faces?.[faceName];
   const uv = Array.isArray(face?.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
-  return [Math.max(0, Math.round(Math.abs(Number(uv[2]) - Number(uv[0])))), Math.max(0, Math.round(Math.abs(Number(uv[3]) - Number(uv[1]))))];
+  const uvLengths = [Math.abs(Number(uv[2]) - Number(uv[0])), Math.abs(Number(uv[3]) - Number(uv[1]))];
+  return axes.map((axis, index) => {
+    const geometryLength = Math.abs(Number(cube.size?.[axis]) || 0);
+    if (geometryLength <= 1e-9) return 0;
+    return Math.max(1, Math.round(uvLengths[index]));
+  });
+}
+
+function cubeFaceHasZeroGeometry(cube, faceName) {
+  const axisPairs = {
+    north: [0, 1], south: [0, 1], east: [2, 1], west: [2, 1], up: [0, 2], down: [0, 2]
+  };
+  return axisPairs[faceName].some(axis => Math.abs(Number(cube.size?.[axis]) || 0) <= 1e-9);
 }
 
 function minimumTemplatePackingSide(rectangles, padding) {
@@ -5246,14 +6669,38 @@ function registerGeneratedTexture(canvas, name, kind) {
 async function createTextureTemplate(options) {
   const targets = templateCubeTargets(options.selectedOnly);
   if (!targets.length) return toast('目前沒有可建立模板的 Cube');
-  const faceCount = targets.reduce((count, target) => count + CUBE_FACE_NAMES.filter(faceName => {
+  const initialFaceCount = targets.reduce((count, target) => count + CUBE_FACE_NAMES.filter(faceName => {
     const face = target.cube.faces?.[faceName];
     return !isCubeFaceCulled(face);
   }).length, 0);
-  if (!faceCount) return toast('目前沒有可建立模板的面');
+  if (!initialFaceCount) return toast('目前沒有可建立模板的面');
+  const invalidFaces = [];
+  const invalidFacesByCube = new WeakMap();
+  if (options.cleanInvalidFaces) {
+    for (const target of targets) {
+      for (const faceName of CUBE_FACE_NAMES) {
+        if (isCubeFaceCulled(target.cube.faces?.[faceName]) || !cubeFaceHasZeroGeometry(target.cube, faceName)) continue;
+        invalidFaces.push({ target, faceName });
+        const names = invalidFacesByCube.get(target.cube) || new Set();
+        names.add(faceName);
+        invalidFacesByCube.set(target.cube, names);
+      }
+    }
+  }
+  const cleanedFaceCount = invalidFaces.length;
+  const faceCount = initialFaceCount - cleanedFaceCount;
+  if (!faceCount) {
+    snapshot();
+    invalidFaces.forEach(({ target, faceName }) => setCubeFaceCulled(target.cube, faceName, true));
+    syncGeneratedTemplateEdits(targets);
+    invalidateAllRenderGeometry();
+    markDirty();
+    renderAll('all');
+    return toast(cleanedFaceCount ? `已清理 ${cleanedFaceCount} 個無效面；沒有可建立模板的面` : '目前沒有可建立模板的面');
+  }
+  snapshot();
   const progress = beginTextureGenerationProgress(faceCount);
   try {
-  snapshot();
   await progress.prepare(`正在準備 ${faceCount} 個面…`);
   const subdivisions = activeSnapSubdivisions();
   const padding = options.paddingEnabled ? Math.max(0, Math.round(options.padding)) : 0;
@@ -5281,7 +6728,10 @@ async function createTextureTemplate(options) {
   };
   for (const target of targets) {
     const cube = target.cube;
-    const dimensions = cube.size.map(value => Math.max(0, Math.round(Math.abs(Number(value) || 0) * subdivisions / 16)));
+    const dimensions = cube.size.map(value => {
+      const scaled = Math.abs(Number(value) || 0) * subdivisions / 16;
+      return scaled > 0 ? Math.max(1, Math.round(scaled)) : 0;
+    });
     if (options.boxUv && cube.uvNormalized !== false) {
       const [x, y, z] = dimensions;
       const boxEntry = { width: 2 * (x + z), height: y + z, faceName: 'north', sourceUv: null, sourceAsset: null, targets: [] };
@@ -5292,14 +6742,14 @@ async function createTextureTemplate(options) {
       };
       for (const faceName of CUBE_FACE_NAMES) {
         const face = cube.faces?.[faceName];
-        if (isCubeFaceCulled(face)) continue;
+        if (isCubeFaceCulled(face) || invalidFacesByCube.get(cube)?.has(faceName)) continue;
         const [ox, oy, width, height] = offsets[faceName];
         addFaceEntry(target, faceName, width, height, boxEntry, { x: ox, y: oy });
       }
     } else {
       for (const faceName of CUBE_FACE_NAMES) {
         const face = cube.faces?.[faceName];
-        if (isCubeFaceCulled(face)) continue;
+        if (isCubeFaceCulled(face) || invalidFacesByCube.get(cube)?.has(faceName)) continue;
         const [width, height] = facePixelSize(cube, faceName, subdivisions);
         addFaceEntry(target, faceName, width, height);
       }
@@ -5319,6 +6769,7 @@ async function createTextureTemplate(options) {
     state.history.pop();
     return toast(`模板尺寸 ${side} × ${side} 過大，請降低吸附分辨率或間隔`);
   }
+  invalidFaces.forEach(({ target, faceName }) => setCubeFaceCulled(target.cube, faceName, true));
   const canvas = document.createElement('canvas');
   canvas.width = side; canvas.height = side;
   const ctx = canvas.getContext('2d');
@@ -5359,7 +6810,7 @@ async function createTextureTemplate(options) {
   syncGeneratedTemplateEdits(targets);
   invalidateAllRenderGeometry();
   renderAll('all');
-  toast(`已建立 ${side} × ${side} 紋理模板`);
+  toast(`已建立 ${side} × ${side} 紋理模板${cleanedFaceCount ? `，並清理 ${cleanedFaceCount} 個無效面` : ''}`);
   } finally {
     progress.finish();
   }
@@ -5398,7 +6849,7 @@ function openTextureCreateDialog() {
   $('#textureTemplateSelectedOnly').checked = false;
   $('#textureTemplateSelectedOnly').disabled = selectedElementUids().length === 0;
   const subdivisions = activeSnapSubdivisions();
-  $('#textureTemplateSummary').textContent = `目前按項目基礎吸附 ${formatNumber(subdivisions)} 計算：UV 像素 = round(Cube 尺寸 × ${formatNumber(subdivisions)} ÷ 16)，再由大到小自左上角打包。`;
+  $('#textureTemplateSummary').textContent = `目前按項目基礎吸附 ${formatNumber(subdivisions)} 計算：UV 像素 = round(Cube 尺寸 × ${formatNumber(subdivisions)} ÷ 16)，非零邊長最少 1px，再由大到小自左上角打包。`;
   updateTextureCreateDialog();
   $('#textureCreateDialog').showModal();
 }
@@ -5492,6 +6943,7 @@ function applyModePanelVisibility() {
 
 function setMode(mode) {
   if (mode === 'uv' && !state.separateUvMode) mode = 'edit';
+  if (mode === 'paint' && subdivisionSession) exitSubdivisionEdit(false);
   state.mode = mode;
   document.body.dataset.editorMode = mode;
   if (mode !== 'paint') {
@@ -5507,6 +6959,8 @@ function setMode(mode) {
   $('#viewLabel').textContent = mode === 'paint' ? '三維繪畫' : mode === 'uv' ? 'UV 編輯' : mode === 'animate' ? '動畫預覽' : '實體著色';
   if (mode === 'paint') activateDock('palette');
   if (mode === 'animate') activateDock('timeline');
+  renderInspector();
+  renderScene();
   toast({ edit: '編輯模式', uv: 'UV 編輯模式', paint: '繪畫模式', animate: '動畫模式' }[mode]);
 }
 
@@ -5536,9 +6990,9 @@ function updateToolOptions() {
   const lane = $('#toolOptionsLane');
   const labels = {
     move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇',
-    brush: '畫筆', eraser: '橡皮擦', eyedropper: '取色器'
+    brush: '畫筆', eraser: '橡皮擦', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', eyedropper: '取色器'
   };
-  const paintTool = ['brush', 'eraser', 'eyedropper'].includes(state.tool);
+  const paintTool = PAINT_TOOLS.includes(state.tool);
   lane.hidden = !labels[state.tool];
   $('#transformSpaceControl').hidden = !['move', 'rotate', 'pivot'].includes(state.tool);
   $('#rotationModeControl').hidden = state.tool !== 'rotate' || state.transformSpace !== 'self';
@@ -5550,15 +7004,27 @@ function updateToolOptions() {
   $('#vertexSnapStatus').textContent = state.vertexSnapSource ? '再選目標頂點' : '先選來源頂點';
   $('#knifeStatus').hidden = state.tool !== 'knife';
   $('#paintToolOptions').hidden = !paintTool;
-  $('#paintBrushSize').disabled = state.tool === 'eyedropper';
+  $('#paintBrushSize').disabled = ['eyedropper', 'fill'].includes(state.tool);
   $('#paintBrushOpacity').disabled = state.tool === 'eyedropper';
+  $('#paintBucketScopeControl').hidden = state.tool !== 'fill';
+  const brushTipTool = ['brush', 'eraser'].includes(state.tool);
+  $('#paintBrushShapeControl').hidden = !brushTipTool;
+  $('#paintBrushAaControl').hidden = !brushTipTool || state.paintBrushShape !== 'circle';
+  $('#paintBrushDepthControl').hidden = state.tool !== 'brush';
+  $('#paintBucketSingleFaceControl').hidden = state.tool !== 'fill'
+    || !['color', 'contiguous'].includes(state.paintBucketScope);
   $('#snapButton').hidden = paintTool;
   const knifePreview = getKnifePreviewLabel();
   $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
   if (!lane.hidden) $('#toolContext').textContent = labels[state.tool];
   if (document.activeElement !== $('#paintColor')) $('#paintColor').value = state.paintColor;
   if (document.activeElement !== $('#paintBrushSize')) $('#paintBrushSize').value = String(state.paintBrushSize);
+  if (document.activeElement !== $('#paintBrushShape')) $('#paintBrushShape').value = state.paintBrushShape;
+  $('#paintBrushAa').checked = state.paintBrushAa;
+  if (document.activeElement !== $('#paintBrushDepth')) $('#paintBrushDepth').value = String(state.paintBrushDepth);
   if (document.activeElement !== $('#paintBrushOpacity')) $('#paintBrushOpacity').value = String(state.paintBrushOpacity);
+  if (document.activeElement !== $('#paintBucketScope')) $('#paintBucketScope').value = state.paintBucketScope;
+  $('#paintBucketSingleFace').checked = state.paintBucketSingleFace;
   $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
   updateTransformSpaceButtons();
   updateRotationModeButtons();
@@ -5873,13 +7339,17 @@ function applyRegisteredConfig(id, value, notify = false) {
   if (id === ConfigKey.SYMMETRY) { state.symmetry = value; $('#symmetryToggle').checked = value; }
   if (id === ConfigKey.ALPHA_LOCK) { state.alphaLock = value; $('#alphaLockToggle').checked = value; }
   if (id === ConfigKey.PREVIEW_SHADE) { state.previewShade = value; $('#previewShadeToggle').checked = value; }
+  if (id === ConfigKey.SHOW_PLAYER_REFERENCE) { state.playerReference = value; $('#playerReferenceToggle').checked = value; }
+  if (id === ConfigKey.PLAYER_REFERENCE_TEXTURE) updatePlayerReferenceTexture(value);
   if (id === ConfigKey.SHOW_GEOMETRY_ONLY) { state.geometryOnly = value; $('#geometryOnlyToggle').checked = value; }
   if (id === ConfigKey.PROJECTION) {
     if (state.projection && state.projection !== value) {
-      state.zoom = mapProjectionZoom(state.zoom, state.projection, value);
+      if (state.axisView && state.generalCamera) {
+        state.generalCamera.zoom = mapProjectionZoom(state.generalCamera.zoom, state.projection, value);
+      } else state.zoom = mapProjectionZoom(state.zoom, state.projection, value);
     }
     state.projection = value;
-    $$('[data-projection]').forEach(button => button.classList.toggle('active', button.dataset.projection === value));
+    updateProjectionControls();
   }
   if (id === ConfigKey.SHOW_GRID) state.grid = value;
   if (id === ConfigKey.SHOW_WIREFRAME) state.wire = value;
@@ -6006,7 +7476,7 @@ function showElementContextMenu(event, uidValue, source = null) {
         }
       }] : []),
       ...(selectedNodes.length > 1 ? [{ icon: '▰', label: '將選中項建立為組', action: addGroup }] : []),
-      ...(isProceduralShape(node) ? [{
+      ...(isProceduralShape(node) && state.mode !== 'paint' ? [{
         icon: subdivisionSession?.ownerUid === node.uid ? '◆' : '◇',
         label: subdivisionSession?.ownerUid === node.uid ? '完成細分編輯' : '進入細分編輯',
         action: () => subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node)
@@ -6103,6 +7573,7 @@ function bindContextMenus() {
     showElementContextMenu(event, uidValue, source);
   });
   outliner.addEventListener('dblclick', event => {
+    if (state.mode === 'paint') return;
     const row = event.target.closest('.outliner-item');
     if (row?.dataset.curveNodeIndex !== undefined) return;
     const node = row && state.project.getNode(row.dataset.uid);
@@ -6111,6 +7582,7 @@ function bindContextMenus() {
     subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node);
   });
   $('#viewport').addEventListener('dblclick', event => {
+    if (state.mode === 'paint') return;
     if (event.target !== sceneCanvas) return;
     const rect = sceneCanvas.getBoundingClientRect();
     const uidValue = sceneRenderer.pick(state.project, event.clientX - rect.left, event.clientY - rect.top, state.geometryOnly);
@@ -6340,7 +7812,7 @@ function bindEvents() {
     const option = event.target.closest('[data-create-shape]');
     if (!option) return;
     closeShapeCreateMenu();
-    if (option.dataset.createShape === 'polygon_prism') addShape();
+    if (['polygon_prism', 'dodecahedron', 'truncated_icosahedron'].includes(option.dataset.createShape)) addShape(option.dataset.createShape);
     if (option.dataset.createShape === 'bezier2d') addBezierElement(2);
     if (option.dataset.createShape === 'bezier3d') addBezierElement(3);
   });
@@ -6372,9 +7844,19 @@ function bindEvents() {
       if (control.value !== '') setConfigFromControl(control);
     });
   });
+  $('[data-action="importPlayerReferenceTexture"]').addEventListener('click', () => {
+    playerReferenceTextureInput.value = '';
+    playerReferenceTextureInput.click();
+  });
+  $('[data-action="resetPlayerReferenceTexture"]').addEventListener('click', () => {
+    configRegistry.reset(ConfigKey.PLAYER_REFERENCE_TEXTURE, { source: 'player-reference-settings' });
+    toast('已恢復內置玩家紋理');
+  });
+  playerReferenceTextureInput.addEventListener('change', () => importPlayerReferenceTexture(playerReferenceTextureInput.files?.[0]));
   $('#symmetryToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SYMMETRY, event.target.checked, { source: 'toolbar' }));
   $('#alphaLockToggle').addEventListener('change', event => configRegistry.set(ConfigKey.ALPHA_LOCK, event.target.checked, { source: 'toolbar' }));
   $('#previewShadeToggle').addEventListener('change', event => configRegistry.set(ConfigKey.PREVIEW_SHADE, event.target.checked, { source: 'toolbar' }));
+  $('#playerReferenceToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SHOW_PLAYER_REFERENCE, event.target.checked, { source: 'toolbar' }));
   $('#uvPreviewEnabled').addEventListener('change', event => {
     state.uvPreviewEnabled = event.target.checked;
     if (!state.uvPreviewEnabled) stopUvPreviewAnimation();
@@ -6469,9 +7951,10 @@ function bindEvents() {
   }));
   const texturePreview = $('#texturePreview');
   texturePreview.addEventListener('pointerdown', startTexturePointer);
-  texturePreview.addEventListener('pointermove', moveTexturePointer);
+  texturePreview.addEventListener('pointermove', onTexturePointerMove);
   texturePreview.addEventListener('pointerup', endTexturePointer);
   texturePreview.addEventListener('pointercancel', endTexturePointer);
+  texturePreview.addEventListener('lostpointercapture', endTexturePointer);
   texturePreview.addEventListener('pointerleave', () => {
     if (!texturePaintDrag) $('#textureBrushCursor').hidden = true;
     if (!textureUvDrag && !texturePaintDrag) texturePreview.style.cursor = '';
@@ -6501,9 +7984,27 @@ function bindEvents() {
     state.paintBrushSize = clamp(Math.round(Number(event.target.value)) || 1, 1, 64);
     event.target.value = String(state.paintBrushSize);
   });
+  $('#paintBrushShape').addEventListener('change', event => {
+    state.paintBrushShape = event.target.value === 'circle' ? 'circle' : 'square';
+    updateToolOptions();
+  });
+  $('#paintBrushAa').addEventListener('change', event => {
+    state.paintBrushAa = event.target.checked;
+  });
+  $('#paintBrushDepth').addEventListener('input', event => {
+    state.paintBrushDepth = clamp(Math.round(Number(event.target.value)) || 0, 0, 32);
+    event.target.value = String(state.paintBrushDepth);
+  });
   $('#paintBrushOpacity').addEventListener('input', event => {
     state.paintBrushOpacity = clamp(Math.round(Number(event.target.value)) || 100, 1, 100);
     $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
+  });
+  $('#paintBucketScope').addEventListener('change', event => {
+    state.paintBucketScope = ['face', 'element', 'color', 'contiguous'].includes(event.target.value) ? event.target.value : 'face';
+    updateToolOptions();
+  });
+  $('#paintBucketSingleFace').addEventListener('change', event => {
+    state.paintBucketSingleFace = event.target.checked;
   });
   new ResizeObserver(() => {
     syncTexturePreviewPriority();
@@ -6567,8 +8068,39 @@ function bindEvents() {
   });
   $('[data-action="frame"]').addEventListener('click', focusSelected);
   $$('[data-projection]').forEach(button => button.addEventListener('click', () => {
+    if (state.axisView) return;
     configRegistry.set(ConfigKey.PROJECTION, button.dataset.projection, { source: 'viewport-toolbar' });
   }));
+  $('[data-action="referenceImage"]').addEventListener('click', event => {
+    event.stopPropagation();
+    setReferenceImageMenu($('#referenceImageMenu').hidden);
+  });
+  $$('[data-reference-action]').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const action = button.dataset.referenceAction;
+    if (action === 'import') beginReferenceImageImport();
+    if (action === 'edit') {
+      setReferenceImageEditing(!referenceImageEditing);
+      setReferenceImageMenu(false);
+    }
+    if (action === 'reset') resetReferenceImage();
+    if (action === 'remove') removeReferenceImage();
+  }));
+  $('#referenceImageList').addEventListener('click', event => {
+    const button = event.target.closest('[data-reference-select]');
+    if (!button) return;
+    event.stopPropagation();
+    state.referenceImageSelection[referenceViewKey()] = button.dataset.referenceSelect;
+    updateReferenceImageLayer();
+  });
+  referenceImageInput.addEventListener('change', () => {
+    loadReferenceImageFiles(referenceImageInput.files, referenceImportViewKey);
+  });
+  referenceImageLayer.addEventListener('pointerdown', beginReferenceImageDrag);
+  referenceImageLayer.addEventListener('pointermove', moveReferenceImageDrag);
+  referenceImageLayer.addEventListener('pointerup', endReferenceImageDrag);
+  referenceImageLayer.addEventListener('pointercancel', endReferenceImageDrag);
+  referenceImageLayer.addEventListener('wheel', scaleReferenceImage, { passive: false });
   $('#renderModeButton').addEventListener('click', event => {
     event.stopPropagation();
     setRenderModeMenu($('#renderModeMenu').hidden);
@@ -6582,6 +8114,7 @@ function bindEvents() {
   }));
   document.addEventListener('click', event => {
     if (!event.target.closest('#viewportRenderMenu')) setRenderModeMenu(false);
+    if (!event.target.closest('.reference-image-control')) setReferenceImageMenu(false);
   });
   $('#minecraftRenderType').addEventListener('change', event => {
     snapshot();
@@ -6610,6 +8143,7 @@ function bindEvents() {
       await createTextureTemplate({
         name,
         selectedOnly: $('#textureTemplateSelectedOnly').checked,
+        cleanInvalidFaces: $('#textureTemplateCleanInvalid').checked,
         boxUv: $('#textureTemplateBoxUv').checked,
         powerOfTwo: $('#textureTemplatePowerOfTwo').checked,
         keepMultiTexture: $('#textureTemplateKeepMulti').checked,
@@ -6825,14 +8359,19 @@ function bindEvents() {
     clearTextureFaceDropTarget();
     renderTextureList();
   });
-  $$('[data-view-axis]').forEach(button => button.addEventListener('click', () => {
-    cancelCameraFocus();
-    const axis = button.dataset.viewAxis;
-    if (axis === 'x') { state.yaw = Math.PI / 2; state.pitch = 0; }
-    if (axis === 'y') { state.yaw = 0; state.pitch = Math.PI / 2 - .001; }
-    if (axis === 'z') { state.yaw = 0; state.pitch = 0; }
-    renderScene();
+  $$('[data-view-axis]').forEach(button => button.addEventListener('click', event => {
+    if (suppressAxisWidgetClick) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    enterAxisView(button.dataset.viewAxis);
   }));
+  const axisWidget = $('.axis-widget');
+  axisWidget.addEventListener('pointerdown', beginAxisWidgetDrag);
+  axisWidget.addEventListener('pointermove', moveAxisWidgetDrag);
+  axisWidget.addEventListener('pointerup', endAxisWidgetDrag);
+  axisWidget.addEventListener('pointercancel', endAxisWidgetDrag);
   $('#transformGizmo').addEventListener('pointerdown', event => {
     if (event.button === 1) {
       event.preventDefault(); event.stopPropagation();
@@ -6875,7 +8414,7 @@ function bindEvents() {
   $('#transformGizmo').addEventListener('pointerup', endPointerDrag);
   $('#transformGizmo').addEventListener('pointercancel', endPointerDrag);
   sceneCanvas.addEventListener('pointerdown', onPointerDown);
-  sceneCanvas.addEventListener('pointermove', onPointerMove);
+  sceneCanvas.addEventListener('pointermove', onScenePointerMove);
   viewport.addEventListener('pointermove', scheduleLockedHover);
   viewport.addEventListener('pointerleave', () => {
     sceneCanvas.classList.remove('is-curve-handle-hover');
@@ -6889,6 +8428,7 @@ function bindEvents() {
   });
   sceneCanvas.addEventListener('pointerup', endPointerDrag);
   sceneCanvas.addEventListener('pointercancel', endPointerDrag);
+  sceneCanvas.addEventListener('lostpointercapture', endPointerDrag);
   sceneCanvas.addEventListener('auxclick', event => { if (event.button === 1) event.preventDefault(); });
   sceneCanvas.addEventListener('wheel', event => { event.preventDefault(); cancelCameraFocus(); state.zoom = Math.max(.002, Math.min(100, state.zoom * (event.deltaY > 0 ? .9 : 1.1))); renderScene(); }, { passive: false });
   window.addEventListener('resize', renderScene);
@@ -6897,6 +8437,8 @@ function bindEvents() {
     if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
     if (event.key === 'Escape') {
       setRenderModeMenu(false);
+      setReferenceImageMenu(false);
+      if (referenceImageEditing) setReferenceImageEditing(false);
       closeShapeCreateMenu();
       if (subdivisionSession) exitSubdivisionEdit();
     }
@@ -6914,7 +8456,7 @@ function bindEvents() {
       else event.shiftKey ? focusSceneOrigin() : focusSelected();
     }
     if (state.mode === 'paint' && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      const paintShortcuts = { b: 'brush', e: 'eraser', i: 'eyedropper' };
+      const paintShortcuts = { b: 'brush', e: 'eraser', l: 'line', m: 'rectangle', o: 'ellipse', g: 'fill', i: 'eyedropper' };
       const paintTool = paintShortcuts[event.key.toLowerCase()];
       if (paintTool) {
         event.preventDefault();
@@ -6995,7 +8537,7 @@ function onPointerDown(event) {
     return;
   }
   if (event.button !== 0) return;
-  if (state.mode === 'paint' && ['brush', 'eraser', 'eyedropper'].includes(state.tool)) {
+  if (state.mode === 'paint' && PAINT_TOOLS.includes(state.tool)) {
     startScenePaintPointer(event, x, y);
     return;
   }
@@ -7121,13 +8663,13 @@ function startCameraDrag(event, captureTarget) {
   captureTarget.setPointerCapture(event.pointerId);
   bakeCameraPan();
   const frame = sceneRenderer.getCameraFrame();
-  state.dragging = event.shiftKey
+  state.dragging = event.shiftKey || state.axisView
     ? {
         type: 'pan', pointerId: event.pointerId, x: event.clientX, y: event.clientY,
         target: [...state.target], right: [...frame.right], up: [...frame.up], worldPerPixel: frame.worldPerPixel
       }
     : { type: 'orbit', pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: state.yaw, pitch: state.pitch };
-  sceneCanvas.classList.add(event.shiftKey ? 'is-panning' : 'is-orbiting');
+  sceneCanvas.classList.add(event.shiftKey || state.axisView ? 'is-panning' : 'is-orbiting');
 }
 
 const CUBE_FACE_NAMES = ['north', 'east', 'south', 'west', 'up', 'down'];
@@ -7148,7 +8690,10 @@ function translateItemByLocalDelta(item, delta) {
   if (item.type === 'cube') {
     item.position = item.position.map((value, axis) => value + delta[axis]);
     item.pivot = item.pivot.map((value, axis) => value + delta[axis]);
-  } else if (item.origin) item.origin = item.origin.map((value, axis) => value + delta[axis]);
+  } else if (item.origin) {
+    item.origin = item.origin.map((value, axis) => value + delta[axis]);
+    if (isShapeElement(item)) item.pivot = item.pivot.map((value, axis) => value + delta[axis]);
+  }
   else if (item.position) item.position = item.position.map((value, axis) => value + delta[axis]);
   else if (item.type === 'group') {
     const members = captureGroupMembers(item);
@@ -7157,7 +8702,10 @@ function translateItemByLocalDelta(item, delta) {
       if (member.node.type === 'cube') {
         member.node.position = member.position.map((value, axis) => value + delta[axis]);
         member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
-      } else if (member.node.origin) member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+      } else if (member.node.origin) {
+        member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+        if (isShapeElement(member.node) && member.pivot) member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
+      }
       else if (member.node.position) member.node.position = member.position.map((value, axis) => value + delta[axis]);
       else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
     });
@@ -7239,7 +8787,7 @@ function useVertexSnapPoint(pointEntry) {
       let localDelta = worldVectorToParentLocal(sourceItem, worldDelta);
       localDelta = inverseRotateVector(localDelta, sourceItem.rotation || [0, 0, 0]);
       node.position = node.position.map((value, axis) => sourceItem.dimension === 2 && axis === 1 ? 0 : value + localDelta[axis]);
-    } else if (state.vertexSnapSource.pointType === 'pivot' && ['cube', 'group'].includes(sourceItem.type)) {
+    } else if (state.vertexSnapSource.pointType === 'pivot' && (['cube', 'group'].includes(sourceItem.type) || isShapeElement(sourceItem))) {
       setPivotPreservingGeometry(state.project, sourceItem, worldPointToParentLocal(sourceItem, pointEntry.point));
     } else {
       const worldDelta = pointEntry.point.map((value, axis) => value - state.vertexSnapSource.point[axis]);
@@ -7533,7 +9081,7 @@ function buildEditorOverlayLines() {
 }
 
 function nodeTransformAnchor(node) {
-  if (node.type === 'cube' || node.type === 'group') return node.pivot;
+  if (node.type === 'cube' || node.type === 'group' || isShapeElement(node)) return node.pivot;
   return node.position || node.origin;
 }
 
@@ -7594,7 +9142,10 @@ function translateCapturedTarget(target, delta) {
   if (node.type === 'cube') {
     node.position = target.position.map((value, axis) => value + delta[axis]);
     node.pivot = target.pivot.map((value, axis) => value + delta[axis]);
-  } else if (node.origin) node.origin = target.position.map((value, axis) => value + delta[axis]);
+  } else if (node.origin) {
+    node.origin = target.position.map((value, axis) => value + delta[axis]);
+    if (isShapeElement(node) && target.pivot) node.pivot = target.pivot.map((value, axis) => value + delta[axis]);
+  }
   else if (node.position) node.position = target.position.map((value, axis) => value + delta[axis]);
   else if (node.type === 'group') {
     node.pivot = target.position.map((value, axis) => value + delta[axis]);
@@ -7602,7 +9153,10 @@ function translateCapturedTarget(target, delta) {
       if (member.node.type === 'cube') {
         member.node.position = member.position.map((value, axis) => value + delta[axis]);
         member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
-      } else if (member.node.origin) member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+      } else if (member.node.origin) {
+        member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+        if (isShapeElement(member.node) && member.pivot) member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
+      }
       else if (member.node.position) member.node.position = member.position.map((value, axis) => value + delta[axis]);
       else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
       translateModifierAnchorsFromSnapshot(member.node, member.modifierAnchors, delta);
@@ -7714,11 +9268,11 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   const itemSubdivisionOwner = subdivisionOwner(item);
   const parentChain = state.project.getGroupChain(itemSubdivisionOwner?.uid || item.uid);
   const chain = modifierAnchorContext
-    ? [...parentChain, { pivot: item.type === 'group' || item.type === 'cube' ? item.pivot : item.origin || item.position || [0, 0, 0], rotation: item.rotation || [0, 0, 0] }]
+    ? [...parentChain, { pivot: item.type === 'group' || item.type === 'cube' || isShapeElement(item) ? item.pivot : item.origin || item.position || [0, 0, 0], rotation: item.rotation || [0, 0, 0] }]
     : curveNodeContext
     ? [...parentChain, { pivot: item.origin, rotation: item.rotation || [0, 0, 0] }]
     : itemSubdivisionOwner
-      ? [...parentChain, { pivot: [0, 0, 0], rotation: itemSubdivisionOwner.rotation || [0, 0, 0] }]
+      ? [...parentChain, { pivot: (itemSubdivisionOwner.pivot || itemSubdivisionOwner.origin).map((value, axis) => value - itemSubdivisionOwner.origin[axis]), rotation: itemSubdivisionOwner.rotation || [0, 0, 0] }]
       : parentChain;
   const cameraFrame = sceneRenderer.getCameraFrame();
   const freeMovePlane = kind === 'free' && ['move', 'pivot'].includes(state.tool)
@@ -7814,6 +9368,7 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
 
 function onPointerMove(event) {
   if (state.dragging?.type === 'texture-paint-3d') {
+    event.preventDefault?.();
     moveScenePaintDrag(event);
     return;
   }
@@ -7911,6 +9466,19 @@ function onPointerMove(event) {
   renderScene();
 }
 
+function onScenePointerMove(event) {
+  if (event.pointerType === 'pen' && state.dragging?.type === 'texture-paint-3d'
+    && typeof event.getCoalescedEvents === 'function') {
+    const samples = event.getCoalescedEvents();
+    if (samples.length) {
+      event.preventDefault();
+      for (const sample of samples) moveScenePaintDrag(sample);
+      return;
+    }
+  }
+  onPointerMove(event);
+}
+
 function applyPendingTransform(drag) {
   const pending = drag?.pendingTransform;
   if (!pending) return false;
@@ -7959,12 +9527,11 @@ function endPointerDrag(event) {
   if (!state.dragging) return;
   const finishedDrag = state.dragging;
   if (finishedDrag.type === 'texture-paint-3d') {
+    state.dragging = null;
     const captureTarget = event.currentTarget;
     if (captureTarget.hasPointerCapture?.(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
     finishedDrag.ended = true;
-    finishedDrag.canceled = event.type === 'pointercancel' && !finishedDrag.ready;
-    state.dragging = null;
-    if (finishedDrag.ready && !finishedDrag.canceled) finishScenePaintDrag(finishedDrag);
+    if (finishedDrag.ready) finishScenePaintDrag(finishedDrag);
     return;
   }
   if (finishedDrag.type === 'transform') {
@@ -8068,7 +9635,7 @@ function applyTransformDrag(drag, dx, dy, event) {
     : drag.axis
     ? (dx * drag.axis.screen[0] + -dy * drag.axis.screen[1]) * drag.axis.worldPerPixel
     : null;
-  const fallbackScale = drag.axis?.worldPerPixel || drag.referenceWorldPerPixel || (state.projection === 'perspective'
+  const fallbackScale = drag.axis?.worldPerPixel || drag.referenceWorldPerPixel || (currentProjection() === 'perspective'
     ? 2 * (42 / state.zoom) * Math.tan(Math.PI / 8) / drag.rect.height
     : 36 / (drag.rect.height * state.zoom));
   if (drag.tool === 'pivot') {
@@ -8198,8 +9765,10 @@ function applyTransformDrag(drag, dx, dy, event) {
       item.pivot = drag.pivot.map((value, axis) => value + applied[axis]);
       translateModifierAnchorsFromSnapshot(item, drag.modifierAnchors, applied);
     } else if (item.origin) {
+      const applied = next.map((value, axis) => value - drag.position[axis]);
       item.origin = next;
-      translateModifierAnchorsFromSnapshot(item, drag.modifierAnchors, next.map((value, axis) => value - drag.position[axis]));
+      if (isShapeElement(item) && drag.pivot) item.pivot = drag.pivot.map((value, axis) => value + applied[axis]);
+      translateModifierAnchorsFromSnapshot(item, drag.modifierAnchors, applied);
     }
     else if (item.position) {
       item.position = next;
@@ -8213,7 +9782,10 @@ function applyTransformDrag(drag, dx, dy, event) {
         if (member.node.type === 'cube') {
           member.node.position = member.position.map((value, axis) => value + delta[axis]);
           member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
-        } else if (member.node.origin) member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+        } else if (member.node.origin) {
+          member.node.origin = member.position.map((value, axis) => value + delta[axis]);
+          if (isShapeElement(member.node) && member.pivot) member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
+        }
         else if (member.node.position) member.node.position = member.position.map((value, axis) => value + delta[axis]);
         else member.node.pivot = member.position.map((value, axis) => value + delta[axis]);
         translateModifierAnchorsFromSnapshot(member.node, member.modifierAnchors, delta);
@@ -8259,7 +9831,16 @@ function applyTransformDrag(drag, dx, dy, event) {
         targetItem.position = position;
         targetItem.size = size;
       } else if (isShapeElement(targetItem)) {
-        if (drag.kind === 'plane-uniform') {
+        if (targetItem.shapeType !== 'polygon_prism') {
+          const distance = drag.kind === 'uniform'
+            ? target.radius * (Math.max(0, 1 - dy * .01) - 1)
+            : drag.kind === 'plane-uniform'
+              ? getPlaneUniformDistance(drag, dx, dy)
+              : drag.kind === 'plane'
+                ? planeDistances.reduce((sum, value) => sum + value, 0) / Math.max(1, planeDistances.length)
+                : axisDelta ?? dx * fallbackScale;
+          targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + distance, event));
+        } else if (drag.kind === 'plane-uniform') {
           const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
           if (drag.axisIndices.includes(1)) targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height + distance * 2, event));
           if (drag.axisIndices.some(index => index !== 1)) targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + distance, event));
@@ -8329,7 +9910,18 @@ function applyTransformDrag(drag, dx, dy, event) {
       item.size = size;
     }
     if (isShapeElement(item)) {
-      if (drag.kind === 'plane-uniform') {
+      if (item.shapeType !== 'polygon_prism') {
+        const distances = drag.kind === 'plane' ? getPlaneDragDistances(drag, dx, dy).map(value => snapValue(value, event)) : [];
+        const distance = drag.kind === 'uniform'
+          ? drag.radius * (Math.max(0, 1 - dy * .01) - 1)
+          : drag.kind === 'plane-uniform'
+            ? getPlaneUniformDistance(drag, dx, dy)
+            : drag.kind === 'plane'
+              ? distances.reduce((sum, value) => sum + value, 0) / Math.max(1, distances.length)
+              : axisDelta ?? dx * fallbackScale;
+        item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + distance, event));
+        drag.tooltipText = `半徑 ${formatNumber(item.parameters.radius)} / 邊長 ${formatNumber(polyhedronEdgeLength(item, item.parameters.radius))} px`;
+      } else if (drag.kind === 'plane-uniform') {
         const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
         if (drag.axisIndices.includes(1)) item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + distance * 2, event));
         if (drag.axisIndices.some(index => index !== 1)) item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + distance, event));
@@ -8460,7 +10052,7 @@ function captureGroupMembers(group) {
       node.children.forEach(visit);
     } else if (node.type === 'cube') members.push({ node, position: [...node.position], pivot: [...node.pivot], modifierAnchors: captureModifierAnchors(node) });
     else if (node.position) members.push({ node, position: [...node.position], modifierAnchors: captureModifierAnchors(node) });
-    else members.push({ node, position: [...node.origin], modifierAnchors: captureModifierAnchors(node) });
+    else members.push({ node, position: [...node.origin], pivot: Array.isArray(node.pivot) ? [...node.pivot] : null, modifierAnchors: captureModifierAnchors(node) });
   };
   group.children.forEach(visit);
   return members;
@@ -8489,17 +10081,23 @@ function getAngleSnapStep(event = {}) {
   return 2.5;
 }
 
+function polyhedronEdgeLength(shape, radius) {
+  const value = Math.max(0, Number(radius) || 0);
+  if (shape?.shapeType === 'dodecahedron') return value * 4 / (Math.sqrt(3) * (1 + Math.sqrt(5)));
+  if (shape?.shapeType === 'truncated_icosahedron') return value * 4 / Math.sqrt(58 + 18 * Math.sqrt(5));
+  const sides = Math.max(3, Math.round(Number(shape?.parameters?.sides) || 3));
+  return value * 2 * Math.sin(Math.PI / sides);
+}
+
+function radiusFromPolyhedronEdge(shape, edgeLength) {
+  const unitEdge = polyhedronEdgeLength(shape, 1);
+  return unitEdge > 1e-8 ? edgeLength / unitEdge : 0;
+}
+
 function snapShapeDimension(shape, key, value, event = {}) {
-  const mode = shape?.parameters?.snapMode === 'bounds' ? 'bounds' : 'cube';
-  if (mode === 'cube') {
-    const step = Math.max(.0625, Number(shape.parameters.cubeSize) || 1);
-    if (key !== 'radius') return Math.round(value / step) * step;
-    const sides = Math.max(3, Math.round(Number(shape.parameters.sides) || 3));
-    const halfTurn = Math.PI / sides;
-    const snappedApothem = Math.max(step, Math.round(value * Math.cos(halfTurn) / step) * step);
-    return snappedApothem / Math.cos(halfTurn);
-  }
-  return key === 'radius' ? snapValue(value * 2, event) / 2 : snapValue(value, event);
+  if (key !== 'radius') return snapValue(value, event);
+  if (shape?.parameters?.snapMode === 'radius') return snapValue(value, event);
+  return radiusFromPolyhedronEdge(shape, snapValue(polyhedronEdgeLength(shape, value), event));
 }
 function snapAngle(value, step) { return Math.round(value / step) * step; }
 function formatNumber(value) { return Number(value.toFixed(4)).toString(); }

@@ -21,6 +21,8 @@ export const ConfigKey = Object.freeze({
   ALPHA_LOCK: 'paint.alpha-lock',
   PROJECTION: 'viewport.projection',
   PREVIEW_SHADE: 'viewport.preview-shade',
+  SHOW_PLAYER_REFERENCE: 'viewport.show-player-reference',
+  PLAYER_REFERENCE_TEXTURE: 'viewport.player-reference-texture',
   SHOW_GEOMETRY_ONLY: 'viewport.show-geometry-only',
   SHOW_GRID: 'viewport.show-grid',
   SHOW_WIREFRAME: 'viewport.show-wireframe',
@@ -104,6 +106,8 @@ configRegistry.registerMany([
     description: 'Viewport camera projection.'
   },
   { id: ConfigKey.PREVIEW_SHADE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Enable face shading in the viewport when the element also allows shading.' },
+  { id: ConfigKey.SHOW_PLAYER_REFERENCE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Show the non-editable player scale reference in the viewport.' },
+  { id: ConfigKey.PLAYER_REFERENCE_TEXTURE, type: ConfigType.OBJECT, scope: ConfigScope.APPLICATION, defaultValue: { name: '內置玩家紋理', source: '' }, validate: value => typeof value.name === 'string' && typeof value.source === 'string', description: 'Custom skin used by the non-editable player reference.' },
   { id: ConfigKey.SHOW_GEOMETRY_ONLY, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Hide helper objects such as locators without changing their individual visibility.' },
   { id: ConfigKey.SHOW_GRID, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Show the viewport floor grid.' },
   { id: ConfigKey.SHOW_WIREFRAME, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Show model wireframe bounds.' },
@@ -121,9 +125,13 @@ const ENGLISH_UI = Object.freeze({
   '未保存': 'Unsaved', '主選單': 'Main menu', '新建': 'New', '打開': 'Open', '保存': 'Save', '撤銷': 'Undo', '重做': 'Redo', 'CubeBricks 設定': 'CubeBricks Settings',
   '編輯': 'Edit', 'UV 編輯模式': 'UV Edit mode', '繪畫': 'Paint', '動畫': 'Animate', '設定': 'Settings', '導出': 'Export',
   '工具欄': 'Toolbar', '工具': 'Tools', '目前工具參數': 'Current tool options', '工具參數': 'Tool options',
-  '移動': 'Move', '縮放': 'Scale', '旋轉': 'Rotate', '新增方塊': 'Add cube', '新增形狀': 'Add shape', '新增 Locator': 'Add locator', '畫筆': 'Brush', '橡皮擦': 'Eraser', '取色器': 'Eyedropper',
-  '畫筆（B）': 'Brush (B)', '橡皮擦（E）': 'Eraser (E)', '取色器（I）': 'Eyedropper (I)',
-  '繪畫顏色': 'Paint color', '筆刷尺寸': 'Brush size', '筆刷透明度': 'Brush opacity', '顏色': 'Color', '尺寸': 'Size', '透明度': 'Opacity',
+  '移動': 'Move', '縮放': 'Scale', '旋轉': 'Rotate', '新增方塊': 'Add cube', '新增形狀': 'Add shape', '新增 Locator': 'Add locator', '畫筆': 'Brush', '橡皮擦': 'Eraser', '直線': 'Line', '矩形': 'Rectangle', '橢圓': 'Ellipse', '油漆桶': 'Fill', '取色器': 'Eyedropper',
+  '畫筆（B）': 'Brush (B)', '橡皮擦（E）': 'Eraser (E)', '直線（L）': 'Line (L)', '矩形（M）': 'Rectangle (M)', '橢圓（O）': 'Ellipse (O)', '油漆桶（G）': 'Fill (G)', '取色器（I）': 'Eyedropper (I)',
+  '繪畫顏色': 'Paint color', '筆刷尺寸': 'Brush size', '筆刷透明度': 'Brush opacity', '筆刷形狀': 'Brush shape', '圓形筆刷邊緣抗鋸齒': 'Antialiased round-brush edge',
+  '筆跡碰到 Cube 邊緣時，向相鄰面的貼圖延伸指定像素': 'Extend the stroke into adjacent face textures when it reaches a cube edge',
+  '油漆桶填充範圍': 'Fill scope', '範圍': 'Scope', '元素': 'Element', '連續顏色': 'Contiguous color', '顏色': 'Color', '尺寸': 'Size', '透明度': 'Opacity',
+  '形狀': 'Shape', '方形': 'Square', '圓形': 'Circle', '三角形': 'Triangle', '深度': 'Depth', 'AA 邊緣': 'AA edge', '單面局限': 'Limit to face',
+  '同色填充只在目前面的 UV 範圍內搜尋': 'Limit same-color fill to the current face UV area',
   '新增節點': 'Add node', '新增二維貝塞爾': 'Add 2D Bezier', '新增三維貝塞爾': 'Add 3D Bezier',
   '移動樞軸': 'Move pivot', '頂點捕捉': 'Vertex snap', '刀具切割': 'Knife', '切割軸': 'Cut axis',
   '沿 X 軸切割': 'Cut along X', '沿 Y 軸切割': 'Cut along Y', '沿 Z 軸切割': 'Cut along Z',
@@ -134,6 +142,7 @@ const ENGLISH_UI = Object.freeze({
   '選中項樞軸點': 'Selected item pivot', '已取消來源頂點': 'Source vertex cleared',
   '縮放捕捉目前只適用於 Cube': 'Scale snap currently supports cubes only', '這個物件不能旋轉捕捉': 'This object cannot use rotation snap',
   '所選頂點無法建立旋轉方向': 'The selected vertices cannot define a rotation',
+  '繪畫模式可直接在 Shape 上繪畫，不使用細分編輯': 'Paint directly on shapes in Paint mode; Subdivision Edit is disabled',
   '已移動至目標頂點': 'Moved to target vertex', '已縮放至目標頂點': 'Scaled to target vertex', '已旋轉對齊目標頂點': 'Rotated to target vertex',
   '請先選擇目前物件的來源頂點': 'Select a source vertex on the current object first',
   '目標頂點必須位於目前選取範圍之外': 'The target vertex must be outside the current selection',
@@ -165,6 +174,7 @@ const ENGLISH_UI = Object.freeze({
   '獨立 UV 編輯模式': 'Separate UV editing mode', '模型製作與 UV 調整使用不同模式': 'Use separate modes for modelling and UV editing',
   '類型': 'Type', '名稱': 'Name', '紋理模板': 'Texture template', '純色模板': 'Solid template', '空白貼圖': 'Blank texture',
   '寬度': 'Width', '高度': 'Height', '填充顏色': 'Fill color', '啟用箱型 UV': 'Use box UV', '使用 2 冪尺寸': 'Use power-of-two size',
+  '清理無效面': 'Clean invalid faces', '將任一邊長為 0 的面設為剔除': 'Cull faces whose width or height is zero', '非零邊長至少分配 1px': 'Non-zero edges receive at least 1 px',
   '保持多紋理佔用': 'Preserve multi-texture occupancy', '填充間隔': 'Padding', '間隔像素': 'Padding pixels', '尺寸倍數': 'Size multiple',
   '僅分配選中元素': 'Selected elements only', '只重排目前選取範圍的 UV': 'Repack UVs only for the current selection',
   '正在建立貼圖': 'Generating texture', '正在準備 UV…': 'Preparing UVs…', '進度按照需要處理的面數計算': 'Progress is based on the number of faces to process',
@@ -184,9 +194,23 @@ const ENGLISH_UI = Object.freeze({
   '目前渲染模式：線框': 'Current render mode: Wireframe', '目前渲染模式：體塊': 'Current render mode: Solid', '目前渲染模式：紋理': 'Current render mode: Textured',
   '線框': 'Wireframe', '體塊': 'Solid', '紋理': 'Textured', '法向': 'Normals', '目前：法向': 'Current: Normals', '目前渲染模式：法向': 'Current render mode: Normals', '座標軸': 'Axes', '頂視圖': 'Top view', '右視圖': 'Right view', '正視圖': 'Front view',
   '中鍵': 'Middle mouse', 'Shift + 中鍵': 'Shift + Middle mouse', '平移': 'Pan', '滾輪': 'Wheel', '中心': 'Origin',
+  '參考圖': 'Reference image', '一般視圖參考圖': 'General-view reference', 'X 軸視圖參考圖': 'X-axis reference',
+  'Y 軸視圖參考圖': 'Y-axis reference', 'Z 軸視圖參考圖': 'Z-axis reference', '尚未導入': 'Not imported',
+  '＋ 導入參考圖': '+ Import reference images', '調整位置與尺寸': 'Adjust position and size', '結束調整': 'Finish adjusting',
+  '重置位置與尺寸': 'Reset position and size', '移除選中參考圖': 'Remove selected reference', '拖動平移 · 滾輪縮放': 'Drag to move · Wheel to scale',
+  '這個視圖還沒有參考圖': 'This view has no reference images', '無法讀取這些參考圖': 'Could not read these reference images',
+  '三軸視圖固定使用正交投影': 'Axis views always use orthographic projection', '拖動輪盤': 'Drag axis widget', '一般視圖': 'General view',
+  '玩家參考': 'Player reference', '顯示玩家尺寸與姿態參考；只用於預覽，不會寫入模型工程或導出檔。': 'Show a player scale and pose reference. This is preview-only and is never saved in model projects or exports.',
+  '玩家參考紋理': 'Player reference texture', '內置玩家紋理': 'Built-in player texture', '導入玩家紋理': 'Import player texture',
+  '恢復內置紋理': 'Restore built-in texture', '建議使用 64×64 或等比例高清 Minecraft 皮膚。': 'Use a 64×64 Minecraft skin or a proportional high-resolution version.',
+  '自定義玩家紋理': 'Custom player texture', '已恢復內置玩家紋理': 'Restored the built-in player texture',
+  '無法讀取內置玩家紋理': 'Could not load the built-in player texture', '無法讀取自定義玩家紋理，已回退內置紋理': 'Could not load the custom player texture; restored the built-in texture',
+  '無法讀取這張玩家紋理': 'Could not read this player texture', '這個檔案不是可用的 PNG 玩家紋理': 'This file is not a usable PNG player texture',
+  '玩家紋理必須是至少 64×64 的正方形圖片': 'Player textures must be square images of at least 64×64 pixels',
   '色卡': 'Palette', '時間軸': 'Timeline', '輸出': 'Output', '模型色卡': 'Model palette', '新增一行': 'Add row', '項目已就緒。': 'Project ready.',
-  '物件屬性': 'Object properties', '場景層級': 'Scene hierarchy', '新增組': 'Add group', '搜尋物件或 UID': 'Search objects or UID',
+  '物件屬性': 'Object properties', '選色器': 'Color picker', '場景層級': 'Scene hierarchy', '新增組': 'Add group', '搜尋物件或 UID': 'Search objects or UID',
   '基礎': 'Basic', '修改器': 'Modifiers', '新增修改器': 'Add modifier', '這個物件目前沒有修改器。': 'This object has no modifiers.',
+  '烘焙': 'Bake', '只烘焙這個修改器': 'Bake only this modifier', '已烘焙選中的修改器': 'Selected modifier baked', '這個修改器目前無法烘焙': 'This modifier cannot currently be baked',
   '展開或折疊': 'Expand or collapse', '啟用修改器': 'Enable modifier', '內嵌軸點': 'Embedded axis', '不進入場景層級': 'Not added to the scene hierarchy',
   '在主視圖編輯': 'Edit in viewport', '結束軸點編輯': 'Finish axis editing',
   '不進入場景層級；可在主視圖點擊標記後移動或旋轉。': 'Not added to the scene hierarchy; click the marker in the viewport to move or rotate it.',
@@ -195,6 +219,8 @@ const ENGLISH_UI = Object.freeze({
   '幾何': 'Geometry', '重置': 'Reset', '位置': 'Position', '尺寸': 'Size', '樞軸': 'Pivot', '膨脹': 'Inflate',
   'UV 模式': 'UV mode', '箱型 UV': 'Box UV', '逐面 UV': 'Per-face UV', '形狀參數': 'Shape parameters',
   '半徑': 'Radius', '高度': 'Height', '邊數': 'Sides', '生成 Cube': 'Generated cubes', 'Locator 變換': 'Locator transform',
+  '正十二面體': 'Regular dodecahedron', '足球（截角二十面體）': 'Football (truncated icosahedron)', '單邊邊長': 'Single-edge length',
+  '尺寸擬合': 'Dimension snapping', '擬合單邊邊長': 'Snap single-edge length', '擬合多邊形邊長': 'Snap polygon edge length', '擬合整體半徑': 'Snap overall radius',
   'Cube 邊長': 'Cube edge', '柱體吸附': 'Prism snapping', '按內含 Cube 邊長': 'Contained-cube edge', '按整體邊長': 'Overall edge',
   '節點': 'Node', '只可移動／旋轉': 'Move / rotate only', '自動切線': 'Automatic tangent', '滾動角': 'Roll angle', '貝塞爾手柄': 'Bezier handles', '前手柄': 'Incoming handle', '後手柄': 'Outgoing handle',
   '二維貝塞爾': '2D Bezier', '三維貝塞爾': '3D Bezier', 'Cube 柱粗細': 'Cube column thickness', '分段方式': 'Segmentation',
@@ -258,7 +284,7 @@ const SIMPLIFIED_CHARS = Object.freeze({
   '體':'体','開':'开','關':'关','閉':'闭','陰':'阴','顯':'显','圖':'图','層':'层','編':'编','輯':'辑','繪':'绘','畫':'画','動':'动','導':'导','檔':'档','儲':'储','復':'复','設':'设','覽':'览','縮':'缩','態':'态','級':'级','軸':'轴','長':'长','圍':'围','線':'线','僅':'仅','鎖':'锁','稱':'称','變':'变','換':'换','擇':'择','組':'组','場':'场','間':'间','輸':'输','項':'项','參':'参','數':'数','塊':'块','刪':'删','除':'除','見':'见','幾':'几','樞':'枢','脹':'胀','狀':'状','徑':'径','邊':'边','質':'质','預':'预','選':'选','語':'语','網':'网','負':'负','許':'许','顔':'颜','顏':'颜','圓':'圆','強':'强','調':'调','熔':'熔','還':'还','應':'应','過':'过','這':'这','臺':'台','電':'电','腦':'脑','獨':'独','當':'当','與':'与','後':'后','會':'会','啟':'启','連':'连','續':'续','離':'离','內':'内','實':'实','視':'视','點':'点','擊':'击','進':'进','階':'阶','構':'构','則':'则','個':'个','處':'处','從':'从','標':'标','記':'记','題':'题','樣':'样','細':'细','節':'节','類':'类','別':'别','載':'载','務':'务','優':'优','勢':'势','據':'据','墊':'垫','疊':'叠','寬':'宽','釋':'释','權':'权','傳':'传','統':'统','築':'筑','擁':'拥','護':'护','隱':'隐','響':'响','極':'极','遠':'远','習':'习','萬':'万','屬':'属','為':'为','時':'时','種':'种','並':'并','註':'注','冊':'册','觀':'观','對':'对','滾':'滚','輪':'轮','鍵':'键','頂':'顶','單':'单','銷':'销','欄':'栏','轉':'转','筆':'笔','蓋':'盖','暫':'暂','輔':'辅','側':'侧','區':'区','紋':'纹','帶':'带','巢':'巢','匯':'汇','總':'总',
   '來':'来','歐':'欧','貼':'贴','範':'范','覺':'觉','緒':'绪','沒':'没','漸':'渐','無':'无','讀':'读','張':'张','敗':'败','認':'认','義':'义','請':'请','須':'须','於':'于','繞':'绕','齊':'齐','適':'适','豎':'竖','橫':'横','執':'执','讓':'让',
   '詳':'详','資':'资','訊':'讯','虛':'虚','準':'准','維':'维','佔':'占','膚':'肤','頁':'页','隨':'随','貝':'贝','爾':'尔',
-  '歸':'归','純':'纯','冪':'幂','將':'将','恢':'恢','礎':'础','鏡':'镜','羅':'罗','東':'东','順':'顺','針':'针','結':'结'
+  '歸':'归','純':'纯','冪':'幂','將':'将','恢':'恢','礎':'础','鏡':'镜','羅':'罗','東':'东','順':'顺','針':'针','結':'结','盤':'盘','寫':'写','計':'计'
 });
 
 function toSimplified(source) {
@@ -283,8 +309,8 @@ export function translateUiText(source, language = configRegistry.get(ConfigKey.
   if (match) return `${match[1]} nodes`;
   match = text.match(/^吸附 (.+) · (.+)px$/);
   if (match) return `Snap ${match[1]} · ${match[2]}px`;
-  match = text.match(/^目前按項目基礎吸附 (.+) 計算：UV 像素 = round\(Cube 尺寸 × (.+) ÷ 16\)，再由大到小自左上角打包。$/);
-  if (match) return `Using project base snap ${match[1]}: UV pixels = round(Cube size × ${match[2]} ÷ 16), then packed largest-first from the top-left.`;
+  match = text.match(/^目前按項目基礎吸附 (.+) 計算：UV 像素 = round\(Cube 尺寸 × (.+) ÷ 16\)，(?:非零邊長最少 1px，)?再由大到小自左上角打包。$/);
+  if (match) return `Using project base snap ${match[1]}: UV pixels = round(Cube size × ${match[2]} ÷ 16), with at least 1 px for every non-zero edge, then packed largest-first from the top-left.`;
   match = text.match(/^正在準備 (\d+) 個面…$/);
   if (match) return `Preparing ${match[1]} faces…`;
   match = text.match(/^已(剔除|恢復) (\d+) 個面$/);
@@ -301,6 +327,12 @@ export function translateUiText(source, language = configRegistry.get(ConfigKey.
   if (match) return `Close ${match[1]}`;
   match = text.match(/^介面語言：(.*)$/);
   if (match) return `Interface language: ${match[1]}`;
+  match = text.match(/^玩家參考紋理：(.*)$/);
+  if (match) return `Player reference texture: ${match[1]}`;
+  match = text.match(/^已導入(一般視圖|[XYZ] 軸視圖)參考圖 · (\d+) 張$/);
+  if (match) return `Imported ${match[2]} reference images for ${match[1] === '一般視圖' ? 'the general view' : `the ${match[1][0]}-axis view`}`;
+  match = text.match(/^已導入 (\d+) 張參考圖，部分檔案無法讀取$/);
+  if (match) return `Imported ${match[1]} reference images; some files could not be read`;
   match = text.match(/^已沿 ([XYZ]) 軸切割 (.+)$/);
   if (match) return `Cut ${match[2]} along the ${match[1]} axis`;
   match = text.match(/^預覽：(豎切|橫切)$/);

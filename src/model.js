@@ -33,6 +33,28 @@ function cloneData(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
+function normalizeReferenceImages(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  return Object.fromEntries(['general', 'x', 'y', 'z'].map(key => {
+    const records = Array.isArray(source[key]) ? source[key] : source[key] ? [source[key]] : [];
+    return [key, records.flatMap(record => {
+      if (!record || typeof record.source !== 'string') return [];
+      const naturalWidth = Math.max(1, Number(record.naturalWidth) || 1);
+      const naturalHeight = Math.max(1, Number(record.naturalHeight) || 1);
+      const fallbackScale = key === 'general' ? 1 : 16 / Math.max(naturalWidth, naturalHeight);
+      return [{
+        uid: String(record.uid || uid('reference')),
+        name: String(record.name || 'reference.png'),
+        source: record.source,
+        naturalWidth,
+        naturalHeight,
+        offset: [Number(record.offset?.[0]) || 0, Number(record.offset?.[1]) || 0],
+        scale: Math.max(.00001, Number(record.scale) || fallbackScale)
+      }];
+    })];
+  }));
+}
+
 function normalizeModifierList(modifiers, targetType, anchorPosition = [0, 0, 0]) {
   if (!Array.isArray(modifiers)) return [];
   return modifiers.flatMap(data => {
@@ -83,7 +105,7 @@ export function addModifier(owner, type, data = {}) {
   if (definition?.allowMultiple === false && getModifier(owner, type)) return null;
   const modifier = modifierRegistry.create(type, owner.type, data);
   if (!modifier) return null;
-  const anchorPosition = owner.type === 'group' || owner.type === 'cube'
+  const anchorPosition = owner.type === 'group' || owner.type === 'cube' || owner instanceof Shape
     ? owner.pivot
     : owner.origin || owner.position || [0, 0, 0];
   modifier.anchor = {
@@ -142,19 +164,155 @@ export class Cube {
   }
 }
 
+const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
+
+function unitVector(vector) {
+  const length = Math.hypot(...vector) || 1;
+  return vector.map(value => value / length);
+}
+
+function vectorCross(left, right) {
+  return [
+    left[1] * right[2] - left[2] * right[1],
+    left[2] * right[0] - left[0] * right[2],
+    left[0] * right[1] - left[1] * right[0]
+  ];
+}
+
+function vectorDot(left, right) {
+  return left.reduce((total, value, axis) => total + value * right[axis], 0);
+}
+
+function orderPolyhedronFace(points, normal) {
+  const center = [0, 1, 2].map(axis => points.reduce((sum, point) => sum + point[axis], 0) / points.length);
+  const basisU = unitVector(points[0].map((value, axis) => value - center[axis]));
+  const basisV = unitVector(vectorCross(normal, basisU));
+  const ordered = [...points].sort((left, right) => {
+    const leftOffset = left.map((value, axis) => value - center[axis]);
+    const rightOffset = right.map((value, axis) => value - center[axis]);
+    return Math.atan2(vectorDot(leftOffset, basisV), vectorDot(leftOffset, basisU))
+      - Math.atan2(vectorDot(rightOffset, basisV), vectorDot(rightOffset, basisU));
+  });
+  const winding = vectorDot(vectorCross(
+    ordered[1].map((value, axis) => value - ordered[0][axis]),
+    ordered[2].map((value, axis) => value - ordered[0][axis])
+  ), normal);
+  if (winding < 0) ordered.reverse();
+  return { normal, vertices: ordered };
+}
+
+function convexPolyhedronFaces(vertices, verticesPerFace) {
+  const faces = [];
+  const seen = new Set();
+  const epsilon = 1e-6;
+  for (let first = 0; first < vertices.length - 2; first++) {
+    for (let second = first + 1; second < vertices.length - 1; second++) {
+      for (let third = second + 1; third < vertices.length; third++) {
+        let normal = vectorCross(
+          vertices[second].map((value, axis) => value - vertices[first][axis]),
+          vertices[third].map((value, axis) => value - vertices[first][axis])
+        );
+        if (Math.hypot(...normal) < epsilon) continue;
+        normal = unitVector(normal);
+        const plane = vectorDot(normal, vertices[first]);
+        const distances = vertices.map(vertex => vectorDot(normal, vertex) - plane);
+        if (!distances.every(distance => distance <= epsilon) && !distances.every(distance => distance >= -epsilon)) continue;
+        const indices = distances.map((distance, index) => Math.abs(distance) <= epsilon ? index : -1).filter(index => index >= 0);
+        if (indices.length !== verticesPerFace) continue;
+        const key = [...indices].sort((left, right) => left - right).join(',');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const center = [0, 1, 2].map(axis => indices.reduce((sum, index) => sum + vertices[index][axis], 0) / indices.length);
+        if (vectorDot(normal, center) < 0) normal = normal.map(value => -value);
+        faces.push(orderPolyhedronFace(indices.map(index => vertices[index]), normal));
+      }
+    }
+  }
+  return faces;
+}
+
+function dodecahedronUnitFaces() {
+  const inverse = 1 / GOLDEN_RATIO;
+  const vertices = [
+    ...[-1, 1].flatMap(x => [-1, 1].flatMap(y => [-1, 1].map(z => [x, y, z]))),
+    ...[-1, 1].flatMap(y => [-1, 1].map(z => [0, y * inverse, z * GOLDEN_RATIO])),
+    ...[-1, 1].flatMap(x => [-1, 1].map(y => [x * inverse, y * GOLDEN_RATIO, 0])),
+    ...[-1, 1].flatMap(x => [-1, 1].map(z => [x * GOLDEN_RATIO, 0, z * inverse]))
+  ].map(unitVector);
+  return convexPolyhedronFaces(vertices, 5);
+}
+
+const DODECAHEDRON_UNIT_FACES = dodecahedronUnitFaces();
+
+function truncatedIcosahedronUnitFaces() {
+  const vertices = [
+    ...[-1, 1].flatMap(y => [-1, 1].map(z => [0, y, z * GOLDEN_RATIO])),
+    ...[-1, 1].flatMap(x => [-1, 1].map(y => [x, y * GOLDEN_RATIO, 0])),
+    ...[-1, 1].flatMap(x => [-1, 1].map(z => [x * GOLDEN_RATIO, 0, z]))
+  ].map(unitVector);
+  const distances = [];
+  for (let left = 0; left < vertices.length; left++) {
+    for (let right = left + 1; right < vertices.length; right++) {
+      const distance = Math.hypot(...vertices[left].map((value, axis) => value - vertices[right][axis]));
+      if (distance > 1e-6) distances.push(distance);
+    }
+  }
+  const edgeLength = Math.min(...distances);
+  const adjacent = (left, right) => Math.abs(Math.hypot(...vertices[left].map((value, axis) => value - vertices[right][axis])) - edgeLength) < 1e-5;
+  const directedPoint = (from, to) => unitVector(vertices[from].map((value, axis) => (value * 2 + vertices[to][axis]) / 3));
+  const pentagons = vertices.map((vertex, index) => {
+    const neighbors = vertices.map((_, candidate) => candidate).filter(candidate => adjacent(index, candidate));
+    return orderPolyhedronFace(neighbors.map(neighbor => directedPoint(index, neighbor)), unitVector(vertex));
+  });
+  const hexagons = [];
+  for (let first = 0; first < vertices.length; first++) {
+    for (let second = first + 1; second < vertices.length; second++) {
+      if (!adjacent(first, second)) continue;
+      for (let third = second + 1; third < vertices.length; third++) {
+        if (!adjacent(first, third) || !adjacent(second, third)) continue;
+        const source = [vertices[first], vertices[second], vertices[third]];
+        let normal = unitVector(vectorCross(
+          source[1].map((value, axis) => value - source[0][axis]),
+          source[2].map((value, axis) => value - source[0][axis])
+        ));
+        const center = [0, 1, 2].map(axis => source.reduce((sum, point) => sum + point[axis], 0) / 3);
+        if (vectorDot(normal, center) < 0) normal = normal.map(value => -value);
+        hexagons.push(orderPolyhedronFace([
+          directedPoint(first, second), directedPoint(second, first),
+          directedPoint(second, third), directedPoint(third, second),
+          directedPoint(third, first), directedPoint(first, third)
+        ], normal));
+      }
+    }
+  }
+  return [...pentagons, ...hexagons];
+}
+
+const TRUNCATED_ICOSAHEDRON_UNIT_FACES = truncatedIcosahedronUnitFaces();
+
 export class Shape {
   constructor(data = {}) {
-    this.type = 'polygon_prism';
+    const requestedType = data.shapeType || data.type;
+    const shapeType = ['dodecahedron', 'truncated_icosahedron'].includes(requestedType)
+      ? requestedType
+      : 'polygon_prism';
+    this.type = shapeType;
     this.uid = data.uid || uid('shape');
     this.name = data.name || 'shape';
-    this.shapeType = 'polygon_prism';
-    this.parameters = {
+    this.shapeType = shapeType;
+    const defaults = shapeType !== 'polygon_prism' ? {
+      radius: 4,
+      snapMode: 'edge'
+    } : {
       radius: 4, height: 8, sides: 8, cubeSize: 1,
       innerRadiusEnabled: false, innerRadiusMode: 'radius', innerRadius: 2,
-      snapMode: 'cube',
-      ...(data.parameters || {})
+      snapMode: 'edge'
     };
-    this.origin = data.origin || [0, 0, 0];
+    this.parameters = { ...defaults, ...(data.parameters || {}) };
+    if (this.parameters.snapMode === 'cube') this.parameters.snapMode = 'edge';
+    if (this.parameters.snapMode === 'bounds') this.parameters.snapMode = 'radius';
+    this.origin = vector3(data.origin || data.position);
+    this.pivot = vector3(data.pivot, this.origin);
     this.rotation = data.rotation || [0, 0, 0];
     this.uvMode = data.uvMode || 'box';
     this.uvNormalized = booleanProperty(data.uvNormalized ?? data.uv_normalized, true);
@@ -166,10 +324,16 @@ export class Shape {
     this.color = data.color || '#d6b35b';
     this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
     this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
-    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.origin);
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
   }
 
   toBaseCubes() {
+    if (this.shapeType === 'dodecahedron') return this.toDodecahedronCubes();
+    if (this.shapeType === 'truncated_icosahedron') return this.toTruncatedIcosahedronCubes();
+    return this.toPolygonPrismCubes();
+  }
+
+  toPolygonPrismCubes() {
     const radius = Math.max(.001, Number(this.parameters.radius) || 0);
     const requestedHeight = Math.max(0, Number(this.parameters.height) || 0);
     const sides = Math.max(3, Math.round(Number(this.parameters.sides) || 3));
@@ -210,6 +374,66 @@ export class Shape {
         locked: this.locked,
         shade: this.shade,
         color: this.color
+      });
+    });
+  }
+
+  toDodecahedronCubes() {
+    return this.toRegularPolyhedronCubes(DODECAHEDRON_UNIT_FACES);
+  }
+
+  toTruncatedIcosahedronCubes() {
+    return this.toRegularPolyhedronCubes(TRUNCATED_ICOSAHEDRON_UNIT_FACES, true);
+  }
+
+  toRegularPolyhedronCubes(unitFaces, mergeEvenFaces = false) {
+    const radius = Math.max(.001, Number(this.parameters.radius) || 0);
+    return unitFaces.flatMap((face, faceIndex) => {
+      const vertices = face.vertices.map(point => point.map(value => value * radius));
+      const center = [0, 1, 2].map(axis => vertices.reduce((sum, point) => sum + point[axis], 0) / vertices.length);
+      const depth = Math.max(.001, Math.hypot(...center));
+      const mergedOpposites = mergeEvenFaces && vertices.length % 2 === 0;
+      const edgeCount = mergedOpposites ? vertices.length / 2 : vertices.length;
+      return Array.from({ length: edgeCount }, (_, edgeIndex) => {
+        const start = vertices[edgeIndex];
+        const end = vertices[(edgeIndex + 1) % vertices.length];
+        const edge = end.map((value, axis) => value - start[axis]);
+        const edgeLength = Math.hypot(...edge);
+        const edgeMidpoint = start.map((value, axis) => (value + end[axis]) / 2);
+        const oppositeIndex = mergedOpposites ? (edgeIndex + vertices.length / 2) % vertices.length : -1;
+        const oppositeStart = mergedOpposites ? vertices[oppositeIndex] : null;
+        const oppositeEnd = mergedOpposites ? vertices[(oppositeIndex + 1) % vertices.length] : null;
+        const oppositeMidpoint = mergedOpposites
+          ? oppositeStart.map((value, axis) => (value + oppositeEnd[axis]) / 2)
+          : null;
+        const inward = mergedOpposites
+          ? oppositeMidpoint.map((value, axis) => value - edgeMidpoint[axis])
+          : center.map((value, axis) => value - edgeMidpoint[axis]);
+        const faceSpan = Math.hypot(...inward);
+        let xAxis = unitVector(edge);
+        const yAxis = [...face.normal];
+        const zAxis = unitVector(inward);
+        if (vectorDot(vectorCross(xAxis, yAxis), zAxis) < 0) xAxis = xAxis.map(value => -value);
+        const faceMidpoint = mergedOpposites
+          ? edgeMidpoint.map((value, axis) => (value + oppositeMidpoint[axis]) / 2)
+          : edgeMidpoint.map((value, axis) => value + zAxis[axis] * faceSpan / 2);
+        const midpoint = faceMidpoint.map((value, axis) => value - yAxis[axis] * depth / 2);
+        const size = [edgeLength, depth, faceSpan + Math.max(.001, edgeLength * .002)];
+        const orientation = [0, 1, 2].map(row => [xAxis[row], yAxis[row], zAxis[row]]);
+        return new Cube({
+          name: `${this.name}_${faceIndex + 1}_${edgeIndex + 1}`,
+          position: midpoint.map((value, axis) => value - size[axis] / 2),
+          size,
+          pivot: midpoint,
+          rotation: matrixEuler(orientation),
+          uvMode: this.uvMode,
+          uvNormalized: this.uvNormalized,
+          autoUv: this.autoUv,
+          exported: this.exported,
+          locked: this.locked,
+          shade: this.shade,
+          color: this.color
+        });
       });
     });
   }
@@ -618,7 +842,10 @@ function translateNode(project, node, delta) {
   if (node.type === 'cube') {
     node.position = node.position.map((value, axis) => value + delta[axis]);
     node.pivot = node.pivot.map((value, axis) => value + delta[axis]);
-  } else if (node.origin) node.origin = node.origin.map((value, axis) => value + delta[axis]);
+  } else if (node.origin) {
+    node.origin = node.origin.map((value, axis) => value + delta[axis]);
+    if (Array.isArray(node.pivot)) node.pivot = node.pivot.map((value, axis) => value + delta[axis]);
+  }
   else if (node.position) node.position = node.position.map((value, axis) => value + delta[axis]);
   else if (node.type === 'group') {
     node.pivot = node.pivot.map((value, axis) => value + delta[axis]);
@@ -630,13 +857,16 @@ function translateNode(project, node, delta) {
 }
 
 export function setPivotPreservingGeometry(project, item, nextPivot) {
-  if (!item || !['cube', 'group'].includes(item.type)) return null;
+  const proceduralShape = item && typeof item.toBaseCubes === 'function' && Array.isArray(item.origin);
+  if (!item || (!['cube', 'group'].includes(item.type) && !proceduralShape)) return null;
   const previousPivot = [...item.pivot];
   const delta = nextPivot.map((value, axis) => value - previousPivot[axis]);
   const inverseDelta = inverseRotateVector(delta, item.rotation || [0, 0, 0]);
   const compensation = delta.map((value, axis) => value - inverseDelta[axis]);
   if (item.type === 'cube') {
     item.position = item.position.map((value, axis) => value + compensation[axis]);
+  } else if (proceduralShape) {
+    item.origin = item.origin.map((value, axis) => value + compensation[axis]);
   } else {
     item.children.forEach(uidValue => {
       const child = project.getNode(uidValue);
@@ -799,8 +1029,9 @@ export class CubeBricksProject {
     const snapSubdivisions = Number(data.snap?.subdivisions ?? data.snapSubdivisions ?? format?.snap?.subdivisions);
     this.snap = { subdivisions: Number.isFinite(snapSubdivisions) && snapSubdivisions > 0 ? snapSubdivisions : null };
     this.formatData = structuredClone(data.formatData || {});
+    this.referenceImages = normalizeReferenceImages(data.referenceImages);
     this.elements = (data.elements || []).map(item => {
-      if (item.type === 'shape' || item.type === 'polygon_prism') return new Shape(item);
+      if (item.type === 'shape' || item.type === 'polygon_prism' || item.type === 'dodecahedron' || item.type === 'truncated_icosahedron') return new Shape(item);
       if (item.type === 'locator') return new Locator(item);
       if (item.type === 'node') return new NodeElement(item);
       if (item.type === 'bezier2d') return new BezierElement(item, 2);
@@ -1222,7 +1453,7 @@ function mirrorCubeFacesAcrossLocalX(faces, flipExplicitUv) {
 
 function modifierOwnerTransform(owner) {
   return {
-    pivot: owner.type === 'group' || owner.type === 'cube'
+    pivot: owner.type === 'group' || owner.type === 'cube' || (Array.isArray(owner.pivot) && typeof owner.toCubes === 'function')
       ? owner.pivot
       : owner.origin || owner.position || [0, 0, 0],
     rotation: owner.rotation || [0, 0, 0]
@@ -1241,38 +1472,250 @@ function symmetrySourceUids(project, owner) {
   return owner.type === 'group' ? project.getDescendantElementUids(owner.uid) : [owner.uid];
 }
 
+function affineIdentity() {
+  return { matrix: matrixIdentity(), translation: [0, 0, 0] };
+}
+
+function affineAround(matrix, center) {
+  const transformedCenter = matrixVector(matrix, center);
+  return {
+    matrix,
+    translation: center.map((value, axis) => value - transformedCenter[axis])
+  };
+}
+
+// Compose two world-space transforms in evaluation order: `before` is
+// already applied to the geometry, then `after` consumes that result.
+function affineCompose(after, before) {
+  return {
+    matrix: matrixMultiply(after.matrix, before.matrix),
+    translation: matrixVector(after.matrix, before.translation)
+      .map((value, axis) => value + after.translation[axis])
+  };
+}
+
+function affinePoint(affine, point) {
+  return matrixVector(affine.matrix, point).map((value, axis) => value + affine.translation[axis]);
+}
+
+function affineIsIdentity(affine, epsilon = 1e-6) {
+  return matrixIsIdentity(affine.matrix, epsilon)
+    && affine.translation.every(value => Math.abs(value) <= epsilon);
+}
+
+function affineKey(affine) {
+  const clean = value => Math.abs(value) < 1e-9 ? 0 : Math.round(value * 1e9) / 1e9;
+  return JSON.stringify([...affine.matrix.flat(), ...affine.translation].map(clean));
+}
+
+function modifierEvaluationOwners(project, element, terminalOwner = null, includeTerminal = true) {
+  const owners = [element, ...project.getGroupChain(element.uid).reverse()];
+  if (!terminalOwner) return owners;
+  const index = owners.findIndex(owner => owner.uid === terminalOwner.uid);
+  if (index < 0) return [];
+  return owners.slice(0, index + (includeTerminal ? 1 : 0));
+}
+
+function evaluateModifierStack(project, owners, initialVariants = null) {
+  let variants = initialVariants || [{ affine: affineIdentity(), modifierUids: [], names: [] }];
+  for (const owner of owners) {
+    for (const modifier of owner.modifiers || []) {
+      if (!modifier?.enabled || modifier.type !== 'symmetry') continue;
+      const frame = symmetryWorldFrame(project, owner, modifier);
+      const definitions = symmetryInstanceDefinitions(owner, modifier, frame.matrix);
+      variants = variants.flatMap(variant => definitions.map(definition => {
+        const operation = affineAround(definition.matrix, frame.center);
+        return {
+          affine: affineCompose(operation, variant.affine),
+          modifierUids: [...variant.modifierUids, modifier.uid],
+          names: [...variant.names, definition.name]
+        };
+      }));
+    }
+  }
+  return variants;
+}
+
 // Describe render-only symmetry instances without duplicating any Cube or mesh.
 // The renderer reuses the source element ranges already uploaded to the GPU and
 // applies these world-space matrices at draw time.
 export function buildModifierRenderInstances(project) {
-  const renderInstances = [];
-  for (const owner of [...project.groups, ...project.elements]) {
-    const modifier = getModifier(owner, 'symmetry');
-    if (!modifier?.enabled || owner.visible === false) continue;
-    const frame = symmetryWorldFrame(project, owner, modifier);
-    const instances = symmetryInstanceDefinitions(owner, modifier, frame.matrix)
-      .filter(instance => !matrixIsIdentity(instance.matrix));
-    if (!instances.length) continue;
-    const sourceUids = symmetrySourceUids(project, owner);
-    for (const instance of instances) renderInstances.push({
-      groupUid: owner.uid,
-      modifierUid: modifier.uid,
-      sourceUids: [...sourceUids],
-      center: [...frame.center],
-      matrix: instance.matrix.map(row => [...row]),
-      reflected: matrixDeterminant(instance.matrix) < 0
-    });
+  const byTransform = new Map();
+  for (const element of project.elements) {
+    const owners = modifierEvaluationOwners(project, element);
+    if (element.visible === false || owners.some(owner => owner.visible === false)) continue;
+    const variants = evaluateModifierStack(project, owners);
+    for (const variant of variants) {
+      if (affineIsIdentity(variant.affine)) continue;
+      const key = affineKey(variant.affine);
+      let instance = byTransform.get(key);
+      if (!instance) {
+        instance = {
+          groupUid: owners.at(-1)?.uid || element.uid,
+          modifierUid: variant.modifierUids.join(':'),
+          modifierUids: [...variant.modifierUids],
+          sourceUids: [],
+          matrix: variant.affine.matrix.map(row => [...row]),
+          translation: [...variant.affine.translation],
+          reflected: matrixDeterminant(variant.affine.matrix) < 0
+        };
+        byTransform.set(key, instance);
+      }
+      if (!instance.sourceUids.includes(element.uid)) instance.sourceUids.push(element.uid);
+    }
   }
-  return renderInstances;
+  return [...byTransform.values()];
+}
+
+function inverseGroupChainPoint(point, chain) {
+  let transformed = [...point];
+  for (const group of chain) transformed = transformAround(transformed, group.pivot, matrixTranspose(rotationMatrix(group.rotation || [0, 0, 0])));
+  return transformed;
+}
+
+function bakedCubeFromWorld(source, affine, parentChain) {
+  const { cube, offset, ownerRotation, ownerOrigin, chain } = source;
+  const baseFrom = cube.position.map((value, axis) => value + offset[axis]);
+  const baseTo = baseFrom.map((value, axis) => value + cube.size[axis]);
+  const basePivot = cube.pivot.map((value, axis) => value + offset[axis]);
+  const ownerMatrix = rotationMatrix(ownerRotation);
+  const ownedPivot = transformAround(basePivot, ownerOrigin, ownerMatrix);
+  const worldPivot = applyGroupChainPoint(ownedPivot, chain);
+  const worldOrientation = matrixMultiply(matrixMultiply(groupChainMatrix(chain), ownerMatrix), rotationMatrix(cube.rotation));
+  const mirrored = matrixDeterminant(affine.matrix) < 0;
+  const handednessFix = mirrored ? [[-1, 0, 0], [0, 1, 0], [0, 0, 1]] : matrixIdentity();
+  const nextWorldPivot = affinePoint(affine, worldPivot);
+  const localPivot = inverseGroupChainPoint(nextWorldPivot, parentChain);
+  const parentMatrix = groupChainMatrix(parentChain);
+  const localOrientation = matrixMultiply(matrixTranspose(parentMatrix),
+    matrixMultiply(matrixMultiply(affine.matrix, worldOrientation), handednessFix));
+  const fromOffset = matrixVector(handednessFix, baseFrom.map((value, axis) => value - basePivot[axis]));
+  const toOffset = matrixVector(handednessFix, baseTo.map((value, axis) => value - basePivot[axis]));
+  const from = localPivot.map((value, axis) => value + Math.min(fromOffset[axis], toOffset[axis]));
+  const to = localPivot.map((value, axis) => value + Math.max(fromOffset[axis], toOffset[axis]));
+  const faces = mirrored ? mirrorCubeFacesAcrossLocalX(cube.faces, cube.uvMode === 'face') : cloneData(cube.faces);
+  return new Cube({
+    ...cloneData(cube), uid: undefined,
+    name: cube.name,
+    position: from,
+    size: to.map((value, axis) => value - from[axis]),
+    pivot: localPivot,
+    rotation: matrixEuler(localOrientation),
+    faces,
+    mirrorUv: mirrored && cube.uvMode !== 'face' ? !Boolean(cube.mirrorUv) : cube.mirrorUv,
+    modifiers: []
+  });
+}
+
+export function bakeModifier(project, owner, modifierUid) {
+  const modifier = owner?.modifiers?.find(entry => entry.uid === modifierUid);
+  if (!project || !owner || !modifier?.enabled || modifier.type !== 'symmetry') return null;
+  const parent = project.getParentGroup(owner.uid);
+  const container = parent ? parent.children : project.outliner;
+  const insertionIndex = Math.max(0, container.indexOf(owner.uid));
+  const parentChain = project.getGroupChain(owner.uid);
+  const sourceUids = symmetrySourceUids(project, owner);
+  const selectedVariants = evaluateModifierStack(project, [{ ...owner, modifiers: [modifier] }]);
+  const generatedElements = [];
+  const instanceGroups = selectedVariants.map((selectedVariant, instanceIndex) => {
+    const children = [];
+    for (const sourceUid of sourceUids) {
+      const element = project.getNode(sourceUid);
+      if (!element) continue;
+      const innerVariants = evaluateModifierStack(project, modifierEvaluationOwners(project, element, owner, false));
+      const chain = project.getGroupChain(element.uid);
+      if (element.type === 'locator' || element.type === 'node') {
+        for (const inner of innerVariants) {
+          const affine = affineCompose(selectedVariant.affine, inner.affine);
+          const basePosition = applyGroupChainPoint(element.position, chain);
+          const worldOrientation = matrixMultiply(groupChainMatrix(chain), rotationMatrix(element.rotation));
+          const mirrored = matrixDeterminant(affine.matrix) < 0;
+          const handednessFix = mirrored ? [[-1, 0, 0], [0, 1, 0], [0, 0, 1]] : matrixIdentity();
+          const localPosition = inverseGroupChainPoint(affinePoint(affine, basePosition), parentChain);
+          const localOrientation = matrixMultiply(matrixTranspose(groupChainMatrix(parentChain)),
+            matrixMultiply(matrixMultiply(affine.matrix, worldOrientation), handednessFix));
+          const locator = new Locator({
+            name: element.name,
+            position: localPosition,
+            rotation: matrixEuler(localOrientation),
+            exported: element.exported,
+            locked: element.locked,
+            visible: element.visible
+          });
+          generatedElements.push(locator);
+          children.push(locator.uid);
+        }
+        continue;
+      }
+      const sources = typeof element.toCubes === 'function'
+        ? element.toCubes().map(cube => ({
+            cube,
+            offset: element.origin || [0, 0, 0],
+            ownerRotation: element.rotation || [0, 0, 0],
+            ownerOrigin: element.pivot || element.origin || [0, 0, 0],
+            chain
+          }))
+        : element.type === 'cube'
+          ? [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, chain }]
+          : [];
+      for (const inner of innerVariants) {
+        const affine = affineCompose(selectedVariant.affine, inner.affine);
+        for (const source of sources) {
+          const cube = bakedCubeFromWorld(source, affine, parentChain);
+          generatedElements.push(cube);
+          children.push(cube.uid);
+        }
+      }
+    }
+    return new Group({
+      name: selectedVariant.names.at(-1) || `${owner.name}_${instanceIndex + 1}`,
+      pivot: inverseGroupChainPoint(symmetryWorldFrame(project, owner, modifier).center, parentChain),
+      children,
+      visible: owner.visible,
+      locked: owner.locked,
+      exported: owner.exported,
+      shade: owner.shade,
+      autoUv: owner.autoUv,
+      uvMode: owner.uvMode,
+      uvNormalized: owner.uvNormalized
+    });
+  });
+  const remainingModifiers = (owner.modifiers || []).filter(entry => entry.uid !== modifierUid).map(cloneData);
+  const bakedRoot = new Group({
+    name: owner.name,
+    pivot: inverseGroupChainPoint(symmetryWorldFrame(project, owner, modifier).center, parentChain),
+    children: instanceGroups.map(group => group.uid),
+    visible: owner.visible,
+    locked: owner.locked,
+    exported: owner.exported,
+    shade: owner.shade,
+    autoUv: owner.autoUv,
+    uvMode: owner.uvMode,
+    uvNormalized: owner.uvNormalized,
+    modifiers: remainingModifiers
+  });
+  project.removeNode(owner.uid);
+  project.elements.push(...generatedElements);
+  project.groups.push(bakedRoot, ...instanceGroups);
+  const targetContainer = parent ? parent.children : project.outliner;
+  targetContainer.splice(Math.min(insertionIndex, targetContainer.length), 0, bakedRoot.uid);
+  project.invalidateHierarchyIndex();
+  return {
+    rootUid: bakedRoot.uid,
+    elementUids: generatedElements.map(element => element.uid),
+    groupUids: [bakedRoot.uid, ...instanceGroups.map(group => group.uid)]
+  };
 }
 
 // Compatibility alias for extensions built against early CubeBricks previews.
 export const buildGroupMirrorRenderInstances = buildModifierRenderInstances;
 
-function exportSymmetryOwner(project, owner, modifier, pushElement) {
-  const frame = symmetryWorldFrame(project, owner, modifier);
-  const center = frame.center;
-  const instances = symmetryInstanceDefinitions(owner, modifier, frame.matrix);
+function exportSymmetryOwner(project, owner, pushElement) {
+  const modifiers = (owner.modifiers || []).filter(modifier => modifier?.enabled && modifier.type === 'symmetry');
+  if (!modifiers.length) return null;
+  const finalFrame = symmetryWorldFrame(project, owner, modifiers.at(-1));
+  const center = finalFrame.center;
+  const instances = evaluateModifierStack(project, [owner]);
   const sourceUids = symmetrySourceUids(project, owner);
   const reflectedLocalAxis = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
   const instanceGroups = instances.map((instance, instanceIndex) => {
@@ -1281,65 +1724,75 @@ function exportSymmetryOwner(project, owner, modifier, pushElement) {
     for (const uidValue of sourceUids) {
       const element = project.getNode(uidValue);
       if (!element) continue;
+      const innerVariants = evaluateModifierStack(project,
+        modifierEvaluationOwners(project, element, owner, false));
       const chain = owner.type === 'group'
         ? relativeMirrorChain(project, element.uid, owner.uid)
         : project.getGroupChain(element.uid);
       const chainMatrix = groupChainMatrix(chain);
-      if (element.type === 'locator' || element.type === 'node') {
-        const basePosition = applyGroupChainPoint(element.position, chain);
-        const orientation = matrixMultiply(chainMatrix, rotationMatrix(element.rotation));
-        const handednessFix = matrixDeterminant(instance.matrix) < 0 ? reflectedLocalAxis : matrixIdentity();
-        const transformed = new Locator({
-          uid: `${element.uid}_mirror_${instanceIndex + 1}`,
-          name: element.name,
-          position: transformAround(basePosition, center, instance.matrix),
-          rotation: matrixEuler(matrixMultiply(matrixMultiply(instance.matrix, orientation), handednessFix)),
-          visible: element.visible,
-          locked: element.locked,
-          exported: element.exported
-        });
-        pushElement(blockbenchLocator(transformed));
-        children.push(transformed.uid);
-        continue;
-      }
-      const cubes = typeof element.toCubes === 'function'
-        ? element.toCubes().map(cube => ({ cube, offset: element.origin || [0, 0, 0], ownerRotation: element.rotation || [0, 0, 0], ownerOrigin: element.origin || [0, 0, 0] }))
-        : element.type === 'cube' ? [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot }] : [];
-      for (const source of cubes) {
-        const baseFrom = source.cube.position.map((value, axis) => value + source.offset[axis]);
-        const baseTo = baseFrom.map((value, axis) => value + source.cube.size[axis]);
-        const basePivot = source.cube.pivot.map((value, axis) => value + source.offset[axis]);
-        const ownerMatrix = rotationMatrix(source.ownerRotation);
-        const ownerPivot = source.ownerOrigin;
-        const ownedPivot = transformAround(basePivot, ownerPivot, ownerMatrix);
-        const worldPivot = applyGroupChainPoint(ownedPivot, chain);
-        const worldOrientation = matrixMultiply(matrixMultiply(chainMatrix, ownerMatrix), rotationMatrix(source.cube.rotation));
-        const mirrored = matrixDeterminant(instance.matrix) < 0;
-        const handednessFix = mirrored ? reflectedLocalAxis : matrixIdentity();
-        const nextPivot = transformAround(worldPivot, center, instance.matrix);
-        const nextFromOffset = matrixVector(handednessFix, baseFrom.map((value, axis) => value - basePivot[axis]));
-        const nextToOffset = matrixVector(handednessFix, baseTo.map((value, axis) => value - basePivot[axis]));
-        const exported = blockbenchCube(source.cube, source.offset);
-        exported.uuid = `${element.uid}_mirror_${instanceIndex + 1}_${++generatedIndex}`;
-        const transformedFrom = nextFromOffset.map((value, axis) => value + nextPivot[axis]);
-        const transformedTo = nextToOffset.map((value, axis) => value + nextPivot[axis]);
-        exported.from = transformedFrom.map((value, axis) => Math.min(value, transformedTo[axis]));
-        exported.to = transformedFrom.map((value, axis) => Math.max(value, transformedTo[axis]));
-        exported.origin = nextPivot;
-        exported.rotation = matrixEuler(matrixMultiply(matrixMultiply(instance.matrix, worldOrientation), handednessFix));
-        if (mirrored) {
-          exported.faces = mirrorCubeFacesAcrossLocalX(exported.faces, exported.box_uv === false);
-          if (exported.box_uv) exported.mirror_uv = !Boolean(exported.mirror_uv);
+      for (const inner of innerVariants) {
+        const affine = affineCompose(instance.affine, inner.affine);
+        if (element.type === 'locator' || element.type === 'node') {
+          const basePosition = applyGroupChainPoint(element.position, chain);
+          const orientation = matrixMultiply(chainMatrix, rotationMatrix(element.rotation));
+          const handednessFix = matrixDeterminant(affine.matrix) < 0 ? reflectedLocalAxis : matrixIdentity();
+          const transformed = new Locator({
+            uid: `${element.uid}_mirror_${instanceIndex + 1}_${++generatedIndex}`,
+            name: element.name,
+            position: affinePoint(affine, basePosition),
+            rotation: matrixEuler(matrixMultiply(matrixMultiply(affine.matrix, orientation), handednessFix)),
+            visible: element.visible,
+            locked: element.locked,
+            exported: element.exported
+          });
+          pushElement(blockbenchLocator(transformed));
+          children.push(transformed.uid);
+          continue;
         }
-        exported.inflate = (Number(source.cube.inflate) || 0) + chain.reduce((total, parent) => total + (Number(parent.inflate) || 0), 0);
-        exported.shade = source.cube.shade !== false && element.shade !== false && chain.every(parent => parent.shade !== false);
-        exported.visibility = source.cube.visible !== false && element.visible !== false && chain.every(parent => parent.visible !== false);
-        pushElement(exported);
-        children.push(exported.uuid);
+        const cubes = typeof element.toCubes === 'function'
+          ? element.toCubes().map(cube => ({ cube, offset: element.origin || [0, 0, 0], ownerRotation: element.rotation || [0, 0, 0], ownerOrigin: element.pivot || element.origin || [0, 0, 0] }))
+          : element.type === 'cube' ? [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot }] : [];
+        for (const source of cubes) {
+          const baseFrom = source.cube.position.map((value, axis) => value + source.offset[axis]);
+          const baseTo = baseFrom.map((value, axis) => value + source.cube.size[axis]);
+          const basePivot = source.cube.pivot.map((value, axis) => value + source.offset[axis]);
+          const ownerMatrix = rotationMatrix(source.ownerRotation);
+          const ownerPivot = source.ownerOrigin;
+          const ownedPivot = transformAround(basePivot, ownerPivot, ownerMatrix);
+          const worldPivot = applyGroupChainPoint(ownedPivot, chain);
+          const worldOrientation = matrixMultiply(matrixMultiply(chainMatrix, ownerMatrix), rotationMatrix(source.cube.rotation));
+          const mirrored = matrixDeterminant(affine.matrix) < 0;
+          const handednessFix = mirrored ? reflectedLocalAxis : matrixIdentity();
+          const nextPivot = affinePoint(affine, worldPivot);
+          const nextFromOffset = matrixVector(handednessFix, baseFrom.map((value, axis) => value - basePivot[axis]));
+          const nextToOffset = matrixVector(handednessFix, baseTo.map((value, axis) => value - basePivot[axis]));
+          const exported = blockbenchCube(source.cube, source.offset);
+          exported.uuid = `${element.uid}_mirror_${instanceIndex + 1}_${++generatedIndex}`;
+          const transformedFrom = nextFromOffset.map((value, axis) => value + nextPivot[axis]);
+          const transformedTo = nextToOffset.map((value, axis) => value + nextPivot[axis]);
+          exported.from = transformedFrom.map((value, axis) => Math.min(value, transformedTo[axis]));
+          exported.to = transformedFrom.map((value, axis) => Math.max(value, transformedTo[axis]));
+          exported.origin = nextPivot;
+          exported.rotation = matrixEuler(matrixMultiply(matrixMultiply(affine.matrix, worldOrientation), handednessFix));
+          if (mirrored) {
+            exported.faces = mirrorCubeFacesAcrossLocalX(exported.faces, exported.box_uv === false);
+            if (exported.box_uv) exported.mirror_uv = !Boolean(exported.mirror_uv);
+          }
+          exported.inflate = (Number(source.cube.inflate) || 0) + chain.reduce((total, parent) => total + (Number(parent.inflate) || 0), 0);
+          exported.shade = source.cube.shade !== false && element.shade !== false && chain.every(parent => parent.shade !== false);
+          exported.visibility = source.cube.visible !== false && element.visible !== false && chain.every(parent => parent.visible !== false);
+          pushElement(exported);
+          children.push(exported.uuid);
+        }
       }
     }
+    const suffix = `_${owner.name}`;
+    const prefix = `${owner.name}_`;
+    const labels = instance.names.map(name => name.endsWith(suffix) ? name.slice(0, -suffix.length)
+      : name.startsWith(prefix) ? name.slice(prefix.length) : name);
+    const instanceName = instance.names.length === 1 ? instance.names[0] : `${labels.join('_')}_${owner.name}`;
     return {
-      name: instance.name,
+      name: instanceName,
       origin: [...center], rotation: [0, 0, 0], color: 0,
       uuid: `${owner.uid}_symmetry_instance_${instanceIndex + 1}`,
       export: owner.exported !== false, locked: owner.locked === true,
@@ -1348,7 +1801,7 @@ function exportSymmetryOwner(project, owner, modifier, pushElement) {
       uv_normalized: owner.uvNormalized !== false, isOpen: true, children
     };
   });
-  if (!modifier.wrapParent) return instanceGroups;
+  if (!modifiers.at(-1).wrapParent) return instanceGroups;
   return {
     name: owner.name,
     origin: [...center], rotation: [0, 0, 0], color: 0,
@@ -1377,7 +1830,7 @@ export function exportBlockbench(project, textureAssets = []) {
     });
     return {
       name: element.name,
-      origin: [...(element.origin || [0, 0, 0])],
+      origin: [...(element.pivot || element.origin || [0, 0, 0])],
       rotation: [...(element.rotation || [0, 0, 0])],
       color: 0,
       uuid: `${element.uid}_group`,
@@ -1395,9 +1848,9 @@ export function exportBlockbench(project, textureAssets = []) {
   const visit = uidValue => {
     const node = project.getNode(uidValue);
     if (!node) return null;
-    const symmetry = getModifier(node, 'symmetry');
-    if (symmetry?.enabled) {
-      const mirrored = exportSymmetryOwner(project, node, symmetry, pushElement);
+    const hasSymmetry = node.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry');
+    if (hasSymmetry) {
+      const mirrored = exportSymmetryOwner(project, node, pushElement);
       if (mirrored) return mirrored;
     }
     if (node.type === 'group') return {

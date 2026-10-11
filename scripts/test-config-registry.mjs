@@ -38,11 +38,14 @@ assert.equal(appConfigRegistry.getDefinition(ConfigKey.LOCKED_DEFAULT_ALPHA).def
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.LOCKED_HOVER_FADE).defaultValue, true);
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.LOCKED_HOVER_ALPHA).defaultValue, 50);
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.LOCKED_HOVER_RADIUS).defaultValue, 120);
+assert.equal(appConfigRegistry.getDefinition(ConfigKey.SHOW_PLAYER_REFERENCE).defaultValue, false);
+assert.deepEqual(appConfigRegistry.getDefinition(ConfigKey.PLAYER_REFERENCE_TEXTURE).defaultValue,
+  { name: '內置玩家紋理', source: '' });
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.SEPARATE_UV_MODE).defaultValue, false);
 assert.equal(modifierRegistry.supports('symmetry', 'group'), true);
 assert.equal(modifierRegistry.supports('symmetry', 'cube'), true);
 assert.equal(modifierRegistry.supports('symmetry', 'node'), false);
-assert.equal(modifierRegistry.get('symmetry').allowMultiple, false);
+assert.equal(modifierRegistry.get('symmetry').allowMultiple, true);
 
 const legacyMemory = new Map([['cubebricks.config', JSON.stringify({
   version: 2,
@@ -59,6 +62,9 @@ assert.equal(translateUiText('物件屬性', 'zh-Hans'), '对象属性');
 assert.equal(translateUiText('歐拉角模式：按 Z → Y → X 層級直接調整歐拉角', 'zh-Hans'), '欧拉角模式：按 Z → Y → X 层级直接调整欧拉角');
 assert.equal(translateUiText('目前沒有可聚焦的物件', 'zh-Hans'), '当前没有可聚焦的对象');
 assert.equal(translateUiText('無法讀取這張圖片', 'zh-Hans'), '无法读取这张图片');
+assert.equal(translateUiText('拖動輪盤', 'zh-Hans'), '拖动轮盘');
+assert.equal(translateUiText('不會寫入模型工程', 'zh-Hans'), '不会写入模型工程');
+assert.equal(translateUiText('玩家參考紋理：skin.png', 'en'), 'Player reference texture: skin.png');
 assert.equal(translateUiText('物件屬性', 'en'), 'Object properties');
 assert.equal(translateUiText('3 行 · 每行獨立設定', 'en'), '3 rows · configured independently');
 assert.equal(translateUiText('預覽：豎切', 'en'), 'Preview: vertical cut');
@@ -70,7 +76,7 @@ assert.equal(translateUiText('僅在此預覽中讓模型慢速轉動', 'zh-Hans
 const uiSource = ['src/index.html', 'src/app.js', 'src/ui/dock-manager.js']
   .map(file => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'))
   .join('\n');
-const traditionalUiGlyphs = new Set([...'體開關閉陰顯圖層編輯繪畫動導檔儲復設覽縮態級軸長圍線僅鎖稱變換擇組場間輸項參數塊刪見幾樞脹狀徑邊質預選語網負許顏圓強調還應過這臺電腦獨當與後會啟連續離內實視點擊進階構則個處從標題樣細節類別載務優勢據墊疊寬釋權傳統築擁護隱響極遠習萬屬為時種並註冊觀對滾輪鍵頂單銷欄轉筆蓋暫輔側區紋帶巢匯總來歐貼範覺緒沒漸無讀張敗認義著請須於繞齊適豎橫詳資訊虛礎鏡羅東順針']);
+const traditionalUiGlyphs = new Set([...'體開關閉陰顯圖層編輯繪畫動導檔儲復設覽縮態級軸長圍線僅鎖稱變換擇組場間輸項參數塊刪見幾樞脹狀徑邊質預選語網負許顏圓強調還應過這臺電腦獨當與後會啟連續離內實視點擊進階構則個處從標題樣細節類別載務優勢據墊疊寬釋權傳統築擁護隱響極遠習萬屬為時種並註冊觀對滾輪鍵頂單銷欄轉筆蓋暫輔側區紋帶巢匯總來歐貼範覺緒沒漸無讀張敗認義著請須於繞齊適豎橫詳資訊虛礎鏡羅東順針盤寫']);
 const simplifiedUiSource = translateUiText(uiSource, 'zh-Hans');
 const leftovers = [...new Set([...simplifiedUiSource].filter(character => traditionalUiGlyphs.has(character)))];
 assert.deepEqual(leftovers, [], `Simplified UI still contains Traditional Chinese glyphs: ${leftovers.join(' ')}`);

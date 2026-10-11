@@ -141,6 +141,11 @@ export class WebGLSceneRenderer {
     this.textureLayoutKey = '';
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    this.playerReferenceBuffer = this.gl.createBuffer();
+    this.playerReferenceTexture = this.gl.createTexture();
+    this.playerReferenceVertexCount = 0;
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.playerReferenceTexture);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
     this.faceLabelTexture = this.gl.createTexture();
     this.faceLabelTextureKey = null;
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.faceLabelTexture);
@@ -195,6 +200,21 @@ export class WebGLSceneRenderer {
       this.textureLayoutKey = '';
       this.invalidateGeometry();
     }
+  }
+
+  setPlayerReference(project, source) {
+    const geometry = buildElementGeometry(project, project?.elements || [], null, [1, 1, 1], false, null);
+    this.uploadBuffer(this.playerReferenceBuffer, geometry.triangles, this.gl.STATIC_DRAW);
+    this.playerReferenceVertexCount = geometry.triangles.length / 12;
+    if (!source) return;
+    const { gl } = this;
+    gl.bindTexture(gl.TEXTURE_2D, this.playerReferenceTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
   setTextureAtlas(source, entries = []) {
@@ -684,7 +704,8 @@ export class WebGLSceneRenderer {
     const rangeKey = lines ? 'edgeRanges' : 'triangleRanges';
     for (const instance of this.mirrorCache?.instances || []) {
       const batchKey = [
-        instance.groupUid, lines ? 'edges' : 'triangles', lockedOnly ? 'locked' : 'visible',
+        instance.groupUid, instance.modifierUid, instance.sourceUids.join(','),
+        lines ? 'edges' : 'triangles', lockedOnly ? 'locked' : 'visible',
         selectedOnly ? 'selected' : 'all', this.geometryRevision,
         this.currentDynamicElementKey || '', this.currentLockedKey || ''
       ].join('::');
@@ -808,6 +829,22 @@ export class WebGLSceneRenderer {
     this.drawVertices(grid.fine, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
     this.drawVertices(grid.major, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
     this.drawVertices(grid.direction, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+  }
+
+  drawPlayerReference(camera, viewProjection) {
+    if (!camera.playerReference || !this.playerReferenceVertexCount) return;
+    this.drawBuffer(this.playerReferenceBuffer, this.playerReferenceVertexCount,
+      this.gl.TRIANGLES, viewProjection, {
+        depthWrite: true,
+        // The player is a visual scale reference rather than editable model
+        // geometry. Keep it double-sided so thin skin parts never disappear
+        // while orbiting or using an axis view.
+        cull: false,
+        renderMode: 2,
+        alphaMode: 1,
+        blend: false,
+        texture: this.playerReferenceTexture
+      });
   }
 
   drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection) {
@@ -972,7 +1009,7 @@ export class WebGLSceneRenderer {
         rangeCache: new Map(),
         instances: buildModifierRenderInstances(project).map(instance => ({
           ...instance,
-          transform: mirrorModelMatrix(instance.matrix, instance.center)
+          transform: modifierModelMatrix(instance.matrix, instance.translation, instance.center)
         }))
       };
     }
@@ -1015,6 +1052,7 @@ export class WebGLSceneRenderer {
       // Only model surfaces are supersampled. Rebuild their depth in the
       // native-MSAA framebuffer, resolve the colour, then draw editor lines
       // directly so Mipped never changes grid or wire appearance.
+      this.drawPlayerReference(camera, viewProjection);
       this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, pixelWidth, pixelHeight);
@@ -1022,6 +1060,7 @@ export class WebGLSceneRenderer {
       gl.clearDepth(1);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.colorMask(false, false, false, false);
+      this.drawPlayerReference(camera, viewProjection);
       this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
       gl.colorMask(true, true, true, true);
       this.presentAntialiased(pixelWidth, pixelHeight, renderWidth, renderHeight);
@@ -1032,6 +1071,7 @@ export class WebGLSceneRenderer {
       this.drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection);
     } else {
       this.drawGrid(camera, viewProjection);
+      this.drawPlayerReference(camera, viewProjection);
       this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
       this.drawLockedOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
         ownerPoints, viewProjection, null, pixelWidth, pixelHeight, pixelWidth, pixelHeight);
@@ -1123,6 +1163,9 @@ export class WebGLSceneRenderer {
           closestDistance = distance;
           closest = {
             uid: face.uid,
+            cubeUid: face.cubeUid || face.uid,
+            cubeIndex: face.cubeIndex ?? null,
+            cube: face.cube || null,
             distance,
             faceName: face.faceName,
             facePoints: face.quad.map(point => [...point]),
@@ -1624,9 +1667,9 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
       if (element.visible) helpers.push(...curveGeometry.lines);
     }
     const cubes = subdivisionOwner
-      ? [{ cube: element, offset: subdivisionOwner.origin || [0, 0, 0], ownerRotation: subdivisionOwner.rotation || [0, 0, 0], ownerOrigin: subdivisionOwner.origin || [0, 0, 0], groupChain, textureSize: project.textureSize, shade: element.shade !== false && subdivisionOwner.shade !== false }]
+      ? [{ cube: element, offset: subdivisionOwner.origin || [0, 0, 0], ownerRotation: subdivisionOwner.rotation || [0, 0, 0], ownerOrigin: subdivisionOwner.pivot || subdivisionOwner.origin || [0, 0, 0], groupChain, textureSize: project.textureSize, shade: element.shade !== false && subdivisionOwner.shade !== false }]
       : typeof element.toCubes === 'function'
-      ? element.toCubes().map(cube => ({ cube, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
+      ? element.toCubes().map((cube, cubeIndex) => ({ cube, cubeIndex, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.pivot || element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
       : [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
 
     if (!element.visible) {
@@ -1638,7 +1681,11 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
     for (const entry of cubes) {
       const geometry = cubeGeometry(entry, element.color, selectedForBounds, selectionOutline, faceDistinct, textureLayout);
       triangles.push(...geometry.triangles);
-      faces.push(...geometry.faces.map(face => ({ ...face, uid: element.uid })));
+      faces.push(...geometry.faces.map(face => ({
+        ...face, uid: element.uid, cube: entry.cube,
+        cubeUid: entry.cube.uid || element.uid,
+        cubeIndex: entry.cubeIndex ?? entry.cube.subdivisionIndex ?? null
+      })));
       edges.push(...geometry.edges);
       if (!ownerPoints.has(element.uid)) ownerPoints.set(element.uid, []);
       ownerPoints.get(element.uid).push(...geometry.corners);
@@ -1774,19 +1821,19 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
   const corners = cubeWorldCorners(entry);
   const { cube, offset, ownerRotation, ownerOrigin, groupChain, textureSize, shade } = entry;
 
-  const base = hexToRgb(color);
   const edgeBoost = selected ? 1.08 : 1;
   const triangles = [], faceBatches = [];
   for (const [faceName, quadIndices] of Object.entries(FACE_LAYOUTS)) {
     const faceData = cube.faces?.[faceName];
     // An explicit null texture is the model's culled-face marker. A missing
-    // face/texture field instead means an ordinary untextured white face.
+    // face/texture field remains renderable; textured mode turns it white in
+    // the shader, while solid mode keeps the element's own display colour.
     if (isCubeFaceCulled(faceData)) continue;
     const textured = hasAssignedFaceTexture(faceData);
     const indices = FACE_TRIANGLE_SLOTS.map(slot => quadIndices[slot]);
     const a = corners[indices[0]], b = corners[indices[1]], c = corners[indices[2]];
     const normal = normalize(cross(subtract(b, a), subtract(c, a)));
-    const sourceColor = faceDistinct ? FACE_PREVIEW_COLORS[faceName] : textured ? base : [1, 1, 1];
+    const sourceColor = getCubeFaceDisplayColor(color, faceName, faceDistinct);
     const faceColor = sourceColor.map(channel => Math.min(1, channel * edgeBoost));
     const faceUv = textured
       ? getFaceUv(cube, faceName, textureSize, textureLayout)
@@ -1808,6 +1855,10 @@ const UNTEXTURED_UV_SENTINEL = -1000000;
 
 export function hasAssignedFaceTexture(face) {
   return face?.texture !== undefined && face?.texture !== null;
+}
+
+export function getCubeFaceDisplayColor(color, faceName, faceDistinct = false) {
+  return faceDistinct ? FACE_PREVIEW_COLORS[faceName] : hexToRgb(color);
 }
 
 export function isCubeFaceCulled(face) {
@@ -2136,6 +2187,15 @@ function identity() { return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; }
 function mirrorModelMatrix(matrix, center) {
   const transformedCenter = matrix.map(row => row[0] * center[0] + row[1] * center[1] + row[2] * center[2]);
   const translation = center.map((value, axis) => value - transformedCenter[axis]);
+  return [
+    matrix[0][0], matrix[1][0], matrix[2][0], 0,
+    matrix[0][1], matrix[1][1], matrix[2][1], 0,
+    matrix[0][2], matrix[1][2], matrix[2][2], 0,
+    translation[0], translation[1], translation[2], 1
+  ];
+}
+function modifierModelMatrix(matrix, translation, center = [0, 0, 0]) {
+  if (!Array.isArray(translation)) return mirrorModelMatrix(matrix, center);
   return [
     matrix[0][0], matrix[1][0], matrix[2][0], 0,
     matrix[0][1], matrix[1][1], matrix[2][1], 0,

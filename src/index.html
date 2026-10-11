@@ -30,6 +30,14 @@
         <path d="M7.2 2.5h9.6L21 6.2v11.6l-4.2 3.7H7.2L3 17.8V6.2l4.2-3.7Zm.9 2.2L5.5 7v9.9l2.6 2.3h7.8l2.6-2.3V7l-2.6-2.3H8.1Z"/>
         <path d="M4.4 6.5 12 10l7.6-3.5v2.4L13 12v8.2h-2V12L4.4 8.9V6.5Z" opacity=".68"/>
       </symbol>
+      <symbol id="icon-dodecahedron" viewBox="0 0 24 24">
+        <path d="M12 1.7 18.2 4l4.1 5.2-1 6.5-4.5 4.8-6.6 1.8-6-2.8-2.5-6.1 1.7-6.4L8.1 2l3.9-.3Zm0 2.2L8.9 4.1 5.2 8 3.9 13l2 4.8 4.6 2.2 5.1-1.4 3.5-3.8.8-5-3.1-4L12 3.9Z"/>
+        <path d="m5.2 8 5.6 1.3L12 3.9m-1.2 5.4-4.9 8.5m4.9-8.5 8.3.5m-8.3-.5-.3 10.7m.3-10.7 5.6 4.4m2.7-3.9-2.7 3.9m0 0-.8 4.9" opacity=".62"/>
+      </symbol>
+      <symbol id="icon-truncated-icosahedron" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <path d="m12 6 3.1 2.2-1.2 3.6h-3.8L8.9 8.2 12 6Zm-3.1 2.2-4-.7m-.7 6.8 5.9-2.5m3.8 0 5.9 2.5m-.7-6.8-4-.7m-5 5 1.9 5.4m1.9-5.4L12 17.2m-5.5 2.2 5.5-2.2 5.5 2.2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>
+      </symbol>
       <symbol id="icon-save" viewBox="0 0 159.76 153.52">
         <rect x="90.72" y="6.58" width="23.14" height="39.03" rx="5.84" ry="5.84"/><path d="M156.12,23.74l-20.1-20.1c-2.33-2.33-5.49-3.64-8.79-3.64H12.43C5.56,0,0,5.56,0,12.43v128.66c0,6.86,5.56,12.43,12.43,12.43h134.9c6.86,0,12.43-5.56,12.43-12.43V32.53c0-3.3-1.31-6.46-3.64-8.79ZM41.95,10.03c0-3.69,2.99-6.68,6.68-6.68h62.5c3.69,0,6.68,2.99,6.68,6.68v32.12c0,3.69-2.99,6.68-6.68,6.68h-62.5c-3.69,0-6.68-2.99-6.68-6.68V10.03ZM142.84,141.17c0,4.67-3.79,8.46-8.46,8.46H25.38c-4.67,0-8.46-3.79-8.46-8.46v-69.19c0-4.67,3.79-8.46,8.46-8.46h109c4.67,0,8.46,3.79,8.46,8.46v69.19Z"/>
       </symbol>
@@ -91,6 +99,10 @@
         <button class="tool" data-tool="faceSelect" title="面選擇" aria-label="面選擇"><span>▱</span></button>
         <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆（B）" aria-label="畫筆"><span>◍</span></button>
         <button class="tool mode-only paint-tool" data-tool="eraser" title="橡皮擦（E）" aria-label="橡皮擦"><span>▰</span></button>
+        <button class="tool mode-only paint-tool" data-tool="line" title="直線（L）" aria-label="直線"><span>╱</span></button>
+        <button class="tool mode-only paint-tool" data-tool="rectangle" title="矩形（M）" aria-label="矩形"><span>□</span></button>
+        <button class="tool mode-only paint-tool" data-tool="ellipse" title="橢圓（O）" aria-label="橢圓"><span>○</span></button>
+        <button class="tool mode-only paint-tool" data-tool="fill" title="油漆桶（G）" aria-label="油漆桶"><span>◩</span></button>
         <button class="tool mode-only paint-tool" data-tool="eyedropper" title="取色器（I）" aria-label="取色器"><span>⌖</span></button>
       </div>
       <div class="toolbar-lane tool-options-lane" id="toolOptionsLane" aria-label="目前工具參數" hidden>
@@ -129,12 +141,18 @@
         <div class="paint-tool-options" id="paintToolOptions" hidden>
           <label class="paint-color-control" title="繪畫顏色"><span>顏色</span><input id="paintColor" type="color" value="#91ad52" /></label>
           <label title="筆刷尺寸"><span>尺寸</span><input id="paintBrushSize" type="number" min="1" max="64" step="1" value="1" /></label>
+          <label id="paintBrushShapeControl" title="筆刷形狀"><span>形狀</span><select id="paintBrushShape"><option value="square">方形</option><option value="circle">圓形</option></select></label>
+          <label id="paintBrushAaControl" title="圓形筆刷邊緣抗鋸齒" hidden><input id="paintBrushAa" type="checkbox" /><span>AA 邊緣</span></label>
+          <label id="paintBrushDepthControl" title="筆跡碰到 Cube 邊緣時，向相鄰面的貼圖延伸指定像素" hidden><span>深度</span><input id="paintBrushDepth" type="number" min="0" max="32" step="1" value="0" /></label>
           <label class="paint-opacity-control" title="筆刷透明度"><span>透明度</span><input id="paintBrushOpacity" type="range" min="1" max="100" step="1" value="100" /><output id="paintBrushOpacityOutput">100%</output></label>
+          <label class="paint-bucket-scope" id="paintBucketScopeControl" title="油漆桶填充範圍" hidden><span>範圍</span><select id="paintBucketScope"><option value="face">面</option><option value="element">元素</option><option value="color">顏色</option><option value="contiguous">連續顏色</option></select></label>
+          <label id="paintBucketSingleFaceControl" title="同色填充只在目前面的 UV 範圍內搜尋" hidden><input id="paintBucketSingleFace" type="checkbox" checked /><span>單面局限</span></label>
         </div>
         <button class="toolbar-option" id="snapButton" data-action="cycleSnap" title="左鍵下一檔，右鍵上一檔">吸附 1.0</button>
       </div>
       <div class="toolbar-lane global-options-lane" aria-label="全局選項">
         <label class="toolbar-check" title="全局開啟或關閉面陰影預覽；不會覆蓋物件自身的陰影設定"><input type="checkbox" id="previewShadeToggle" checked /><span>◐</span> 面陰影</label>
+        <label class="toolbar-check" title="顯示玩家尺寸與姿態參考；只用於預覽，不會寫入模型工程或導出檔。"><input type="checkbox" id="playerReferenceToggle" /><span>♙</span> 玩家參考</label>
         <label class="toolbar-check" title="只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件"><input type="checkbox" id="geometryOnlyToggle" /><span>◇</span> 僅幾何</label>
         <label class="toolbar-check" title="沿 X 軸對稱編輯"><input type="checkbox" id="symmetryToggle" /><span>◫</span> 對稱</label>
         <label class="toolbar-check" title="繪畫時鎖定透明度"><input type="checkbox" id="alphaLockToggle" /><span>◩</span> 鎖透明</label>
@@ -213,6 +231,18 @@
           </div>
           <div class="viewport-title"><span class="live-dot"></span><span id="viewLabel">實體著色</span></div>
           <div class="viewport-buttons">
+            <div class="reference-image-control">
+              <button data-action="referenceImage" title="參考圖" aria-expanded="false" aria-controls="referenceImageMenu">▧</button>
+              <div class="reference-image-menu" id="referenceImageMenu" hidden>
+                <strong id="referenceImageViewLabel">一般視圖參考圖</strong>
+                <span id="referenceImageName">尚未導入</span>
+                <div class="reference-image-list" id="referenceImageList"></div>
+                <button type="button" data-reference-action="import">＋ 導入參考圖</button>
+                <button type="button" data-reference-action="edit">調整位置與尺寸</button>
+                <button type="button" data-reference-action="reset">重置位置與尺寸</button>
+                <button type="button" class="danger" data-reference-action="remove">移除選中參考圖</button>
+              </div>
+            </div>
             <button data-action="frame" title="聚焦">⌖</button><button data-action="grid" title="網格">#</button><button data-action="wire" title="邊界線框">▧</button>
             <select id="minecraftRenderType" title="Minecraft Java RenderType" aria-label="Minecraft Java RenderType">
               <option value="solid">實心</option>
@@ -226,6 +256,9 @@
           </div>
         </div>
         <div class="viewport" id="viewport">
+          <div class="reference-image-layer" id="referenceImageLayer" hidden>
+            <span id="referenceImageHint">拖動平移 · 滾輪縮放</span>
+          </div>
           <canvas id="sceneCanvas"></canvas>
           <div class="selection-marquee" id="selectionMarquee" aria-hidden="true" hidden></div>
           <svg class="locator-overlay" id="locatorOverlay" aria-label="Locator 標記" hidden></svg>
@@ -262,7 +295,7 @@
             <button class="axis-x" data-view-axis="x" title="右視圖">X</button>
             <button class="axis-z" data-view-axis="z" title="正視圖">Z</button>
           </div>
-          <div class="view-hint"><kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心</div>
+          <div class="view-hint" id="viewHint"><kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心</div>
           <div class="selection-badge"><span id="selectionType">Cube</span><strong id="selectionName">body</strong></div>
         </div>
         <aside class="dock-zone dock-zone-bottom" data-dock-zone="bottom" aria-label="底部停靠區">
@@ -292,10 +325,10 @@
       <aside class="dock-zone dock-zone-right" data-dock-zone="right" aria-label="右側停靠區">
         <section class="dock-panel panel-section inspector-section" data-panel="inspector">
           <div class="panel-heading compact panel-drag-handle">
-            <strong>物件屬性</strong>
+            <strong id="inspectorHeading">物件屬性</strong>
             <div class="panel-heading-actions"></div>
           </div>
-          <div class="panel-control-strip inspector-meta-strip"><span>UID</span><span class="uid-chip" id="uidChip">—</span></div>
+          <div class="panel-control-strip inspector-meta-strip" id="inspectorMetaStrip"><span>UID</span><span class="uid-chip" id="uidChip">—</span></div>
           <div class="inspector" id="inspector"></div>
         </section>
         <section class="dock-panel panel-section outliner-section" data-panel="outliner">
@@ -312,6 +345,8 @@
               <button class="panel-object-action" data-action="toggleShapeCreate" title="新增 Shape" aria-haspopup="menu" aria-expanded="false"><svg class="panel-action-icon object-icon" aria-hidden="true"><use href="#icon-shape"></use></svg><span class="panel-action-add">+</span></button>
               <span class="shape-create-menu" id="shapeCreateMenu" role="menu" hidden>
                 <button type="button" data-create-shape="polygon_prism"><svg class="object-icon" aria-hidden="true"><use href="#icon-polygon-prism"></use></svg><span>多邊形柱體</span></button>
+                <button type="button" data-create-shape="dodecahedron"><svg class="object-icon" aria-hidden="true"><use href="#icon-dodecahedron"></use></svg><span>正十二面體</span></button>
+                <button type="button" data-create-shape="truncated_icosahedron"><svg class="object-icon" aria-hidden="true"><use href="#icon-truncated-icosahedron"></use></svg><span>足球（截角二十面體）</span></button>
                 <button type="button" data-create-shape="bezier2d"><span class="shape-menu-symbol">⌁²</span><span>二維貝塞爾</span></button>
                 <button type="button" data-create-shape="bezier3d"><span class="shape-menu-symbol">⌁³</span><span>三維貝塞爾</span></button>
               </span>
@@ -380,6 +415,11 @@
               <label class="config-toggle-label"><span>線框邊界<small>viewport.show-wireframe</small></span><input type="checkbox" data-config-key="viewport.show-wireframe" /></label>
               <label class="config-toggle-label"><span>僅顯示幾何<small>viewport.show-geometry-only</small></span><input type="checkbox" data-config-key="viewport.show-geometry-only" /></label>
               <label class="config-toggle-label"><span>面陰影預覽<small>viewport.preview-shade</small></span><input type="checkbox" data-config-key="viewport.preview-shade" /></label>
+              <div class="player-reference-texture-setting">
+                <img id="playerReferenceTexturePreview" alt="玩家參考紋理" />
+                <div><strong>玩家參考紋理</strong><small id="playerReferenceTextureName">內置玩家紋理</small><span>建議使用 64×64 或等比例高清 Minecraft 皮膚。</span></div>
+                <div class="player-reference-texture-actions"><button type="button" data-action="importPlayerReferenceTexture">導入玩家紋理</button><button type="button" data-action="resetPlayerReferenceTexture">恢復內置紋理</button></div>
+              </div>
               <label class="config-number-label"><span>鎖定物體默認虛化 Alpha<small>viewport.locked-default-alpha · 0–100</small></span><input type="number" min="0" max="100" step="1" data-config-key="viewport.locked-default-alpha" /></label>
               <label class="config-toggle-label"><span>開啟鼠標虛化<small>viewport.locked-hover-fade</small></span><input type="checkbox" data-config-key="viewport.locked-hover-fade" /></label>
               <label class="config-number-label"><span>鼠標虛化 Alpha<small>viewport.locked-hover-alpha · 0–100</small></span><input type="number" min="0" max="100" step="1" data-config-key="viewport.locked-hover-alpha" /></label>
@@ -428,6 +468,7 @@
         </div>
         <div class="texture-template-options" id="textureTemplateOptions">
           <label class="config-toggle-label"><span>僅分配選中元素<small>只重排目前選取範圍的 UV</small></span><input id="textureTemplateSelectedOnly" type="checkbox" /></label>
+          <label class="config-toggle-label"><span>清理無效面<small>將任一邊長為 0 的面設為剔除</small></span><input id="textureTemplateCleanInvalid" type="checkbox" /></label>
           <label class="config-toggle-label"><span>啟用箱型 UV<small>按 Cube 建立連續六面展開</small></span><input id="textureTemplateBoxUv" type="checkbox" /></label>
           <label class="config-toggle-label"><span>使用 2 冪尺寸<small>默認開啟</small></span><input id="textureTemplatePowerOfTwo" type="checkbox" checked /></label>
           <label class="config-toggle-label"><span>保持多紋理佔用<small>不同來源的面維持獨立佔位</small></span><input id="textureTemplateKeepMulti" type="checkbox" checked /></label>
@@ -436,7 +477,7 @@
           <label class="config-number-label"><span>尺寸倍數<small>關閉 2 冪時使用</small></span><input id="textureTemplateMultiple" type="number" min="1" max="1024" step="1" value="4" /></label>
         </div>
       </div>
-      <p class="texture-template-summary" id="textureTemplateSummary">UV 尺寸會按照項目基礎吸附分辨率四捨五入，並由大到小自左上角打包。</p>
+      <p class="texture-template-summary" id="textureTemplateSummary">UV 尺寸會按照項目基礎吸附分辨率四捨五入；非零邊長至少分配 1px，並由大到小自左上角打包。</p>
       <div class="dialog-actions"><button value="cancel" type="button" data-action="cancelTextureCreate">取消</button><button class="primary-button" type="submit">建立</button></div>
     </form>
   </dialog>
@@ -454,6 +495,8 @@
   <div class="toast" id="toast" role="status"></div>
   <input type="file" id="fileInput" accept=".cbmodel,.bbmodel,.json" hidden />
   <input type="file" id="textureInput" accept="image/png,image/jpeg,image/webp" hidden />
+  <input type="file" id="referenceImageInput" accept="image/png,image/jpeg,image/webp" multiple hidden />
+  <input type="file" id="playerReferenceTextureInput" accept="image/png" hidden />
   <script type="module" src="./app.js"></script>
 </body>
 </html>
