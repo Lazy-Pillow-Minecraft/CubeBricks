@@ -144,6 +144,10 @@ kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; padding: 1
 .paint-tool-options select { height: 20px; min-width: 78px; padding: 0 20px 0 5px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--text); background: var(--panel-2); font: .58rem var(--ui-font); }
 .paint-tool-options .paint-bucket-scope[hidden] { display: none; }
 .paint-tool-options label[hidden] { display: none; }
+.paint-tool-options .gradient-color-stop { height:25px; display:flex; align-items:center; gap:5px; padding:0 7px; border:1px solid var(--line); border-radius:5px; color:var(--subtle); background:rgba(0,0,0,.12); }
+.paint-tool-options .gradient-color-stop[hidden] { display:none; }
+.paint-tool-options .gradient-color-stop i { width:14px; height:14px; border:1px solid rgba(255,255,255,.28); border-radius:3px; background:var(--gradient-color); box-shadow:0 0 0 1px rgba(0,0,0,.3) inset; }
+.paint-tool-options .gradient-color-stop.active { color:var(--accent); border-color:rgba(var(--accent-rgb),.62); background:rgba(var(--accent-rgb),.12); }
 .paint-opacity-control input { width: 76px; accent-color: var(--accent); }
 .paint-opacity-control output { width: 30px; color: var(--text); text-align: right; }
 .paint-tool-options :disabled { opacity: .38; cursor: not-allowed; }

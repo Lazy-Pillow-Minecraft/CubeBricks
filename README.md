@@ -1,5 +1,9 @@
 # CubeBricks
 
+[繁體中文](#繁體中文) · [English](#english)
+
+## 繁體中文
+
 CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 Cube 為基礎幾何，同時提供程序化 Shape、二維／三維 Bezier 曲線、節點、Locator、分組與非破壞式修改器，目標是在熟悉的 Blockbench 類工作區中完成建模、UV、貼圖與格式轉換。
 
 項目目前處於原型開發階段，重點是建立可擴展的編輯器基礎、穩定的三維交互，以及與 Minecraft／Blockbench 資料語義相符的預覽和導出流程。
@@ -53,7 +57,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 可建立紋理模板、純色模板或空白貼圖。模板生成會按工程基礎吸附分辨率歸一化尺寸，為非零邊長保留至少 1px，並可清理零面積無效面；UV 使用緊密的矩形裝箱排列，畫布可選 2 冪或指定倍數。
 - 繪畫模式可直接在二維貼圖、Cube 與程序化 Shape 表面作畫，提供畫筆、橡皮擦、直線、矩形、橢圓、油漆桶、漸變與取色器；不同面可引用不同貼圖。
 - 畫筆支援方形／圓形筆尖、抗鋸齒、透明度與三維跨面連續筆畫。筆刷深度會沿 Cube 的實際鄰面及 UV 朝向延伸，疊加繪製只同步處理最前方完全重合的面，不會穿透模型。
-- 漸變工具提供面漸變與體漸變，使用兩個三維取樣點即時預覽方向，並以透明度混合方式疊加到原有紋理；第二色預設為透明。
+- 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
 - 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算。
 - 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。
 - 繪畫模式保持模型表面乾淨，不顯示編輯選中高亮，也不允許進入 Shape 細分編輯。
@@ -140,3 +144,148 @@ scripts/                  預覽服務、測試與輔助工具
 ```
 
 CubeBricks 的核心方向是把編輯器能力拆成可註冊、可組合的模組，同時保留 Minecraft 模型需要的像素精度、UV 語義與 Blockbench 交換能力。
+
+---
+
+## English
+
+CubeBricks is a desktop model editor designed for Minecraft-oriented workflows. Cube geometry remains its foundation, while procedural shapes, 2D and 3D Bezier curves, nodes, locators, groups, and non-destructive modifiers extend the editor beyond basic box modeling. Its goal is to bring modeling, UV editing, texturing, and format conversion into a familiar Blockbench-style workspace.
+
+The project is currently an evolving prototype focused on an extensible editor architecture, dependable 3D interaction, and preview/export behavior that follows Minecraft and Blockbench data semantics.
+
+## Core features
+
+### Modeling and scene hierarchy
+
+- Cubes use position, size, pivot, and Euler rotation to describe geometry. Zero-sized dimensions are supported, and negative dimensions are optional.
+- Groups, locators, nodes, polygon columns, dodecahedrons, truncated-icosahedron footballs, and 2D/3D Bezier curves are supported. Procedural shapes have editable pivots as well.
+- Procedural shapes support non-destructive subdivision editing. Changes to generated cubes are stored as overrides without destroying the original shape parameters.
+- Curves can be expanded in the scene hierarchy like groups, with their nodes displayed and selected as children instead of being placed in a long property list.
+- The hierarchy supports multi-selection, range selection, drag reordering, group nesting, in-place grouping, search, and animated navigation.
+- Visibility, locking, automatic UV, UV normalization, and conversion-export flags can be managed directly from the detailed hierarchy view.
+
+### Modifiers
+
+- Modifiers are managed by an extensible registry that declares compatible object types, default data, and whether a modifier can be stacked more than once.
+- Groups and individual objects keep separate modifier stacks. A dedicated Modifiers property page handles creation, enabling, ordering, collapsing, and deletion.
+- The built-in symmetry modifier supports XYZ mirroring, radial repetition, and mandala symmetry. Multiple instances can be stacked, with each modifier processing the previous result.
+- Each modifier can be baked independently, turning that layer into editable content without applying the entire stack.
+- Symmetry anchors are internal owner data rather than extra hierarchy nodes. They remain directly selectable, movable, and rotatable in the viewport without polluting exports.
+- Symmetry previews reuse existing GPU geometry. Instances are expanded only when exporting `.bbmodel`, including winding and mirrored-UV correction for negative-determinant transforms.
+- Legacy group symmetry data and control nodes are migrated to the modifier structure when loaded.
+
+### 3D editing
+
+- Move, scale, rotate, and pivot tools provide 3D axis, plane, and center handles. The middle mouse button is always reserved for the camera.
+- Move and rotate support global, parent, and local reference spaces. Local rotation offers pose and Euler modes.
+- Moving a pivot compensates the geometry position, changing only the rotation center without changing the visible model.
+- Vertex snapping supports move, scale, rotate, and pivot operations.
+- The knife selects the frontmost cube face along the view ray, cuts at the project snapping step, and splits UVs with the geometry.
+- The viewport supports click selection, marquee selection, Shift-add, Ctrl-remove, and a dedicated face-selection mode.
+
+### Viewport and rendering
+
+- Perspective and orthographic cameras preserve their apparent scale when switching and support orbiting, panning, zooming, and eased focus transitions.
+- Wireframe, solid, textured, and normal display modes are available.
+- Minecraft-style face shading is calculated from transformed normals and two directional lights. Global and per-object shading can be controlled separately.
+- Solid, cutout, and translucent rendering are supported, together with antialiased variants and optional back-face culling.
+- Grids, wireframes, selection overlays, and guides use an independent antialiasing path and are not affected by the model-surface Mipped option.
+- Locked objects can use a separate fade layer and a screen-space pointer gradient without modifying material transparency.
+- General, X, Y, and Z views can each contain multiple reference images. Axis views are always orthographic; clicking the same axis again reverses direction, and middle-drag always pans.
+- An independent player scale and pose reference can use the bundled skin or a custom texture from Settings. It is excluded from selection, project files, and model exports.
+
+### UV and texturing
+
+- Cubes support box UV and per-face UV. Every face can independently select a texture, rotation, mirroring, and culling state.
+- The texture panel supports multi-face selection, UV movement and resizing, snapping, focus, zoom, and pan.
+- UV Preview renders only selected content and can show automatic rotation, face-direction colors, face rotation, and mirror markers. Disabling the panel stops its render scheduling.
+- Texture templates, solid-color templates, and blank textures can be created. Template generation normalizes sizes against the project base snapping resolution, preserves at least one pixel for non-zero edges, can remove zero-area faces, packs UV rectangles tightly, and supports power-of-two or custom-multiple canvases.
+- Paint mode works directly on the 2D texture, cubes, and procedural shape surfaces. It includes brush, eraser, line, rectangle, ellipse, fill, gradient, and eyedropper tools, while allowing each face to reference a different texture.
+- Brushes support square and round tips, antialiasing, opacity, and continuous 3D strokes across faces. Brush depth follows actual shared cube edges and each neighboring face's UV orientation. Coincident painting affects only exactly overlapping frontmost faces and never paints through the model.
+- Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
+- The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion.
+- Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient.
+- Paint mode keeps the model surface free of edit-selection highlighting and prevents entry into shape subdivision editing.
+- Culling every face removes the cube. A culled individual face is no longer pickable in the main viewport but remains available in UV Preview.
+
+### Workspace and configuration
+
+- Left, right, and bottom panels use a shared docking object model. Panels can detach, auto-dock when nearby, reorder, collapse, and resize their entire dock column.
+- Object properties are split into Basic, Appearance, UV, and Modifiers pages instead of one continuously stacked panel.
+- Multiple projects can remain open as tabs that support selection, drag ordering, project-information editing, and closing.
+- A configuration registry manages Traditional Chinese, Simplified Chinese, English, appearance, viewport, snapping, and workspace settings.
+- Model formats use an extensible registry and may provide their own initial project data, snapping baseline, texture size, and capability flags.
+
+## File formats
+
+- `.cbmodel`: the CubeBricks project format, preserving editable shapes, curves, modifiers, hierarchy, and project settings.
+- `.bbmodel`: Blockbench import and export. Procedural objects and modifiers are expanded into compatible cube/group data during export.
+- Built-in project types cover generic models, images, and several Minecraft Java, Bedrock, modded-entity, skin, and GeckoLib workflows. Editors that are not implemented yet are clearly marked as placeholders.
+
+## Running
+
+Node.js is required. Install dependencies once:
+
+```powershell
+npm install
+```
+
+Start the desktop application:
+
+```powershell
+npm start
+```
+
+If GPU rendering is unavailable in a remote desktop or virtual machine:
+
+```powershell
+npm run start:safe
+```
+
+To preview only the web interface:
+
+```powershell
+npm run preview
+```
+
+Then open `http://127.0.0.1:8765/`.
+
+## Validation
+
+```powershell
+npm run check
+npm run test:config
+npm run test:model
+npm run test:render
+```
+
+## Windows single-file build
+
+Double-click `build-portable.bat` in the repository root. It checks the source, runs the test suite, and creates a portable single executable in `dist`:
+
+```text
+dist/CubeBricks-<version>-portable.exe
+```
+
+The same build can be started from a terminal:
+
+```powershell
+npm run dist:portable
+```
+
+The first build requires network access to download dependencies and Electron packaging resources. Later builds reuse the local cache.
+
+## Project structure
+
+```text
+electron/                 Electron main process and desktop integration
+src/app.js                Editor interaction and UI state
+src/model.js              Project data, geometry, modifier instances, and format conversion
+src/render/               WebGL scene and UV Preview rendering
+src/core/                 Shared registries for configuration, formats, and modifiers
+src/config/               Built-in configuration, model formats, and modifier definitions
+src/ui/                   Shared UI components such as dockable panels
+scripts/                  Preview server, tests, and helper tools
+```
+
+CubeBricks is built around registrable, composable editor capabilities while preserving the pixel precision, UV semantics, and Blockbench interchange required by Minecraft model workflows.

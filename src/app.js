@@ -107,7 +107,10 @@ const state = {
   paintBucketScope: 'face',
   paintBucketSingleFace: true,
   paintGradientMode: 'face',
+  paintGradientPalette: false,
+  paintGradientStop: 'start',
   paintGradientStart: '#91ad52',
+  paintGradientStartAlpha: 100,
   paintGradientEnd: '#000000',
   paintGradientEndAlpha: 0,
   paintGradientAnchor: null,
@@ -1037,6 +1040,21 @@ function barycentric2d(point, a, b, c) {
   return [first, second, 1 - first - second];
 }
 
+function closestPointOnSegment2d(point, start, end) {
+  const direction = [end[0] - start[0], end[1] - start[1]];
+  const lengthSquared = direction[0] ** 2 + direction[1] ** 2;
+  const amount = lengthSquared < 1e-8 ? 0 : clamp(
+    ((point[0] - start[0]) * direction[0] + (point[1] - start[1]) * direction[1]) / lengthSquared, 0, 1);
+  return [start[0] + direction[0] * amount, start[1] + direction[1] * amount];
+}
+
+function closestPointOnTriangle2d(point, geometry) {
+  return [[geometry.hue, geometry.white], [geometry.white, geometry.black], [geometry.black, geometry.hue]]
+    .map(([start, end]) => closestPointOnSegment2d(point, start, end))
+    .sort((first, second) => Math.hypot(first[0] - point[0], first[1] - point[1])
+      - Math.hypot(second[0] - point[0], second[1] - point[1]))[0];
+}
+
 function renderTrianglePickerCanvas(surface) {
   const canvas = surface?.querySelector('.color-picker-triangle-field');
   if (!canvas || state.paintColorPickerMode !== 'triangle') return;
@@ -1114,7 +1132,7 @@ function updatePaintColorPickerVisual() {
   if (hex && document.activeElement !== hex) hex.value = state.paintColor;
 }
 
-function colorPickerPoint(surface, event) {
+function colorPickerPoint(surface, event, lockedZone = null) {
   const rect = surface.getBoundingClientRect();
   let x = insetControlRatio(event.clientX, rect.left, rect.width);
   const y = insetControlRatio(event.clientY, rect.top, rect.height);
@@ -1128,12 +1146,18 @@ function colorPickerPoint(surface, event) {
     };
   }
   if (state.paintColorPickerMode === 'triangle') {
-    const local = [event.clientX - rect.left, event.clientY - rect.top];
+    let local = [event.clientX - rect.left, event.clientY - rect.top];
     const geometry = trianglePickerGeometry(rect);
-    const weights = barycentric2d(local, geometry.hue, geometry.white, geometry.black);
-    if (!weights || weights.some(weight => weight < -1e-4)) {
+    let weights = barycentric2d(local, geometry.hue, geometry.white, geometry.black);
+    const inside = weights && weights.every(weight => weight >= -1e-4);
+    const zone = lockedZone || (inside ? 'triangle' : 'hue');
+    if (zone === 'hue') {
       const angle = Math.atan2(local[0] - rect.width / 2, rect.height / 2 - local[1]);
       return { hue: (angle / (Math.PI * 2) + 1) % 1, saturation: currentSaturation, value: currentValue, zone: 'hue' };
+    }
+    if (!inside) {
+      local = closestPointOnTriangle2d(local, geometry);
+      weights = barycentric2d(local, geometry.hue, geometry.white, geometry.black);
     }
     const value = clamp(weights[0] + weights[1], 0, 1);
     return {
@@ -1148,8 +1172,9 @@ function colorPickerPoint(surface, event) {
 function bindPaintColorPicker() {
   const surface = $('[data-color-picker-surface]', inspector);
   const hueRail = $('[data-color-hue]', inspector);
-  const useSurface = event => {
-    const point = colorPickerPoint(surface, event);
+  let surfaceZone = null;
+  const useSurface = (event, lockedZone = null) => {
+    const point = colorPickerPoint(surface, event, lockedZone);
     state.paintColorPickerHue = point.hue;
     state.paintColorPickerSaturation = point.saturation;
     state.paintColorPickerValue = point.value;
@@ -1176,7 +1201,23 @@ function bindPaintColorPicker() {
     });
     node.addEventListener('pointermove', event => { if (node.hasPointerCapture(event.pointerId)) handler(event); });
   };
-  bindPointer(surface, useSurface);
+  surface.addEventListener('pointerdown', event => {
+    event.preventDefault();
+    const point = colorPickerPoint(surface, event);
+    surfaceZone = point.zone || null;
+    surface.setPointerCapture(event.pointerId);
+    useSurface(event, surfaceZone);
+  });
+  surface.addEventListener('pointermove', event => {
+    if (surface.hasPointerCapture(event.pointerId)) useSurface(event, surfaceZone);
+  });
+  const releaseSurface = event => {
+    if (surface.hasPointerCapture?.(event.pointerId)) surface.releasePointerCapture(event.pointerId);
+    surfaceZone = null;
+  };
+  surface.addEventListener('pointerup', releaseSurface);
+  surface.addEventListener('pointercancel', releaseSurface);
+  surface.addEventListener('lostpointercapture', () => { surfaceZone = null; });
   if (hueRail) bindPointer(hueRail, useHue);
   $$('[data-color-picker-mode]', inspector).forEach(button => button.addEventListener('click', () => {
     state.paintColorPickerMode = button.dataset.colorPickerMode;
@@ -4856,7 +4897,10 @@ function activeTextureAsset() {
 function setPaintColor(color, notify = false, preservePickerHue = false) {
   if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
   state.paintColor = String(color).toLowerCase();
-  if (state.tool === 'gradient') state.paintGradientStart = state.paintColor;
+  if (state.tool === 'gradient' && !state.paintGradientPalette) {
+    if (state.paintGradientStop === 'end') state.paintGradientEnd = state.paintColor;
+    else state.paintGradientStart = state.paintColor;
+  }
   const [hue, saturation, value] = rgbToHsv(hexToRgb(state.paintColor));
   if (!preservePickerHue) {
     if (saturation > 1e-4 && value > 1e-4) state.paintColorPickerHue = hue;
@@ -4864,9 +4908,18 @@ function setPaintColor(color, notify = false, preservePickerHue = false) {
     state.paintColorPickerValue = value;
   }
   $('#paintColor').value = state.paintColor;
-  if ($('#paintGradientStart') && document.activeElement !== $('#paintGradientStart')) $('#paintGradientStart').value = state.paintGradientStart;
+  const startButton = $('#paintGradientStartControl'), endButton = $('#paintGradientEndControl');
+  startButton?.style.setProperty('--gradient-color', state.paintGradientStart);
+  endButton?.style.setProperty('--gradient-color', state.paintGradientEnd);
   updatePaintColorPickerVisual();
+  renderPaintGradientPreview();
   if (notify) toast(`繪畫顏色 ${state.paintColor}`);
+}
+
+function selectPaintGradientStop(stop) {
+  state.paintGradientStop = stop === 'end' ? 'end' : 'start';
+  setPaintColor(state.paintGradientStop === 'end' ? state.paintGradientEnd : state.paintGradientStart);
+  updateToolOptions();
 }
 
 function paintBrushOffsets(size, shape = state.paintBrushShape, antialias = state.paintBrushAa) {
@@ -4914,33 +4967,48 @@ function faceUvPixelSlots(cube, faceName) {
   return rectangle ? createBlockbenchFaceUvSlots(rectangle, face.rotation || 0) : null;
 }
 
-function paintFaceEdgeNeighbors(cube, faceName) {
-  const layout = PAINT_FACE_LAYOUTS[faceName];
-  const slots = faceUvPixelSlots(cube, faceName);
-  if (!layout || !slots) return [];
+function paintFaceDepthNeighbors(hit, target) {
+  const sourcePoints = hit.facePoints;
+  const sourceLayout = PAINT_FACE_LAYOUTS[target.faceName];
+  const sourceSlots = faceUvPixelSlots(target.cube, target.faceName);
+  if (sourcePoints?.length !== 4 || !sourceLayout || !sourceSlots) return [];
+  const extent = Math.max(1, ...[0, 1, 2].map(axis => Math.max(...sourcePoints.map(point => point[axis]))
+    - Math.min(...sourcePoints.map(point => point[axis]))));
   const neighbors = [];
-  for (const [firstSlot, secondSlot] of PAINT_FACE_EDGES) {
-    const firstCorner = layout[firstSlot], secondCorner = layout[secondSlot];
+  for (const [sourceFirst, sourceSecond] of PAINT_FACE_EDGES) {
+    const worldStart = sourcePoints[sourceFirst], worldEnd = sourcePoints[sourceSecond];
+    const cornerStart = sourceLayout[sourceFirst], cornerEnd = sourceLayout[sourceSecond];
     for (const [candidateName, candidateLayout] of Object.entries(PAINT_FACE_LAYOUTS)) {
-      if (candidateName === faceName) continue;
-      const candidateSlots = faceUvPixelSlots(cube, candidateName);
+      if (candidateName === target.faceName) continue;
+      const candidateSlots = faceUvPixelSlots(target.cube, candidateName);
       if (!candidateSlots) continue;
-      const pair = PAINT_FACE_EDGES.find(([a, b]) => {
-        const corners = [candidateLayout[a], candidateLayout[b]];
-        return corners.includes(firstCorner) && corners.includes(secondCorner);
-      });
+      const pair = PAINT_FACE_EDGES.find(([first, second]) => (
+        candidateLayout[first] === cornerStart && candidateLayout[second] === cornerEnd
+      ) || (candidateLayout[first] === cornerEnd && candidateLayout[second] === cornerStart));
       if (!pair) continue;
       const [candidateFirst, candidateSecond] = pair;
-      const forward = candidateLayout[candidateFirst] === firstCorner;
+      const forward = candidateLayout[candidateFirst] === cornerStart;
       const targetStart = candidateSlots[forward ? candidateFirst : candidateSecond];
       const targetEnd = candidateSlots[forward ? candidateSecond : candidateFirst];
-      const center = candidateSlots.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
-      const midpoint = [(targetStart[0] + targetEnd[0]) / 2, (targetStart[1] + targetEnd[1]) / 2];
-      const inwardRaw = [center[0] - midpoint[0], center[1] - midpoint[1]];
+      const targetCenter = candidateSlots.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
+      const targetMidpoint = [(targetStart[0] + targetEnd[0]) / 2, (targetStart[1] + targetEnd[1]) / 2];
+      const inwardRaw = [targetCenter[0] - targetMidpoint[0], targetCenter[1] - targetMidpoint[1]];
       const inwardLength = Math.hypot(...inwardRaw) || 1;
+      const sourceStart = sourceSlots[sourceFirst], sourceEnd = sourceSlots[sourceSecond];
+      const sourceCenter = sourceSlots.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
+      const sourceMidpoint = [(sourceStart[0] + sourceEnd[0]) / 2, (sourceStart[1] + sourceEnd[1]) / 2];
+      const sourceInwardRaw = [sourceCenter[0] - sourceMidpoint[0], sourceCenter[1] - sourceMidpoint[1]];
+      const sourceInwardLength = Math.hypot(...sourceInwardRaw) || 1;
+      const midpointWorld = worldStart.map((value, axis) => (value + worldEnd[axis]) / 2);
+      const inwardWorld = faceUvWorldPoint(target.cube, target.faceName, sourcePoints, [
+        sourceMidpoint[0] + sourceInwardRaw[0] / sourceInwardLength,
+        sourceMidpoint[1] + sourceInwardRaw[1] / sourceInwardLength
+      ]);
       neighbors.push({
-        faceName: candidateName,
-        sourceStart: slots[firstSlot], sourceEnd: slots[secondSlot],
+        faceName: candidateName, sourceFacePoints: sourcePoints,
+        sourceStart, sourceEnd,
+        worldStart, worldEnd,
+        worldPixelDepth: inwardWorld ? Math.max(1e-7, Math.hypot(...inwardWorld.map((value, axis) => value - midpointWorld[axis]))) : extent * 1e-4,
         targetStart, targetEnd,
         inward: inwardRaw.map(value => value / inwardLength)
       });
@@ -5030,19 +5098,30 @@ function touchScenePaintSurface(surface) {
 
 function paintBrushDepthPixel(drag, x, y, coverage, opacity) {
   const depth = clamp(Math.round(Number(state.paintBrushDepth)) || 0, 0, 32);
-  if (!depth || drag.tool !== 'brush' || !drag.paintFace?.cube || !drag.depthTargets) return;
-  const point = [x + .5, y + .5];
-  const edges = drag.depthEdges || (drag.depthEdges = paintFaceEdgeNeighbors(drag.paintFace.cube, drag.paintFace.faceName));
-  for (const edge of edges) {
-    const surface = drag.depthTargets.get(edge.faceName);
+  if (!depth || drag.tool !== 'brush' || !drag.paintFace?.cube || !drag.depthEdges?.length) return;
+  const sourcePoint = [x + .5, y + .5];
+  const world = facePixelWorldPoint(drag.paintFace.cube, drag.paintFace.faceName, drag.paintFace.facePoints, x, y);
+  for (const edge of drag.depthEdges) {
+    const surface = edge.surface;
     if (!surface) continue;
-    const edgeVector = [edge.sourceEnd[0] - edge.sourceStart[0], edge.sourceEnd[1] - edge.sourceStart[1]];
-    const lengthSquared = edgeVector[0] ** 2 + edgeVector[1] ** 2;
-    if (lengthSquared < 1e-8) continue;
-    const ratio = clamp(((point[0] - edge.sourceStart[0]) * edgeVector[0]
-      + (point[1] - edge.sourceStart[1]) * edgeVector[1]) / lengthSquared, 0, 1);
-    const closest = [edge.sourceStart[0] + edgeVector[0] * ratio, edge.sourceStart[1] + edgeVector[1] * ratio];
-    if (Math.hypot(point[0] - closest[0], point[1] - closest[1]) > .76) continue;
+    const sourceEdge = [edge.sourceEnd[0] - edge.sourceStart[0], edge.sourceEnd[1] - edge.sourceStart[1]];
+    const sourceLengthSquared = sourceEdge[0] ** 2 + sourceEdge[1] ** 2;
+    if (sourceLengthSquared < 1e-8) continue;
+    const uvRatio = clamp(((sourcePoint[0] - edge.sourceStart[0]) * sourceEdge[0]
+      + (sourcePoint[1] - edge.sourceStart[1]) * sourceEdge[1]) / sourceLengthSquared, 0, 1);
+    const sourceClosest = [edge.sourceStart[0] + sourceEdge[0] * uvRatio, edge.sourceStart[1] + sourceEdge[1] * uvRatio];
+    const uvDistance = Math.hypot(sourcePoint[0] - sourceClosest[0], sourcePoint[1] - sourceClosest[1]);
+    let ratio = uvRatio;
+    if (world) {
+      const worldEdge = edge.worldEnd.map((value, axis) => value - edge.worldStart[axis]);
+      const worldLengthSquared = dot3(worldEdge, worldEdge);
+      if (worldLengthSquared >= 1e-8) {
+        ratio = clamp(dot3(world.map((value, axis) => value - edge.worldStart[axis]), worldEdge) / worldLengthSquared, 0, 1);
+        const worldClosest = edge.worldStart.map((value, axis) => value + worldEdge[axis] * ratio);
+        const worldDistance = Math.hypot(...world.map((value, axis) => value - worldClosest[axis]));
+        if (worldDistance > edge.worldPixelDepth * .8 && uvDistance > .8) continue;
+      } else if (uvDistance > .8) continue;
+    } else if (uvDistance > .8) continue;
     touchScenePaintSurface(surface);
     const targetEdge = [edge.targetEnd[0] - edge.targetStart[0], edge.targetEnd[1] - edge.targetStart[1]];
     const edgePoint = [edge.targetStart[0] + targetEdge[0] * ratio, edge.targetStart[1] + targetEdge[1] * ratio];
@@ -5126,10 +5205,11 @@ function drawPaintSegment(drag, from, to, sync = true) {
   }
   context.restore();
   flushHolisticPaintSurface(drag);
-  if (drag.depthTargets) for (const surface of new Set(drag.depthTargets.values())) flushHolisticPaintSurface(surface);
+  const depthSurfaces = new Set((drag.depthEdges || []).map(edge => edge.surface).filter(Boolean));
+  for (const surface of depthSurfaces) flushHolisticPaintSurface(surface);
   if (sync) queuePaintedTextureSync(asset, canvas);
-  if (sync && drag.depthTargets) {
-    for (const surface of new Set(drag.depthTargets.values())) {
+  if (sync) {
+    for (const surface of depthSurfaces) {
       if (drag.rootDrag?.historyAssets.has(surface.asset._uid)) queuePaintedTextureSync(surface.asset, surface.canvas);
     }
   }
@@ -5402,12 +5482,16 @@ function useTexturePaintGradient(asset, point, hit) {
   pushTexturePaintHistory(asset, textureCanvas);
   const bounds = paintUvBounds(hit.cube, hit.faceName, textureCanvas);
   const image = textureCtx.getImageData(0, 0, textureCanvas.width, textureCanvas.height);
-  const startColor = hexToRgb(state.paintGradientStart), endColor = hexToRgb(state.paintGradientEnd);
-  const endAlpha = clamp(state.paintGradientEndAlpha / 100, 0, 1);
+  const stops = activePaintGradientStops();
+  const projections = [
+    [bounds.minU, bounds.minV], [bounds.maxU, bounds.minV],
+    [bounds.minU, bounds.maxV], [bounds.maxU, bounds.maxV]
+  ].map(corner => (corner[0] - anchor.point[0]) * direction[0] + (corner[1] - anchor.point[1]) * direction[1]);
+  const minProjection = Math.min(...projections), maxProjection = Math.max(...projections);
+  const projectionSpan = Math.max(1e-8, maxProjection - minProjection);
   for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
-    const ratio = clamp(((x + .5 - anchor.point[0]) * direction[0] + (y + .5 - anchor.point[1]) * direction[1]) / lengthSquared, 0, 1);
-    const rgba = [0, 1, 2].map(channel => Math.round(startColor[channel] + (endColor[channel] - startColor[channel]) * ratio));
-    rgba.push(1 + (endAlpha - 1) * ratio);
+    const projection = (x + .5 - anchor.point[0]) * direction[0] + (y + .5 - anchor.point[1]) * direction[1];
+    const rgba = samplePaintGradient((projection - minProjection) / projectionSpan, stops);
     blendRgbaPixel(image.data, (y * textureCanvas.width + x) * 4, rgba, clamp(state.paintBrushOpacity / 100, 0, 1));
   }
   textureCtx.putImageData(image, 0, 0);
@@ -5691,19 +5775,22 @@ function facePaintUvPoint(hit, target, canvas) {
   return null;
 }
 
-function facePixelWorldPoint(cube, faceName, facePoints, x, y) {
+function faceUvWorldPoint(cube, faceName, facePoints, point) {
   if (!cube || !faceName || facePoints?.length !== 4) return null;
   const face = cube.faces?.[faceName] || {};
   const rectangle = Array.isArray(face.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
   if (!rectangle) return null;
   const slots = createBlockbenchFaceUvSlots(rectangle, face.rotation || 0);
-  const point = [x + .5, y + .5];
   for (const indices of [[0, 2, 1], [2, 3, 1]]) {
     const weights = barycentric2d(point, slots[indices[0]], slots[indices[1]], slots[indices[2]]);
     if (!weights || weights.some(weight => weight < -1e-5)) continue;
     return [0, 1, 2].map(axis => indices.reduce((sum, slot, index) => sum + facePoints[slot][axis] * weights[index], 0));
   }
   return null;
+}
+
+function facePixelWorldPoint(cube, faceName, facePoints, x, y) {
+  return faceUvWorldPoint(cube, faceName, facePoints, [x + .5, y + .5]);
 }
 
 function blendRgbaPixel(data, offset, source, opacity = 1) {
@@ -5719,6 +5806,53 @@ function blendRgbaPixel(data, offset, source, opacity = 1) {
   for (let channel = 0; channel < 3; channel++) data[offset + channel] = outputAlpha <= 0 ? 0 : Math.round(
     (source[channel] * sourceAlpha + data[offset + channel] * destinationAlpha * (1 - sourceAlpha)) / outputAlpha);
   data[offset + 3] = Math.round(outputAlpha * 255);
+}
+
+function activePaintGradientStops() {
+  if (state.paintGradientPalette) {
+    const row = paletteRows.find(entry => entry.id === selectedPaletteRowId);
+    if (row?.colors?.length) return row.colors.map(color => ({ color: hexToRgb(color), alpha: 1 }));
+  }
+  return [
+    { color: hexToRgb(state.paintGradientStart), alpha: clamp(state.paintGradientStartAlpha / 100, 0, 1) },
+    { color: hexToRgb(state.paintGradientEnd), alpha: clamp(state.paintGradientEndAlpha / 100, 0, 1) }
+  ];
+}
+
+function samplePaintGradient(ratio, stops = activePaintGradientStops()) {
+  if (!stops.length) return [...hexToRgb(state.paintGradientStart), 1];
+  if (stops.length === 1) return [...stops[0].color, stops[0].alpha];
+  const scaled = clamp(ratio, 0, 1) * (stops.length - 1);
+  const leftIndex = Math.floor(scaled);
+  const rightIndex = Math.min(stops.length - 1, leftIndex + 1);
+  const amount = scaled - leftIndex;
+  const left = stops[leftIndex], right = stops[rightIndex];
+  return [
+    ...left.color.map((channel, index) => Math.round(channel + (right.color[index] - channel) * amount)),
+    left.alpha + (right.alpha - left.alpha) * amount
+  ];
+}
+
+function paintGradientSvgStops(opacity = .72) {
+  const stops = activePaintGradientStops();
+  return stops.map((stop, index) => {
+    const color = `#${stop.color.map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+    const offset = stops.length === 1 ? 0 : index / (stops.length - 1);
+    return `<stop offset="${offset}" stop-color="${color}" stop-opacity="${stop.alpha * opacity}"/>`;
+  }).join('');
+}
+
+function projectedGradientRange(points, origin, direction) {
+  const lengthSquared = dot3(direction, direction);
+  if (lengthSquared < 1e-8 || !points.length) return null;
+  const amounts = points.map(point => dot3(point.map((value, axis) => value - origin[axis]), direction) / lengthSquared);
+  const min = Math.min(...amounts), max = Math.max(...amounts);
+  if (max - min < 1e-8) return null;
+  return {
+    min, max,
+    start: origin.map((value, axis) => value + direction[axis] * min),
+    end: origin.map((value, axis) => value + direction[axis] * max)
+  };
 }
 
 function clearPaintGradientSelection() {
@@ -5741,16 +5875,20 @@ function renderPaintGradientPreview() {
   if (!sameCube || (state.paintGradientMode === 'face' && !sameFace)) {
     overlay.innerHTML = ''; overlay.hidden = true; return;
   }
-  const start = sceneRenderer.projectPoint(anchor.hit.point);
-  const end = sceneRenderer.projectPoint(hover.point);
+  const direction = hover.point.map((value, axis) => value - anchor.hit.point[axis]);
+  const domainFaces = state.paintGradientMode === 'face'
+    ? [hover]
+    : sceneRenderer.getCubeFaceQuads(anchor.hit.uid, anchor.hit.cubeUid || anchor.hit.uid);
+  const range = projectedGradientRange(domainFaces.flatMap(entry => entry.facePoints || []), anchor.hit.point, direction);
+  if (!range) { overlay.innerHTML = ''; overlay.hidden = true; return; }
+  const start = sceneRenderer.projectPoint(range.start);
+  const end = sceneRenderer.projectPoint(range.end);
   const face = hover.facePoints.map(point => sceneRenderer.projectPoint(point));
   if (start.behind || end.behind || face.some(point => point.behind)) return;
   const width = sceneCanvas.clientWidth, height = sceneCanvas.clientHeight;
   const perimeter = [face[0], face[1], face[3], face[2]];
-  const endColor = state.paintGradientEnd;
-  const endOpacity = clamp(state.paintGradientEndAlpha / 100, 0, 1);
   overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  overlay.innerHTML = `<defs><linearGradient id="paintGradientPreviewFill" gradientUnits="userSpaceOnUse" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}"><stop offset="0" stop-color="${state.paintGradientStart}" stop-opacity=".72"/><stop offset="1" stop-color="${endColor}" stop-opacity="${endOpacity * .72}"/></linearGradient></defs>
+  overlay.innerHTML = `<defs><linearGradient id="paintGradientPreviewFill" gradientUnits="userSpaceOnUse" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}">${paintGradientSvgStops()}</linearGradient></defs>
     ${state.paintGradientMode === 'face' ? `<path class="gradient-preview-face" d="M${perimeter.map(point => `${point.x},${point.y}`).join(' L')} Z"/>` : ''}
     <line class="gradient-preview-line" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}"/>
     <circle class="gradient-preview-point start" cx="${start.x}" cy="${start.y}" r="4"/><circle class="gradient-preview-point" cx="${end.x}" cy="${end.y}" r="4"/>`;
@@ -5773,12 +5911,15 @@ async function bakePaintGradient(anchorHit, endHit) {
   const assignmentContext = {};
   const surfaces = new Map();
   const historyGroup = crypto.randomUUID();
-  const startColor = hexToRgb(state.paintGradientStart);
-  const endColor = hexToRgb(state.paintGradientEnd);
-  const endAlpha = clamp(state.paintGradientEndAlpha / 100, 0, 1);
+  const stops = activePaintGradientStops();
   const direction = endHit.point.map((value, axis) => value - anchorHit.point[axis]);
   const lengthSquared = dot3(direction, direction);
   if (lengthSquared < 1e-8) return toast('漸變兩點距離太短');
+  const domainProjections = faceHits.flatMap(hit => hit.facePoints || [])
+    .map(point => dot3(point.map((value, axis) => value - anchorHit.point[axis]), direction));
+  const minProjection = Math.min(...domainProjections), maxProjection = Math.max(...domainProjections);
+  const projectionSpan = maxProjection - minProjection;
+  if (!Number.isFinite(projectionSpan) || projectionSpan < 1e-8) return toast('漸變範圍無效');
   for (const hit of faceHits) {
     const target = facePaintTarget(hit, true, assignmentContext);
     if (!target) continue;
@@ -5798,9 +5939,8 @@ async function bakePaintGradient(anchorHit, endHit) {
       const pixel = y * surface.canvas.width + x;
       if (surface.processed[pixel]) continue;
       surface.processed[pixel] = 1;
-      const ratio = clamp(dot3(world.map((value, axis) => value - anchorHit.point[axis]), direction) / lengthSquared, 0, 1);
-      const rgba = [0, 1, 2].map(channel => Math.round(startColor[channel] + (endColor[channel] - startColor[channel]) * ratio));
-      rgba.push(1 + (endAlpha - 1) * ratio);
+      const projection = dot3(world.map((value, axis) => value - anchorHit.point[axis]), direction);
+      const rgba = samplePaintGradient((projection - minProjection) / projectionSpan, stops);
       blendRgbaPixel(image.data, pixel * 4, rgba, clamp(state.paintBrushOpacity / 100, 0, 1));
     }
     surface.context.putImageData(image, 0, 0);
@@ -5886,16 +6026,16 @@ async function sceneBrushSurfaceForHit(drag, hit) {
   const surface = {
     ...base, baseSurface: base, rootDrag: drag, clip,
     cube: target.cube, faceName: target.faceName,
-    paintFace: { cube: target.cube, faceName: target.faceName },
-    depthTargets: new Map()
+    paintFace: { cube: target.cube, faceName: target.faceName, facePoints: hit.facePoints },
+    depthEdges: []
   };
   if (state.paintBrushDepth > 0) {
-    const neighborNames = new Set(paintFaceEdgeNeighbors(target.cube, target.faceName).map(edge => edge.faceName));
-    for (const faceName of neighborNames) {
-      const asset = adjacentPaintFaceAsset(target.cube, faceName, target.asset, drag);
+    const neighbors = paintFaceDepthNeighbors(hit, target);
+    for (const neighbor of neighbors) {
+      const asset = adjacentPaintFaceAsset(target.cube, neighbor.faceName, target.asset, drag);
       if (!asset) continue;
       const neighborSurface = await ensureScenePaintAssetSurface(drag, asset);
-      if (neighborSurface) surface.depthTargets.set(faceName, neighborSurface);
+      if (neighborSurface) surface.depthEdges.push({ ...neighbor, surface: neighborSurface });
     }
   }
   return surface;
@@ -6578,6 +6718,7 @@ function renderPalette() {
     });
     picker.addEventListener('pointermove', event => { if (picker.hasPointerCapture(event.pointerId)) pickGradientColor(picker, event); });
   });
+  if (state.tool === 'gradient' && state.paintGradientPalette) renderPaintGradientPreview();
 }
 
 function addPaletteRow() {
@@ -7326,7 +7467,10 @@ function setTool(tool) {
   if (tool !== 'vertexSnap') state.vertexSnapSource = null;
   if (tool !== 'knife') cancelKnifeSelection(false);
   if (tool !== 'gradient') clearPaintGradientSelection();
-  if (tool === 'gradient' && state.tool !== 'gradient') state.paintGradientStart = state.paintColor;
+  if (tool === 'gradient' && state.tool !== 'gradient') {
+    state.paintGradientStop = 'start';
+    state.paintGradientStart = state.paintColor;
+  }
   state.tool = tool;
   sceneCanvas.classList.toggle('is-knife', tool === 'knife');
   $$('.tool').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
@@ -7364,9 +7508,15 @@ function updateToolOptions() {
     || !['color', 'contiguous'].includes(state.paintBucketScope);
   const gradientTool = state.tool === 'gradient';
   $('#paintGradientModeControl').hidden = !gradientTool;
+  $('#paintGradientPaletteControl').hidden = !gradientTool;
   $('#paintGradientStartControl').hidden = !gradientTool;
+  $('#paintGradientStartAlphaControl').hidden = !gradientTool;
   $('#paintGradientEndControl').hidden = !gradientTool;
   $('#paintGradientEndAlphaControl').hidden = !gradientTool;
+  $('#paintGradientStartControl').disabled = state.paintGradientPalette;
+  $('#paintGradientEndControl').disabled = state.paintGradientPalette;
+  $('#paintGradientStartAlpha').disabled = state.paintGradientPalette;
+  $('#paintGradientEndAlpha').disabled = state.paintGradientPalette;
   $('#snapButton').hidden = paintTool;
   const knifePreview = getKnifePreviewLabel();
   $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
@@ -7381,8 +7531,12 @@ function updateToolOptions() {
   if (document.activeElement !== $('#paintBucketScope')) $('#paintBucketScope').value = state.paintBucketScope;
   $('#paintBucketSingleFace').checked = state.paintBucketSingleFace;
   $('#paintGradientMode').value = state.paintGradientMode;
-  $('#paintGradientStart').value = state.paintGradientStart;
-  $('#paintGradientEnd').value = state.paintGradientEnd;
+  $('#paintGradientPalette').checked = state.paintGradientPalette;
+  $('#paintGradientStartControl').classList.toggle('active', state.paintGradientStop === 'start' && !state.paintGradientPalette);
+  $('#paintGradientEndControl').classList.toggle('active', state.paintGradientStop === 'end' && !state.paintGradientPalette);
+  $('#paintGradientStartControl').style.setProperty('--gradient-color', state.paintGradientStart);
+  $('#paintGradientEndControl').style.setProperty('--gradient-color', state.paintGradientEnd);
+  $('#paintGradientStartAlpha').value = String(state.paintGradientStartAlpha);
   $('#paintGradientEndAlpha').value = String(state.paintGradientEndAlpha);
   $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
   updateTransformSpaceButtons();
@@ -8379,12 +8533,17 @@ function bindEvents() {
     state.paintGradientMode = event.target.value === 'volume' ? 'volume' : 'face';
     clearPaintGradientSelection();
   });
-  $('#paintGradientStart').addEventListener('input', event => {
-    state.paintGradientStart = event.target.value;
+  $('#paintGradientPalette').addEventListener('change', event => {
+    state.paintGradientPalette = event.target.checked;
+    if (!state.paintGradientPalette) selectPaintGradientStop(state.paintGradientStop);
+    updateToolOptions();
     renderPaintGradientPreview();
   });
-  $('#paintGradientEnd').addEventListener('input', event => {
-    state.paintGradientEnd = event.target.value;
+  $('#paintGradientStartControl').addEventListener('click', () => selectPaintGradientStop('start'));
+  $('#paintGradientEndControl').addEventListener('click', () => selectPaintGradientStop('end'));
+  $('#paintGradientStartAlpha').addEventListener('input', event => {
+    state.paintGradientStartAlpha = clamp(Math.round(Number(event.target.value)) || 0, 0, 100);
+    event.target.value = String(state.paintGradientStartAlpha);
     renderPaintGradientPreview();
   });
   $('#paintGradientEndAlpha').addEventListener('input', event => {

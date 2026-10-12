@@ -150,9 +150,11 @@
           <label class="paint-bucket-scope" id="paintBucketScopeControl" title="油漆桶填充範圍" hidden><span>範圍</span><select id="paintBucketScope"><option value="face">面</option><option value="element">元素</option><option value="color">顏色</option><option value="contiguous">連續顏色</option></select></label>
           <label id="paintBucketSingleFaceControl" title="同色填充只在目前面的 UV 範圍內搜尋" hidden><input id="paintBucketSingleFace" type="checkbox" checked /><span>單面局限</span></label>
           <label id="paintGradientModeControl" title="面漸變限制在同一個面；體漸變可跨同一 Cube 的多個面" hidden><span>模式</span><select id="paintGradientMode"><option value="face">面漸變</option><option value="volume">體漸變</option></select></label>
-          <label id="paintGradientStartControl" title="漸變第一色" hidden><span>第一色</span><input id="paintGradientStart" type="color" value="#91ad52" /></label>
-          <label id="paintGradientEndControl" title="漸變第二色" hidden><span>第二色</span><input id="paintGradientEnd" type="color" value="#000000" /></label>
-          <label id="paintGradientEndAlphaControl" title="漸變第二色透明度；預設完全透明" hidden><span>末端 α</span><input id="paintGradientEndAlpha" type="number" min="0" max="100" step="1" value="0" /></label>
+          <label id="paintGradientPaletteControl" title="使用目前選中的色卡覆蓋整個漸變範圍" hidden><input id="paintGradientPalette" type="checkbox" /><span>使用色卡</span></label>
+          <button class="gradient-color-stop active" id="paintGradientStartControl" type="button" title="選中第一色並在右側選色器調整" hidden><i></i><span>第一色</span></button>
+          <label id="paintGradientStartAlphaControl" title="漸變第一色透明度" hidden><span>第一色 α</span><input id="paintGradientStartAlpha" type="number" min="0" max="100" step="1" value="100" /></label>
+          <button class="gradient-color-stop" id="paintGradientEndControl" type="button" title="選中第二色並在右側選色器調整" hidden><i></i><span>第二色</span></button>
+          <label id="paintGradientEndAlphaControl" title="漸變第二色透明度；預設完全透明" hidden><span>第二色 α</span><input id="paintGradientEndAlpha" type="number" min="0" max="100" step="1" value="0" /></label>
         </div>
         <button class="toolbar-option" id="snapButton" data-action="cycleSnap" title="左鍵下一檔，右鍵上一檔">吸附 1.0</button>
       </div>
