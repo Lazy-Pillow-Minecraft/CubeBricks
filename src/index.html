@@ -103,6 +103,7 @@
         <button class="tool mode-only paint-tool" data-tool="rectangle" title="矩形（M）" aria-label="矩形"><span>□</span></button>
         <button class="tool mode-only paint-tool" data-tool="ellipse" title="橢圓（O）" aria-label="橢圓"><span>○</span></button>
         <button class="tool mode-only paint-tool" data-tool="fill" title="油漆桶（G）" aria-label="油漆桶"><span>◩</span></button>
+        <button class="tool mode-only paint-tool" data-tool="gradient" title="漸變（J）" aria-label="漸變"><span>▨</span></button>
         <button class="tool mode-only paint-tool" data-tool="eyedropper" title="取色器（I）" aria-label="取色器"><span>⌖</span></button>
       </div>
       <div class="toolbar-lane tool-options-lane" id="toolOptionsLane" aria-label="目前工具參數" hidden>
@@ -144,9 +145,14 @@
           <label id="paintBrushShapeControl" title="筆刷形狀"><span>形狀</span><select id="paintBrushShape"><option value="square">方形</option><option value="circle">圓形</option></select></label>
           <label id="paintBrushAaControl" title="圓形筆刷邊緣抗鋸齒" hidden><input id="paintBrushAa" type="checkbox" /><span>AA 邊緣</span></label>
           <label id="paintBrushDepthControl" title="筆跡碰到 Cube 邊緣時，向相鄰面的貼圖延伸指定像素" hidden><span>深度</span><input id="paintBrushDepth" type="number" min="0" max="32" step="1" value="0" /></label>
+          <label id="paintBrushOverlayControl" title="只在最前方命中位置，同時繪製完全重合的共面表面" hidden><input id="paintBrushOverlay" type="checkbox" /><span>疊加繪製</span></label>
           <label class="paint-opacity-control" title="筆刷透明度"><span>透明度</span><input id="paintBrushOpacity" type="range" min="1" max="100" step="1" value="100" /><output id="paintBrushOpacityOutput">100%</output></label>
           <label class="paint-bucket-scope" id="paintBucketScopeControl" title="油漆桶填充範圍" hidden><span>範圍</span><select id="paintBucketScope"><option value="face">面</option><option value="element">元素</option><option value="color">顏色</option><option value="contiguous">連續顏色</option></select></label>
           <label id="paintBucketSingleFaceControl" title="同色填充只在目前面的 UV 範圍內搜尋" hidden><input id="paintBucketSingleFace" type="checkbox" checked /><span>單面局限</span></label>
+          <label id="paintGradientModeControl" title="面漸變限制在同一個面；體漸變可跨同一 Cube 的多個面" hidden><span>模式</span><select id="paintGradientMode"><option value="face">面漸變</option><option value="volume">體漸變</option></select></label>
+          <label id="paintGradientStartControl" title="漸變第一色" hidden><span>第一色</span><input id="paintGradientStart" type="color" value="#91ad52" /></label>
+          <label id="paintGradientEndControl" title="漸變第二色" hidden><span>第二色</span><input id="paintGradientEnd" type="color" value="#000000" /></label>
+          <label id="paintGradientEndAlphaControl" title="漸變第二色透明度；預設完全透明" hidden><span>末端 α</span><input id="paintGradientEndAlpha" type="number" min="0" max="100" step="1" value="0" /></label>
         </div>
         <button class="toolbar-option" id="snapButton" data-action="cycleSnap" title="左鍵下一檔，右鍵上一檔">吸附 1.0</button>
       </div>
@@ -261,6 +267,7 @@
           </div>
           <canvas id="sceneCanvas"></canvas>
           <div class="selection-marquee" id="selectionMarquee" aria-hidden="true" hidden></div>
+          <svg class="paint-gradient-overlay" id="paintGradientOverlay" aria-label="漸變預覽" aria-hidden="true" hidden></svg>
           <svg class="locator-overlay" id="locatorOverlay" aria-label="Locator 標記" hidden></svg>
           <svg class="face-selection-overlay" id="faceSelectionOverlay" aria-label="選中面標記" hidden></svg>
           <svg class="texture-drop-face-overlay" id="sceneTextureDropFaceOverlay" aria-hidden="true" hidden></svg>
@@ -300,24 +307,17 @@
         </div>
         <aside class="dock-zone dock-zone-bottom" data-dock-zone="bottom" aria-label="底部停靠區">
         <section class="dock-panel bottom-dock" id="bottomDock" data-panel="bottom">
-          <div class="dock-tabs panel-drag-handle">
-            <button class="dock-tab active" data-dock="palette">色卡</button>
-            <button class="dock-tab" data-dock="timeline">時間軸</button>
-            <button class="dock-tab" data-dock="console">輸出</button>
-            <span class="dock-spacer"></span>
+          <div class="panel-heading panel-drag-handle">
+            <strong>色卡</strong>
+            <div class="panel-heading-actions"></div>
+          </div>
+          <div class="panel-control-strip palette-control-strip">
+            <span id="paletteSummary">3 行 · 每行獨立設定</span>
+            <button class="add-palette-row" data-action="addPaletteRow">＋ 新增一行</button>
           </div>
           <div class="dock-content palette-view active" data-dock-view="palette">
-            <div class="palette-meta">
-              <strong>模型色卡</strong><span id="paletteSummary">3 行 · 每行獨立設定</span>
-              <button class="add-palette-row" data-action="addPaletteRow">＋ 新增一行</button>
-            </div>
             <div class="palette-rows" id="paletteRows"></div>
           </div>
-          <div class="dock-content timeline-view" data-dock-view="timeline">
-          <div class="timeline-controls"><button data-action="playTimeline">▶</button><button data-action="stopTimeline">■</button><span id="timelineTime">00:00:00</span><label>24 FPS</label></div>
-            <div class="timeline-ruler" id="timelineRuler"></div>
-          </div>
-          <div class="dock-content console-view" data-dock-view="console"><code>CubeBricks 0.1 — 項目已就緒。</code></div>
         </section>
         </aside>
       </section>

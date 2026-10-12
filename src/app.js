@@ -23,9 +23,10 @@ const TOOL_REGISTRY = Object.freeze({
   rectangle: { modes: ['paint'] },
   ellipse: { modes: ['paint'] },
   fill: { modes: ['paint'] },
+  gradient: { modes: ['paint'] },
   eyedropper: { modes: ['paint'] }
 });
-const PAINT_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse', 'fill', 'eyedropper']);
+const PAINT_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse', 'fill', 'gradient', 'eyedropper']);
 const PAINT_STROKE_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse']);
 const PAINT_SHAPE_TOOLS = Object.freeze(['line', 'rectangle', 'ellipse']);
 
@@ -101,9 +102,16 @@ const state = {
   paintBrushShape: 'square',
   paintBrushAa: false,
   paintBrushDepth: 0,
+  paintBrushOverlay: false,
   paintBrushOpacity: 100,
   paintBucketScope: 'face',
   paintBucketSingleFace: true,
+  paintGradientMode: 'face',
+  paintGradientStart: '#91ad52',
+  paintGradientEnd: '#000000',
+  paintGradientEndAlpha: 0,
+  paintGradientAnchor: null,
+  paintGradientHover: null,
   paintColorPickerMode: 'square',
   paintColorPickerHue: .218,
   paintColorPickerSaturation: .526,
@@ -129,7 +137,7 @@ const DOCK_PANEL_DEFINITIONS = Object.freeze([
   { id: 'uvPreview', index: 1, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'left', defaultOrder: 1, defaultPosition: { x: 24, y: 520 }, defaultSize: { width: 236, height: 260 }, defaultCollapsed: false },
   { id: 'inspector', index: 2, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 0, defaultPosition: { x: 920, y: 104 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
   { id: 'outliner', index: 3, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 1, defaultPosition: { x: 920, y: 460 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
-  { id: 'bottom', index: 4, modes: ['paint', 'animate'], defaultDock: 'bottom', defaultOrder: 0, defaultPosition: { x: 280, y: 620 }, defaultSize: { width: 720, height: 176 }, defaultCollapsed: false }
+  { id: 'bottom', index: 4, modes: ['paint'], defaultDock: 'bottom', defaultOrder: 0, defaultPosition: { x: 280, y: 620 }, defaultSize: { width: 720, height: 176 }, defaultCollapsed: false }
 ]);
 
 state.selectedUid = state.project.elements[0]?.uid;
@@ -997,15 +1005,61 @@ function rgbToHex(rgb) {
 }
 
 const COLOR_CONTROL_INSET = 2;
+const TRIANGLE_RING_WIDTH = 14;
+const TRIANGLE_FIELD_INSET = 22;
 
 function insetControlRatio(clientCoordinate, start, length) {
   return clamp((clientCoordinate - start - COLOR_CONTROL_INSET)
     / Math.max(1, length - COLOR_CONTROL_INSET * 2), 0, 1);
 }
 
-function insetControlPosition(ratio) {
+function insetControlPosition(ratio, inset = COLOR_CONTROL_INSET) {
   const normalized = clamp(ratio, 0, 1);
-  return `calc(${normalized * 100}% + ${COLOR_CONTROL_INSET - normalized * COLOR_CONTROL_INSET * 2}px)`;
+  return `calc(${normalized * 100}% + ${inset - normalized * inset * 2}px)`;
+}
+
+function trianglePickerGeometry(rect) {
+  const width = rect.width, height = rect.height;
+  const center = [width / 2, height / 2];
+  const radius = Math.max(2, Math.min(width, height) / 2 - TRIANGLE_FIELD_INSET);
+  return {
+    hue: [center[0], center[1] - radius],
+    white: [center[0] - radius * Math.sqrt(3) / 2, center[1] + radius / 2],
+    black: [center[0] + radius * Math.sqrt(3) / 2, center[1] + radius / 2]
+  };
+}
+
+function barycentric2d(point, a, b, c) {
+  const denominator = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+  if (Math.abs(denominator) < 1e-8) return null;
+  const first = ((b[1] - c[1]) * (point[0] - c[0]) + (c[0] - b[0]) * (point[1] - c[1])) / denominator;
+  const second = ((c[1] - a[1]) * (point[0] - c[0]) + (a[0] - c[0]) * (point[1] - c[1])) / denominator;
+  return [first, second, 1 - first - second];
+}
+
+function renderTrianglePickerCanvas(surface) {
+  const canvas = surface?.querySelector('.color-picker-triangle-field');
+  if (!canvas || state.paintColorPickerMode !== 'triangle') return;
+  const rect = surface.getBoundingClientRect();
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+  const renderKey = `${width}:${height}:${state.paintColorPickerHue.toFixed(6)}`;
+  if (canvas.dataset.renderKey === renderKey) return;
+  canvas.dataset.renderKey = renderKey;
+  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(width, height);
+  const geometry = trianglePickerGeometry({ width, height });
+  const hueRgb = hsvToRgb(state.paintColorPickerHue, 1, 1);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const weights = barycentric2d([x + .5, y + .5], geometry.hue, geometry.white, geometry.black);
+    if (!weights || weights.some(weight => weight < -1e-5)) continue;
+    const offset = (y * width + x) * 4;
+    for (let channel = 0; channel < 3; channel++) image.data[offset + channel] = Math.round(
+      hueRgb[channel] * weights[0] + 255 * weights[1]);
+    image.data[offset + 3] = 255;
+  }
+  context.putImageData(image, 0, 0);
 }
 
 function updatePaintColorPickerVisual() {
@@ -1028,14 +1082,28 @@ function updatePaintColorPickerVisual() {
     markerX = .5 + Math.cos(angle) * saturation * .5;
     markerY = .5 + Math.sin(angle) * saturation * .5;
   } else if (state.paintColorPickerMode === 'triangle') {
-    markerX = .5 - value * .5 + saturation * value;
+    const hueWeight = saturation * value;
+    const whiteWeight = (1 - saturation) * value;
+    const blackWeight = 1 - value;
+    const width = surface.clientWidth || 1, height = surface.clientHeight || 1;
+    const geometry = trianglePickerGeometry({ width, height });
+    markerX = (geometry.hue[0] * hueWeight + geometry.white[0] * whiteWeight + geometry.black[0] * blackWeight) / width;
+    markerY = (geometry.hue[1] * hueWeight + geometry.white[1] * whiteWeight + geometry.black[1] * blackWeight) / height;
+    renderTrianglePickerCanvas(surface);
   }
-  marker?.style.setProperty('left', insetControlPosition(markerX));
-  marker?.style.setProperty('top', insetControlPosition(markerY));
+  marker?.style.setProperty('left', state.paintColorPickerMode === 'triangle' ? `${markerX * 100}%` : insetControlPosition(markerX));
+  marker?.style.setProperty('top', state.paintColorPickerMode === 'triangle' ? `${markerY * 100}%` : insetControlPosition(markerY));
   const hueRail = $('[data-color-hue]', inspector);
   hueRail?.style.setProperty('--picker-bright', brightColor);
   const hueMarker = $('.color-hue-marker', inspector);
   if (hueMarker) hueMarker.style.top = insetControlPosition(state.paintColorPickerMode === 'circle' ? 1 - value : hue);
+  const ringMarker = $('.color-picker-ring-marker', inspector);
+  if (ringMarker && state.paintColorPickerMode === 'triangle') {
+    const angle = hue * Math.PI * 2;
+    const radius = Math.max(1, (surface.clientWidth || 1) / 2 - TRIANGLE_RING_WIDTH / 2 - 2);
+    ringMarker.style.left = `calc(50% + ${Math.sin(angle) * radius}px)`;
+    ringMarker.style.top = `calc(50% - ${Math.cos(angle) * radius}px)`;
+  }
   const preview = $('.color-picker-current', inspector);
   if (preview) preview.style.background = state.paintColor;
   ['r', 'g', 'b'].forEach((channel, index) => {
@@ -1060,13 +1128,18 @@ function colorPickerPoint(surface, event) {
     };
   }
   if (state.paintColorPickerMode === 'triangle') {
-    const value = 1 - y;
-    const halfWidth = value * .5;
-    x = clamp(x, .5 - halfWidth, .5 + halfWidth);
+    const local = [event.clientX - rect.left, event.clientY - rect.top];
+    const geometry = trianglePickerGeometry(rect);
+    const weights = barycentric2d(local, geometry.hue, geometry.white, geometry.black);
+    if (!weights || weights.some(weight => weight < -1e-4)) {
+      const angle = Math.atan2(local[0] - rect.width / 2, rect.height / 2 - local[1]);
+      return { hue: (angle / (Math.PI * 2) + 1) % 1, saturation: currentSaturation, value: currentValue, zone: 'hue' };
+    }
+    const value = clamp(weights[0] + weights[1], 0, 1);
     return {
       hue: state.paintColorPickerHue,
-      saturation: value > 1e-5 ? clamp((x - (.5 - halfWidth)) / value, 0, 1) : currentSaturation,
-      value
+      saturation: value > 1e-8 ? clamp(weights[0] / value, 0, 1) : currentSaturation,
+      value, zone: 'triangle'
     };
   }
   return { hue: state.paintColorPickerHue, saturation: x, value: 1 - y };
@@ -1104,7 +1177,7 @@ function bindPaintColorPicker() {
     node.addEventListener('pointermove', event => { if (node.hasPointerCapture(event.pointerId)) handler(event); });
   };
   bindPointer(surface, useSurface);
-  bindPointer(hueRail, useHue);
+  if (hueRail) bindPointer(hueRail, useHue);
   $$('[data-color-picker-mode]', inspector).forEach(button => button.addEventListener('click', () => {
     state.paintColorPickerMode = button.dataset.colorPickerMode;
     renderInspector();
@@ -1116,10 +1189,7 @@ function bindPaintColorPicker() {
   $('[data-paint-hex]', inspector)?.addEventListener('change', event => setPaintColor(event.target.value));
   $('[data-action="paintEyedropper"]', inspector)?.addEventListener('click', () => setTool('eyedropper'));
   $('[data-action="addPaintSwatch"]', inspector)?.addEventListener('click', () => {
-    const row = paletteRows[0];
-    if (row && !row.colors.includes(state.paintColor)) row.colors.push(state.paintColor);
-    renderPalette();
-    toast(`已加入色卡 ${state.paintColor}`);
+    addPaintSwatchToSelection();
   });
   updatePaintColorPickerVisual();
 }
@@ -1135,7 +1205,7 @@ function renderPaintColorPicker() {
       <button type="button" data-color-picker-mode="triangle" class="${mode === 'triangle' ? 'active' : ''}">三角形</button>
     </nav>
     <div class="color-picker-stage mode-${mode}">
-      <div class="color-picker-surface" data-color-picker-surface><i class="color-picker-marker"></i></div>
+      <div class="color-picker-surface" data-color-picker-surface><canvas class="color-picker-triangle-field"></canvas><i class="color-picker-marker"></i><i class="color-picker-ring-marker"></i></div>
       <div class="color-hue-rail" data-color-hue><i class="color-hue-marker"></i></div>
     </div>
     <div class="color-picker-values">
@@ -4786,6 +4856,7 @@ function activeTextureAsset() {
 function setPaintColor(color, notify = false, preservePickerHue = false) {
   if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
   state.paintColor = String(color).toLowerCase();
+  if (state.tool === 'gradient') state.paintGradientStart = state.paintColor;
   const [hue, saturation, value] = rgbToHsv(hexToRgb(state.paintColor));
   if (!preservePickerHue) {
     if (saturation > 1e-4 && value > 1e-4) state.paintColorPickerHue = hue;
@@ -4793,6 +4864,7 @@ function setPaintColor(color, notify = false, preservePickerHue = false) {
     state.paintColorPickerValue = value;
   }
   $('#paintColor').value = state.paintColor;
+  if ($('#paintGradientStart') && document.activeElement !== $('#paintGradientStart')) $('#paintGradientStart').value = state.paintGradientStart;
   updatePaintColorPickerVisual();
   if (notify) toast(`繪畫顏色 ${state.paintColor}`);
 }
@@ -5308,6 +5380,43 @@ function finishTexturePaintDrag(drag) {
   for (const surface of surfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
 }
 
+function useTexturePaintGradient(asset, point, hit) {
+  if (state.paintGradientMode === 'volume') {
+    toast('體漸變需要在三維視圖的同一個 Cube 上選取兩點');
+    return;
+  }
+  if (!hit) return toast('請在一個 UV 面內選擇漸變點');
+  const anchor = state.paintGradientAnchor;
+  if (!anchor || anchor.surface !== 'texture') {
+    state.paintGradientAnchor = { surface: 'texture', assetUid: asset._uid, point, cubeUid: hit.cube.uid, faceName: hit.faceName };
+    toast('選擇面漸變終點');
+    return;
+  }
+  if (anchor.assetUid !== asset._uid || anchor.cubeUid !== hit.cube.uid || anchor.faceName !== hit.faceName) {
+    toast('面漸變的第二點必須在同一個 UV 面');
+    return;
+  }
+  const direction = [point[0] - anchor.point[0], point[1] - anchor.point[1]];
+  const lengthSquared = direction[0] ** 2 + direction[1] ** 2;
+  if (lengthSquared < 1e-8) return toast('漸變兩點距離太短');
+  pushTexturePaintHistory(asset, textureCanvas);
+  const bounds = paintUvBounds(hit.cube, hit.faceName, textureCanvas);
+  const image = textureCtx.getImageData(0, 0, textureCanvas.width, textureCanvas.height);
+  const startColor = hexToRgb(state.paintGradientStart), endColor = hexToRgb(state.paintGradientEnd);
+  const endAlpha = clamp(state.paintGradientEndAlpha / 100, 0, 1);
+  for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
+    const ratio = clamp(((x + .5 - anchor.point[0]) * direction[0] + (y + .5 - anchor.point[1]) * direction[1]) / lengthSquared, 0, 1);
+    const rgba = [0, 1, 2].map(channel => Math.round(startColor[channel] + (endColor[channel] - startColor[channel]) * ratio));
+    rgba.push(1 + (endAlpha - 1) * ratio);
+    blendRgbaPixel(image.data, (y * textureCanvas.width + x) * 4, rgba, clamp(state.paintBrushOpacity / 100, 0, 1));
+  }
+  textureCtx.putImageData(image, 0, 0);
+  commitPaintedTextureAsset(asset, textureCanvas);
+  queuePaintedTextureSync(asset, textureCanvas);
+  syncPaintedTextureNow();
+  clearPaintGradientSelection();
+}
+
 function startTexturePaintPointer(event) {
   const asset = activeTextureAsset();
   if (!asset) {
@@ -5317,6 +5426,10 @@ function startTexturePaintPointer(event) {
   const point = paintPointFromEvent(event);
   if (!paintPointInside(point)) return;
   const hit = textureUvHit(allTextureUvEntriesForAsset(asset), point);
+  if (state.tool === 'gradient') {
+    useTexturePaintGradient(asset, point, hit);
+    return;
+  }
   if (state.tool === 'fill') {
     applyTextureBucket(asset, point, hit);
     return;
@@ -5578,6 +5691,148 @@ function facePaintUvPoint(hit, target, canvas) {
   return null;
 }
 
+function facePixelWorldPoint(cube, faceName, facePoints, x, y) {
+  if (!cube || !faceName || facePoints?.length !== 4) return null;
+  const face = cube.faces?.[faceName] || {};
+  const rectangle = Array.isArray(face.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
+  if (!rectangle) return null;
+  const slots = createBlockbenchFaceUvSlots(rectangle, face.rotation || 0);
+  const point = [x + .5, y + .5];
+  for (const indices of [[0, 2, 1], [2, 3, 1]]) {
+    const weights = barycentric2d(point, slots[indices[0]], slots[indices[1]], slots[indices[2]]);
+    if (!weights || weights.some(weight => weight < -1e-5)) continue;
+    return [0, 1, 2].map(axis => indices.reduce((sum, slot, index) => sum + facePoints[slot][axis] * weights[index], 0));
+  }
+  return null;
+}
+
+function blendRgbaPixel(data, offset, source, opacity = 1) {
+  const sourceAlpha = clamp(source[3] * opacity, 0, 1);
+  const destinationAlpha = data[offset + 3] / 255;
+  if (sourceAlpha <= 0 || (state.alphaLock && destinationAlpha <= 0)) return;
+  if (state.alphaLock) {
+    for (let channel = 0; channel < 3; channel++) data[offset + channel] = Math.round(
+      data[offset + channel] * (1 - sourceAlpha) + source[channel] * sourceAlpha);
+    return;
+  }
+  const outputAlpha = sourceAlpha + destinationAlpha * (1 - sourceAlpha);
+  for (let channel = 0; channel < 3; channel++) data[offset + channel] = outputAlpha <= 0 ? 0 : Math.round(
+    (source[channel] * sourceAlpha + data[offset + channel] * destinationAlpha * (1 - sourceAlpha)) / outputAlpha);
+  data[offset + 3] = Math.round(outputAlpha * 255);
+}
+
+function clearPaintGradientSelection() {
+  state.paintGradientAnchor = null;
+  state.paintGradientHover = null;
+  const overlay = $('#paintGradientOverlay');
+  if (overlay) { overlay.innerHTML = ''; overlay.hidden = true; }
+}
+
+function renderPaintGradientPreview() {
+  const overlay = $('#paintGradientOverlay');
+  const anchor = state.paintGradientAnchor;
+  const hover = state.paintGradientHover;
+  if (!overlay || !anchor?.hit || !hover?.faceName) {
+    if (overlay) { overlay.innerHTML = ''; overlay.hidden = true; }
+    return;
+  }
+  const sameCube = (hover.cubeUid || hover.uid) === (anchor.hit.cubeUid || anchor.hit.uid);
+  const sameFace = sameCube && hover.faceName === anchor.hit.faceName;
+  if (!sameCube || (state.paintGradientMode === 'face' && !sameFace)) {
+    overlay.innerHTML = ''; overlay.hidden = true; return;
+  }
+  const start = sceneRenderer.projectPoint(anchor.hit.point);
+  const end = sceneRenderer.projectPoint(hover.point);
+  const face = hover.facePoints.map(point => sceneRenderer.projectPoint(point));
+  if (start.behind || end.behind || face.some(point => point.behind)) return;
+  const width = sceneCanvas.clientWidth, height = sceneCanvas.clientHeight;
+  const perimeter = [face[0], face[1], face[3], face[2]];
+  const endColor = state.paintGradientEnd;
+  const endOpacity = clamp(state.paintGradientEndAlpha / 100, 0, 1);
+  overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  overlay.innerHTML = `<defs><linearGradient id="paintGradientPreviewFill" gradientUnits="userSpaceOnUse" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}"><stop offset="0" stop-color="${state.paintGradientStart}" stop-opacity=".72"/><stop offset="1" stop-color="${endColor}" stop-opacity="${endOpacity * .72}"/></linearGradient></defs>
+    ${state.paintGradientMode === 'face' ? `<path class="gradient-preview-face" d="M${perimeter.map(point => `${point.x},${point.y}`).join(' L')} Z"/>` : ''}
+    <line class="gradient-preview-line" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}"/>
+    <circle class="gradient-preview-point start" cx="${start.x}" cy="${start.y}" r="4"/><circle class="gradient-preview-point" cx="${end.x}" cy="${end.y}" r="4"/>`;
+  overlay.hidden = false;
+}
+
+function updatePaintGradientHover(event) {
+  if (!state.paintGradientAnchor || state.tool !== 'gradient') return;
+  const rect = sceneCanvas.getBoundingClientRect();
+  state.paintGradientHover = sceneRenderer.pickDetailed(state.project,
+    event.clientX - rect.left, event.clientY - rect.top, true);
+  renderPaintGradientPreview();
+}
+
+async function bakePaintGradient(anchorHit, endHit) {
+  const cubeUid = anchorHit.cubeUid || anchorHit.uid;
+  const faceHits = state.paintGradientMode === 'face'
+    ? [anchorHit]
+    : sceneRenderer.getCubeFaceQuads(anchorHit.uid, cubeUid).map(entry => ({ ...entry, point: anchorHit.point }));
+  const assignmentContext = {};
+  const surfaces = new Map();
+  const historyGroup = crypto.randomUUID();
+  const startColor = hexToRgb(state.paintGradientStart);
+  const endColor = hexToRgb(state.paintGradientEnd);
+  const endAlpha = clamp(state.paintGradientEndAlpha / 100, 0, 1);
+  const direction = endHit.point.map((value, axis) => value - anchorHit.point[axis]);
+  const lengthSquared = dot3(direction, direction);
+  if (lengthSquared < 1e-8) return toast('漸變兩點距離太短');
+  for (const hit of faceHits) {
+    const target = facePaintTarget(hit, true, assignmentContext);
+    if (!target) continue;
+    let surface = surfaces.get(target.asset._uid);
+    if (!surface) {
+      const result = await paintCanvasForAsset(target.asset);
+      if (!result) continue;
+      surface = { ...result, asset: target.asset, processed: new Uint8Array(result.canvas.width * result.canvas.height) };
+      surfaces.set(target.asset._uid, surface);
+      pushTexturePaintHistory(target.asset, result.canvas, historyGroup);
+    }
+    const bounds = paintUvBounds(target.cube, target.faceName, surface.canvas);
+    const image = surface.context.getImageData(0, 0, surface.canvas.width, surface.canvas.height);
+    for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
+      const world = facePixelWorldPoint(target.cube, target.faceName, hit.facePoints, x, y);
+      if (!world) continue;
+      const pixel = y * surface.canvas.width + x;
+      if (surface.processed[pixel]) continue;
+      surface.processed[pixel] = 1;
+      const ratio = clamp(dot3(world.map((value, axis) => value - anchorHit.point[axis]), direction) / lengthSquared, 0, 1);
+      const rgba = [0, 1, 2].map(channel => Math.round(startColor[channel] + (endColor[channel] - startColor[channel]) * ratio));
+      rgba.push(1 + (endAlpha - 1) * ratio);
+      blendRgbaPixel(image.data, pixel * 4, rgba, clamp(state.paintBrushOpacity / 100, 0, 1));
+    }
+    surface.context.putImageData(image, 0, 0);
+  }
+  for (const surface of surfaces.values()) {
+    commitPaintedTextureAsset(surface.asset, surface.canvas);
+    queuePaintedTextureSync(surface.asset, surface.canvas);
+  }
+  syncPaintedTextureNow();
+  renderTextureList();
+  renderScene();
+}
+
+function useScenePaintGradient(hit) {
+  if (!state.paintGradientAnchor?.hit) {
+    state.paintGradientAnchor = { hit };
+    state.paintGradientHover = hit;
+    renderPaintGradientPreview();
+    toast(state.paintGradientMode === 'face' ? '選擇面漸變終點' : '選擇同一 Cube 上的終點');
+    return;
+  }
+  const anchor = state.paintGradientAnchor.hit;
+  const sameCube = (hit.cubeUid || hit.uid) === (anchor.cubeUid || anchor.uid);
+  const sameFace = sameCube && hit.faceName === anchor.faceName;
+  if (!sameCube || (state.paintGradientMode === 'face' && !sameFace)) {
+    toast(state.paintGradientMode === 'face' ? '面漸變的第二點必須在同一個面' : '體漸變的第二點必須在同一個 Cube');
+    return;
+  }
+  clearPaintGradientSelection();
+  bakePaintGradient(anchor, hit);
+}
+
 function cloneCanvas(source) {
   const canvas = document.createElement('canvas');
   canvas.width = source.naturalWidth || source.width;
@@ -5595,11 +5850,15 @@ async function paintCanvasForAsset(asset) {
 
 function scenePaintHit(clientX, clientY, drag = null) {
   const rect = sceneCanvas.getBoundingClientRect();
-  const hit = sceneRenderer.pickDetailed(state.project, clientX - rect.left, clientY - rect.top, true);
+  const hits = state.tool === 'brush' && state.paintBrushOverlay
+    ? sceneRenderer.pickCoincident(state.project, clientX - rect.left, clientY - rect.top, true)
+    : [];
+  const hit = hits[0] || sceneRenderer.pickDetailed(state.project, clientX - rect.left, clientY - rect.top, true);
   if (!hit?.faceName) return null;
   if (drag && (hit.uid !== drag.uid
     || (hit.cubeUid || hit.uid) !== (drag.cubeUid || drag.uid)
     || hit.faceName !== drag.faceName)) return null;
+  if (hits.length > 1) hit.coincidentHits = hits;
   return hit;
 }
 
@@ -5645,29 +5904,25 @@ async function sceneBrushSurfaceForHit(drag, hit) {
 function queueSceneBrushHit(drag, hit) {
   drag.queue = drag.queue.then(async () => {
     if (drag.canceled || !hit?.faceName) {
-      drag.last = null;
-      drag.lastFaceKey = null;
+      drag.lastByFace.clear();
       return;
     }
-    const surface = await sceneBrushSurfaceForHit(drag, hit);
-    if (!surface || drag.canceled) {
-      drag.last = null;
-      drag.lastFaceKey = null;
-      return;
+    const hits = state.paintBrushOverlay && hit.coincidentHits?.length ? hit.coincidentHits : [hit];
+    const activeKeys = new Set();
+    for (const paintHit of hits) {
+      const surface = await sceneBrushSurfaceForHit(drag, paintHit);
+      if (!surface || drag.canceled) continue;
+      const point = facePaintUvPoint(paintHit, surface, surface.canvas);
+      if (!point) continue;
+      // Each concrete face owns its own UV-space cursor. This keeps a single
+      // 3D stroke continuous while preventing lines between unrelated UVs.
+      const faceKey = `${sceneBrushHitKey(paintHit)}::${surface.asset._uid}`;
+      const previous = drag.lastByFace.get(faceKey);
+      drawPaintSegment(surface, previous || point, point);
+      drag.lastByFace.set(faceKey, point);
+      activeKeys.add(faceKey);
     }
-    const point = facePaintUvPoint(hit, surface, surface.canvas);
-    if (!point) {
-      drag.last = null;
-      drag.lastFaceKey = null;
-      return;
-    }
-    // Procedural Shapes expose many generated Cubes through one owner UID.
-    // Include the concrete generated Cube in the key so a stroke never draws
-    // a UV-space line between unrelated cubes that happen to share a face name.
-    const faceKey = `${sceneBrushHitKey(hit)}::${surface.asset._uid}`;
-    drawPaintSegment(surface, drag.lastFaceKey === faceKey && drag.last ? drag.last : point, point);
-    drag.last = point;
-    drag.lastFaceKey = faceKey;
+    for (const key of [...drag.lastByFace.keys()]) if (!activeKeys.has(key)) drag.lastByFace.delete(key);
   });
   return drag.queue;
 }
@@ -5769,7 +6024,20 @@ function moveScenePaintDrag(event, drag = state.dragging) {
 }
 
 function startScenePaintPointer(event, x, y) {
-  const hit = sceneRenderer.pickDetailed(state.project, x, y, true);
+  const coincidentHits = state.tool === 'brush' && state.paintBrushOverlay
+    ? sceneRenderer.pickCoincident(state.project, x, y, true)
+    : [];
+  const hit = coincidentHits[0] || sceneRenderer.pickDetailed(state.project, x, y, true);
+  if (hit && coincidentHits.length > 1) hit.coincidentHits = coincidentHits;
+  if (state.tool === 'gradient') {
+    if (!hit?.faceName) { toast('請指向一個 Cube 面'); return true; }
+    const cube = hit.cube?.type === 'cube' ? hit.cube : state.project.getNode(hit.uid);
+    const faceAsset = textureAssetForReference(cube?.faces?.[hit.faceName]?.texture) || activeTextureAsset();
+    if (!faceAsset) { toast('請先建立或導入一張貼圖'); return true; }
+    event.preventDefault();
+    useScenePaintGradient(hit);
+    return true;
+  }
   const assignmentContext = {};
   const target = facePaintTarget(hit, state.tool !== 'eyedropper', assignmentContext);
   if (!target) {
@@ -5805,6 +6073,7 @@ function startScenePaintPointer(event, x, y) {
       latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
       assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(), touchedSurfaces: new Set(),
       historyGroup: crypto.randomUUID(), last: null, lastFaceKey: null,
+      lastByFace: new Map(),
       holisticStroke: true, lastPointerSample: { x: event.clientX, y: event.clientY, hit },
       assignmentSnapshotTaken: assignmentContext.assignmentSnapshotTaken === true,
       ready: true, ended: false, canceled: false, finished: false
@@ -6207,11 +6476,14 @@ const paletteRows = [
   { id: crypto.randomUUID(), name: '深潭', gradient: false, marker: .5, colors: ['#11191b','#1d2a29','#2b403a','#3b5b4c','#4b7560','#629178','#7aaf91','#9bc9aa','#c3dfc9','#f1f3dd','#8baab2','#587989','#365261','#263640'] },
   { id: crypto.randomUUID(), name: '暖岩', gradient: false, marker: .5, colors: ['#22191b','#402329','#663233','#8b443b','#b65e48','#d9805a','#eca875','#f6d09b','#f4e4c2','#8b705b','#66503e','#48382f','#2f2926','#1c1d19'] }
 ];
+let selectedPaletteRowId = paletteRows[0].id;
+let selectedPaletteColorIndex = null;
+let draggedPaletteColor = null;
 
 function renderPalette() {
   $('#paletteSummary').textContent = `${paletteRows.length} 行 · 每行獨立設定`;
   $('#paletteRows').innerHTML = paletteRows.map((row, index) => `
-    <div class="palette-row-card" data-palette-id="${row.id}">
+    <div class="palette-row-card ${selectedPaletteRowId === row.id ? 'selected' : ''}" data-palette-id="${row.id}">
       <div class="palette-row-controls">
         <span class="palette-row-name" title="${escapeAttribute(row.name)}">${escapeHtml(row.name)}</span>
         <label class="row-gradient-toggle" title="此行使用連續漸變">
@@ -6220,21 +6492,81 @@ function renderPalette() {
         <button class="delete-palette-row" data-delete-row="${index}" title="刪除此行">×</button>
       </div>
       ${row.gradient
-        ? `<div class="gradient-picker" data-gradient-picker="${index}" style="background:linear-gradient(90deg, ${row.colors.join(', ')})"><i class="gradient-marker" style="left:${insetControlPosition(row.marker)}"></i></div>`
-        : `<div class="palette-row">${row.colors.map(color => `<button class="swatch" data-color="${color}" style="background:${color}" title="${color}"></button>`).join('')}</div>`}
+        ? row.colors.length ? `<div class="gradient-picker" data-gradient-picker="${index}" style="background:linear-gradient(90deg, ${row.colors.join(', ')})"><i class="gradient-marker" style="left:${insetControlPosition(row.marker)}"></i></div>`
+          : `<div class="palette-empty">空色卡 · 先從選色器加入顏色</div>`
+        : `<div class="palette-row" data-palette-row="${row.id}">${row.colors.length ? row.colors.map((color, colorIndex) => `<span class="swatch-item ${selectedPaletteRowId === row.id && selectedPaletteColorIndex === colorIndex ? 'selected' : ''}" draggable="true" data-palette-row-id="${row.id}" data-palette-color-index="${colorIndex}"><button class="swatch" data-color="${color}" style="background:${color}" title="${color}"></button><button class="swatch-delete" title="刪除顏色">×</button></span>`).join('') : `<span class="palette-empty">空色卡 · 從選色器加入顏色</span>`}</div>`}
     </div>`).join('');
 
-  $$('.swatch').forEach(swatch => swatch.addEventListener('click', () => {
+  $$('.palette-row-card').forEach(card => card.addEventListener('pointerdown', () => {
+    selectedPaletteRowId = card.dataset.paletteId;
+    selectedPaletteColorIndex = null;
+    $$('.palette-row-card').forEach(entry => entry.classList.toggle('selected', entry === card));
+    $$('.swatch-item').forEach(entry => entry.classList.remove('selected'));
+  }));
+  $$('.swatch').forEach(swatch => swatch.addEventListener('click', event => {
+    const item = event.currentTarget.closest('.swatch-item');
+    selectedPaletteRowId = item.dataset.paletteRowId;
+    selectedPaletteColorIndex = Number(item.dataset.paletteColorIndex);
     if (state.mode !== 'paint') snapshot();
     applyPaletteColor(swatch.dataset.color);
+    renderPalette();
   }));
+  $$('.swatch-delete').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const item = button.closest('.swatch-item');
+    const row = paletteRows.find(entry => entry.id === item.dataset.paletteRowId);
+    if (!row) return;
+    row.colors.splice(Number(item.dataset.paletteColorIndex), 1);
+    selectedPaletteRowId = row.id;
+    selectedPaletteColorIndex = row.colors.length ? Math.min(Number(item.dataset.paletteColorIndex), row.colors.length - 1) : null;
+    renderPalette();
+  }));
+  $$('.swatch-item').forEach(item => {
+    item.addEventListener('dragstart', event => {
+      const row = paletteRows.find(entry => entry.id === item.dataset.paletteRowId);
+      if (!row || row.gradient) return event.preventDefault();
+      draggedPaletteColor = { rowId: row.id, index: Number(item.dataset.paletteColorIndex) };
+      event.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragover', event => { if (draggedPaletteColor) event.preventDefault(); });
+    item.addEventListener('drop', event => {
+      if (!draggedPaletteColor) return;
+      event.preventDefault();
+      const source = paletteRows.find(entry => entry.id === draggedPaletteColor.rowId);
+      const target = paletteRows.find(entry => entry.id === item.dataset.paletteRowId);
+      if (!source || !target || target.gradient) return;
+      const [color] = source.colors.splice(draggedPaletteColor.index, 1);
+      let targetIndex = Number(item.dataset.paletteColorIndex);
+      if (source === target && draggedPaletteColor.index < targetIndex) targetIndex--;
+      target.colors.splice(targetIndex, 0, color);
+      selectedPaletteRowId = target.id;
+      selectedPaletteColorIndex = targetIndex;
+      draggedPaletteColor = null;
+      renderPalette();
+    });
+    item.addEventListener('dragend', () => { draggedPaletteColor = null; });
+  });
+  $$('.palette-row').forEach(rowNode => {
+    rowNode.addEventListener('dragover', event => { if (draggedPaletteColor) event.preventDefault(); });
+    rowNode.addEventListener('drop', event => {
+      if (!draggedPaletteColor || event.target.closest('.swatch-item')) return;
+      const source = paletteRows.find(entry => entry.id === draggedPaletteColor.rowId);
+      const target = paletteRows.find(entry => entry.id === rowNode.dataset.paletteRow);
+      if (!source || !target || target.gradient) return;
+      const [color] = source.colors.splice(draggedPaletteColor.index, 1);
+      target.colors.push(color);
+      selectedPaletteRowId = target.id; selectedPaletteColorIndex = target.colors.length - 1;
+      draggedPaletteColor = null; renderPalette();
+    });
+  });
   $$('[data-gradient-row]').forEach(toggle => toggle.addEventListener('change', () => {
     paletteRows[Number(toggle.dataset.gradientRow)].gradient = toggle.checked;
     renderPalette();
   }));
   $$('[data-delete-row]').forEach(button => button.addEventListener('click', () => {
     if (paletteRows.length === 1) return toast('至少保留一行色卡');
-    paletteRows.splice(Number(button.dataset.deleteRow), 1);
+    const removed = paletteRows.splice(Number(button.dataset.deleteRow), 1)[0];
+    if (removed.id === selectedPaletteRowId) { selectedPaletteRowId = paletteRows[0].id; selectedPaletteColorIndex = null; }
     renderPalette();
   }));
   $$('[data-gradient-picker]').forEach(picker => {
@@ -6252,8 +6584,10 @@ function addPaletteRow() {
   const number = paletteRows.length + 1;
   paletteRows.push({
     id: crypto.randomUUID(), name: `自定義 ${number}`, gradient: false, marker: .5,
-    colors: ['#101410', '#283323', '#4c6338', '#78964d', '#a9c866', '#d8e79a', '#f1f3d0']
+    colors: []
   });
+  selectedPaletteRowId = paletteRows.at(-1).id;
+  selectedPaletteColorIndex = null;
   renderPalette();
   const rows = $('#paletteRows'); rows.scrollTop = rows.scrollHeight;
 }
@@ -6268,6 +6602,7 @@ function pickGradientColor(picker, event) {
 }
 
 function sampleGradient(colors, ratio) {
+  if (!colors.length) return state.paintColor;
   if (colors.length === 1) return colors[0];
   const scaled = ratio * (colors.length - 1);
   const left = Math.floor(scaled);
@@ -6275,6 +6610,17 @@ function sampleGradient(colors, ratio) {
   const amount = scaled - left;
   const a = hexToRgb(colors[left]), b = hexToRgb(colors[right]);
   return `#${a.map((channel, axis) => Math.round(channel + (b[axis] - channel) * amount).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function addPaintSwatchToSelection() {
+  const row = paletteRows.find(entry => entry.id === selectedPaletteRowId) || paletteRows[0];
+  if (!row) return;
+  const insertion = selectedPaletteColorIndex === null ? row.colors.length : selectedPaletteColorIndex + 1;
+  row.colors.splice(insertion, 0, state.paintColor);
+  selectedPaletteRowId = row.id;
+  selectedPaletteColorIndex = insertion;
+  renderPalette();
+  toast(`已加入「${row.name}」 ${state.paintColor}`);
 }
 
 function applyPaletteColor(color, notify = true) {
@@ -6979,6 +7325,8 @@ function setTool(tool) {
   }
   if (tool !== 'vertexSnap') state.vertexSnapSource = null;
   if (tool !== 'knife') cancelKnifeSelection(false);
+  if (tool !== 'gradient') clearPaintGradientSelection();
+  if (tool === 'gradient' && state.tool !== 'gradient') state.paintGradientStart = state.paintColor;
   state.tool = tool;
   sceneCanvas.classList.toggle('is-knife', tool === 'knife');
   $$('.tool').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
@@ -6990,7 +7338,7 @@ function updateToolOptions() {
   const lane = $('#toolOptionsLane');
   const labels = {
     move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇',
-    brush: '畫筆', eraser: '橡皮擦', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', eyedropper: '取色器'
+    brush: '畫筆', eraser: '橡皮擦', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', gradient: '漸變', eyedropper: '取色器'
   };
   const paintTool = PAINT_TOOLS.includes(state.tool);
   lane.hidden = !labels[state.tool];
@@ -7004,15 +7352,21 @@ function updateToolOptions() {
   $('#vertexSnapStatus').textContent = state.vertexSnapSource ? '再選目標頂點' : '先選來源頂點';
   $('#knifeStatus').hidden = state.tool !== 'knife';
   $('#paintToolOptions').hidden = !paintTool;
-  $('#paintBrushSize').disabled = ['eyedropper', 'fill'].includes(state.tool);
+  $('#paintBrushSize').disabled = ['eyedropper', 'fill', 'gradient'].includes(state.tool);
   $('#paintBrushOpacity').disabled = state.tool === 'eyedropper';
   $('#paintBucketScopeControl').hidden = state.tool !== 'fill';
   const brushTipTool = ['brush', 'eraser'].includes(state.tool);
   $('#paintBrushShapeControl').hidden = !brushTipTool;
   $('#paintBrushAaControl').hidden = !brushTipTool || state.paintBrushShape !== 'circle';
   $('#paintBrushDepthControl').hidden = state.tool !== 'brush';
+  $('#paintBrushOverlayControl').hidden = state.tool !== 'brush';
   $('#paintBucketSingleFaceControl').hidden = state.tool !== 'fill'
     || !['color', 'contiguous'].includes(state.paintBucketScope);
+  const gradientTool = state.tool === 'gradient';
+  $('#paintGradientModeControl').hidden = !gradientTool;
+  $('#paintGradientStartControl').hidden = !gradientTool;
+  $('#paintGradientEndControl').hidden = !gradientTool;
+  $('#paintGradientEndAlphaControl').hidden = !gradientTool;
   $('#snapButton').hidden = paintTool;
   const knifePreview = getKnifePreviewLabel();
   $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
@@ -7022,9 +7376,14 @@ function updateToolOptions() {
   if (document.activeElement !== $('#paintBrushShape')) $('#paintBrushShape').value = state.paintBrushShape;
   $('#paintBrushAa').checked = state.paintBrushAa;
   if (document.activeElement !== $('#paintBrushDepth')) $('#paintBrushDepth').value = String(state.paintBrushDepth);
+  $('#paintBrushOverlay').checked = state.paintBrushOverlay;
   if (document.activeElement !== $('#paintBrushOpacity')) $('#paintBrushOpacity').value = String(state.paintBrushOpacity);
   if (document.activeElement !== $('#paintBucketScope')) $('#paintBucketScope').value = state.paintBucketScope;
   $('#paintBucketSingleFace').checked = state.paintBucketSingleFace;
+  $('#paintGradientMode').value = state.paintGradientMode;
+  $('#paintGradientStart').value = state.paintGradientStart;
+  $('#paintGradientEnd').value = state.paintGradientEnd;
+  $('#paintGradientEndAlpha').value = String(state.paintGradientEndAlpha);
   $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
   updateTransformSpaceButtons();
   updateRotationModeButtons();
@@ -7644,7 +8003,14 @@ function bindContextMenus() {
     if (!rowNode) return;
     const index = paletteRows.findIndex(row => row.id === rowNode.dataset.paletteId);
     const row = paletteRows[index];
+    const swatch = event.target.closest('.swatch-item');
     showContextMenu(event, { title: row.name, source: rowNode, items: [
+      ...(swatch ? [{ icon: '×', label: '刪除顏色', action: () => {
+        row.colors.splice(Number(swatch.dataset.paletteColorIndex), 1);
+        selectedPaletteRowId = row.id;
+        selectedPaletteColorIndex = null;
+        renderPalette();
+      } }] : []),
       { icon: '◫', label: row.gradient ? '改用離散色卡' : '啟用連續漸變', action: () => { row.gradient = !row.gradient; renderPalette(); } },
       { icon: '＋', label: '新增色卡行', action: addPaletteRow }
     ] });
@@ -7995,6 +8361,9 @@ function bindEvents() {
     state.paintBrushDepth = clamp(Math.round(Number(event.target.value)) || 0, 0, 32);
     event.target.value = String(state.paintBrushDepth);
   });
+  $('#paintBrushOverlay').addEventListener('change', event => {
+    state.paintBrushOverlay = event.target.checked;
+  });
   $('#paintBrushOpacity').addEventListener('input', event => {
     state.paintBrushOpacity = clamp(Math.round(Number(event.target.value)) || 100, 1, 100);
     $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
@@ -8005,6 +8374,23 @@ function bindEvents() {
   });
   $('#paintBucketSingleFace').addEventListener('change', event => {
     state.paintBucketSingleFace = event.target.checked;
+  });
+  $('#paintGradientMode').addEventListener('change', event => {
+    state.paintGradientMode = event.target.value === 'volume' ? 'volume' : 'face';
+    clearPaintGradientSelection();
+  });
+  $('#paintGradientStart').addEventListener('input', event => {
+    state.paintGradientStart = event.target.value;
+    renderPaintGradientPreview();
+  });
+  $('#paintGradientEnd').addEventListener('input', event => {
+    state.paintGradientEnd = event.target.value;
+    renderPaintGradientPreview();
+  });
+  $('#paintGradientEndAlpha').addEventListener('input', event => {
+    state.paintGradientEndAlpha = clamp(Math.round(Number(event.target.value)) || 0, 0, 100);
+    event.target.value = String(state.paintGradientEndAlpha);
+    renderPaintGradientPreview();
   });
   new ResizeObserver(() => {
     syncTexturePreviewPriority();
@@ -8158,8 +8544,8 @@ function bindEvents() {
       color: $('#textureCreateColor').value
     });
   });
-  $('[data-action="playTimeline"]').addEventListener('click', playTimeline);
-  $('[data-action="stopTimeline"]').addEventListener('click', stopTimeline);
+  $('[data-action="playTimeline"]')?.addEventListener('click', playTimeline);
+  $('[data-action="stopTimeline"]')?.addEventListener('click', stopTimeline);
   $('[data-action="addPaletteRow"]').addEventListener('click', addPaletteRow);
   $('#outlinerSearch').addEventListener('input', renderOutliner);
   $('#outlinerDetailsToggle').addEventListener('change', event => {
@@ -8441,6 +8827,7 @@ function bindEvents() {
       if (referenceImageEditing) setReferenceImageEditing(false);
       closeShapeCreateMenu();
       if (subdivisionSession) exitSubdivisionEdit();
+      clearPaintGradientSelection();
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(event.shiftKey); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
@@ -8456,7 +8843,7 @@ function bindEvents() {
       else event.shiftKey ? focusSceneOrigin() : focusSelected();
     }
     if (state.mode === 'paint' && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      const paintShortcuts = { b: 'brush', e: 'eraser', l: 'line', m: 'rectangle', o: 'ellipse', g: 'fill', i: 'eyedropper' };
+      const paintShortcuts = { b: 'brush', e: 'eraser', l: 'line', m: 'rectangle', o: 'ellipse', g: 'fill', j: 'gradient', i: 'eyedropper' };
       const paintTool = paintShortcuts[event.key.toLowerCase()];
       if (paintTool) {
         event.preventDefault();
@@ -8478,7 +8865,8 @@ function playTimeline() {
   if (state.timelinePlaying) return;
   state.timelinePlaying = true;
   timelineLastTime = performance.now();
-  $('[data-action="playTimeline"]').textContent = '❚❚';
+  const playButton = $('[data-action="playTimeline"]');
+  if (playButton) playButton.textContent = '❚❚';
   const tick = now => {
     if (!state.timelinePlaying) return;
     state.timelineFrame = (state.timelineFrame + (now - timelineLastTime) / 1000 * 24) % 48;
@@ -8494,15 +8882,18 @@ function stopTimeline() {
   state.timelineFrame = 0;
   if (timelineAnimation) cancelAnimationFrame(timelineAnimation);
   timelineAnimation = null;
-  $('[data-action="playTimeline"]').textContent = '▶';
+  const playButton = $('[data-action="playTimeline"]');
+  if (playButton) playButton.textContent = '▶';
   updateTimelineUI();
 }
 
 function updateTimelineUI() {
   const frame = Math.floor(state.timelineFrame);
   const seconds = Math.floor(frame / 24);
-  $('#timelineTime').textContent = `00:00:${String(seconds).padStart(2, '0')}:${String(frame % 24).padStart(2, '0')}`;
-  $('#timelineRuler').style.setProperty('--playhead', `${state.timelineFrame / 48 * 100}%`);
+  const time = $('#timelineTime');
+  const ruler = $('#timelineRuler');
+  if (time) time.textContent = `00:00:${String(seconds).padStart(2, '0')}:${String(frame % 24).padStart(2, '0')}`;
+  ruler?.style.setProperty('--playhead', `${state.timelineFrame / 48 * 100}%`);
 }
 
 function startCurveHandleDrag(event, curve, hit) {
@@ -9374,6 +9765,10 @@ function onPointerMove(event) {
   }
   if (state.tool === 'knife' && !state.dragging) {
     updateKnifeHover(event);
+    return;
+  }
+  if (state.tool === 'gradient' && !state.dragging && state.paintGradientAnchor) {
+    updatePaintGradientHover(event);
     return;
   }
   if (!state.dragging) {

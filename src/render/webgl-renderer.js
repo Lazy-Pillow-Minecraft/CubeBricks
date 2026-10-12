@@ -1177,6 +1177,65 @@ export class WebGLSceneRenderer {
     return closest;
   }
 
+  pickCoincident(project, screenX, screenY, geometryOnly = true) {
+    if (!this.lastCameraState || !this.lastCameraInput) return [];
+    const ray = screenRay(screenX, screenY, this.lastViewport, this.lastCameraState, this.lastCameraInput);
+    const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
+    const faces = [
+      ...queryFaceBvh(this.staticCache?.faceBvh, ray).filter(face => !dynamicUids.has(face.uid)),
+      ...queryFaceBvh(this.selectedCache?.faceBvh, ray)
+    ];
+    const hits = new Map();
+    for (const face of faces) {
+      if (this.lastLockedUids.has(face.uid)
+        || (geometryOnly && ['locator', 'node'].includes(project.getNode(face.uid)?.type))) continue;
+      let faceDistance = Infinity;
+      for (let triangle = 0; triangle < 2; triangle++) {
+        const base = triangle * 3;
+        const distance = rayTriangleDistance(ray.origin, ray.direction,
+          face.quad[FACE_TRIANGLE_SLOTS[base]], face.quad[FACE_TRIANGLE_SLOTS[base + 1]], face.quad[FACE_TRIANGLE_SLOTS[base + 2]]);
+        if (distance !== null) faceDistance = Math.min(faceDistance, distance);
+      }
+      if (!Number.isFinite(faceDistance)) continue;
+      const key = `${face.uid}::${face.cubeUid || face.uid}::${face.faceName}`;
+      const normal = normalize(cross(subtract(face.quad[2], face.quad[0]), subtract(face.quad[1], face.quad[0])));
+      const previous = hits.get(key);
+      if (!previous || faceDistance < previous.distance) hits.set(key, {
+        uid: face.uid,
+        cubeUid: face.cubeUid || face.uid,
+        cubeIndex: face.cubeIndex ?? null,
+        cube: face.cube || null,
+        distance: faceDistance,
+        faceName: face.faceName,
+        facePoints: face.quad.map(point => [...point]),
+        normal,
+        point: ray.origin.map((value, axis) => value + ray.direction[axis] * faceDistance)
+      });
+    }
+    const ordered = [...hits.values()].sort((a, b) => a.distance - b.distance);
+    if (!ordered.length) return [];
+    const front = ordered[0];
+    const distanceTolerance = Math.max(1e-5, Math.abs(front.distance) * 1e-6);
+    return ordered.filter(hit => Math.abs(hit.distance - front.distance) <= distanceTolerance
+      && Math.abs(dot(hit.normal, front.normal)) >= .99999);
+  }
+
+  getCubeFaceQuads(uid, cubeUid = uid) {
+    const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
+    return [
+      ...(this.staticCache?.faces || []).filter(face => !dynamicUids.has(face.uid)),
+      ...(this.selectedCache?.faces || [])
+    ].filter(face => face.uid === uid && (face.cubeUid || face.uid) === cubeUid)
+      .map(face => ({
+        uid: face.uid,
+        cubeUid: face.cubeUid || face.uid,
+        cubeIndex: face.cubeIndex ?? null,
+        cube: face.cube || null,
+        faceName: face.faceName,
+        facePoints: face.quad.map(point => [...point])
+      }));
+  }
+
   getFaceQuad(uid, faceName) {
     const key = `${uid}::${faceName}`;
     const selectedFace = this.selectedCache?.faceIndex?.get(key);
