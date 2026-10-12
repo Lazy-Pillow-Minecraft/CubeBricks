@@ -4,7 +4,7 @@
 
 ## 繁體中文
 
-CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 Cube 為基礎幾何，同時提供程序化 Shape、二維／三維 Bezier 曲線、節點、Locator、分組與非破壞式修改器，目標是在熟悉的 Blockbench 類工作區中完成建模、UV、貼圖與格式轉換。
+CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 Cube 為基礎幾何，同時提供程序化 Shape、二維／三維 Bezier 曲線、節點、Locator、分組、非破壞式修改器與即時繪畫操作器，目標是在熟悉的 Blockbench 類工作區中完成建模、UV、貼圖與格式轉換。
 
 項目目前處於原型開發階段，重點是建立可擴展的編輯器基礎、穩定的三維交互，以及與 Minecraft／Blockbench 資料語義相符的預覽和導出流程。
 
@@ -29,10 +29,20 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 對稱預覽重用已有 GPU 幾何；導出 `.bbmodel` 時才展開實例，並修正負行列式變換的繞序與 UV 鏡像。
 - 舊版組鏡像及其控制節點會在載入時自動遷移到新修改器結構。
 
+### 即時操作器
+
+- 操作器由獨立註冊表管理，掛載在組或單一物件上；它只處理即時輸入，不生成場景元素，也沒有烘焙流程。
+- 內置「繪畫對稱」操作器支援 XYZ、徑向與曼陀羅模式。組操作器作用於全部後代，物件操作器只作用於自身及其生成面。
+- 面關聯在背景中分批建立；實際落筆的面會優先處理。匹配同時檢查世界空間四頂點及對應 UV 邊的實際像素長度，避免對稱筆跡被拉伸。
+- 幾何、作用域或對稱軸資料變化後會重新核對關聯；整個作用域只做剛體移動或旋轉時可沿用原關聯。
+- 在操作器中點擊「在主視圖編輯」，可用場景內軸點標記與移動／旋轉手柄調整對稱中心和方向。同面對稱保留原筆跡與全部頂點映射結果，重疊筆跡沿用單筆透明度。
+- 對稱提示包含平面網格、軸線與角度分割射線；徑向與曼陀羅使用相同的提示角度分布，調整中心、方向或配置時即時更新。
+
 ### 三維編輯
 
 - 移動、縮放、旋轉與樞軸工具具有三維軸、平面及中心手柄；中鍵始終保留給攝像機。
 - 移動與旋轉支援全局、父級和自身參考；自身旋轉可選姿態或歐拉角模式。
+- 組縮放與多選縮放共用批量操作；每個元素從自己的初始參數計算尺寸和位置補償。縮放手柄使用參與元素的平均軸方向。
 - 樞軸移動會補償幾何位置，只改變旋轉中心而不改變模型外觀。
 - 頂點捕捉支援移動、縮放、旋轉及樞軸點操作。
 - 刀具按視線選取最前方 Cube 面，依工程吸附切割幾何並同步切開 UV。
@@ -45,6 +55,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - Minecraft 風格的面陰影由旋轉後法線和雙方向光計算；全局陰影與物件陰影可分別控制。
 - 支援實心、Cutout、半透明及其抗鋸齒版本，並提供可選背面剔除。
 - 網格、線框、選中覆蓋與輔助線使用獨立抗鋸齒路徑，不受模型表面的 Mipped 設定影響。
+- 操作與對稱引導線按三維空間投影，具有最大延伸距離和末端淡出；接近朝向攝像機時會淡化。
 - 鎖定物件可使用獨立淡化層和螢幕空間漸變區域，不會改寫材質本身的透明度。
 - 一般視圖與 X／Y／Z 軸向視圖可分別導入多張參考圖；軸向視圖固定使用正交投影，同軸再次點擊可切換正負方向，中鍵專用於平移。
 - 可啟用獨立的玩家尺寸與姿態參考，使用內置皮膚或在設定中替換自定義紋理；參考不參與選取、工程保存與模型導出。
@@ -53,7 +64,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 
 - Cube 可使用箱型 UV 或逐面 UV，每個面可獨立指定貼圖、旋轉、鏡像與剔除狀態。
 - 貼圖窗口支援多面選取、UV 移動與拉伸、吸附、聚焦、縮放和平移。
-- UV 預覽只渲染選中內容，可選自動旋轉、面向配色、面旋轉及鏡像標記；停用時停止渲染排程。
+- UV 預覽只渲染選中內容，可選自動旋轉、面向配色、面旋轉及鏡像標記；繪畫時同步使用最新畫布，停用時停止渲染排程。
 - 可建立紋理模板、純色模板或空白貼圖。模板生成會按工程基礎吸附分辨率歸一化尺寸，為非零邊長保留至少 1px，並可清理零面積無效面；UV 使用緊密的矩形裝箱排列，畫布可選 2 冪或指定倍數。
 - 繪畫模式可直接在二維貼圖、Cube 與程序化 Shape 表面作畫，提供畫筆、橡皮擦、直線、矩形、橢圓、油漆桶、漸變與取色器；不同面可引用不同貼圖。
 - 繪畫時可按住 Alt 臨時切換至取色器，鬆開後立即返回原本工具；臨時切換不會清除尚未完成的漸變選點。
@@ -61,13 +72,13 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
 - 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算。
 - 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。
-- 繪畫模式保持模型表面乾淨，不顯示編輯選中高亮，也不允許進入 Shape 細分編輯。
+- 繪畫模式不顯示編輯選中高亮。場景層級只保留索引、選取、展開與聚焦，禁止新建、刪除、拖動重排及幾何操作，也不允許進入 Shape 細分編輯；撤銷／重做只處理繪畫歷史。
 - 全部剔除的 Cube 會被移除；單面剔除會同時取消該面的主視圖拾取，但仍可在 UV 預覽中處理。
 
 ### 工作區與配置
 
 - 左、右、底部面板使用統一停靠物件，可取下、靠近自動吸附、重新排序、折疊及調整整欄寬度。
-- 物件屬性按「基礎／外觀／UV／修改器」分類，避免長頁面持續向下堆疊。
+- 物件屬性按「基礎／外觀／UV／修改器／操作器」分類，避免長頁面持續向下堆疊。
 - 多項目以頁籤方式同時打開，可切換、拖動排序、編輯項目信息或關閉。
 - 配置註冊表統一管理繁體中文、簡體中文、英語、外觀、視圖、吸附與工作區選項。
 - 模型格式使用可擴展註冊表，格式可提供自己的初始工程資料、吸附基準、貼圖尺寸與能力標記。
@@ -110,6 +121,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 
 - 手柄只接受左鍵；中鍵始終交給攝像機。拖動軸、平面或中心手柄可執行單軸、雙軸或三軸操作。
 - 移動與旋轉可在全局、父級和自身坐標系間切換；多選時可選擇統一執行或分別執行。
+- 選中組或多個元素後，使用縮放工具批量調整；手柄按參與元素的平均方向顯示，位置補償對各元素獨立計算。
 - 吸附精度由工程格式與設定共同決定。`Shift`、`Ctrl` 及兩者同時按下可套用各自的微調倍率。
 - 樞軸工具和樞軸頂點捕捉只改變旋轉中心，會補償物件參數以保持幾何外觀不動。
 - `Ctrl+Z` 撤銷，`Ctrl+Shift+Z` 重做；複製、剪切、貼上與原位複製分別使用 `Ctrl+C`、`Ctrl+X`、`Ctrl+V`、`Ctrl+D`。
@@ -137,10 +149,20 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 | 按住 `Alt` | 臨時取色；鬆開恢復原工具 |
 
 - 畫筆可直接在二維貼圖或三維模型表面起筆。跨面筆畫會維持同一次筆畫的透明度與連續性。
+- 未分配貼圖的面不會在繪畫時自動綁定目前貼圖；三維視圖會提示先指定貼圖並保持模型資料不變。
 - 「筆刷深度」控制筆跡碰到 Cube 邊緣時向相鄰面的延伸像素數；「疊加繪製」只同步處理最前方完全重合的面。
 - 面漸變要求兩點位於同一面；體漸變要求兩點位於同一 Cube。兩點只定義方向，漸變會覆蓋完整目標。
 - 雙色漸變先點擊第一色或第二色色槽，再在右側選色器調色；兩端 Alpha 可獨立設定。啟用「使用色卡」後會改用目前選中色卡的全部顏色。
 - 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。
+- 繪畫模式中的場景層級用於查找、選取與聚焦內容；修改模型幾何需回到編輯模式。`Ctrl+Z`／`Ctrl+Shift+Z` 在繪畫模式只撤銷／重做繪畫。
+
+### 使用繪畫對稱
+
+1. 在編輯模式選中組或單一物件，打開物件屬性的「操作器」頁面，新增「繪畫對稱」。
+2. 選擇 XYZ、徑向或曼陀羅模式；XYZ 可同時啟用多軸，其餘模式可設定數量及 360° 均分或限制角度範圍。
+3. 點擊「在主視圖編輯」，使用移動／旋轉手柄調整軸點；也可直接輸入位置和旋轉。調整完成後結束軸點編輯。
+4. 先為需要繪製的面分配貼圖，再切換繪畫模式。三維繪畫會依面關聯同步到對稱面；頂點或對應 UV 邊長不匹配的面不會強行映射。
+5. 組操作器涵蓋其後代，單一物件操作器涵蓋自身的面；符合條件的同面鏡像、徑向與曼陀羅映射會保留原筆跡並一起繪製。操作器保存在工程中，不需要烘焙。
 
 ### 面板與視窗
 
@@ -151,7 +173,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 
 ## 文件格式
 
-- `.cbmodel`：CubeBricks 工程格式，保存可編輯的 Shape、曲線、修改器、層級和工程設定。
+- `.cbmodel`：CubeBricks 工程格式，保存可編輯的 Shape、曲線、修改器、操作器、層級和工程設定。
 - `.bbmodel`：支援 Blockbench 模型匯入與導出；程序化物件和修改器會在導出時展開為兼容的 Cube／組資料。
 - 內置工程類型包含通用模型、圖像以及多種 Minecraft Java、Bedrock、模組實體、皮膚與 GeckoLib 類型；尚未完成的編輯器類型會明確標記為佔位。
 
@@ -213,10 +235,10 @@ npm run dist:portable
 ```text
 electron/                 Electron 主程序與桌面整合
 src/app.js                編輯器交互與界面狀態
-src/model.js              工程資料、幾何、修改器實例與格式轉換
+src/model.js              工程資料、幾何、修改器／操作器實例與格式轉換
 src/render/               WebGL 場景與 UV 預覽渲染
-src/core/                 配置、格式、修改器等通用註冊表
-src/config/               內置配置、模型格式與修改器定義
+src/core/                 配置、格式、修改器、操作器等通用註冊表
+src/config/               內置配置、模型格式、修改器與操作器定義
 src/ui/                   停靠窗口等通用界面組件
 scripts/                  預覽服務、測試與輔助工具
 ```
@@ -227,7 +249,7 @@ CubeBricks 的核心方向是把編輯器能力拆成可註冊、可組合的模
 
 ## English
 
-CubeBricks is a desktop model editor designed for Minecraft-oriented workflows. Cube geometry remains its foundation, while procedural shapes, 2D and 3D Bezier curves, nodes, locators, groups, and non-destructive modifiers extend the editor beyond basic box modeling. Its goal is to bring modeling, UV editing, texturing, and format conversion into a familiar Blockbench-style workspace.
+CubeBricks is a desktop model editor designed for Minecraft-oriented workflows. Cube geometry remains its foundation, while procedural shapes, 2D and 3D Bezier curves, nodes, locators, groups, non-destructive modifiers, and real-time painting operators extend the editor beyond basic box modeling. Its goal is to bring modeling, UV editing, texturing, and format conversion into a familiar Blockbench-style workspace.
 
 The project is currently an evolving prototype focused on an extensible editor architecture, dependable 3D interaction, and preview/export behavior that follows Minecraft and Blockbench data semantics.
 
@@ -252,10 +274,20 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Symmetry previews reuse existing GPU geometry. Instances are expanded only when exporting `.bbmodel`, including winding and mirrored-UV correction for negative-determinant transforms.
 - Legacy group symmetry data and control nodes are migrated to the modifier structure when loaded.
 
+### Real-time operators
+
+- Operators use a separate extensible registry and can be attached to groups or individual objects. They process live input only, create no scene objects, and have no bake action.
+- The built-in Paint Symmetry operator supports XYZ reflection, radial repetition, and mandala symmetry. Group operators cover all descendants; object operators cover that object and its generated faces.
+- Face relationships are built incrementally in the background, while a face receiving a live stroke is promoted immediately. Matching checks both the four world-space vertices and the corresponding UV edge lengths in real pixels, preventing scaled symmetry strokes.
+- Geometry, scope, or symmetry-axis changes trigger relationship validation. A rigid transform of the complete scope can reuse the existing mapping.
+- Click the operator's viewport-edit button to adjust its center and orientation with the embedded anchor marker and move/rotate gizmos. Self-symmetry preserves the original stroke and every distinct vertex mapping; overlapping strokes retain single-stroke opacity.
+- Symmetry guides include plane grids, axes, and angular rays. Radial and mandala modes share the same guide-angle distribution; guides update as the center, orientation, or settings change.
+
 ### 3D editing
 
 - Move, scale, rotate, and pivot tools provide 3D axis, plane, and center handles. The middle mouse button is always reserved for the camera.
 - Move and rotate support global, parent, and local reference spaces. Local rotation offers pose and Euler modes.
+- Groups and multi-selected elements share batch scaling. Each element calculates its size and position compensation from its own starting parameters, and scale gizmos use the participating elements' average axis directions.
 - Moving a pivot compensates the geometry position, changing only the rotation center without changing the visible model.
 - Vertex snapping supports move, scale, rotate, and pivot operations.
 - The knife selects the frontmost cube face along the view ray, cuts at the project snapping step, and splits UVs with the geometry.
@@ -268,6 +300,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Minecraft-style face shading is calculated from transformed normals and two directional lights. Global and per-object shading can be controlled separately.
 - Solid, cutout, and translucent rendering are supported, together with antialiased variants and optional back-face culling.
 - Grids, wireframes, selection overlays, and guides use an independent antialiasing path and are not affected by the model-surface Mipped option.
+- Transform and symmetry guide lines are projected from 3D space, have a maximum length, and fade at their ends. They also fade when nearly aligned with the camera direction.
 - Locked objects can use a separate fade layer and a screen-space pointer gradient without modifying material transparency.
 - General, X, Y, and Z views can each contain multiple reference images. Axis views are always orthographic; clicking the same axis again reverses direction, and middle-drag always pans.
 - An independent player scale and pose reference can use the bundled skin or a custom texture from Settings. It is excluded from selection, project files, and model exports.
@@ -276,21 +309,22 @@ The project is currently an evolving prototype focused on an extensible editor a
 
 - Cubes support box UV and per-face UV. Every face can independently select a texture, rotation, mirroring, and culling state.
 - The texture panel supports multi-face selection, UV movement and resizing, snapping, focus, zoom, and pan.
-- UV Preview renders only selected content and can show automatic rotation, face-direction colors, face rotation, and mirror markers. Disabling the panel stops its render scheduling.
+- UV Preview renders only selected content and can show automatic rotation, face-direction colors, face rotation, and mirror markers. Painting uses the latest live canvas; disabling the panel stops its render scheduling.
 - Texture templates, solid-color templates, and blank textures can be created. Template generation normalizes sizes against the project base snapping resolution, preserves at least one pixel for non-zero edges, can remove zero-area faces, packs UV rectangles tightly, and supports power-of-two or custom-multiple canvases.
 - Paint mode works directly on the 2D texture, cubes, and procedural shape surfaces. It includes brush, eraser, line, rectangle, ellipse, fill, gradient, and eyedropper tools, while allowing each face to reference a different texture.
+- Painting never assigns the active texture to an untextured face implicitly. The 3D viewport reports the missing assignment and leaves model data unchanged until a texture is explicitly attached.
 - Holding Alt temporarily activates the eyedropper and releasing it restores the previous tool. Temporary switching preserves an unfinished gradient selection.
 - Brushes support square and round tips, antialiasing, opacity, and continuous 3D strokes across faces. Brush depth follows actual shared cube edges and each neighboring face's UV orientation. Coincident painting affects only exactly overlapping frontmost faces and never paints through the model.
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
 - The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion.
 - Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient.
-- Paint mode keeps the model surface free of edit-selection highlighting and prevents entry into shape subdivision editing.
+- Paint mode hides edit-selection highlighting. The hierarchy provides indexing, selection, expansion, and focus, while creation, deletion, reordering, geometry operations, and shape subdivision editing are disabled. Undo and redo affect painting history only.
 - Culling every face removes the cube. A culled individual face is no longer pickable in the main viewport but remains available in UV Preview.
 
 ### Workspace and configuration
 
 - Left, right, and bottom panels use a shared docking object model. Panels can detach, auto-dock when nearby, reorder, collapse, and resize their entire dock column.
-- Object properties are split into Basic, Appearance, UV, and Modifiers pages instead of one continuously stacked panel.
+- Object properties are split into Basic, Appearance, UV, Modifiers, and Operators pages instead of one continuously stacked panel.
 - Multiple projects can remain open as tabs that support selection, drag ordering, project-information editing, and closing.
 - A configuration registry manages Traditional Chinese, Simplified Chinese, English, appearance, viewport, snapping, and workspace settings.
 - Model formats use an extensible registry and may provide their own initial project data, snapping baseline, texture size, and capability flags.
@@ -333,6 +367,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 
 - Gizmos accept only the left mouse button; the middle button always controls the camera. Axis, plane, and center handles perform one-, two-, and three-axis operations.
 - Move and rotate can use global, parent, or local coordinates. Multi-selection offers unified and per-object execution.
+- Select a group or multiple elements and use Scale for batch resizing. Gizmos follow the participating elements' average directions, and position compensation is calculated independently for each element.
 - Snapping is defined by both the project format and user settings. `Shift`, `Ctrl`, and both together apply their configured fine-adjustment multipliers.
 - Pivot movement and pivot vertex snapping change only the rotation center and compensate object parameters so the visible geometry stays fixed.
 - `Ctrl+Z` undoes and `Ctrl+Shift+Z` redoes. Copy, cut, paste, and duplicate in place use `Ctrl+C`, `Ctrl+X`, `Ctrl+V`, and `Ctrl+D`.
@@ -364,6 +399,15 @@ The project is currently an evolving prototype focused on an extensible editor a
 - A face gradient requires both points on one face; a volume gradient requires both points on one cube. The points define direction only, and the gradient covers the complete target.
 - In two-color mode, click the first or second stop button and edit that stop in the right-side picker. Each stop has independent alpha. Enabling **Use Palette** switches to every color in the selected palette row.
 - Palette rows independently support discrete or gradient display and allow color selection, insertion, deletion, and drag reordering.
+- The hierarchy in Paint mode is for finding, selecting, and focusing content. Return to Edit mode to change model geometry. `Ctrl+Z` and `Ctrl+Shift+Z` undo and redo painting only in Paint mode.
+
+### Using Paint Symmetry
+
+1. In Edit mode, select a group or individual object, open its Operators property page, and add Paint Symmetry.
+2. Choose XYZ, radial, or mandala symmetry. XYZ supports multiple enabled axes; the other modes provide a count and either full-circle distribution or a limited angular range.
+3. Click the viewport-edit button and adjust the anchor with Move or Rotate, or enter its position and rotation directly. Finish anchor editing when done.
+4. Assign textures to the faces you intend to paint, then switch to Paint mode. Painting in the 3D viewport propagates through face relationships; faces with mismatched vertices or corresponding UV edge lengths are excluded.
+5. Group operators cover descendants, while object operators cover their own faces. Eligible self-reflection, radial, and mandala mappings preserve the original stroke alongside every mapped result. Operators are saved in the project and require no baking.
 
 ### Panels and windows
 
@@ -374,7 +418,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 
 ## File formats
 
-- `.cbmodel`: the CubeBricks project format, preserving editable shapes, curves, modifiers, hierarchy, and project settings.
+- `.cbmodel`: the CubeBricks project format, preserving editable shapes, curves, modifiers, operators, hierarchy, and project settings.
 - `.bbmodel`: Blockbench import and export. Procedural objects and modifiers are expanded into compatible cube/group data during export.
 - Built-in project types cover generic models, images, and several Minecraft Java, Bedrock, modded-entity, skin, and GeckoLib workflows. Editors that are not implemented yet are clearly marked as placeholders.
 
@@ -436,10 +480,10 @@ The first build requires network access to download dependencies and Electron pa
 ```text
 electron/                 Electron main process and desktop integration
 src/app.js                Editor interaction and UI state
-src/model.js              Project data, geometry, modifier instances, and format conversion
+src/model.js              Project data, geometry, modifier/operator instances, and format conversion
 src/render/               WebGL scene and UV Preview rendering
-src/core/                 Shared registries for configuration, formats, and modifiers
-src/config/               Built-in configuration, model formats, and modifier definitions
+src/core/                 Shared registries for configuration, formats, modifiers, and operators
+src/config/               Built-in configuration, model formats, modifier definitions, and operator definitions
 src/ui/                   Shared UI components such as dockable panels
 scripts/                  Preview server, tests, and helper tools
 ```

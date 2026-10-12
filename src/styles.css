@@ -236,6 +236,7 @@ kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; padding: 1
 .panel-action-add { position: absolute; right: 1px; bottom: 0; color: currentColor; font-size: .48rem; font-weight: 900; line-height: 1; text-shadow: 0 0 2px var(--panel-2); }
 .outliner-create-actions { justify-content: flex-start; }
 .outliner-create-actions .outliner-selection-count { margin-right: 1px; }
+body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selection-count) { display: none; }
 .texture-control-strip button { display: inline-flex; gap: 4px; }
 .inspector-meta-strip { min-height: 29px; justify-content: space-between; color: var(--subtle); font-size: .55rem; }
 .curve-create-action > span:first-child { color: currentColor; font: 700 .64rem/1 var(--ui-font); }

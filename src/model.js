@@ -1,5 +1,6 @@
 import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './config/model-formats.js';
 import { modifierRegistry } from './config/modifiers.js';
+import { operatorRegistry } from './config/operators.js';
 
 const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
 
@@ -68,6 +69,19 @@ function normalizeModifierList(modifiers, targetType, anchorPosition = [0, 0, 0]
   });
 }
 
+function normalizeOperatorList(operators, targetType, anchorPosition = [0, 0, 0]) {
+  if (!Array.isArray(operators)) return [];
+  return operators.flatMap(data => {
+    const operator = operatorRegistry.create(data?.type, targetType, data);
+    if (!operator) return [];
+    operator.anchor = {
+      position: vector3(operator.anchor?.position, anchorPosition),
+      rotation: vector3(operator.anchor?.rotation)
+    };
+    return [operator];
+  });
+}
+
 function legacyMirrorHasState(mirror) {
   return Boolean(mirror && (mirror.enabled || mirror.controllerUid || mirror.mode && mirror.mode !== 'axes'
     || mirror.axes?.x || mirror.axes?.y || mirror.axes?.z || mirror.distribution === 'range'
@@ -117,6 +131,24 @@ export function addModifier(owner, type, data = {}) {
   return modifier;
 }
 
+export function addOperator(owner, type, data = {}) {
+  if (!owner) return null;
+  const definition = operatorRegistry.get(type);
+  if (definition?.allowMultiple === false && owner.operators?.some(operator => operator.type === type)) return null;
+  const operator = operatorRegistry.create(type, owner.type, data);
+  if (!operator) return null;
+  const anchorPosition = owner.type === 'group' || owner.type === 'cube' || owner instanceof Shape
+    ? owner.pivot
+    : owner.origin || owner.position || [0, 0, 0];
+  operator.anchor = {
+    position: vector3(data.anchor?.position, anchorPosition),
+    rotation: vector3(data.anchor?.rotation)
+  };
+  owner.operators ||= [];
+  owner.operators.push(operator);
+  return operator;
+}
+
 function applySubdivisionEdits(cubes, owner) {
   const edits = owner.subdivisionEdits || {};
   return cubes.map((cube, index) => {
@@ -161,6 +193,7 @@ export class Cube {
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.color = data.color || '#9ac24d';
     this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
+    this.operators = normalizeOperatorList(data.operators, this.type, this.pivot);
   }
 }
 
@@ -325,6 +358,7 @@ export class Shape {
     this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
     this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
     this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
+    this.operators = normalizeOperatorList(data.operators, this.type, this.pivot);
   }
 
   toBaseCubes() {
@@ -503,6 +537,7 @@ export class NodeElement {
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.mirrorControllerFor = data.mirrorControllerFor || null;
     this.modifiers = normalizeModifierList(data.modifiers, this.type, this.position);
+    this.operators = normalizeOperatorList(data.operators, this.type, this.position);
   }
 }
 
@@ -587,6 +622,7 @@ export class BezierElement {
     this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
     this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
     this.modifiers = normalizeModifierList(data.modifiers, this.type, this.origin);
+    this.operators = normalizeOperatorList(data.operators, this.type, this.origin);
   }
 
   resolvedNodeState(index) {
@@ -790,6 +826,7 @@ export class Locator {
     this.locked = booleanProperty(data.locked, false);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.modifiers = normalizeModifierList(data.modifiers, this.type, this.position);
+    this.operators = normalizeOperatorList(data.operators, this.type, this.position);
   }
 }
 
@@ -810,6 +847,7 @@ export class Group {
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.children = [...(data.children || [])];
     this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
+    this.operators = normalizeOperatorList(data.operators, this.type, this.pivot);
     if (!getModifier(this, 'symmetry')) {
       const migrated = legacyMirrorModifier(data.mirror, this.type, this.pivot);
       if (migrated) this.modifiers.push(migrated);
@@ -834,6 +872,10 @@ function translateModifierAnchors(node, delta) {
   for (const modifier of node?.modifiers || []) {
     if (!Array.isArray(modifier.anchor?.position)) continue;
     modifier.anchor.position = modifier.anchor.position.map((value, axis) => value + delta[axis]);
+  }
+  for (const operator of node?.operators || []) {
+    if (!Array.isArray(operator.anchor?.position)) continue;
+    operator.anchor.position = operator.anchor.position.map((value, axis) => value + delta[axis]);
   }
 }
 

@@ -1236,6 +1236,29 @@ export class WebGLSceneRenderer {
       }));
   }
 
+  getFaceQuadsForUids(uids) {
+    const wanted = uids instanceof Set ? uids : new Set(uids || []);
+    const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
+    const seen = new Set();
+    return [
+      ...(this.staticCache?.faces || []).filter(face => !dynamicUids.has(face.uid)),
+      ...(this.selectedCache?.faces || [])
+    ].flatMap(face => {
+      if (!wanted.has(face.uid)) return [];
+      const key = `${face.uid}::${face.cubeUid || face.uid}::${face.faceName}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{
+        uid: face.uid,
+        cubeUid: face.cubeUid || face.uid,
+        cubeIndex: face.cubeIndex ?? null,
+        cube: face.cube || null,
+        faceName: face.faceName,
+        facePoints: face.quad.map(point => [...point])
+      }];
+    });
+  }
+
   getFaceQuad(uid, faceName) {
     const key = `${uid}::${faceName}`;
     const selectedFace = this.selectedCache?.faceIndex?.get(key);

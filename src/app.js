@@ -1,7 +1,8 @@
-import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, bakeModifier, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
+import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, addOperator, bakeModifier, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
 import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
 import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
 import { modifierRegistry } from './config/modifiers.js';
+import { operatorRegistry } from './config/operators.js';
 import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate, isCubeFaceCulled } from './render/webgl-renderer.js';
 import { DockManager } from './ui/dock-manager.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from './assets/player-reference.js';
@@ -29,6 +30,9 @@ const TOOL_REGISTRY = Object.freeze({
 const PAINT_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse', 'fill', 'gradient', 'eyedropper']);
 const PAINT_STROKE_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse']);
 const PAINT_SHAPE_TOOLS = Object.freeze(['line', 'rectangle', 'ellipse']);
+const paintSymmetryRelationCache = new Map();
+const paintSymmetryBuildScheduled = new Set();
+const livePaintTextureSources = new Map();
 
 const state = {
   project: new CubeBricksProject({ name: 'untitled' }),
@@ -39,6 +43,7 @@ const state = {
   selectedModifierUid: null,
   inspectorPage: 'basic',
   collapsedModifiers: new Set(),
+  collapsedOperators: new Set(),
   mode: 'edit',
   separateUvMode: configRegistry.get(ConfigKey.SEPARATE_UV_MODE),
   tool: 'move',
@@ -220,6 +225,7 @@ let textureViewLayout = null;
 let textureFocusFrame = null;
 let textureUvEntryCache = null;
 let mirrorGuideGroupUid = null;
+let mirrorGuideEntryUid = null;
 let mirrorGuideHoldTimer = null;
 let mirrorGuideHideTimer = null;
 let subdivisionSession = null;
@@ -511,7 +517,7 @@ function restore(serialized) {
     : state.selectedUid;
   const restoredSelection = state.project.getNode(state.selectedUid);
   if (!isBezierElement(restoredSelection) || state.selectedCurveNodeIndex >= restoredSelection.nodes.length) state.selectedCurveNodeIndex = null;
-  if (!restoredSelection?.modifiers?.some(modifier => modifier.uid === state.selectedModifierUid)) state.selectedModifierUid = null;
+  if (![...(restoredSelection?.modifiers || []), ...(restoredSelection?.operators || [])].some(modifier => modifier.uid === state.selectedModifierUid)) state.selectedModifierUid = null;
   if (state.vertexSnapSource && !state.project.getNode(state.vertexSnapSource.rootUid)) state.vertexSnapSource = null;
   if (state.knifeSelection && !state.project.getNode(state.knifeSelection.uid)) cancelKnifeSelection(false);
   markDirty(true);
@@ -555,14 +561,20 @@ function restoreTexturePaintHistory(sourceStack, targetStack) {
 }
 
 function undo() {
-  if (state.mode === 'paint' && restoreTexturePaintHistory(state.paintHistory, state.paintFuture)) return;
+  if (state.mode === 'paint') {
+    if (!restoreTexturePaintHistory(state.paintHistory, state.paintFuture)) toast('沒有可撤銷的繪畫操作');
+    return;
+  }
   if (!state.history.length) return toast('沒有可撤銷的操作');
   state.future.push(state.project.serialize());
   restore(state.history.pop());
 }
 
 function redo() {
-  if (state.mode === 'paint' && restoreTexturePaintHistory(state.paintFuture, state.paintHistory)) return;
+  if (state.mode === 'paint') {
+    if (!restoreTexturePaintHistory(state.paintFuture, state.paintHistory)) toast('沒有可重做的繪畫操作');
+    return;
+  }
   if (!state.future.length) return toast('沒有可重做的操作');
   state.history.push(state.project.serialize());
   restore(state.future.pop());
@@ -609,6 +621,7 @@ function invalidateAllRenderGeometry() {
   textureUvEntryCache = null;
   selectionTransformContextCache = null;
   if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
+  scheduleAllPaintSymmetryBuilds();
 }
 
 function selectionAffectsMirrorPreview() {
@@ -642,7 +655,7 @@ function invalidateSelectionRenderGeometry(geometryChanged = true) {
 
 function updateSelectionLabels() {
   const item = selected();
-  const modifierAnchorSelected = item?.modifiers?.find(modifier => modifier.uid === state.selectedModifierUid);
+  const modifierAnchorSelected = [...(item?.modifiers || []), ...(item?.operators || [])].find(modifier => modifier.uid === state.selectedModifierUid);
   const curveNodeSelected = isBezierElement(item) && Number.isInteger(state.selectedCurveNodeIndex)
     && item.nodes[state.selectedCurveNodeIndex];
   const format = modelFormatRegistry.get(state.project.formatId);
@@ -711,10 +724,10 @@ function renderOutlinerWindow() {
         <span></span><span class="kind curve-node-kind">◆</span><span class="item-name">節點 ${nodeIndex + 1}</span><span></span>
       </button>`;
     }
-    return `<button class="outliner-item ${state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''}" data-uid="${node.uid}" draggable="true" style="padding-left:${5 + depth * 13}px">
+    return `<button class="outliner-item ${state.outlinerDetailed && state.mode !== 'paint' ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''}" data-uid="${node.uid}" draggable="${state.mode !== 'paint'}" style="padding-left:${5 + depth * 13}px">
       ${container ? openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure', `data-disclosure="${node.uid}"`) : '<span></span>'}
       <span class="kind">${outlinerKindMarkup(node)}</span>
-      <span class="item-name">${escapeHtml(node.name)}</span>${outlinerStateMarkup(node)}
+      <span class="item-name">${escapeHtml(node.name)}</span>${state.mode === 'paint' ? '<span></span>' : outlinerStateMarkup(node)}
     </button>`;
   }).join('');
 }
@@ -978,6 +991,61 @@ function modifierPanelMarkup(owner) {
   return `<div class="field-section modifier-page">
     <div class="modifier-add-row"><select data-modifier-add-type>${available.map(definition => `<option value="${definition.id}">${escapeHtml(definition.label)}</option>`).join('')}</select><button type="button" data-action="addModifier" ${available.length ? '' : 'disabled'}>＋ 新增修改器</button></div>
     ${cards || '<p class="modifier-empty">這個物件目前沒有修改器。</p>'}
+  </div>`;
+}
+
+function operatorVectorField(label, operator, property, values) {
+  return `<div class="vector-field modifier-vector-field"><span>${label}</span><div class="axis-inputs">${['X', 'Y', 'Z'].map((axis, index) =>
+    `<label><b>${axis}</b><input type="number" step="0.1" data-operator-vector="${property}" data-operator-uid="${operator.uid}" data-axis="${index}" value="${round(values[index])}" /></label>`).join('')}</div></div>`;
+}
+
+function paintSymmetryOperatorMarkup(operator) {
+  const radial = operator.mode === 'radial' || operator.mode === 'mandala';
+  const cache = paintSymmetryRelationCache.get(operator.uid);
+  const status = cache?.building ? '正在建立面關聯…' : cache ? `已建立 ${cache.relationCount || 0} 組關聯` : '等待首次繪製時建立';
+  return `<div class="modifier-settings">
+    <div class="option-row"><span>對稱模式</span><select data-operator-field="mode" data-operator-uid="${operator.uid}">
+      <option value="axes" ${operator.mode === 'axes' ? 'selected' : ''}>XYZ 鏡像</option>
+      <option value="radial" ${operator.mode === 'radial' ? 'selected' : ''}>徑向旋轉</option>
+      <option value="mandala" ${operator.mode === 'mandala' ? 'selected' : ''}>曼陀羅</option>
+    </select></div>
+    ${operator.mode === 'axes' ? `<div class="option-row group-mirror-axes"><span>啟用軸</span>${['x', 'y', 'z'].map(axis => `<label class="axis-${axis}"><input type="checkbox" data-operator-axis="${axis}" data-operator-uid="${operator.uid}" ${operator.axes?.[axis] ? 'checked' : ''}/><b>${axis.toUpperCase()}</b></label>`).join('')}</div>` : ''}
+    ${radial ? `<div class="option-row"><span>${operator.mode === 'mandala' ? '對稱軸數量' : '複製數量'}</span><div class="number-wrap" style="width:68px"><input type="number" min="1" max="256" step="1" data-operator-field="copies" data-operator-uid="${operator.uid}" value="${operator.copies}" /></div></div>
+      <div class="option-row"><span>角度分布</span><select data-operator-field="distribution" data-operator-uid="${operator.uid}"><option value="full" ${operator.distribution === 'full' ? 'selected' : ''}>360° 均分</option><option value="range" ${operator.distribution === 'range' ? 'selected' : ''}>限制範圍</option></select></div>
+      ${operator.distribution === 'range' ? `<div class="option-row"><span>起始角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-operator-field="rangeStart" data-operator-uid="${operator.uid}" value="${round(operator.rangeStart)}" /></div></div><div class="option-row"><span>結束角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-operator-field="rangeEnd" data-operator-uid="${operator.uid}" value="${round(operator.rangeEnd)}" /></div></div>` : ''}` : ''}
+    <div class="field-title"><span>作用軸點</span><button type="button" class="modifier-anchor-edit ${state.selectedModifierUid === operator.uid ? 'active' : ''}" data-edit-operator-anchor="${operator.uid}">${state.selectedModifierUid === operator.uid ? '結束軸點編輯' : '在主視圖編輯'}</button></div>
+    <p class="modifier-anchor-note">${status}</p>
+    ${operatorVectorField('位置', operator, 'anchor.position', operator.anchor.position)}
+    ${operatorVectorField('旋轉', operator, 'anchor.rotation', operator.anchor.rotation)}
+    <p class="modifier-anchor-note">操作器只處理即時繪畫輸入，不生成物件，也沒有烘焙。</p>
+  </div>`;
+}
+
+function operatorPanelMarkup(owner) {
+  const operators = owner.operators || [];
+  const available = operatorRegistry.listFor(owner.type).filter(definition =>
+    definition.allowMultiple !== false || !operators.some(operator => operator.type === definition.id));
+  const cards = operators.map((operator, index) => {
+    if (operator.enabled && operator.type === 'paint_symmetry' && !paintSymmetryRelationCache.has(operator.uid)) {
+      schedulePaintSymmetryBuild(owner, operator);
+    }
+    const definition = operatorRegistry.get(operator.type);
+    const collapsed = state.collapsedOperators.has(operator.uid);
+    return `<section class="modifier-card ${operator.enabled ? '' : 'disabled'}" data-operator-card="${operator.uid}">
+      <div class="modifier-card-heading">
+        <button type="button" class="modifier-collapse" data-operator-collapse="${operator.uid}" title="展開或折疊">${openIconMarkup(collapsed ? 'right' : 'down')}</button>
+        <label class="switch" title="啟用操作器"><input type="checkbox" data-operator-enabled="${operator.uid}" ${operator.enabled ? 'checked' : ''}/><i></i></label>
+        <strong>${escapeHtml(definition?.label || operator.type)}</strong>
+        <button type="button" data-operator-move="up" data-operator-uid="${operator.uid}" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" data-operator-move="down" data-operator-uid="${operator.uid}" ${index === operators.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="danger" data-operator-remove="${operator.uid}">×</button>
+      </div>
+      ${collapsed ? '' : operator.type === 'paint_symmetry' ? paintSymmetryOperatorMarkup(operator) : ''}
+    </section>`;
+  }).join('');
+  return `<div class="field-section modifier-page">
+    <div class="modifier-add-row"><select data-operator-add-type>${available.map(definition => `<option value="${definition.id}">${escapeHtml(definition.label)}</option>`).join('')}</select><button type="button" data-action="addOperator" ${available.length ? '' : 'disabled'}>＋ 新增操作器</button></div>
+    ${cards || '<p class="modifier-empty">這個物件目前沒有操作器。</p>'}
   </div>`;
 }
 
@@ -1350,7 +1418,8 @@ function renderInspector() {
     { id: 'basic', label: '基礎' },
     ...(appearanceCapable ? [{ id: 'appearance', label: '外觀' }] : []),
     ...(isUvCapable(item) ? [{ id: 'uv', label: 'UV' }] : []),
-    ...(modifierRegistry.listFor(item.type).length || item.modifiers?.length ? [{ id: 'modifiers', label: '修改器' }] : [])
+    ...(modifierRegistry.listFor(item.type).length || item.modifiers?.length ? [{ id: 'modifiers', label: '修改器' }] : []),
+    ...(operatorRegistry.listFor(item.type).length || item.operators?.length ? [{ id: 'operators', label: '操作器' }] : [])
   ];
   if (!pages.some(page => page.id === state.inspectorPage)) state.inspectorPage = 'basic';
   const tabs = `<nav class="inspector-tabs" aria-label="物件屬性分類">${pages.map(page => `<button type="button" data-inspector-page="${page.id}" class="${state.inspectorPage === page.id ? 'active' : ''}">${page.label}</button>`).join('')}</nav>`;
@@ -1386,6 +1455,7 @@ function renderInspector() {
   const content = state.inspectorPage === 'appearance' ? appearancePage
     : state.inspectorPage === 'uv' ? uvPage
       : state.inspectorPage === 'modifiers' ? modifierPanelMarkup(item)
+        : state.inspectorPage === 'operators' ? operatorPanelMarkup(item)
         : basicPage;
   inspector.innerHTML = `${tabs}${content}`;
   bindInspector();
@@ -1566,6 +1636,7 @@ function bindInspector() {
   $$('[data-inspector-page]', inspector).forEach(button => button.addEventListener('click', () => {
     state.inspectorPage = button.dataset.inspectorPage;
     renderInspector();
+    renderScene();
   }));
   const modifierByUid = uidValue => item.modifiers?.find(modifier => modifier.uid === uidValue);
   $('[data-action="addModifier"]', inspector)?.addEventListener('click', () => {
@@ -1658,6 +1729,92 @@ function bindInspector() {
       const [scope, property] = input.dataset.modifierVector.split('.');
       modifier[scope][property][Number(input.dataset.axis)] = value;
       sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('change', apply);
+    input.addEventListener('blur', () => { snapshotTaken = false; });
+  });
+  const operatorByUid = uidValue => item.operators?.find(operator => operator.uid === uidValue);
+  $$('[data-edit-operator-anchor]', inspector).forEach(button => button.addEventListener('click', () => {
+    const operator = operatorByUid(button.dataset.editOperatorAnchor);
+    if (!operator?.enabled) return;
+    state.selectedModifierUid = state.selectedModifierUid === operator.uid ? null : operator.uid;
+    state.selectedCurveNodeIndex = null;
+    if (state.selectedModifierUid) {
+      if (state.mode !== 'edit') setMode('edit');
+      if (!['move', 'rotate', 'pivot'].includes(state.tool)) setTool('move');
+    }
+    renderInspector(); renderScene(); updateSelectionLabels();
+  }));
+  const invalidatePaintOperator = operator => {
+    if (operator) paintSymmetryRelationCache.delete(operator.uid);
+    markDirty();
+    if (operator?.enabled) schedulePaintSymmetryBuild(item, operator);
+  };
+  $('[data-action="addOperator"]', inspector)?.addEventListener('click', () => {
+    const type = $('[data-operator-add-type]', inspector)?.value;
+    if (!type) return;
+    snapshot();
+    const operator = addOperator(item, type);
+    if (!operator) return;
+    invalidatePaintOperator(operator);
+    renderInspector();
+  });
+  $$('[data-operator-collapse]', inspector).forEach(button => button.addEventListener('click', () => {
+    const uidValue = button.dataset.operatorCollapse;
+    state.collapsedOperators.has(uidValue) ? state.collapsedOperators.delete(uidValue) : state.collapsedOperators.add(uidValue);
+    renderInspector();
+  }));
+  $$('[data-operator-enabled]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    const operator = operatorByUid(toggle.dataset.operatorEnabled);
+    if (!operator) return;
+    snapshot(); operator.enabled = toggle.checked;
+    if (!operator.enabled && state.selectedModifierUid === operator.uid) state.selectedModifierUid = null;
+    invalidatePaintOperator(operator); renderInspector(); renderScene();
+  }));
+  $$('[data-operator-remove]', inspector).forEach(button => button.addEventListener('click', () => {
+    const uidValue = button.dataset.operatorRemove;
+    snapshot(); item.operators = (item.operators || []).filter(operator => operator.uid !== uidValue);
+    if (state.selectedModifierUid === uidValue) state.selectedModifierUid = null;
+    state.collapsedOperators.delete(uidValue); paintSymmetryRelationCache.delete(uidValue);
+    markDirty(); renderInspector(); renderScene();
+  }));
+  $$('[data-operator-move]', inspector).forEach(button => button.addEventListener('click', () => {
+    const index = item.operators?.findIndex(operator => operator.uid === button.dataset.operatorUid) ?? -1;
+    const target = index + (button.dataset.operatorMove === 'up' ? -1 : 1);
+    if (index < 0 || target < 0 || target >= item.operators.length) return;
+    snapshot(); [item.operators[index], item.operators[target]] = [item.operators[target], item.operators[index]];
+    invalidatePaintOperator(item.operators[target]); renderInspector();
+  }));
+  $$('[data-operator-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    const operator = operatorByUid(toggle.dataset.operatorUid);
+    if (!operator) return;
+    snapshot(); operator.axes[toggle.dataset.operatorAxis] = toggle.checked;
+    invalidatePaintOperator(operator);
+    renderScene();
+  }));
+  $$('[data-operator-field]', inspector).forEach(input => input.addEventListener('change', () => {
+    const operator = operatorByUid(input.dataset.operatorUid);
+    if (!operator) return;
+    const key = input.dataset.operatorField;
+    let value = input.type === 'number' ? Number(input.value) : input.value;
+    if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
+    if (!Number.isFinite(value) && input.type === 'number') return;
+    snapshot(); operator[key] = value; invalidatePaintOperator(operator);
+    if (key === 'mode' || key === 'distribution') renderInspector();
+    renderScene();
+  }));
+  $$('[data-operator-vector]', inspector).forEach(input => {
+    let snapshotTaken = false;
+    const apply = () => {
+      const operator = operatorByUid(input.dataset.operatorUid);
+      const value = Number(input.value);
+      if (!operator || !Number.isFinite(value)) return;
+      if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      const [scope, property] = input.dataset.operatorVector.split('.');
+      operator[scope][property][Number(input.dataset.axis)] = value;
+      invalidatePaintOperator(operator);
+      renderScene();
     };
     input.addEventListener('input', apply);
     input.addEventListener('change', apply);
@@ -1973,6 +2130,7 @@ function selectCreatedNode(uidValue) {
 }
 
 function addCube() {
+  if (state.mode === 'paint') return;
   snapshot();
   const count = state.project.elements.filter(item => item.type === 'cube').length + 1;
   const cube = new Cube({ name: `cube_${count}`, position: [-3, 1, -3], size: [6, 6, 6], pivot: [0, 4, 0], color: '#a7d352' });
@@ -1983,6 +2141,7 @@ function addCube() {
 }
 
 function addShape(shapeType = 'polygon_prism') {
+  if (state.mode === 'paint') return;
   snapshot();
   const type = ['dodecahedron', 'truncated_icosahedron'].includes(shapeType) ? shapeType : 'polygon_prism';
   const shape = new Shape({ type, shapeType: type, name: type, origin: [0, 2, 0], pivot: [0, 2, 0] });
@@ -1994,6 +2153,7 @@ function addShape(shapeType = 'polygon_prism') {
 }
 
 function addLocator() {
+  if (state.mode === 'paint') return;
   snapshot();
   const count = state.project.elements.filter(item => item.type === 'locator').length + 1;
   const locator = new Locator({ name: `locator_${count}`, position: [0, 4, 0] });
@@ -2004,6 +2164,7 @@ function addLocator() {
 }
 
 function addBezierElement(dimension) {
+  if (state.mode === 'paint') return;
   snapshot();
   const type = dimension === 2 ? 'bezier2d' : 'bezier3d';
   const count = state.project.elements.filter(item => item.type === type).length + 1;
@@ -2016,6 +2177,7 @@ function addBezierElement(dimension) {
 }
 
 function addGroup() {
+  if (state.mode === 'paint') return;
   const previousRowPositions = captureOutlinerRowPositions();
   snapshot();
   const group = new Group({ name: `group_${state.project.groups.length + 1}`, children: [] });
@@ -2065,6 +2227,7 @@ function addGroup() {
 }
 
 function deleteSelected() {
+  if (state.mode === 'paint') return;
   const selectedIds = topLevelSelectedUids();
   if (!selectedIds.length) return;
   if (subdivisionSession && selectedIds.some(uidValue => state.project.getNode(uidValue)?.subdivisionOwnerUid)) {
@@ -2161,6 +2324,7 @@ function insertClonedRoots(cloned, sourceRootUids = null) {
 }
 
 function pasteElements({ inPlace = false } = {}) {
+  if (state.mode === 'paint') return;
   const payload = inPlace ? captureSelectedElements() : elementClipboard;
   if (!payload) return toast(inPlace ? '沒有可複製的選中項' : '元素剪貼簿是空的');
   const cloned = instantiateClipboard(payload, true);
@@ -2181,6 +2345,7 @@ function pasteElements({ inPlace = false } = {}) {
 }
 
 function cutSelected() {
+  if (state.mode === 'paint') return;
   if (!copySelected({ notify: false })) return;
   const count = elementClipboard.roots.length;
   deleteSelected();
@@ -2571,7 +2736,7 @@ function updateUvFaceUi() {
   const selection = state.uvPreviewSelectedFace;
   const data = selectedUvFaceData(false);
   const controls = $$('[data-uv-face-action]');
-  controls.forEach(button => button.disabled = !data);
+  controls.forEach(button => button.disabled = !data || (state.mode === 'paint' && button.dataset.uvFaceAction === 'cull'));
   const label = $('#uvSelectedFaceLabel');
   const size = $('#uvPreviewSize');
   const overlay = $('#uvPreviewFaceOverlay');
@@ -2627,6 +2792,7 @@ function editSelectedUvFace(action) {
 }
 
 function toggleSelectedUvFacesCull() {
+  if (state.mode === 'paint') return;
   const selection = state.uvPreviewSelectedFace;
   const current = selectedUvFaceData(false);
   if (!selection || !current) return toast('請先在 UV 預覽中選擇 Cube 的面');
@@ -2782,9 +2948,11 @@ function renderScene() {
 
 function selectedMirrorGuideGroup() {
   const owner = selected();
-  const modifier = owner?.modifiers?.find(entry => entry.uid === state.selectedModifierUid
-    && entry.type === 'symmetry' && entry.enabled)
-    || owner?.modifiers?.find(entry => entry.type === 'symmetry' && entry.enabled);
+  const entries = [...(owner?.modifiers || []), ...(owner?.operators || [])];
+  const isSymmetry = entry => ['symmetry', 'paint_symmetry'].includes(entry.type) && entry.enabled;
+  const modifier = entries.find(entry => entry.uid === state.selectedModifierUid && isSymmetry(entry))
+    || (state.inspectorPage === 'operators' ? owner?.operators?.find(isSymmetry) : null)
+    || owner?.modifiers?.find(isSymmetry);
   return modifier?.enabled ? { owner, modifier } : null;
 }
 
@@ -2840,33 +3008,30 @@ function mirrorGridPlaneMarkup(origin, firstAxis, secondAxis, className) {
   </g>`;
 }
 
-function clipScreenDirection(origin, direction, width, height, ray = false) {
-  const length = Math.hypot(direction[0], direction[1]);
-  if (length < .0001) return null;
-  const unit = direction.map(value => value / length);
-  const candidates = [];
-  if (Math.abs(unit[0]) > .0001) for (const x of [0, width]) {
-    const t = (x - origin[0]) / unit[0], y = origin[1] + unit[1] * t;
-    if (y >= 0 && y <= height && (!ray || t >= 0)) candidates.push([x, y, t]);
-  }
-  if (Math.abs(unit[1]) > .0001) for (const y of [0, height]) {
-    const t = (y - origin[1]) / unit[1], x = origin[0] + unit[0] * t;
-    if (x >= 0 && x <= width && (!ray || t >= 0)) candidates.push([x, y, t]);
-  }
-  candidates.sort((left, right) => left[2] - right[2]);
-  if (ray) return candidates.length ? [origin, candidates[candidates.length - 1].slice(0, 2)] : null;
-  return candidates.length >= 2 ? [candidates[0].slice(0, 2), candidates[candidates.length - 1].slice(0, 2)] : null;
+function mirrorInfiniteLineMarkup(origin, direction, width, height, className, ray = false) {
+  return finiteWorldGuideMarkup(origin, direction, `mirror-guide ${className} ${ray ? 'mirror-ray' : 'mirror-axis-line'}`, ray);
 }
 
-function mirrorInfiniteLineMarkup(origin, direction, width, height, className, ray = false) {
-  const center = projectViewportPoint(origin);
-  const forward = projectViewportPoint(addScaled3(origin, direction, 1));
-  const backward = projectViewportPoint(addScaled3(origin, direction, -1));
-  let delta = !forward.behind ? [forward.x - center.x, forward.y - center.y] : [0, 0];
-  if (Math.hypot(...delta) < .001 && !backward.behind) delta = [center.x - backward.x, center.y - backward.y];
-  const clipped = clipScreenDirection([center.x, center.y], delta, width, height, ray);
-  if (!clipped) return '';
-  return `<line class="mirror-guide ${className} ${ray ? 'mirror-ray' : 'mirror-axis-line'}" x1="${clipped[0][0]}" y1="${clipped[0][1]}" x2="${clipped[1][0]}" y2="${clipped[1][1]}"/>`;
+function finiteWorldGuideMarkup(origin, direction, className, ray = false) {
+  if (!origin || !direction) return '';
+  const cameraForward = sceneRenderer.getCameraFrame()?.forward;
+  const viewFade = cameraForward ? clamp(Math.hypot(...cross3(normalize3(direction), cameraForward)) * 20, 0, 1) : 1;
+  const limit = 2048;
+  const positive = [0, ...Array.from({ length: 29 }, (_, index) => .125 * 2 ** (index / 2)), ...Array.from({ length: 13 }, (_, index) => limit * (.7 + index * .025))];
+  const distances = [...new Set(positive.filter(value => value <= limit))].sort((a, b) => a - b);
+  const samples = ray ? distances : [...distances.slice(1).reverse().map(value => -value), ...distances];
+  const projected = samples.map(distance => ({ distance, point: projectViewportPoint(addScaled3(origin, direction, distance)) }));
+  const lines = [];
+  for (let index = 1; index < projected.length; index++) {
+    const first = projected[index - 1], second = projected[index];
+    if (first.point.behind || second.point.behind || first.point.depth < -1 || second.point.depth < -1) continue;
+    if (!Number.isFinite(first.point.x + first.point.y + second.point.x + second.point.y)) continue;
+    if (Math.hypot(second.point.x - first.point.x, second.point.y - first.point.y) < .05) continue;
+    const distance = Math.max(Math.abs(first.distance), Math.abs(second.distance));
+    const opacity = clamp((limit - distance) / (limit * .3), 0, 1) * viewFade;
+    lines.push(`<line class="${className}" style="opacity:${opacity}" x1="${first.point.x}" y1="${first.point.y}" x2="${second.point.x}" y2="${second.point.y}"/>`);
+  }
+  return lines.join('');
 }
 
 function renderMirrorGuide(entry) {
@@ -2913,18 +3078,21 @@ function updateMirrorGuideOverlay() {
     mirrorGuideHoldTimer = null;
     mirrorGuideHideTimer = null;
     mirrorGuideGroupUid = activeGroup.owner.uid;
+    mirrorGuideEntryUid = activeGroup.modifier.uid;
     const visible = renderMirrorGuide(activeGroup);
     overlay.toggleAttribute('hidden', !visible);
     if (visible) requestAnimationFrame(() => overlay.classList.add('visible'));
     return;
   }
   const previousOwner = mirrorGuideGroupUid && state.project.getNode(mirrorGuideGroupUid);
-  const previousModifier = getModifier(previousOwner, 'symmetry');
+  const previousModifier = [...(previousOwner?.modifiers || []), ...(previousOwner?.operators || [])]
+    .find(entry => entry.uid === mirrorGuideEntryUid);
   if (!previousModifier?.enabled) {
     overlay.classList.remove('visible');
     overlay.setAttribute('hidden', '');
     overlay.innerHTML = '';
     mirrorGuideGroupUid = null;
+    mirrorGuideEntryUid = null;
     return;
   }
   renderMirrorGuide({ owner: previousOwner, modifier: previousModifier });
@@ -2938,6 +3106,7 @@ function updateMirrorGuideOverlay() {
       overlay.setAttribute('hidden', '');
       overlay.innerHTML = '';
       mirrorGuideGroupUid = null;
+      mirrorGuideEntryUid = null;
     }, 340);
   }, 1500);
 }
@@ -3794,6 +3963,22 @@ function getTransformAxes(item) {
 }
 
 function getSelectionTransformAxes(context, fallbackItem) {
+  if (state.tool === 'resize') {
+    const elements = selectedElementUids().map(uidValue => state.project.getNode(uidValue))
+      .filter(node => node?.type === 'cube' || isShapeElement(node));
+    if (elements.length) {
+      const frames = elements.map(getTransformAxes);
+      const first = frames[0];
+      const mean = [0, 1, 2].map(axis => frames.reduce((sum, frame) => sum.map((value, component) => value + frame[axis][component]), [0, 0, 0]));
+      const x = Math.hypot(...mean[0]) > 1e-6 ? normalize3(mean[0]) : first[0];
+      const projectedY = mean[1].map((value, component) => value - x[component] * dot3(mean[1], x));
+      let y = Math.hypot(...projectedY) > 1e-6 ? normalize3(projectedY) : normalize3(cross3(first[2], x));
+      if (Math.hypot(...y) < 1e-6) y = normalize3(cross3(Math.abs(x[1]) < .9 ? [0, 1, 0] : [0, 0, 1], x));
+      let z = normalize3(cross3(x, y));
+      if (dot3(z, mean[2]) < 0) { y = y.map(value => -value); z = z.map(value => -value); }
+      return [x, y, z];
+    }
+  }
   if (!context.multiple) return getTransformAxes(fallbackItem);
   if (context.commonGroup) return getTransformAxes(context.commonGroup);
   return [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -3808,8 +3993,8 @@ function activeCurveNodeContext() {
 
 function activeModifierAnchorContext() {
   const owner = selected();
-  const modifier = owner?.modifiers?.find(entry => entry.uid === state.selectedModifierUid);
-  return modifier?.enabled && modifier.type === 'symmetry' ? { owner, modifier } : null;
+  const modifier = [...(owner?.modifiers || []), ...(owner?.operators || [])].find(entry => entry.uid === state.selectedModifierUid);
+  return modifier?.enabled && ['symmetry', 'paint_symmetry'].includes(modifier.type) ? { owner, modifier } : null;
 }
 
 function bakeCurveNodeTangent(curve, index) {
@@ -4269,27 +4454,7 @@ function cameraRingGeometry(origin, radius, cameraFrame) {
 }
 
 function infiniteGuideMarkup(handle, width, height, axisClass) {
-  const direction = [handle.screen[0], -handle.screen[1]];
-  const center = [handle.centerX, handle.centerY];
-  const candidates = [];
-  if (Math.abs(direction[0]) > .0001) {
-    for (const x of [0, width]) {
-      const t = (x - center[0]) / direction[0];
-      const y = center[1] + direction[1] * t;
-      if (y >= 0 && y <= height) candidates.push([x, y, t]);
-    }
-  }
-  if (Math.abs(direction[1]) > .0001) {
-    for (const y of [0, height]) {
-      const t = (y - center[1]) / direction[1];
-      const x = center[0] + direction[0] * t;
-      if (x >= 0 && x <= width) candidates.push([x, y, t]);
-    }
-  }
-  candidates.sort((a, b) => a[2] - b[2]);
-  if (candidates.length < 2) return '';
-  const first = candidates[0], last = candidates[candidates.length - 1];
-  return `<line class="drag-infinite-line ${axisClass}" x1="${first[0]}" y1="${first[1]}" x2="${last[0]}" y2="${last[1]}"/>`;
+  return finiteWorldGuideMarkup(state.gizmoOrigin, handle.vector, `drag-infinite-line ${axisClass}`);
 }
 
 function renderVertexSnapGizmo(gizmo, width, height) {
@@ -4378,7 +4543,7 @@ function updateTransformGizmo() {
   }
   const curveNodeContext = activeCurveNodeContext();
   const selectionContext = getSelectionTransformContext();
-  if (state.tool === 'resize' && (modifierAnchorContext || curveNodeContext || (!selectionContext.multiple && item.type !== 'cube' && !isShapeElement(item)))) {
+  if (state.tool === 'resize' && (modifierAnchorContext || curveNodeContext || (!selectionContext.multiple && !['cube', 'group'].includes(item.type) && !isShapeElement(item)))) {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
     if (editorOverlay) {
       gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -4433,7 +4598,7 @@ function updateTransformGizmo() {
     let positiveDistance = relativeAxisLength, negativeDistance = relativeAxisLength;
     if (state.tool === 'resize' && state.scaleHandleMode === 'bounds') {
       let extent;
-      if (selectionContext.multiple) {
+      if (selectionContext.multiple || item.type === 'group') {
         extent = sceneRenderer.getSelectionProjectionExtent(state.project, state.selectedUids, gizmoOrigin, axis) ?? 0;
       } else extent = item.type === 'cube'
         ? Math.abs(item.size[index]) / 2
@@ -5098,43 +5263,36 @@ function touchScenePaintSurface(surface) {
   pushTexturePaintHistory(surface.asset, surface.canvas, root.historyGroup);
 }
 
-function paintBrushDepthPixel(drag, x, y, coverage, opacity) {
+function paintBrushDepthStamp(drag, centerX, centerY, offsets, opacity) {
   const depth = clamp(Math.round(Number(state.paintBrushDepth)) || 0, 0, 32);
   if (!depth || drag.tool !== 'brush' || !drag.paintFace?.cube || !drag.depthEdges?.length) return;
-  const sourcePoint = [x + .5, y + .5];
-  const world = facePixelWorldPoint(drag.paintFace.cube, drag.paintFace.faceName, drag.paintFace.facePoints, x, y);
   for (const edge of drag.depthEdges) {
     const surface = edge.surface;
     if (!surface) continue;
     const sourceEdge = [edge.sourceEnd[0] - edge.sourceStart[0], edge.sourceEnd[1] - edge.sourceStart[1]];
     const sourceLengthSquared = sourceEdge[0] ** 2 + sourceEdge[1] ** 2;
     if (sourceLengthSquared < 1e-8) continue;
-    const uvRatio = clamp(((sourcePoint[0] - edge.sourceStart[0]) * sourceEdge[0]
-      + (sourcePoint[1] - edge.sourceStart[1]) * sourceEdge[1]) / sourceLengthSquared, 0, 1);
-    const sourceClosest = [edge.sourceStart[0] + sourceEdge[0] * uvRatio, edge.sourceStart[1] + sourceEdge[1] * uvRatio];
-    const uvDistance = Math.hypot(sourcePoint[0] - sourceClosest[0], sourcePoint[1] - sourceClosest[1]);
-    let ratio = uvRatio;
-    if (world) {
-      const worldEdge = edge.worldEnd.map((value, axis) => value - edge.worldStart[axis]);
-      const worldLengthSquared = dot3(worldEdge, worldEdge);
-      if (worldLengthSquared >= 1e-8) {
-        ratio = clamp(dot3(world.map((value, axis) => value - edge.worldStart[axis]), worldEdge) / worldLengthSquared, 0, 1);
-        const worldClosest = edge.worldStart.map((value, axis) => value + worldEdge[axis] * ratio);
-        const worldDistance = Math.hypot(...world.map((value, axis) => value - worldClosest[axis]));
-        if (worldDistance > edge.worldPixelDepth * .8 && uvDistance > .8) continue;
-      } else if (uvDistance > .8) continue;
-    } else if (uvDistance > .8) continue;
-    touchScenePaintSurface(surface);
     const targetEdge = [edge.targetEnd[0] - edge.targetStart[0], edge.targetEnd[1] - edge.targetStart[1]];
-    const edgePoint = [edge.targetStart[0] + targetEdge[0] * ratio, edge.targetStart[1] + targetEdge[1] * ratio];
-    surface.context.save();
-    surface.context.imageSmoothingEnabled = false;
-    for (let layer = 0; layer < depth; layer++) {
-      const targetX = Math.floor(edgePoint[0] + edge.inward[0] * (layer + .5));
-      const targetY = Math.floor(edgePoint[1] + edge.inward[1] * (layer + .5));
-      drawPaintPixel(surface, targetX, targetY, coverage, drag.tool, opacity);
+    let touched = false;
+    for (const [offsetX, offsetY, coverage] of offsets) {
+      // Test the complete stamp, including pixels just outside the source UV
+      // rectangle. This makes crossing a 3D cube edge deterministic instead
+      // of depending on whether a clipped border pixel happened to survive.
+      const sourcePoint = [centerX + offsetX + .5, centerY + offsetY + .5];
+      const rawRatio = ((sourcePoint[0] - edge.sourceStart[0]) * sourceEdge[0]
+        + (sourcePoint[1] - edge.sourceStart[1]) * sourceEdge[1]) / sourceLengthSquared;
+      if (rawRatio < -.02 || rawRatio > 1.02) continue;
+      const ratio = clamp(rawRatio, 0, 1);
+      const closest = [edge.sourceStart[0] + sourceEdge[0] * ratio, edge.sourceStart[1] + sourceEdge[1] * ratio];
+      if (Math.hypot(sourcePoint[0] - closest[0], sourcePoint[1] - closest[1]) > .8) continue;
+      if (!touched) { touchScenePaintSurface(surface); touched = true; }
+      const edgePoint = [edge.targetStart[0] + targetEdge[0] * ratio, edge.targetStart[1] + targetEdge[1] * ratio];
+      for (let layer = 0; layer < depth; layer++) {
+        const targetX = Math.floor(edgePoint[0] + edge.inward[0] * (layer + .5));
+        const targetY = Math.floor(edgePoint[1] + edge.inward[1] * (layer + .5));
+        drawPaintPixel(surface, targetX, targetY, coverage, drag.tool, opacity);
+      }
     }
-    surface.context.restore();
   }
 }
 
@@ -5201,9 +5359,9 @@ function drawPaintSegment(drag, from, to, sync = true) {
       const insideClip = !drag.clip || (x >= drag.clip.minU && y >= drag.clip.minV && x < drag.clip.maxU && y < drag.clip.maxV);
       if (insideClip && x >= 0 && y >= 0 && x < canvas.width && y < canvas.height) {
         drawPaintPixel(drag, x, y, coverage, tool, opacity);
-        paintBrushDepthPixel(drag, x, y, coverage, opacity);
       }
     }
+    paintBrushDepthStamp(drag, centerX, centerY, offsets, opacity);
   }
   context.restore();
   flushHolisticPaintSurface(drag);
@@ -5217,9 +5375,9 @@ function drawPaintSegment(drag, from, to, sync = true) {
   }
 }
 
-function drawPaintShape(drag, to) {
+function drawPaintShape(drag, to, restoreBase = true) {
   if (!drag?.baseImage || !drag.start || !PAINT_SHAPE_TOOLS.includes(drag.tool)) return;
-  drag.context.putImageData(drag.baseImage, 0, 0);
+  if (restoreBase) drag.context.putImageData(drag.baseImage, 0, 0);
   const [startX, startY] = drag.start;
   const [endX, endY] = to;
   if (drag.tool === 'line') drawPaintSegment(drag, drag.start, to, false);
@@ -5537,7 +5695,7 @@ function startTexturePaintPointer(event) {
     canvas: textureCanvas, context: textureCtx, tool: state.tool, start: point, last: point,
     baseImage: PAINT_SHAPE_TOOLS.includes(state.tool) ? textureCtx.getImageData(0, 0, textureCanvas.width, textureCanvas.height) : null,
     historyGroup, historyAssets: new Set([asset._uid]), touchedSurfaces: new Set(), pendingPoints: [point],
-    holisticStroke: ['brush', 'eraser'].includes(state.tool), assignmentSnapshotTaken: false,
+    holisticStroke: ['brush', 'eraser'].includes(state.tool),
     ready: true, ended: false, finished: false
   };
   texturePaintDrag.rootDrag = texturePaintDrag;
@@ -5684,27 +5842,14 @@ function bindTextureFaceDropSurface(surface, canvas, renderer, projectProvider, 
   });
 }
 
-function facePaintTarget(hit, assignMissing = false, assignmentContext = null) {
+function facePaintTarget(hit) {
   if (!hit?.faceName) return null;
   const hitNode = state.project.getNode(hit.uid);
   const cube = hit.cube?.type === 'cube' ? hit.cube : hitNode;
   if (cube?.type !== 'cube') return null;
   const existingFace = cube.faces?.[hit.faceName];
-  let asset = textureAssetForReference(existingFace?.texture);
-  if (!asset && existingFace?.texture !== undefined && existingFace?.texture !== null) return null;
-  if (!asset) asset = activeTextureAsset();
+  const asset = textureAssetForReference(existingFace?.texture);
   if (!asset) return null;
-  if (assignMissing && existingFace?.texture === undefined) {
-    if (!assignmentContext?.assignmentSnapshotTaken) {
-      snapshot();
-      if (assignmentContext) assignmentContext.assignmentSnapshotTaken = true;
-    }
-    freezeCubeUvs(cube, true);
-    cube.faces[hit.faceName].texture = faceTextureReference(asset);
-    persistGeneratedPaintCube(cube);
-    invalidateAllRenderGeometry();
-    markDirty();
-  }
   return { cube, faceName: hit.faceName, asset, owner: cube.subdivisionOwnerUid ? state.project.getNode(cube.subdivisionOwnerUid) : null };
 }
 
@@ -5719,28 +5864,12 @@ function persistGeneratedPaintCube(cube) {
   owner.subdivisionEdits = edits;
 }
 
-function adjacentPaintFaceAsset(cube, faceName, preferredAsset, assignmentContext = null) {
+function adjacentPaintFaceAsset(cube, faceName) {
   const existingFace = cube.faces?.[faceName];
   if (isCubeFaceCulled(existingFace)) return null;
   const assignedAsset = textureAssetForReference(existingFace?.texture);
   if (assignedAsset) return assignedAsset;
-  // Preserve an explicit unknown texture reference instead of silently
-  // replacing it. Only genuinely unassigned faces inherit the stroke texture.
-  if (existingFace?.texture !== undefined || !preferredAsset) return null;
-  if (!assignmentContext?.assignmentSnapshotTaken) {
-    snapshot();
-    if (assignmentContext) assignmentContext.assignmentSnapshotTaken = true;
-  }
-  freezeCubeUvs(cube, true);
-  const face = ensureCubeFaceRecord(cube, faceName);
-  face.texture = faceTextureReference(preferredAsset);
-  delete face.enabled;
-  delete face[CULLED_FACE_TEXTURE_KEY];
-  cube.autoUv = false;
-  persistGeneratedPaintCube(cube);
-  invalidateAllRenderGeometry();
-  markDirty();
-  return preferredAsset;
+  return null;
 }
 
 function barycentricPoint(point, a, b, c) {
@@ -5907,47 +6036,86 @@ function updatePaintGradientHover(event) {
 
 async function bakePaintGradient(anchorHit, endHit) {
   const cubeUid = anchorHit.cubeUid || anchorHit.uid;
-  const faceHits = state.paintGradientMode === 'face'
-    ? [anchorHit]
-    : sceneRenderer.getCubeFaceQuads(anchorHit.uid, cubeUid).map(entry => ({ ...entry, point: anchorHit.point }));
-  const assignmentContext = {};
+  const domains = [];
+  if (state.paintGradientMode === 'face') {
+    const anchors = paintSymmetryRelatedHits(anchorHit);
+    const ends = paintSymmetryRelatedHits(endHit);
+    for (let index = 0; index < anchors.length; index++) {
+      const anchor = anchors[index];
+      const end = ends[index] && paintSymmetryFaceKey(ends[index]) === paintSymmetryFaceKey(anchor)
+        ? ends[index]
+        : ends.find(hit => paintSymmetryFaceKey(hit) === paintSymmetryFaceKey(anchor));
+      if (end) domains.push({ anchor, end, hits: [anchor] });
+    }
+  } else {
+    const anchors = paintSymmetryRelatedHits(anchorHit);
+    const ends = paintSymmetryRelatedHits(endHit);
+    for (let index = 0; index < anchors.length; index++) {
+      const anchor = anchors[index];
+      const end = ends[index] && paintSymmetryFaceKey(ends[index]) === paintSymmetryFaceKey(anchor)
+        ? ends[index] : ends.find(hit => paintSymmetryFaceKey(hit) === paintSymmetryFaceKey(anchor));
+      if (!end) continue;
+      const targetCubeUid = anchor.cubeUid || anchor.uid;
+      domains.push({
+        anchor, end,
+        hits: sceneRenderer.getCubeFaceQuads(anchor.uid, targetCubeUid).map(entry => ({ ...entry, point: anchor.point }))
+      });
+    }
+  }
   const surfaces = new Map();
   const historyGroup = crypto.randomUUID();
   const stops = activePaintGradientStops();
-  const direction = endHit.point.map((value, axis) => value - anchorHit.point[axis]);
-  const lengthSquared = dot3(direction, direction);
-  if (lengthSquared < 1e-8) return toast('漸變兩點距離太短');
-  const domainProjections = faceHits.flatMap(hit => hit.facePoints || [])
-    .map(point => dot3(point.map((value, axis) => value - anchorHit.point[axis]), direction));
-  const minProjection = Math.min(...domainProjections), maxProjection = Math.max(...domainProjections);
-  const projectionSpan = maxProjection - minProjection;
-  if (!Number.isFinite(projectionSpan) || projectionSpan < 1e-8) return toast('漸變範圍無效');
-  for (const hit of faceHits) {
-    const target = facePaintTarget(hit, true, assignmentContext);
-    if (!target) continue;
-    let surface = surfaces.get(target.asset._uid);
-    if (!surface) {
-      const result = await paintCanvasForAsset(target.asset);
-      if (!result) continue;
-      surface = { ...result, asset: target.asset, processed: new Uint8Array(result.canvas.width * result.canvas.height) };
-      surfaces.set(target.asset._uid, surface);
-      pushTexturePaintHistory(target.asset, result.canvas, historyGroup);
+  for (const domain of domains) {
+    const direction = domain.end.point.map((value, axis) => value - domain.anchor.point[axis]);
+    if (dot3(direction, direction) < 1e-8) continue;
+    const projections = domain.hits.flatMap(hit => hit.facePoints || [])
+      .map(point => dot3(point.map((value, axis) => value - domain.anchor.point[axis]), direction));
+    const minimum = Math.min(...projections), maximum = Math.max(...projections), span = maximum - minimum;
+    if (!Number.isFinite(span) || span < 1e-8) continue;
+    for (const hit of domain.hits) {
+      const target = facePaintTarget(hit);
+      if (!target) continue;
+      let surface = surfaces.get(target.asset._uid);
+      if (!surface) {
+        const result = await paintCanvasForAsset(target.asset);
+        if (!result) continue;
+        const pixelCount = result.canvas.width * result.canvas.height;
+        surface = {
+          ...result, asset: target.asset,
+          image: result.context.getImageData(0, 0, result.canvas.width, result.canvas.height),
+          samples: new Float32Array(pixelCount * 4), counts: new Uint32Array(pixelCount)
+        };
+        surfaces.set(target.asset._uid, surface);
+        pushTexturePaintHistory(target.asset, result.canvas, historyGroup);
+      }
+      const bounds = paintUvBounds(target.cube, target.faceName, surface.canvas);
+      for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
+        const world = facePixelWorldPoint(target.cube, target.faceName, hit.facePoints, x, y);
+        if (!world) continue;
+        const pixel = y * surface.canvas.width + x;
+        const projection = dot3(world.map((value, axis) => value - domain.anchor.point[axis]), direction);
+        const rgba = samplePaintGradient((projection - minimum) / span, stops);
+        const offset = pixel * 4;
+        for (let channel = 0; channel < 3; channel++) surface.samples[offset + channel] += rgba[channel] * rgba[3];
+        surface.samples[offset + 3] += rgba[3];
+        surface.counts[pixel]++;
+      }
     }
-    const bounds = paintUvBounds(target.cube, target.faceName, surface.canvas);
-    const image = surface.context.getImageData(0, 0, surface.canvas.width, surface.canvas.height);
-    for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
-      const world = facePixelWorldPoint(target.cube, target.faceName, hit.facePoints, x, y);
-      if (!world) continue;
-      const pixel = y * surface.canvas.width + x;
-      if (surface.processed[pixel]) continue;
-      surface.processed[pixel] = 1;
-      const projection = dot3(world.map((value, axis) => value - anchorHit.point[axis]), direction);
-      const rgba = samplePaintGradient((projection - minProjection) / projectionSpan, stops);
-      blendRgbaPixel(image.data, pixel * 4, rgba, clamp(state.paintBrushOpacity / 100, 0, 1));
-    }
-    surface.context.putImageData(image, 0, 0);
   }
+  if (!surfaces.size) return toast('漸變範圍無效，或對應面沒有貼圖');
   for (const surface of surfaces.values()) {
+    // Combine all mapped gradients against the original texture once. An
+    // overlapping self-mapping must neither erase another mapping nor apply
+    // the stroke opacity repeatedly. Premultiplied averaging is order-free.
+    for (let pixel = 0; pixel < surface.counts.length; pixel++) {
+      const count = surface.counts[pixel];
+      if (!count) continue;
+      const offset = pixel * 4, alphaSum = surface.samples[offset + 3];
+      const rgba = [0, 1, 2].map(channel => alphaSum > 0 ? surface.samples[offset + channel] / alphaSum : 0);
+      rgba.push(alphaSum / count);
+      blendRgbaPixel(surface.image.data, offset, rgba, clamp(state.paintBrushOpacity / 100, 0, 1));
+    }
+    surface.context.putImageData(surface.image, 0, 0);
     commitPaintedTextureAsset(surface.asset, surface.canvas);
     queuePaintedTextureSync(surface.asset, surface.canvas);
   }
@@ -6020,7 +6188,7 @@ function ensureScenePaintAssetSurface(drag, asset) {
 }
 
 async function sceneBrushSurfaceForHit(drag, hit) {
-  const target = facePaintTarget(hit, true, drag);
+  const target = facePaintTarget(hit);
   if (!target) return null;
   const base = await ensureScenePaintAssetSurface(drag, target.asset);
   if (!base) return null;
@@ -6034,7 +6202,7 @@ async function sceneBrushSurfaceForHit(drag, hit) {
   if (state.paintBrushDepth > 0) {
     const neighbors = paintFaceDepthNeighbors(hit, target);
     for (const neighbor of neighbors) {
-      const asset = adjacentPaintFaceAsset(target.cube, neighbor.faceName, target.asset, drag);
+      const asset = adjacentPaintFaceAsset(target.cube, neighbor.faceName);
       if (!asset) continue;
       const neighborSurface = await ensureScenePaintAssetSurface(drag, asset);
       if (neighborSurface) surface.depthEdges.push({ ...neighbor, surface: neighborSurface });
@@ -6043,13 +6211,271 @@ async function sceneBrushSurfaceForHit(drag, hit) {
   return surface;
 }
 
+function paintSymmetryScopeUids(owner) {
+  return new Set(owner?.type === 'group' ? state.project.getDescendantElementUids(owner.uid) : owner ? [owner.uid] : []);
+}
+
+function paintSymmetryFaceKey(face) {
+  return `${face.uid}::${face.cubeUid || face.uid}::${face.faceName}`;
+}
+
+function paintSymmetryFaceRecords(owner) {
+  return sceneRenderer.getFaceQuadsForUids(paintSymmetryScopeUids(owner)).flatMap(face => {
+    const cube = face.cube?.type === 'cube' ? face.cube : state.project.getNode(face.uid);
+    if (cube?.type !== 'cube' || isCubeFaceCulled(cube.faces?.[face.faceName])) return [];
+    const uvSlots = faceUvPixelSlots(cube, face.faceName);
+    if (!uvSlots) return [];
+    return [{ ...face, cube, uvSlots, key: paintSymmetryFaceKey(face) }];
+  });
+}
+
+function paintSymmetryFramePoint(frame, point) {
+  const offset = point.map((value, axis) => value - frame.origin[axis]);
+  return frame.axes.map(axis => dot3(offset, axis));
+}
+
+function paintSymmetryWorldPoint(frame, point) {
+  return frame.origin.map((value, axis) => value
+    + frame.axes[0][axis] * point[0]
+    + frame.axes[1][axis] * point[1]
+    + frame.axes[2][axis] * point[2]);
+}
+
+function paintSymmetryTransforms(operator) {
+  const transforms = [];
+  if (operator.mode === 'axes') {
+    const enabled = ['x', 'y', 'z'].map(axis => operator.axes?.[axis] === true);
+    for (let mask = 1; mask < 8; mask++) {
+      if ([0, 1, 2].some(axis => (mask & (1 << axis)) && !enabled[axis])) continue;
+      transforms.push(point => point.map((value, axis) => mask & (1 << axis) ? -value : value));
+    }
+    return transforms;
+  }
+  const angles = symmetryModifierAngles(operator);
+  const rotate = (point, degrees) => {
+    const angle = degrees * Math.PI / 180, cosine = Math.cos(angle), sine = Math.sin(angle);
+    return [point[0] * cosine + point[2] * sine, point[1], -point[0] * sine + point[2] * cosine];
+  };
+  for (const degrees of angles) {
+    if (Math.abs(((degrees % 360) + 360) % 360) > 1e-6) transforms.push(point => rotate(point, degrees));
+    if (operator.mode === 'mandala') {
+      // R(angle) composed with reflection across local X gives a reflection
+      // axis at half that angle, producing all N distinct mandala reflections.
+      const angle = -degrees * Math.PI / 360;
+      const axis = [Math.cos(angle), Math.sin(angle)];
+      transforms.push(point => {
+        const projection = point[0] * axis[0] + point[2] * axis[1];
+        return [2 * axis[0] * projection - point[0], point[1], 2 * axis[1] * projection - point[2]];
+      });
+    }
+  }
+  return transforms;
+}
+
+function paintSymmetryPermutation(points, candidate, tolerance) {
+  const used = new Set(), permutation = [];
+  for (const point of points) {
+    let best = -1, distance = Infinity;
+    for (let index = 0; index < candidate.length; index++) {
+      if (used.has(index)) continue;
+      const next = Math.hypot(...point.map((value, axis) => value - candidate[index][axis]));
+      if (next < distance) { distance = next; best = index; }
+    }
+    if (best < 0 || distance > tolerance) return null;
+    used.add(best); permutation.push(best);
+  }
+  return permutation;
+}
+
+function paintSymmetryUvEdgesMatch(source, target, permutation) {
+  const edgeKey = (first, second) => first < second ? `${first}:${second}` : `${second}:${first}`;
+  const targetEdges = new Set(PAINT_FACE_EDGES.map(edge => edgeKey(edge[0], edge[1])));
+  return PAINT_FACE_EDGES.every(([first, second]) => {
+    const targetFirst = permutation[first], targetSecond = permutation[second];
+    if (!targetEdges.has(edgeKey(targetFirst, targetSecond))) return false;
+    const sourceLength = Math.hypot(source.uvSlots[first][0] - source.uvSlots[second][0], source.uvSlots[first][1] - source.uvSlots[second][1]);
+    const targetLength = Math.hypot(target.uvSlots[targetFirst][0] - target.uvSlots[targetSecond][0], target.uvSlots[targetFirst][1] - target.uvSlots[targetSecond][1]);
+    return Math.abs(sourceLength - targetLength) <= Math.max(1e-4, Math.max(sourceLength, targetLength) * 1e-5);
+  });
+}
+
+function paintSymmetryCenterKey(points) {
+  return [0, 1, 2].map(axis => Math.round(points.reduce((sum, point) => sum + point[axis], 0) / points.length * 1e4)).join(':');
+}
+
+function paintSymmetryCacheSignature(owner, operator, records, frame) {
+  const geometry = records.map(record => `${record.key}:${record.facePoints.map(point => paintSymmetryFramePoint(frame, point).map(value => value.toFixed(4)).join(',')).join(';')}:${record.uvSlots.map(point => point.map(value => Number(value).toFixed(4)).join(',')).join(';')}`).sort();
+  return JSON.stringify({
+    owner: owner.uid, mode: operator.mode, axes: operator.axes, copies: operator.copies,
+    distribution: operator.distribution, rangeStart: operator.rangeStart, rangeEnd: operator.rangeEnd,
+    geometry
+  });
+}
+
+function buildPaintSymmetryRelationsForFace(cache, key) {
+  if (cache.relations.has(key)) return cache.relations.get(key);
+  const source = cache.records.get(key);
+  if (!source) return [];
+  const relations = [];
+  const seen = new Set();
+  const coordinateScale = Math.max(1, ...source.facePoints.flatMap(point => point.map(value => Math.abs(value))));
+  const tolerance = Math.max(1e-4, coordinateScale * 1e-5);
+  for (const transform of cache.transforms) {
+    const transformed = source.facePoints.map(point => paintSymmetryWorldPoint(cache.frame,
+      transform(paintSymmetryFramePoint(cache.frame, point))));
+    const candidates = cache.centerBuckets.get(paintSymmetryCenterKey(transformed)) || [];
+    for (const target of candidates) {
+      const permutation = paintSymmetryPermutation(transformed, target.facePoints, tolerance);
+      if (!permutation || !paintSymmetryUvEdgesMatch(source, target, permutation)) continue;
+      if (source.key === target.key && permutation.every((slot, index) => slot === index)) continue;
+      const relationKey = `${target.key}:${permutation.join('')}`;
+      if (seen.has(relationKey)) continue;
+      seen.add(relationKey);
+      relations.push({ targetKey: target.key, permutation });
+    }
+  }
+  cache.relations.set(key, relations);
+  cache.relationCount += relations.length;
+  return relations;
+}
+
+function beginPaintSymmetryBackgroundBuild(cache) {
+  if (cache.building) return;
+  cache.building = true;
+  const keys = [...cache.records.keys()];
+  let index = 0;
+  const chunk = () => {
+    const end = Math.min(keys.length, index + 10);
+    while (index < end) buildPaintSymmetryRelationsForFace(cache, keys[index++]);
+    if (index < keys.length) setTimeout(chunk, 0);
+    else { cache.building = false; if (state.inspectorPage === 'operators') renderInspector(); }
+  };
+  setTimeout(chunk, 0);
+}
+
+function schedulePaintSymmetryBuild(owner, operator) {
+  if (!owner || !operator?.enabled || paintSymmetryBuildScheduled.has(operator.uid)) return;
+  paintSymmetryBuildScheduled.add(operator.uid);
+  requestAnimationFrame(() => {
+    paintSymmetryBuildScheduled.delete(operator.uid);
+    if (operator.enabled && owner.operators?.includes(operator) && state.project.getNode(owner.uid) === owner) ensurePaintSymmetryCache(owner, operator);
+  });
+}
+
+function scheduleAllPaintSymmetryBuilds() {
+  for (const owner of [...(state.project.groups || []), ...(state.project.elements || [])]) {
+    for (const operator of owner.operators || []) {
+      if (operator.enabled && operator.type === 'paint_symmetry') schedulePaintSymmetryBuild(owner, operator);
+    }
+  }
+}
+
+function ensurePaintSymmetryCache(owner, operator, session = null) {
+  const sessionCache = session?.paintSymmetryCaches?.get(operator.uid);
+  if (sessionCache) return sessionCache;
+  const frame = mirrorControllerWorldFrame(owner, operator);
+  if (!frame) return null;
+  const records = paintSymmetryFaceRecords(owner);
+  const signature = paintSymmetryCacheSignature(owner, operator, records, frame);
+  let cache = paintSymmetryRelationCache.get(operator.uid);
+  if (cache?.signature === signature) {
+    cache.frame = frame;
+    cache.records = new Map(records.map(record => [record.key, record]));
+    cache.centerBuckets = new Map();
+    for (const record of records) {
+      const key = paintSymmetryCenterKey(record.facePoints);
+      const bucket = cache.centerBuckets.get(key) || [];
+      bucket.push(record); cache.centerBuckets.set(key, bucket);
+    }
+    session?.paintSymmetryCaches?.set(operator.uid, cache);
+    return cache;
+  }
+  cache = {
+    signature, owner, operator, frame,
+    records: new Map(records.map(record => [record.key, record])),
+    relations: new Map(), transforms: paintSymmetryTransforms(operator),
+    relationCount: 0, building: false
+  };
+  cache.centerBuckets = new Map();
+  for (const record of records) {
+    const key = paintSymmetryCenterKey(record.facePoints);
+    const bucket = cache.centerBuckets.get(key) || [];
+    bucket.push(record); cache.centerBuckets.set(key, bucket);
+  }
+  paintSymmetryRelationCache.set(operator.uid, cache);
+  beginPaintSymmetryBackgroundBuild(cache);
+  session?.paintSymmetryCaches?.set(operator.uid, cache);
+  return cache;
+}
+
+function paintSymmetryOperatorsForUid(uidValue, session = null) {
+  if (!session?.paintSymmetryOperatorScopes) {
+    const owners = [...(state.project.groups || []), ...(state.project.elements || [])];
+    const scopes = owners.flatMap(owner => {
+      const operators = (owner.operators || []).filter(operator => operator.enabled && operator.type === 'paint_symmetry');
+      return operators.length ? [{ owner, operators, uids: paintSymmetryScopeUids(owner) }] : [];
+    });
+    if (session) session.paintSymmetryOperatorScopes = scopes;
+    else return scopes.filter(scope => scope.uids.has(uidValue)).flatMap(scope => scope.operators.map(operator => ({ owner: scope.owner, operator })));
+  }
+  return session.paintSymmetryOperatorScopes.filter(scope => scope.uids.has(uidValue))
+    .flatMap(scope => scope.operators.map(operator => ({ owner: scope.owner, operator })));
+}
+
+function paintSymmetryMappedHit(sourceHit, sourceRecord, targetRecord, permutation) {
+  const triangles = [[0, 2, 1], [2, 3, 1]];
+  for (const indices of triangles) {
+    const weights = barycentricPoint(sourceHit.point,
+      sourceRecord.facePoints[indices[0]], sourceRecord.facePoints[indices[1]], sourceRecord.facePoints[indices[2]]);
+    if (!weights) continue;
+    const point = [0, 1, 2].map(axis => indices.reduce((sum, slot, index) =>
+      sum + targetRecord.facePoints[permutation[slot]][axis] * weights[index], 0));
+    return {
+      uid: targetRecord.uid, cubeUid: targetRecord.cubeUid, cubeIndex: targetRecord.cubeIndex,
+      cube: targetRecord.cube, faceName: targetRecord.faceName,
+      facePoints: targetRecord.facePoints.map(entry => [...entry]), point,
+      symmetryPermutation: (sourceHit.symmetryPermutation || [0, 1, 2, 3]).map(slot => permutation[slot]),
+      symmetryInstanceKey: `${targetRecord.key}:${(sourceHit.symmetryPermutation || [0, 1, 2, 3]).map(slot => permutation[slot]).join(',')}`
+    };
+  }
+  return null;
+}
+
+function paintSymmetryRelatedHits(hit, session = null) {
+  const resultKey = paintHit => `${paintSymmetryFaceKey(paintHit)}:${(paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`;
+  const result = new Map([[resultKey(hit), hit]]);
+  const queue = [hit];
+  while (queue.length) {
+    const sourceHit = queue.shift();
+    for (const { owner, operator } of paintSymmetryOperatorsForUid(sourceHit.uid, session)) {
+      const cache = ensurePaintSymmetryCache(owner, operator, session);
+      const sourceKey = paintSymmetryFaceKey(sourceHit);
+      const sourceRecord = cache?.records.get(sourceKey);
+      if (!sourceRecord) continue;
+      // A face requested by a live stroke jumps ahead of the background build.
+      for (const relation of buildPaintSymmetryRelationsForFace(cache, sourceKey)) {
+        const targetRecord = cache.records.get(relation.targetKey);
+        if (!targetRecord) continue;
+        const mapped = paintSymmetryMappedHit(sourceHit, sourceRecord, targetRecord, relation.permutation);
+        if (!mapped) continue;
+        const key = resultKey(mapped);
+        if (result.has(key)) continue;
+        result.set(key, mapped); queue.push(mapped);
+      }
+    }
+  }
+  return [...result.values()];
+}
+
 function queueSceneBrushHit(drag, hit) {
   drag.queue = drag.queue.then(async () => {
     if (drag.canceled || !hit?.faceName) {
       drag.lastByFace.clear();
       return;
     }
-    const hits = state.paintBrushOverlay && hit.coincidentHits?.length ? hit.coincidentHits : [hit];
+    const directHits = drag.tool === 'brush' && state.paintBrushOverlay && hit.coincidentHits?.length ? hit.coincidentHits : [hit];
+    const hits = [...new Map(directHits.flatMap(paintHit => paintSymmetryRelatedHits(paintHit, drag))
+      .map(paintHit => [`${paintSymmetryFaceKey(paintHit)}:${(paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`, paintHit])).values()];
     const activeKeys = new Set();
     for (const paintHit of hits) {
       const surface = await sceneBrushSurfaceForHit(drag, paintHit);
@@ -6058,7 +6484,7 @@ function queueSceneBrushHit(drag, hit) {
       if (!point) continue;
       // Each concrete face owns its own UV-space cursor. This keeps a single
       // 3D stroke continuous while preventing lines between unrelated UVs.
-      const faceKey = `${sceneBrushHitKey(paintHit)}::${surface.asset._uid}`;
+      const faceKey = `${sceneBrushHitKey(paintHit)}::${surface.asset._uid}::${(paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`;
       const previous = drag.lastByFace.get(faceKey);
       drawPaintSegment(surface, previous || point, point);
       drag.lastByFace.set(faceKey, point);
@@ -6135,6 +6561,10 @@ function finishScenePaintDrag(drag) {
     });
     return;
   }
+  if (PAINT_SHAPE_TOOLS.includes(drag.tool) && drag.canvas) {
+    finalizeScenePaintShapeSymmetry(drag);
+    return;
+  }
   if (!drag.canvas) return;
   syncPaintedTextureNow();
   commitPaintedTextureAsset(drag.asset, drag.canvas);
@@ -6142,6 +6572,64 @@ function finishScenePaintDrag(drag) {
     const index = state.textureAssets.findIndex(asset => asset._uid === drag.asset._uid);
     if (index >= 0) activateProjectTexture(index);
   }
+  renderScene();
+}
+
+async function finalizeScenePaintShapeSymmetry(drag) {
+  const endHit = drag.currentHit || drag.initialHit;
+  const starts = paintSymmetryRelatedHits(drag.initialHit);
+  const ends = paintSymmetryRelatedHits(endHit);
+  const assets = new Map([[drag.asset._uid, {
+    asset: drag.asset, canvas: drag.canvas, context: drag.context,
+    baseImage: drag.baseImage, surfaces: []
+  }]]);
+  const sourceGroup = assets.get(drag.asset._uid);
+  sourceGroup.surfaces.push({
+    asset: drag.asset, canvas: drag.canvas, context: drag.context, baseImage: drag.baseImage,
+    cube: drag.cube, faceName: drag.faceName, clip: drag.clip, tool: drag.tool,
+    start: drag.start, end: drag.last || drag.start
+  });
+  for (let index = 1; index < starts.length; index++) {
+    const startHit = starts[index];
+    const endHitForTarget = ends[index] && paintSymmetryFaceKey(ends[index]) === paintSymmetryFaceKey(startHit)
+      ? ends[index] : ends.find(hit => paintSymmetryFaceKey(hit) === paintSymmetryFaceKey(startHit));
+    if (!endHitForTarget) continue;
+    const target = facePaintTarget(startHit);
+    if (!target) continue;
+    let group = assets.get(target.asset._uid);
+    if (!group) {
+      const result = await paintCanvasForAsset(target.asset);
+      if (!result) continue;
+      group = {
+        asset: target.asset, canvas: result.canvas, context: result.context,
+        baseImage: result.context.getImageData(0, 0, result.canvas.width, result.canvas.height), surfaces: []
+      };
+      assets.set(target.asset._uid, group);
+      pushTexturePaintHistory(target.asset, result.canvas);
+    }
+    const start = facePaintUvPoint(startHit, target, group.canvas);
+    const end = facePaintUvPoint(endHitForTarget, target, group.canvas);
+    if (!start || !end) continue;
+    group.surfaces.push({
+      asset: target.asset, canvas: group.canvas, context: group.context, baseImage: group.baseImage,
+      cube: target.cube, faceName: target.faceName, clip: paintUvBounds(target.cube, target.faceName, group.canvas),
+      tool: drag.tool, start, end
+    });
+  }
+  for (const group of assets.values()) {
+    group.context.putImageData(group.baseImage, 0, 0);
+    const rootDrag = { holisticStroke: true, historyAssets: new Set([group.asset._uid]), touchedSurfaces: new Set(), historyGroup: null };
+    group.rootDrag = rootDrag;
+    group.baseSurface = group;
+    for (const surface of group.surfaces) {
+      surface.rootDrag = rootDrag;
+      surface.baseSurface = group;
+      drawPaintShape(surface, surface.end, false);
+    }
+    commitPaintedTextureAsset(group.asset, group.canvas);
+    queuePaintedTextureSync(group.asset, group.canvas);
+  }
+  syncPaintedTextureNow();
   renderScene();
 }
 
@@ -6162,6 +6650,7 @@ function moveScenePaintDrag(event, drag = state.dragging) {
   if (PAINT_SHAPE_TOOLS.includes(drag.tool)) drawPaintShape(drag, point);
   else drawPaintSegment(drag, drag.last || point, point);
   drag.last = point;
+  drag.currentHit = hit;
   return true;
 }
 
@@ -6174,16 +6663,15 @@ function startScenePaintPointer(event, x, y) {
   if (state.tool === 'gradient') {
     if (!hit?.faceName) { toast('請指向一個 Cube 面'); return true; }
     const cube = hit.cube?.type === 'cube' ? hit.cube : state.project.getNode(hit.uid);
-    const faceAsset = textureAssetForReference(cube?.faces?.[hit.faceName]?.texture) || activeTextureAsset();
-    if (!faceAsset) { toast('請先建立或導入一張貼圖'); return true; }
+    const faceAsset = textureAssetForReference(cube?.faces?.[hit.faceName]?.texture);
+    if (!faceAsset) { toast('這個面尚未分配貼圖，無法繪製'); return true; }
     event.preventDefault();
     useScenePaintGradient(hit);
     return true;
   }
-  const assignmentContext = {};
-  const target = facePaintTarget(hit, state.tool !== 'eyedropper', assignmentContext);
+  const target = facePaintTarget(hit);
   if (!target) {
-    toast(hit?.faceName ? '這個面沒有可用的貼圖' : '請指向一個 Cube 面');
+    toast(hit?.faceName ? '這個面尚未分配貼圖，無法繪製' : '請指向一個 Cube 面');
     return true;
   }
   if (state.tool === 'eraser' && state.alphaLock) {
@@ -6192,10 +6680,22 @@ function startScenePaintPointer(event, x, y) {
   }
   event.preventDefault();
   if (state.tool === 'fill') {
-    paintCanvasForAsset(target.asset).then(result => {
-      const point = result && facePaintUvPoint(hit, target, result.canvas);
-      if (point) applyTextureBucket(target.asset, point, { cube: target.cube, faceName: target.faceName });
-    });
+    (async () => {
+      const related = paintSymmetryRelatedHits(hit);
+      const seen = new Set();
+      for (const paintHit of related) {
+        const paintTarget = facePaintTarget(paintHit);
+        if (!paintTarget) continue;
+        const key = state.paintBucketScope === 'element'
+          ? paintTarget.cube.uid
+          : `${paintTarget.asset._uid}:${paintTarget.cube.uid}:${paintTarget.faceName}:${['color', 'contiguous'].includes(state.paintBucketScope) ? (paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',') : 'face'}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const result = await paintCanvasForAsset(paintTarget.asset);
+        const point = result && facePaintUvPoint(paintHit, paintTarget, result.canvas);
+        if (point) await applyTextureBucket(paintTarget.asset, point, { cube: paintTarget.cube, faceName: paintTarget.faceName });
+      }
+    })();
     return true;
   }
   if (state.tool === 'eyedropper') {
@@ -6209,15 +6709,15 @@ function startScenePaintPointer(event, x, y) {
     return true;
   }
   sceneCanvas.setPointerCapture(event.pointerId);
-  if (state.tool === 'brush') {
+  if (state.tool === 'brush' || state.tool === 'eraser') {
     const drag = {
-      type: 'texture-paint-3d', multiSurface: true, pointerId: event.pointerId, tool: 'brush',
+      type: 'texture-paint-3d', multiSurface: true, pointerId: event.pointerId, tool: state.tool,
       latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
       assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(), touchedSurfaces: new Set(),
+      paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
       historyGroup: crypto.randomUUID(), last: null, lastFaceKey: null,
       lastByFace: new Map(),
       holisticStroke: true, lastPointerSample: { x: event.clientX, y: event.clientY, hit },
-      assignmentSnapshotTaken: assignmentContext.assignmentSnapshotTaken === true,
       ready: true, ended: false, canceled: false, finished: false
     };
     state.dragging = drag;
@@ -6561,9 +7061,11 @@ async function rebuildTextureAtlasNow() {
 }
 
 function syncRendererTextureAsset(asset, source) {
+  if (asset?._uid && source) livePaintTextureSources.set(asset._uid, { source, savedSource: asset.source });
   const atlasEntry = asset && textureAtlasLayoutByUid.get(asset._uid);
   let atlasPatch = null;
   if (atlasEntry && source?.width === atlasEntry.width && source?.height === atlasEntry.height) {
+    textureAtlasRevision++;
     drawTextureAtlasEntry(source, atlasEntry);
     atlasPatch = textureAtlasPatch(atlasEntry);
     if (!sceneRenderer.updateTextureAtlasRegion(atlasPatch, atlasEntry.x - 1, atlasEntry.y - 1)) {
@@ -6589,6 +7091,7 @@ function syncRendererTextureAsset(asset, source) {
     } else if (source) uvPreviewRenderer.setTexture(source);
     uvPreviewTextureDirty = false;
   }
+  scheduleSceneRender();
 }
 
 function syncRendererTexture(source) {
@@ -6870,6 +7373,8 @@ function remapNumericFaceTextureReferences(previousAssets) {
 }
 
 function loadTextureAssetImage(asset) {
+  const live = asset && livePaintTextureSources.get(asset._uid);
+  if (live && live.savedSource === asset.source) return Promise.resolve(live.source);
   return new Promise(resolve => {
     if (!asset?.source) return resolve(null);
     const image = new Image();
@@ -7434,6 +7939,7 @@ function setMode(mode) {
   if (mode === 'uv' && !state.separateUvMode) mode = 'edit';
   if (mode === 'paint' && subdivisionSession) exitSubdivisionEdit(false);
   state.mode = mode;
+  renderOutliner();
   document.body.dataset.editorMode = mode;
   if (mode !== 'paint') {
     $('#textureBrushCursor').hidden = true;
@@ -7988,6 +8494,12 @@ function showElementContextMenu(event, uidValue, source = null) {
   if (!state.project.getNode(uidValue)) return;
   if (!state.selectedUids.has(uidValue)) selectItem(uidValue);
   const node = state.project.getNode(uidValue);
+  if (state.mode === 'paint') {
+    showContextMenu(event, { title: node.name, source, items: [
+      { icon: '⌖', label: '聚焦此物件', action: focusSelected }
+    ] });
+    return;
+  }
   const selectedNodes = selectedNodeUids().map(id => state.project.getNode(id)).filter(Boolean);
   const allVisible = selectedNodes.every(entry => entry.visible);
   showContextMenu(event, {
@@ -8050,6 +8562,13 @@ function bindContextMenus() {
       return;
     }
     const activeCurve = selected();
+    if (state.mode === 'paint') {
+      showContextMenu(event, { title: state.project.name, items: [
+        { icon: '⌖', label: '聚焦選中物件', action: focusSelected },
+        { icon: '◎', label: '回到場景中心', action: focusSceneOrigin }
+      ] });
+      return;
+    }
     if (isBezierElement(activeCurve) && Number.isInteger(state.selectedCurveNodeIndex)) {
       event.preventDefault();
       event.stopPropagation();
@@ -8071,6 +8590,14 @@ function bindContextMenus() {
     });
   });
   outliner.addEventListener('contextmenu', event => {
+    if (state.mode === 'paint') {
+      const row = event.target.closest('.outliner-item');
+      if (row) showElementContextMenu(event, row.dataset.uid, row);
+      else showContextMenu(event, { title: state.project.name, source: outliner, items: [
+        { icon: '⌖', label: '聚焦選中物件', action: focusSelected }
+      ] });
+      return;
+    }
     const item = event.target.closest('.outliner-item');
     if (!item) {
       showContextMenu(event, { title: state.project.name, source: outliner, items: [
@@ -8208,6 +8735,7 @@ function bindContextMenus() {
 }
 
 function addCurveNodeAtViewportPoint(curve, event, rect = sceneCanvas.getBoundingClientRect()) {
+  if (state.mode === 'paint') return;
   const selectedIndex = Math.max(0, Math.min(curve.nodes.length - 1, state.selectedCurveNodeIndex));
   const selectedWorld = sceneRenderer.getCurveNodeWorldPoints(state.project, curve.uid)[selectedIndex]?.point;
   if (!selectedWorld) return;
@@ -8781,6 +9309,7 @@ function bindEvents() {
     selectItem(button.dataset.uid, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey });
   });
   outliner.addEventListener('dragstart', event => {
+    if (state.mode === 'paint') { event.preventDefault(); return; }
     if (event.target.closest('[data-node-toggle]')) { event.preventDefault(); return; }
     const item = event.target.closest('.outliner-item');
     if (!item) return;
@@ -8819,6 +9348,7 @@ function bindEvents() {
     item.dataset.dropZone = zone;
   });
   outliner.addEventListener('drop', event => {
+    if (state.mode === 'paint') { event.preventDefault(); clearOutlinerDropState(); return; }
     if (!state.outlinerDragUids?.length) return;
     event.preventDefault();
     const item = event.target.closest('.outliner-item');
@@ -8946,11 +9476,12 @@ function bindEvents() {
     if (!handle) return;
     event.preventDefault(); event.stopPropagation();
     if (handle.dataset.kind === 'modifier-anchor') {
-      const modifier = selected()?.modifiers?.find(entry => entry.uid === handle.dataset.modifierUid);
+      const owner = selected();
+      const modifier = [...(owner?.modifiers || []), ...(owner?.operators || [])].find(entry => entry.uid === handle.dataset.modifierUid);
       if (!modifier?.enabled) return;
       state.selectedModifierUid = modifier.uid;
       state.selectedCurveNodeIndex = null;
-      state.inspectorPage = 'modifiers';
+      state.inspectorPage = modifier.type === 'paint_symmetry' ? 'operators' : 'modifiers';
       if (!['move', 'rotate', 'pivot'].includes(state.tool)) setTool('move');
       else { renderInspector(); renderScene(); updateSelectionLabels(); }
       return;
@@ -9083,6 +9614,7 @@ function updateTimelineUI() {
 }
 
 function startCurveHandleDrag(event, curve, hit) {
+  if (state.mode === 'paint') return;
   event.preventDefault();
   event.stopPropagation();
   sceneCanvas.setPointerCapture(event.pointerId);
@@ -9663,13 +10195,13 @@ function nodeTransformAnchor(node) {
 }
 
 function captureModifierAnchors(node) {
-  return new Map((node.modifiers || []).flatMap(modifier => Array.isArray(modifier.anchor?.position)
+  return new Map([...(node.modifiers || []), ...(node.operators || [])].flatMap(modifier => Array.isArray(modifier.anchor?.position)
     ? [[modifier.uid, [...modifier.anchor.position]]]
     : []));
 }
 
 function translateModifierAnchorsFromSnapshot(node, anchors, delta) {
-  for (const modifier of node.modifiers || []) {
+  for (const modifier of [...(node.modifiers || []), ...(node.operators || [])]) {
     const start = anchors?.get(modifier.uid);
     if (!start || !Array.isArray(modifier.anchor?.position)) continue;
     modifier.anchor.position = start.map((value, axis) => value + delta[axis]);
@@ -9677,7 +10209,7 @@ function translateModifierAnchorsFromSnapshot(node, anchors, delta) {
 }
 
 function translateModifierAnchors(node, delta) {
-  for (const modifier of node.modifiers || []) {
+  for (const modifier of [...(node.modifiers || []), ...(node.operators || [])]) {
     if (!Array.isArray(modifier.anchor?.position)) continue;
     modifier.anchor.position = modifier.anchor.position.map((value, axis) => value + delta[axis]);
   }
@@ -9817,6 +10349,7 @@ function applyTargetRotation(target, worldAxis, degrees, { separate = false, sel
 function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign = 1, handleElement = null,
   axisKey = axisIndex === null ? 'free' : String(axisIndex), axisIndices = axisIndex === null ? [] : [axisIndex], axisSigns = [sign]) {
   if (event.button !== 0) return;
+  if (state.mode === 'paint') return;
   const modifierAnchorContext = activeModifierAnchorContext();
   const baseSelectionContext = getSelectionTransformContext();
   const selectionContext = modifierAnchorContext
@@ -9829,7 +10362,8 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   const targetNodes = state.tool === 'resize'
     ? selectedElementUids().map(uidValue => state.project.getNode(uidValue)).filter(Boolean)
     : selectionContext.nodes;
-  const targets = selectionContext.multiple && ['move', 'rotate', 'resize'].includes(state.tool)
+  const resizeBatch = state.tool === 'resize' && (selectionContext.multiple || item.type === 'group');
+  const targets = (resizeBatch || selectionContext.multiple) && ['move', 'rotate', 'resize'].includes(state.tool)
     ? targetNodes.map(captureTransformTarget)
     : [captureTransformTarget(item)];
   const rect = sceneCanvas.getBoundingClientRect();
@@ -9936,7 +10470,8 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
     uvFrozen: false,
     groupMembers: item.type === 'group' ? captureGroupMembers(item) : [],
     curveNodeContext,
-    modifierAnchorContext
+    modifierAnchorContext,
+    resizeBatch
   };
   sceneRenderer.beginTransformGhost();
   $('#transformTooltip').hidden = true;
@@ -10154,7 +10689,14 @@ function endPointerDrag(event) {
   }
   if (finishedDrag.type === 'transform' && finishedDrag.snapshotTaken) {
     sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
-    if (finishedDrag.modifierAnchorContext) renderInspector();
+    if (finishedDrag.modifierAnchorContext) {
+      const { owner, modifier } = finishedDrag.modifierAnchorContext;
+      if (modifier.type === 'paint_symmetry') {
+        paintSymmetryRelationCache.delete(modifier.uid);
+        schedulePaintSymmetryBuild(owner, modifier);
+      }
+      renderInspector();
+    }
     else syncInspectorValues();
   }
   sceneRenderer.endTransformGhost();
@@ -10373,7 +10915,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       });
     }
   }
-  if (drag.tool === 'resize' && drag.selectionContext.multiple) {
+  if (drag.tool === 'resize' && drag.resizeBatch) {
     const planeDistances = drag.kind === 'plane'
       ? getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event))
       : [];
@@ -10400,14 +10942,14 @@ function applyTransformDrag(drag, dx, dy, event) {
           drag.axisIndices.forEach((targetAxis, index) => {
             const proposed = target.size[targetAxis] + planeDistances[index];
             size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
-            if ((drag.axisSigns[index] || 1) < 0) position[targetAxis] = target.position[targetAxis] + size[targetAxis] - target.size[targetAxis];
+            if ((drag.axisSigns[index] || 1) < 0) position[targetAxis] = target.position[targetAxis] - (size[targetAxis] - target.size[targetAxis]);
           });
         } else {
           const targetAxis = drag.axis ? drag.axisIndex : 0;
           const requestedChange = drag.axis ? snapValue(axisDelta, event) : snapValue(dx * fallbackScale, event);
           const proposed = target.size[targetAxis] + requestedChange;
           size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
-          if (drag.axis && drag.sign < 0) position[targetAxis] = target.position[targetAxis] + size[targetAxis] - target.size[targetAxis];
+          if (drag.axis && drag.sign < 0) position[targetAxis] = target.position[targetAxis] - (size[targetAxis] - target.size[targetAxis]);
         }
         targetItem.position = position;
         targetItem.size = size;
@@ -10492,7 +11034,7 @@ function applyTransformDrag(drag, dx, dy, event) {
     }
     if (isShapeElement(item)) {
       if (item.shapeType !== 'polygon_prism') {
-        const distances = drag.kind === 'plane' ? getPlaneDragDistances(drag, dx, dy).map(value => snapValue(value, event)) : [];
+        const distances = drag.kind === 'plane' ? getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event)) : [];
         const distance = drag.kind === 'uniform'
           ? drag.radius * (Math.max(0, 1 - dy * .01) - 1)
           : drag.kind === 'plane-uniform'
@@ -10513,7 +11055,7 @@ function applyTransformDrag(drag, dx, dy, event) {
         item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height * factor, event));
         drag.tooltipText = `等比尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
       } else if (drag.kind === 'plane') {
-        const distances = getPlaneDragDistances(drag, dx, dy).map(value => snapValue(value, event));
+        const distances = getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event));
         const radialChanges = [];
         drag.planeAxes.forEach((planeAxis, index) => {
           if (planeAxis.index === 1) item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + distances[index], event));
