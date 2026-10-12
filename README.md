@@ -56,6 +56,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - UV 預覽只渲染選中內容，可選自動旋轉、面向配色、面旋轉及鏡像標記；停用時停止渲染排程。
 - 可建立紋理模板、純色模板或空白貼圖。模板生成會按工程基礎吸附分辨率歸一化尺寸，為非零邊長保留至少 1px，並可清理零面積無效面；UV 使用緊密的矩形裝箱排列，畫布可選 2 冪或指定倍數。
 - 繪畫模式可直接在二維貼圖、Cube 與程序化 Shape 表面作畫，提供畫筆、橡皮擦、直線、矩形、橢圓、油漆桶、漸變與取色器；不同面可引用不同貼圖。
+- 繪畫時可按住 Alt 臨時切換至取色器，鬆開後立即返回原本工具；臨時切換不會清除尚未完成的漸變選點。
 - 畫筆支援方形／圓形筆尖、抗鋸齒、透明度與三維跨面連續筆畫。筆刷深度會沿 Cube 的實際鄰面及 UV 朝向延伸，疊加繪製只同步處理最前方完全重合的面，不會穿透模型。
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
 - 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算。
@@ -70,6 +71,83 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 多項目以頁籤方式同時打開，可切換、拖動排序、編輯項目信息或關閉。
 - 配置註冊表統一管理繁體中文、簡體中文、英語、外觀、視圖、吸附與工作區選項。
 - 模型格式使用可擴展註冊表，格式可提供自己的初始工程資料、吸附基準、貼圖尺寸與能力標記。
+
+## 操作指南
+
+### 建立與管理項目
+
+1. 點擊頂部的「新建」，選擇模型格式及其初始參數。
+2. 使用項目頁籤切換同時打開的工程；頁籤可拖動排序，右鍵可編輯項目信息，中鍵或叉號可關閉。
+3. 在場景層級上方建立 Cube、Shape、Locator 或組。選中元素後建立的新內容會依目前層級插入。
+4. `Ctrl+S` 保存，`Ctrl+Shift+S` 另存；導出時可依副檔名選擇 `.cbmodel` 或 `.bbmodel`。
+
+### 視角與選取
+
+| 操作 | 結果 |
+| --- | --- |
+| 中鍵拖動 | 在一般視圖環繞攝像機；在 X／Y／Z 軸向視圖平移 |
+| `Shift` + 中鍵拖動 | 平移一般視圖攝像機 |
+| 滾輪 | 縮放視圖 |
+| `R` | 聚焦選中內容 |
+| `Shift+R` | 回到場景中心 |
+| 點擊輪盤軸 | 進入對應的正交軸向視圖；再次點擊反轉方向 |
+| 拖動三軸輪盤 | 退出軸向視圖並返回一般視圖 |
+| 左鍵物件 | 單選；點擊空白背景清空選擇 |
+| 左鍵拖框 | 框選；`Shift` 追加，`Ctrl` 從目前選擇中移除 |
+| 右鍵物件或列表項 | 打開共用的物件操作選單 |
+
+### 編輯工具
+
+| 快捷鍵 | 工具 |
+| --- | --- |
+| `1` | 移動 |
+| `2` | 縮放 |
+| `3` | 旋轉 |
+| `4` | 移動樞軸 |
+| `5` | 頂點捕捉 |
+| `6` | 刀具 |
+| `7` | 面選擇 |
+
+- 手柄只接受左鍵；中鍵始終交給攝像機。拖動軸、平面或中心手柄可執行單軸、雙軸或三軸操作。
+- 移動與旋轉可在全局、父級和自身坐標系間切換；多選時可選擇統一執行或分別執行。
+- 吸附精度由工程格式與設定共同決定。`Shift`、`Ctrl` 及兩者同時按下可套用各自的微調倍率。
+- 樞軸工具和樞軸頂點捕捉只改變旋轉中心，會補償物件參數以保持幾何外觀不動。
+- `Ctrl+Z` 撤銷，`Ctrl+Shift+Z` 重做；複製、剪切、貼上與原位複製分別使用 `Ctrl+C`、`Ctrl+X`、`Ctrl+V`、`Ctrl+D`。
+
+### UV 與貼圖
+
+1. 在貼圖列表建立或導入貼圖，再把貼圖拖到主視圖的 Cube 面上。多選 Cube 時會按放下位置所指的面向批量指定。
+2. 進入 UV 編輯模式後，可在貼圖窗口選擇一個或多個面，拖動 UV 框或邊緣調整位置和尺寸。
+3. `Ctrl` + 滾輪縮放貼圖；滾輪縱向捲動，`Shift` + 滾輪橫向捲動，中鍵可自由平移。
+4. 貼圖窗口獲得焦點後，`R` 聚焦選中 UV，`Shift+R` 回到預設貼圖視圖。
+5. UV 可以超出貼圖範圍以保留特殊模型資料，但主動拖動不會把 UV 推出有效範圍。
+
+### 繪畫模式
+
+| 快捷鍵 | 工具 |
+| --- | --- |
+| `B` | 畫筆 |
+| `E` | 橡皮擦 |
+| `L` | 直線 |
+| `M` | 矩形 |
+| `O` | 橢圓 |
+| `G` | 油漆桶 |
+| `J` | 漸變 |
+| `I` | 取色器 |
+| 按住 `Alt` | 臨時取色；鬆開恢復原工具 |
+
+- 畫筆可直接在二維貼圖或三維模型表面起筆。跨面筆畫會維持同一次筆畫的透明度與連續性。
+- 「筆刷深度」控制筆跡碰到 Cube 邊緣時向相鄰面的延伸像素數；「疊加繪製」只同步處理最前方完全重合的面。
+- 面漸變要求兩點位於同一面；體漸變要求兩點位於同一 Cube。兩點只定義方向，漸變會覆蓋完整目標。
+- 雙色漸變先點擊第一色或第二色色槽，再在右側選色器調色；兩端 Alpha 可獨立設定。啟用「使用色卡」後會改用目前選中色卡的全部顏色。
+- 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。
+
+### 面板與視窗
+
+- 拖動停靠面板標題可將面板取下；靠近左、右或底部停靠區時會自動吸附。
+- 同一停靠邊的面板共享寬度，拖動任一面板邊界會調整整欄；浮動面板可從邊或角調整大小。
+- 點擊面板外側的三角形可折疊或展開整個停靠邊。帶熱點聚焦的面板在交互後會顯示淡色焦點框。
+- 在輸入框、選單或文字編輯區內，字母和數字快捷鍵不會觸發工具切換。
 
 ## 文件格式
 
@@ -201,6 +279,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - UV Preview renders only selected content and can show automatic rotation, face-direction colors, face rotation, and mirror markers. Disabling the panel stops its render scheduling.
 - Texture templates, solid-color templates, and blank textures can be created. Template generation normalizes sizes against the project base snapping resolution, preserves at least one pixel for non-zero edges, can remove zero-area faces, packs UV rectangles tightly, and supports power-of-two or custom-multiple canvases.
 - Paint mode works directly on the 2D texture, cubes, and procedural shape surfaces. It includes brush, eraser, line, rectangle, ellipse, fill, gradient, and eyedropper tools, while allowing each face to reference a different texture.
+- Holding Alt temporarily activates the eyedropper and releasing it restores the previous tool. Temporary switching preserves an unfinished gradient selection.
 - Brushes support square and round tips, antialiasing, opacity, and continuous 3D strokes across faces. Brush depth follows actual shared cube edges and each neighboring face's UV orientation. Coincident painting affects only exactly overlapping frontmost faces and never paints through the model.
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
 - The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion.
@@ -215,6 +294,83 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Multiple projects can remain open as tabs that support selection, drag ordering, project-information editing, and closing.
 - A configuration registry manages Traditional Chinese, Simplified Chinese, English, appearance, viewport, snapping, and workspace settings.
 - Model formats use an extensible registry and may provide their own initial project data, snapping baseline, texture size, and capability flags.
+
+## Operation guide
+
+### Creating and managing projects
+
+1. Click **New** in the top bar and choose a model format and its initial parameters.
+2. Use project tabs to switch between open projects. Tabs can be reordered by dragging, edited from the context menu, and closed with the middle mouse button or close icon.
+3. Create cubes, shapes, locators, or groups from the controls above the scene hierarchy. New content is inserted relative to the current hierarchy selection.
+4. Use `Ctrl+S` to save and `Ctrl+Shift+S` to save as. Export chooses `.cbmodel` or `.bbmodel` from the selected or typed extension.
+
+### Camera and selection
+
+| Input | Result |
+| --- | --- |
+| Middle-drag | Orbit in the general view; pan in X/Y/Z axis views |
+| `Shift` + middle-drag | Pan the general-view camera |
+| Mouse wheel | Zoom the view |
+| `R` | Focus the current selection |
+| `Shift+R` | Return to the scene origin |
+| Click an axis-widget axis | Enter its orthographic axis view; click it again to reverse direction |
+| Drag the axis widget | Leave an axis view and return to the general view |
+| Left-click an object | Select it; click the empty background to clear the selection |
+| Left-drag a marquee | Box-select; hold `Shift` to add or `Ctrl` to remove |
+| Right-click an object or hierarchy item | Open the shared object context menu |
+
+### Editing tools
+
+| Shortcut | Tool |
+| --- | --- |
+| `1` | Move |
+| `2` | Scale |
+| `3` | Rotate |
+| `4` | Move pivot |
+| `5` | Vertex snap |
+| `6` | Knife |
+| `7` | Face select |
+
+- Gizmos accept only the left mouse button; the middle button always controls the camera. Axis, plane, and center handles perform one-, two-, and three-axis operations.
+- Move and rotate can use global, parent, or local coordinates. Multi-selection offers unified and per-object execution.
+- Snapping is defined by both the project format and user settings. `Shift`, `Ctrl`, and both together apply their configured fine-adjustment multipliers.
+- Pivot movement and pivot vertex snapping change only the rotation center and compensate object parameters so the visible geometry stays fixed.
+- `Ctrl+Z` undoes and `Ctrl+Shift+Z` redoes. Copy, cut, paste, and duplicate in place use `Ctrl+C`, `Ctrl+X`, `Ctrl+V`, and `Ctrl+D`.
+
+### UV and textures
+
+1. Create or import a texture in the texture list, then drag it onto a cube face in the main viewport. With multiple cubes selected, the drop direction is assigned to all of them.
+2. In UV Edit mode, select one or more faces in the texture panel and drag UV rectangles or their edges to move and resize them.
+3. Use `Ctrl` + wheel to zoom the texture, the wheel to scroll vertically, `Shift` + wheel to scroll horizontally, and middle-drag to pan freely.
+4. When the texture panel has focus, `R` focuses selected UVs and `Shift+R` restores the default texture view.
+5. UVs may remain outside the texture bounds for compatibility with unusual model data, but ordinary dragging does not push them out of range.
+
+### Paint mode
+
+| Shortcut | Tool |
+| --- | --- |
+| `B` | Brush |
+| `E` | Eraser |
+| `L` | Line |
+| `M` | Rectangle |
+| `O` | Ellipse |
+| `G` | Fill |
+| `J` | Gradient |
+| `I` | Eyedropper |
+| Hold `Alt` | Temporary eyedropper; release to restore the previous tool |
+
+- Painting can begin directly in the 2D texture or on the 3D model. A stroke crossing faces keeps one continuous opacity and stroke history.
+- Brush Depth controls how many pixels continue onto neighboring faces when a stroke reaches a cube edge. Coincident Painting affects only exactly overlapping frontmost faces.
+- A face gradient requires both points on one face; a volume gradient requires both points on one cube. The points define direction only, and the gradient covers the complete target.
+- In two-color mode, click the first or second stop button and edit that stop in the right-side picker. Each stop has independent alpha. Enabling **Use Palette** switches to every color in the selected palette row.
+- Palette rows independently support discrete or gradient display and allow color selection, insertion, deletion, and drag reordering.
+
+### Panels and windows
+
+- Drag a dock panel header to detach it. Moving it near the left, right, or bottom docking area attaches it automatically.
+- Panels on one dock edge share a width. Resizing any panel edge changes the column; floating panels resize from edges and corners.
+- Use the outward-facing triangle to collapse or expand a dock edge. Panels with hotspot focus show a subtle focus outline after interaction.
+- Letter and number shortcuts do not switch tools while an input, select menu, or editable text field has focus.
 
 ## File formats
 

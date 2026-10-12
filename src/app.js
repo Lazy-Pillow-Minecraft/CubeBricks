@@ -135,6 +135,8 @@ const state = {
   layoutResizing: false
 };
 
+let temporaryPaintTool = null;
+
 const DOCK_PANEL_DEFINITIONS = Object.freeze([
   { id: 'texture', index: 0, modes: ['edit', 'uv', 'paint'], hotspotFocus: true, defaultDock: 'left', defaultOrder: 0, defaultPosition: { x: 24, y: 104 }, defaultSize: { width: 236, height: 620 }, defaultCollapsed: false },
   { id: 'uvPreview', index: 1, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'left', defaultOrder: 1, defaultPosition: { x: 24, y: 520 }, defaultSize: { width: 236, height: 260 }, defaultCollapsed: false },
@@ -7459,15 +7461,15 @@ function updateToolVisibility() {
   });
 }
 
-function setTool(tool) {
+function setTool(tool, { temporary = false } = {}) {
   if (!toolSupportsMode(tool) || (tool === 'knife' && subdivisionSession)) {
     if (tool === 'knife' && subdivisionSession) toast('細分編輯期間不能使用刀具');
     return;
   }
-  if (tool !== 'vertexSnap') state.vertexSnapSource = null;
-  if (tool !== 'knife') cancelKnifeSelection(false);
-  if (tool !== 'gradient') clearPaintGradientSelection();
-  if (tool === 'gradient' && state.tool !== 'gradient') {
+  if (!temporary && tool !== 'vertexSnap') state.vertexSnapSource = null;
+  if (!temporary && tool !== 'knife') cancelKnifeSelection(false);
+  if (!temporary && tool !== 'gradient') clearPaintGradientSelection();
+  if (!temporary && tool === 'gradient' && state.tool !== 'gradient') {
     state.paintGradientStop = 'start';
     state.paintGradientStart = state.paintColor;
   }
@@ -7476,6 +7478,22 @@ function setTool(tool) {
   $$('.tool').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
   updateToolOptions();
   renderScene();
+}
+
+function beginTemporaryEyedropper() {
+  if (temporaryPaintTool || state.mode !== 'paint' || state.tool === 'eyedropper'
+    || state.dragging || texturePaintDrag || textureUvDrag) return false;
+  temporaryPaintTool = state.tool;
+  setTool('eyedropper', { temporary: true });
+  return true;
+}
+
+function endTemporaryEyedropper() {
+  if (!temporaryPaintTool) return false;
+  const previous = temporaryPaintTool;
+  temporaryPaintTool = null;
+  if (state.mode === 'paint' && toolSupportsMode(previous, 'paint')) setTool(previous, { temporary: true });
+  return true;
 }
 
 function updateToolOptions() {
@@ -8980,6 +8998,10 @@ function bindEvents() {
   document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
     if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
+    if (event.key === 'Alt' && !event.repeat && beginTemporaryEyedropper()) {
+      event.preventDefault();
+      return;
+    }
     if (event.key === 'Escape') {
       setRenderModeMenu(false);
       setReferenceImageMenu(false);
@@ -9013,8 +9035,13 @@ function bindEvents() {
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
   });
   window.addEventListener('keyup', event => {
+    if (event.key === 'Alt' && endTemporaryEyedropper()) {
+      event.preventDefault();
+      return;
+    }
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
   });
+  window.addEventListener('blur', endTemporaryEyedropper);
 }
 
 let timelineAnimation = null;
