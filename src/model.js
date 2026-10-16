@@ -2,7 +2,68 @@ import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './conf
 import { modifierRegistry } from './config/modifiers.js';
 import { operatorRegistry } from './config/operators.js';
 
-const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
+const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID()}`;
+// Blockbench's standard marker palette (pastel viewport colours).
+export const BLOCKBENCH_MARKER_COLORS = Object.freeze(['#a2ebff', '#fff899', '#f1bb75', '#ff9b97', '#c5a6e8', '#a6c8ff', '#7bffa3', '#bdffa6', '#ffa5d5', '#e0e9fb']);
+
+function blockbenchMarkerIndex(color) {
+  const rgb = hex => [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16));
+  const target = rgb(typeof color === 'string' ? color : BLOCKBENCH_MARKER_COLORS[0]);
+  let best = 0, distance = Infinity;
+  BLOCKBENCH_MARKER_COLORS.forEach((hex, index) => {
+    const next = rgb(hex).reduce((sum, value, channel) => sum + (value - target[channel]) ** 2, 0);
+    if (next < distance) { best = index; distance = next; }
+  });
+  return best;
+}
+
+function initializeNodeNaming(node, data, fallback) {
+  node.name = data.name || fallback;
+  // Older projects and imported names are explicit unless the saved state
+  // says otherwise. Do not infer naming ownership from the displayed text.
+  node.unnamed = booleanProperty(data.unnamed, !data.name);
+}
+
+export function allocateGroupName(project, sourceName = 'group_1', { duplicate = false, reservedNames = [], excludeUid = null } = {}) {
+  const parse = name => {
+    const match = String(name).match(/^(.*?)(\d+)$/);
+    return match ? { prefix: match[1], number: BigInt(match[2]) } : { prefix: String(name), number: 1n };
+  };
+  const source = parse(sourceName);
+  const numbers = [...project.groups.filter(group => group.uid !== excludeUid).map(group => group.name), ...reservedNames]
+    .map(parse).filter(entry => entry.prefix === source.prefix).map(entry => entry.number);
+  if (!numbers.length) return `${source.prefix}${duplicate ? source.number + 1n : source.number}`;
+  const used = new Set(numbers.map(String));
+  let candidate = numbers.reduce((minimum, number) => number < minimum ? number : minimum);
+  while (used.has(String(candidate))) candidate++;
+  return `${source.prefix}${candidate}`;
+}
+
+export function refreshAutomaticNodeName(project, node) {
+  if (!node?.unnamed || node.type === 'group') return;
+  const parent = project.getParentGroup(node.uid);
+  node.name = parent && !parent.unnamed ? parent.name
+    : node instanceof Shape ? 'shape' : node.type;
+}
+
+export function setNodeName(project, node, value) {
+  const name = String(value || '').trim();
+  if (!name) return setNodeUnnamed(project, node, true);
+  node.name = name;
+  node.unnamed = false;
+  if (node.type === 'group') {
+    for (const childUid of node.children) refreshAutomaticNodeName(project, project.getNode(childUid));
+  }
+}
+
+export function setNodeUnnamed(project, node, value) {
+  const wasUnnamed = node.unnamed;
+  node.unnamed = Boolean(value);
+  if (node.type === 'group') {
+    if (node.unnamed && !wasUnnamed) node.name = allocateGroupName(project, 'group_1', { excludeUid: node.uid });
+    for (const childUid of node.children) refreshAutomaticNodeName(project, project.getNode(childUid));
+  } else if (node.unnamed) refreshAutomaticNodeName(project, node);
+}
 
 function normalizeRenderType(value) {
   const id = String(value || '').replace(/^minecraft:/, '');
@@ -162,7 +223,7 @@ function applySubdivisionEdits(cubes, owner) {
       if (Array.isArray(delta)) cube[field] = cube[field].map((value, axis) => value + (Number(delta[axis]) || 0));
     }
     if (Number.isFinite(Number(edit.inflateDelta))) cube.inflate += Number(edit.inflateDelta);
-    for (const field of ['name', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
+    for (const field of ['name', 'unnamed', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
       if (edit[field] !== undefined) cube[field] = cloneData(edit[field]);
     }
     return cube;
@@ -173,7 +234,7 @@ export class Cube {
   constructor(data = {}) {
     this.type = 'cube';
     this.uid = data.uid || uid('cube');
-    this.name = data.name || 'cube';
+    initializeNodeNaming(this, data, 'cube');
     // CubeBricks cubes use a start position plus an extension size. The legacy
     // from/to pair is accepted only as a migration path for early prototypes.
     this.position = data.position || data.from || [-4, 0, -4];
@@ -191,7 +252,8 @@ export class Cube {
     this.locked = booleanProperty(data.locked, false);
     this.shade = data.shade ?? true;
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
-    this.color = data.color || '#9ac24d';
+    this.color = typeof data.color === 'number' ? BLOCKBENCH_MARKER_COLORS[((Math.floor(data.color) % 10) + 10) % 10]
+      : data.color || '#9ac24d';
     this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
     this.operators = normalizeOperatorList(data.operators, this.type, this.pivot);
   }
@@ -331,7 +393,7 @@ export class Shape {
       : 'polygon_prism';
     this.type = shapeType;
     this.uid = data.uid || uid('shape');
-    this.name = data.name || 'shape';
+    initializeNodeNaming(this, data, 'shape');
     this.shapeType = shapeType;
     const defaults = shapeType !== 'polygon_prism' ? {
       radius: 4,
@@ -525,7 +587,7 @@ export class NodeElement {
   constructor(data = {}) {
     this.type = 'node';
     this.uid = data.uid || data.uuid || uid('node_element');
-    this.name = data.name || 'node';
+    initializeNodeNaming(this, data, 'node');
     this.position = vector3(data.position || data.origin);
     this.rotation = vector3(data.rotation);
     this.handlesEnabled = booleanProperty(data.handlesEnabled ?? data.handles, false);
@@ -596,7 +658,7 @@ export class BezierElement {
   constructor(data = {}, dimension = data.dimension === 2 ? 2 : 3) {
     this.type = dimension === 2 ? 'bezier2d' : 'bezier3d';
     this.uid = data.uid || data.uuid || uid(this.type);
-    this.name = data.name || (dimension === 2 ? 'bezier_2d' : 'bezier_3d');
+    initializeNodeNaming(this, data, this.type);
     this.dimension = dimension;
     this.origin = vector3(data.origin);
     this.rotation = vector3(data.rotation);
@@ -819,7 +881,7 @@ export class Locator {
   constructor(data = {}) {
     this.type = 'locator';
     this.uid = data.uid || data.uuid || uid('locator');
-    this.name = data.name || 'locator';
+    initializeNodeNaming(this, data, 'locator');
     this.position = data.position || data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
     this.exported = booleanProperty(data.exported ?? data.export, true);
@@ -834,7 +896,7 @@ export class Group {
   constructor(data = {}) {
     this.type = 'group';
     this.uid = data.uid || data.uuid || uid('group');
-    this.name = data.name || 'group';
+    initializeNodeNaming(this, data, 'group_1');
     this.pivot = data.pivot || data.origin || [0, 0, 0];
     this.rotation = data.rotation || [0, 0, 0];
     this.inflate = Number(data.inflate) || 0;
@@ -1005,7 +1067,7 @@ export function splitCubeAt(cube, axis, coordinate) {
   const originalFaces = materializeCutFaces(cube);
   const data = JSON.parse(JSON.stringify({ ...cube, faces: originalFaces }));
   delete data.uid;
-  data.name = `${cube.name}_cut`;
+  data.name = cube.name;
   const second = new Cube(data);
   const firstSize = coordinate - start;
   const secondSize = end - coordinate;
@@ -1189,13 +1251,16 @@ export class CubeBricksProject {
     const parent = parentUid && this.getNode(parentUid);
     (parent ? parent.children : this.outliner).push(element.uid);
     this.invalidateHierarchyIndex();
+    refreshAutomaticNodeName(this, element);
   }
 
   addGroup(group, parentUid = null) {
+    if (group.unnamed) group.name = allocateGroupName(this);
     this.groups.push(group);
     const parent = parentUid && this.getNode(parentUid);
     (parent ? parent.children : this.outliner).push(group.uid);
     this.invalidateHierarchyIndex();
+    group.children.forEach(childUid => refreshAutomaticNodeName(this, this.getNode(childUid)));
   }
 
   removeNode(uidValue) {
@@ -1270,6 +1335,7 @@ export function importBlockbench(data) {
       exported: booleanProperty(item.export, true),
       locked: booleanProperty(item.locked, false),
       shade: item.shade,
+      color: item.color,
       visible: booleanProperty(item.visibility ?? item.visible, true)
     });
   }).filter(Boolean);
@@ -1351,7 +1417,7 @@ function blockbenchCube(cube, offset = [0, 0, 0]) {
     from,
     to: from.map((value, axis) => value + cube.size[axis]),
     autouv: cube.autoUv ? 1 : 0,
-    color: 0,
+    color: blockbenchMarkerIndex(cube.color),
     origin,
     rotation: [...cube.rotation],
     uv_offset: [...(cube.uv || [0, 0])],
@@ -1550,6 +1616,49 @@ function affineKey(affine) {
   return JSON.stringify([...affine.matrix.flat(), ...affine.translation].map(clean));
 }
 
+function sourceCubeEntries(project, element) {
+  if (element.type === 'locator' || element.type === 'node') return [];
+  const cubes = typeof element.toCubes === 'function' ? element.toCubes() : element.type === 'cube' ? [element] : [];
+  return cubes.map((cube, index) => ({
+    cube, index, offset: element.type === 'cube' ? [0, 0, 0] : element.origin || [0, 0, 0],
+    ownerRotation: element.type === 'cube' ? [0, 0, 0] : element.rotation || [0, 0, 0],
+    ownerOrigin: element.type === 'cube' ? element.pivot : element.pivot || element.origin || [0, 0, 0],
+    chain: project.getGroupChain(element.uid)
+  }));
+}
+
+function cubeVertexKey(source, affine = affineIdentity()) {
+  const { cube, offset, ownerRotation, ownerOrigin, chain } = source;
+  const inflate = (Number(cube.inflate) || 0) + chain.reduce((sum, group) => sum + (Number(group.inflate) || 0), 0);
+  const from = cube.position.map((value, axis) => value + offset[axis] - inflate);
+  const to = cube.position.map((value, axis) => value + offset[axis] + cube.size[axis] + inflate);
+  const pivot = cube.pivot.map((value, axis) => value + offset[axis]);
+  const points = [];
+  for (const x of [from[0], to[0]]) for (const y of [from[1], to[1]]) for (const z of [from[2], to[2]]) {
+    const point = applyGroupChainPoint(transformAround(transformAround([x, y, z], pivot,
+      rotationMatrix(cube.rotation || [0, 0, 0])), ownerOrigin, rotationMatrix(ownerRotation)), chain);
+    points.push(affinePoint(affine, point).map(value => Math.round(value * 100000) / 100000).join(','));
+  }
+  return points.sort().join('|');
+}
+
+function originalCubeKeys(project, sourcesByUid = null, excludedUids = null) {
+  const keys = new Set();
+  for (const element of project.elements) {
+    if (excludedUids?.has(element.uid)) continue;
+    if (element.visible === false || project.getGroupChain(element.uid).some(group => group.visible === false)) continue;
+    const sources = sourceCubeEntries(project, element);
+    sourcesByUid?.set(element.uid, sources);
+    for (const source of sources) keys.add(cubeVertexKey(source));
+  }
+  return keys;
+}
+
+function variantIgnoresDuplicates(owners, variant) {
+  return owners.some(owner => (owner.modifiers || []).some(modifier =>
+    variant.modifierUids.includes(modifier.uid) && modifier.ignoreDuplicateCubes));
+}
+
 function modifierEvaluationOwners(project, element, terminalOwner = null, includeTerminal = true) {
   const owners = [element, ...project.getGroupChain(element.uid).reverse()];
   if (!terminalOwner) return owners;
@@ -1582,7 +1691,13 @@ function evaluateModifierStack(project, owners, initialVariants = null) {
 // The renderer reuses the source element ranges already uploaded to the GPU and
 // applies these world-space matrices at draw time.
 export function buildModifierRenderInstances(project) {
+  if (![...project.elements, ...project.groups].some(owner =>
+    owner.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry'))) return [];
   const byTransform = new Map();
+  const sourcesByUid = new Map();
+  const deduplicate = [...project.elements, ...project.groups].some(owner =>
+    owner.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry' && modifier.ignoreDuplicateCubes));
+  const occupied = deduplicate ? originalCubeKeys(project, sourcesByUid) : null;
   for (const element of project.elements) {
     const owners = modifierEvaluationOwners(project, element);
     if (element.visible === false || owners.some(owner => owner.visible === false)) continue;
@@ -1593,17 +1708,37 @@ export function buildModifierRenderInstances(project) {
       let instance = byTransform.get(key);
       if (!instance) {
         instance = {
+          key,
           groupUid: owners.at(-1)?.uid || element.uid,
           modifierUid: variant.modifierUids.join(':'),
           modifierUids: [...variant.modifierUids],
           sourceUids: [],
+          cubeIndices: {},
           matrix: variant.affine.matrix.map(row => [...row]),
           translation: [...variant.affine.translation],
           reflected: matrixDeterminant(variant.affine.matrix) < 0
         };
         byTransform.set(key, instance);
       }
-      if (!instance.sourceUids.includes(element.uid)) instance.sourceUids.push(element.uid);
+      let sources = sourcesByUid.get(element.uid);
+      if (!sources) {
+        sources = sourceCubeEntries(project, element);
+        sourcesByUid.set(element.uid, sources);
+      }
+      const ignoreDuplicates = variantIgnoresDuplicates(owners, variant);
+      const include = sources.filter(source => {
+        if (!occupied) return true;
+        const vertexKey = cubeVertexKey(source, variant.affine);
+        if (ignoreDuplicates && occupied.has(vertexKey)) return false;
+        occupied.add(vertexKey);
+        return true;
+      }).map(source => source.index);
+      if (!sources.length || include.length) {
+        if (!instance.sourceUids.includes(element.uid)) instance.sourceUids.push(element.uid);
+        if (sources.length && occupied) instance.cubeIndices[element.uid] = [...new Set([
+          ...(instance.cubeIndices[element.uid] || []), ...include
+        ])];
+      }
     }
   }
   return [...byTransform.values()];
@@ -1657,6 +1792,9 @@ export function bakeModifier(project, owner, modifierUid) {
   const insertionIndex = Math.max(0, container.indexOf(owner.uid));
   const parentChain = project.getGroupChain(owner.uid);
   const sourceUids = symmetrySourceUids(project, owner);
+  const occupied = modifier.ignoreDuplicateCubes || sourceUids.some(uidValue =>
+    project.getNode(uidValue)?.modifiers?.some(entry => entry.enabled && entry.ignoreDuplicateCubes))
+    ? originalCubeKeys(project, null, new Set(sourceUids)) : null;
   const selectedVariants = evaluateModifierStack(project, [{ ...owner, modifiers: [modifier] }]);
   const generatedElements = [];
   const instanceGroups = selectedVariants.map((selectedVariant, instanceIndex) => {
@@ -1703,6 +1841,11 @@ export function bakeModifier(project, owner, modifierUid) {
       for (const inner of innerVariants) {
         const affine = affineCompose(selectedVariant.affine, inner.affine);
         for (const source of sources) {
+          const vertexKey = occupied ? cubeVertexKey(source, affine) : null;
+          if (occupied && (modifier.ignoreDuplicateCubes
+            || variantIgnoresDuplicates(modifierEvaluationOwners(project, element, owner, false), inner))
+            && !affineIsIdentity(affine) && occupied.has(vertexKey)) continue;
+          if (occupied) occupied.add(vertexKey);
           const cube = bakedCubeFromWorld(source, affine, parentChain);
           generatedElements.push(cube);
           children.push(cube.uid);
@@ -1759,6 +1902,9 @@ function exportSymmetryOwner(project, owner, pushElement) {
   const center = finalFrame.center;
   const instances = evaluateModifierStack(project, [owner]);
   const sourceUids = symmetrySourceUids(project, owner);
+  const occupied = modifiers.some(modifier => modifier.ignoreDuplicateCubes) || sourceUids.some(uidValue =>
+    project.getNode(uidValue)?.modifiers?.some(entry => entry.enabled && entry.ignoreDuplicateCubes))
+    ? originalCubeKeys(project, null, new Set(sourceUids)) : null;
   const reflectedLocalAxis = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
   const instanceGroups = instances.map((instance, instanceIndex) => {
     const children = [];
@@ -1795,6 +1941,11 @@ function exportSymmetryOwner(project, owner, pushElement) {
           ? element.toCubes().map(cube => ({ cube, offset: element.origin || [0, 0, 0], ownerRotation: element.rotation || [0, 0, 0], ownerOrigin: element.pivot || element.origin || [0, 0, 0] }))
           : element.type === 'cube' ? [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot }] : [];
         for (const source of cubes) {
+          const vertexKey = occupied ? cubeVertexKey({ ...source, chain: project.getGroupChain(element.uid) }, affine) : null;
+          if (occupied && (modifiers.some(modifier => modifier.ignoreDuplicateCubes)
+            || variantIgnoresDuplicates(modifierEvaluationOwners(project, element, owner, false), inner))
+            && !affineIsIdentity(affine) && occupied.has(vertexKey)) continue;
+          if (occupied) occupied.add(vertexKey);
           const baseFrom = source.cube.position.map((value, axis) => value + source.offset[axis]);
           const baseTo = baseFrom.map((value, axis) => value + source.cube.size[axis]);
           const basePivot = source.cube.pivot.map((value, axis) => value + source.offset[axis]);
@@ -1842,7 +1993,7 @@ function exportSymmetryOwner(project, owner, pushElement) {
       shade: owner.shade !== false, box_uv: owner.uvMode !== 'face',
       uv_normalized: owner.uvNormalized !== false, isOpen: true, children
     };
-  });
+  }).filter(group => group.children.length > 0);
   if (!modifiers.at(-1).wrapParent) return instanceGroups;
   return {
     name: owner.name,

@@ -1,4 +1,5 @@
 import { buildModifierRenderInstances } from '../model.js';
+import { tiledFaceReference, tiledFaceRegions } from '../core/texture-features.js';
 
 const DEG = Math.PI / 180;
 const MIPPED_SUPERSAMPLE = 1.5;
@@ -91,6 +92,7 @@ export class WebGLSceneRenderer {
     this.renderModeLocation = this.gl.getUniformLocation(this.program, 'uRenderMode');
     this.alphaModeLocation = this.gl.getUniformLocation(this.program, 'uAlphaMode');
     this.opacityLocation = this.gl.getUniformLocation(this.program, 'uOpacity');
+    this.colorOverrideLocation = this.gl.getUniformLocation(this.program, 'uColorOverride');
     this.textureLocation = this.gl.getUniformLocation(this.program, 'uTexture');
     this.useLogDepthLocation = this.gl.getUniformLocation(this.program, 'uUseLogDepth');
     this.logDepthFactorLocation = this.gl.getUniformLocation(this.program, 'uLogDepthFactor');
@@ -227,7 +229,7 @@ export class WebGLSceneRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const key = `${source.width}x${source.height}:` + entries.map(entry =>
-      `${entry.uid}:${entry.x},${entry.y},${entry.width},${entry.height}:${(entry.references || []).join(',')}`).join('|');
+      `${entry.uid}:${entry.mode}:${entry.x},${entry.y},${entry.width},${entry.height}:${(entry.references || []).join(',')}`).join('|');
     if (key === this.textureLayoutKey) return;
     const byReference = new Map();
     let defaultEntry = null;
@@ -702,9 +704,10 @@ export class WebGLSceneRenderer {
     { lockedOnly = false, selectedOnly = false } = {}) {
     const lines = primitive === this.gl.LINES;
     const rangeKey = lines ? 'edgeRanges' : 'triangleRanges';
+    const cubeRangeKey = lines ? 'cubeEdgeRanges' : 'cubeTriangleRanges';
     for (const instance of this.mirrorCache?.instances || []) {
       const batchKey = [
-        instance.groupUid, instance.modifierUid, instance.sourceUids.join(','),
+        instance.key, instance.groupUid, instance.modifierUid, instance.sourceUids.join(','),
         lines ? 'edges' : 'triangles', lockedOnly ? 'locked' : 'visible',
         selectedOnly ? 'selected' : 'all', this.geometryRevision,
         this.currentDynamicElementKey || '', this.currentLockedKey || ''
@@ -717,8 +720,11 @@ export class WebGLSceneRenderer {
           if (lockedOnly !== locked || (selectedOnly && !dynamicUids.has(uid))) continue;
           const selected = dynamicUids.has(uid);
           const cache = selected ? this.selectedCache : this.staticCache;
-          const range = cache?.[rangeKey]?.get(uid);
-          if (range?.count) (selected ? selectedRanges : staticRanges).push(range);
+          const allowedIndices = instance.cubeIndices?.[uid];
+          const ranges = allowedIndices && cache?.[cubeRangeKey]?.get(uid)
+            ? allowedIndices.map(index => cache[cubeRangeKey].get(uid)[index]).filter(Boolean)
+            : [cache?.[rangeKey]?.get(uid)];
+          for (const range of ranges) if (range?.count) (selected ? selectedRanges : staticRanges).push(range);
         }
         batches = {
           static: mergeAdjacentVertexRanges(staticRanges),
@@ -736,6 +742,8 @@ export class WebGLSceneRenderer {
           : instance.transform;
         for (const range of ranges) this.drawBuffer(buffer, range.count, primitive, viewProjection, {
             ...options,
+            ...(this.lastCameraInput?.modifierResultGhost
+              ? { opacity: .75, blend: true, depthWrite: false } : {}),
             first: range.start,
             modelTransform,
             flipWinding: instance.reflected
@@ -903,11 +911,30 @@ export class WebGLSceneRenderer {
       }
       this.drawVertices(overlay, gl.LINES, viewProjection, { depthWrite: false, cull: false, renderMode: 0 });
     }
+    this.drawGeneratedSelection(camera.selectedGenerated, viewProjection);
     const selectedFaceFillCount = this.ensureFaceSelectionFill(camera.selectedUvFaces);
     this.drawBuffer(this.faceSelectionBuffer, selectedFaceFillCount, gl.TRIANGLES, viewProjection, {
       depthWrite: false, depthTest: true, cull: false, renderMode: 0, blend: true,
       modelTransform: this.selectionPreviewTransform
     });
+  }
+
+  drawGeneratedSelection(selection, viewProjection) {
+    if (!selection || this.lastCameraInput?.modifierResultGhost) return;
+    const instance = this.mirrorCache?.instances.find(entry => entry.key === selection.instanceKey);
+    if (!instance || !instance.sourceUids.includes(selection.uid)) return;
+    const inverted = this.selectionOutline.map(value => 1 - value);
+    const allowed = instance.cubeIndices?.[selection.uid];
+    for (const cache of [this.staticCache, this.selectedCache]) {
+      const ranges = allowed && cache?.cubeEdgeRanges?.get(selection.uid)
+        ? allowed.map(index => cache.cubeEdgeRanges.get(selection.uid)[index]).filter(Boolean)
+        : [cache?.edgeRanges?.get(selection.uid)];
+      const buffer = cache === this.staticCache ? this.staticWireBuffer : this.selectedWireBuffer;
+      for (const range of ranges) if (range?.count) this.drawBuffer(buffer, range.count, this.gl.LINES, viewProjection, {
+        first: range.start, modelTransform: instance.transform, depthWrite: false,
+        cull: false, renderMode: 0, colorOverride: [...inverted, 1]
+      });
+    }
   }
 
   ensureFaceSelectionFill(selection) {
@@ -1121,7 +1148,7 @@ export class WebGLSceneRenderer {
   }
 
   pickDetailed(project, screenX, screenY, geometryOnly = false,
-    { includeLocked = false, lockedOnly = false, candidateUids = null } = {}) {
+    { includeLocked = false, lockedOnly = false, candidateUids = null, includeGenerated = false } = {}) {
     if (!this.lastCameraState || !this.lastCameraInput) return null;
     const ray = screenRay(screenX, screenY, this.lastViewport, this.lastCameraState, this.lastCameraInput);
     let closest = null;
@@ -1174,10 +1201,45 @@ export class WebGLSceneRenderer {
         }
       }
     }
+    if (includeGenerated && !this.lastCameraInput.modifierResultGhost && !lockedOnly) {
+      for (const instance of this.mirrorCache?.instances || []) {
+        const inversePoint = point => [0, 1, 2].map(axis =>
+          instance.matrix[0][axis] * (point[0] - instance.translation[0])
+          + instance.matrix[1][axis] * (point[1] - instance.translation[1])
+          + instance.matrix[2][axis] * (point[2] - instance.translation[2]));
+        const inverseDirection = direction => [0, 1, 2].map(axis =>
+          instance.matrix[0][axis] * direction[0]
+          + instance.matrix[1][axis] * direction[1]
+          + instance.matrix[2][axis] * direction[2]);
+        const localRay = { origin: inversePoint(ray.origin), direction: inverseDirection(ray.direction) };
+        const candidates = [...queryFaceBvh(this.staticCache?.faceBvh, localRay),
+          ...queryFaceBvh(this.selectedCache?.faceBvh, localRay)];
+        for (const face of candidates) {
+          if (!instance.sourceUids.includes(face.uid) || this.lastLockedUids.has(face.uid)
+            || candidateUids && !candidateUids.has(face.uid)) continue;
+          const indices = instance.cubeIndices?.[face.uid];
+          if (indices && !indices.includes(face.cubeIndex ?? 0)) continue;
+          for (let triangle = 0; triangle < 2; triangle++) {
+            const base = triangle * 3;
+            const distance = rayTriangleDistance(localRay.origin, localRay.direction,
+              face.quad[FACE_TRIANGLE_SLOTS[base]], face.quad[FACE_TRIANGLE_SLOTS[base + 1]],
+              face.quad[FACE_TRIANGLE_SLOTS[base + 2]]);
+            if (distance === null || distance >= closestDistance) continue;
+            closestDistance = distance;
+            closest = {
+              uid: face.uid, cubeUid: face.cubeUid || face.uid, cubeIndex: face.cubeIndex ?? null,
+              distance, faceName: face.faceName, generated: true, instanceKey: instance.key,
+              facePoints: face.quad.map(point => modifierInstancePoint(instance, point)),
+              point: ray.origin.map((value, axis) => value + ray.direction[axis] * distance)
+            };
+          }
+        }
+      }
+    }
     return closest;
   }
 
-  pickCoincident(project, screenX, screenY, geometryOnly = true) {
+  pickCoincident(project, screenX, screenY, geometryOnly = true, allDepths = false) {
     if (!this.lastCameraState || !this.lastCameraInput) return [];
     const ray = screenRay(screenX, screenY, this.lastViewport, this.lastCameraState, this.lastCameraInput);
     const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
@@ -1197,7 +1259,8 @@ export class WebGLSceneRenderer {
         if (distance !== null) faceDistance = Math.min(faceDistance, distance);
       }
       if (!Number.isFinite(faceDistance)) continue;
-      const key = `${face.uid}::${face.cubeUid || face.uid}::${face.faceName}`;
+      const key = `${face.uid}::${face.cubeUid || face.uid}::${face.faceName}`
+        + (allDepths ? `::${face.quad[0].map(value => Math.round(value * 1e5)).join(',')}` : '');
       const normal = normalize(cross(subtract(face.quad[2], face.quad[0]), subtract(face.quad[1], face.quad[0])));
       const previous = hits.get(key);
       if (!previous || faceDistance < previous.distance) hits.set(key, {
@@ -1214,6 +1277,7 @@ export class WebGLSceneRenderer {
     }
     const ordered = [...hits.values()].sort((a, b) => a.distance - b.distance);
     if (!ordered.length) return [];
+    if (allDepths) return ordered;
     const front = ordered[0];
     const distanceTolerance = Math.max(1e-5, Math.abs(front.distance) * 1e-6);
     return ordered.filter(hit => Math.abs(hit.distance - front.distance) <= distanceTolerance
@@ -1283,6 +1347,27 @@ export class WebGLSceneRenderer {
         if (seen.has(key)) continue;
         seen.add(key);
         vertices.push({ uid: elementUid, point: [...point] });
+      }
+    }
+    return vertices;
+  }
+
+  getGeneratedWorldVertices(uid) {
+    if (this.lastCameraInput?.modifierResultGhost) return [];
+    const vertices = [];
+    for (const instance of this.mirrorCache?.instances || []) {
+      if (!instance.sourceUids.includes(uid)) continue;
+      const cache = this.selectedCache?.cubePoints?.has(uid) ? this.selectedCache : this.staticCache;
+      const cubePoints = cache?.cubePoints?.get(uid) || [];
+      const source = (instance.cubeIndices?.[uid] || cubePoints.map((_, index) => index))
+        .flatMap(index => cubePoints[index] || []);
+      const seen = new Set();
+      for (const point of source) {
+        const transformed = modifierInstancePoint(instance, point);
+        const key = transformed.map(value => Math.round(value * 1e5)).join(',');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        vertices.push({ uid, point: transformed, generated: true, instanceKey: instance.key });
       }
     }
     return vertices;
@@ -1498,7 +1583,7 @@ export class WebGLSceneRenderer {
 
   drawBuffer(buffer, vertexCount, primitive, matrix, {
     depthWrite = true, cull = true, renderMode = 1, alphaMode = 0, blend = false, first = 0, opacity = 1,
-    modelTransform = null, depthTest = true, texture = null, flipWinding = false
+    modelTransform = null, depthTest = true, texture = null, flipWinding = false, colorOverride = null
   } = {}) {
     if (!vertexCount) return;
     const { gl } = this;
@@ -1513,6 +1598,7 @@ export class WebGLSceneRenderer {
     gl.uniform1i(this.renderModeLocation, renderMode);
     gl.uniform1i(this.alphaModeLocation, alphaMode);
     gl.uniform1f(this.opacityLocation, opacity);
+    gl.uniform4fv(this.colorOverrideLocation, colorOverride || [0, 0, 0, 0]);
     if (this.useLogDepthLocation) gl.uniform1i(this.useLogDepthLocation,
       this.logDepthEnabled && this.lastCameraState?.projection === 'perspective' ? 1 : 0);
     if (this.logDepthFactorLocation) gl.uniform1f(this.logDepthFactorLocation, 1 / Math.log2(30001));
@@ -1723,14 +1809,22 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
   const triangleRanges = new Map();
   const edgeRanges = new Map();
   const helperRanges = new Map();
+  const cubeTriangleRanges = new Map();
+  const cubeEdgeRanges = new Map();
+  const cubePoints = new Map();
   for (const element of elements) {
     const triangleStart = triangles.length / 12;
     const edgeStart = edges.length / 12;
     const helperStart = helpers.length / 12;
+    const elementCubeTriangles = [], elementCubeEdges = [];
+    const elementCubePoints = [];
     const finishRanges = () => {
       triangleRanges.set(element.uid, { start: triangleStart, count: triangles.length / 12 - triangleStart });
       edgeRanges.set(element.uid, { start: edgeStart, count: edges.length / 12 - edgeStart });
       helperRanges.set(element.uid, { start: helperStart, count: helpers.length / 12 - helperStart });
+      cubeTriangleRanges.set(element.uid, elementCubeTriangles);
+      cubeEdgeRanges.set(element.uid, elementCubeEdges);
+      cubePoints.set(element.uid, elementCubePoints);
     };
     const subdivisionOwner = element.subdivisionOwnerUid && project.getNode(element.subdivisionOwnerUid);
     const groupChain = project.getGroupChain(subdivisionOwner?.uid || element.uid);
@@ -1761,6 +1855,8 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
     }
 
     for (const entry of cubes) {
+      const cubeTriangleStart = triangles.length / 12;
+      const cubeEdgeStart = edges.length / 12;
       const geometry = cubeGeometry(entry, element.color, selectedForBounds, selectionOutline, faceDistinct, textureLayout);
       triangles.push(...geometry.triangles);
       faces.push(...geometry.faces.map(face => ({
@@ -1769,6 +1865,9 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
         cubeIndex: entry.cubeIndex ?? entry.cube.subdivisionIndex ?? null
       })));
       edges.push(...geometry.edges);
+      elementCubeTriangles.push({ start: cubeTriangleStart, count: triangles.length / 12 - cubeTriangleStart });
+      elementCubeEdges.push({ start: cubeEdgeStart, count: edges.length / 12 - cubeEdgeStart });
+      elementCubePoints.push(geometry.corners);
       if (!ownerPoints.has(element.uid)) ownerPoints.set(element.uid, []);
       ownerPoints.get(element.uid).push(...geometry.corners);
       boundsPoints.push(...geometry.corners);
@@ -1776,7 +1875,8 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
     finishRanges();
   }
   const bounds = geometryBounds(boundsPoints);
-  return { triangles, faces, edges, helpers, ownerPoints, triangleRanges, edgeRanges, helperRanges, bounds, boundsPoints };
+  return { triangles, faces, edges, helpers, ownerPoints, triangleRanges, edgeRanges, helperRanges,
+    cubeTriangleRanges, cubeEdgeRanges, cubePoints, bounds, boundsPoints };
 }
 
 function geometryBounds(points) {
@@ -1921,9 +2021,20 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
       ? getFaceUv(cube, faceName, textureSize, textureLayout)
       : Array.from({ length: 6 }, () => [UNTEXTURED_UV_SENTINEL, UNTEXTURED_UV_SENTINEL]);
     const faceVertices = [];
-    indices.forEach((index, vertexIndex) => pushVertex(faceVertices, corners[index], [...faceColor, selected ? 2 : 1], shade === false ? [0, 0, 0] : normal, faceUv[vertexIndex]));
-    triangles.push(...faceVertices);
+    const textureEntry = textureLayoutEntry(textureLayout, faceData?.texture);
     const quad = quadIndices.map(index => corners[index]);
+    if (textured && textureEntry?.mode === 'tiled') {
+      const regions = tiledFaceRegions(cube, faceName, textureEntry.width, textureEntry.height);
+      const point = (u, v) => quad[0].map((value, axis) => value + (quad[1][axis] - value) * u + (quad[2][axis] - value) * v);
+      for (const region of regions) {
+        const tileEntry = textureLayout.byReference.get(tiledFaceReference(cube, faceName, textureEntry, region));
+        if (!tileEntry) continue;
+        const points = [point(region.x / region.faceWidth, region.y / region.faceHeight), point((region.x + region.width) / region.faceWidth, region.y / region.faceHeight), point(region.x / region.faceWidth, (region.y + region.height) / region.faceHeight), point((region.x + region.width) / region.faceWidth, (region.y + region.height) / region.faceHeight)];
+        const uvs = createAtlasFaceUvs([0, 0, tileEntry.width, tileEntry.height], 0, tileEntry, [textureLayout.width, textureLayout.height]);
+        FACE_TRIANGLE_SLOTS.forEach((slot, index) => pushVertex(faceVertices, points[slot], [...faceColor, selected ? 2 : 1], shade === false ? [0, 0, 0] : normal, uvs[index]));
+      }
+    } else indices.forEach((index, vertexIndex) => pushVertex(faceVertices, corners[index], [...faceColor, selected ? 2 : 1], shade === false ? [0, 0, 0] : normal, faceUv[vertexIndex]));
+    triangles.push(...faceVertices);
     faceBatches.push({ faceName, quad, vertices: faceVertices, center: averagePoints(quad) });
   }
   const edges = [], edgeColor = selected ? [...selectionOutline, 1] : [.46, .56, .4, 1];
@@ -2285,6 +2396,10 @@ function modifierModelMatrix(matrix, translation, center = [0, 0, 0]) {
     translation[0], translation[1], translation[2], 1
   ];
 }
+function modifierInstancePoint(instance, point) {
+  return instance.matrix.map((row, axis) =>
+    row[0] * point[0] + row[1] * point[1] + row[2] * point[2] + instance.translation[axis]);
+}
 function multiply(a, b) {
   const out = new Array(16).fill(0);
   for (let column = 0; column < 4; column++) for (let row = 0; row < 4; row++) {
@@ -2435,6 +2550,7 @@ const FRAGMENT_SHADER = `
   uniform int uRenderMode;
   uniform int uAlphaMode;
   uniform float uOpacity;
+  uniform vec4 uColorOverride;
   varying float vSelected;
   void main() {
     vec4 color = vColor;
@@ -2451,6 +2567,7 @@ const FRAGMENT_SHADER = `
       if (uAlphaMode == 2 && color.a < 0.1) discard;
     }
     color.rgb = mix(color.rgb, vec3(1.0), vSelected * 0.13);
+    if (uColorOverride.a > 0.5) color.rgb = uColorOverride.rgb;
     color.a *= uOpacity;
     gl_FragColor = color;
   }
@@ -2468,6 +2585,7 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
   uniform int uRenderMode;
   uniform int uAlphaMode;
   uniform float uOpacity;
+  uniform vec4 uColorOverride;
   uniform int uUseLogDepth;
   uniform float uLogDepthFactor;
   void main() {
@@ -2485,6 +2603,7 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
       if (uAlphaMode == 2 && color.a < 0.1) discard;
     }
     color.rgb = mix(color.rgb, vec3(1.0), vSelected * 0.13);
+    if (uColorOverride.a > 0.5) color.rgb = uColorOverride.rgb;
     color.a *= uOpacity;
     gl_FragDepthEXT = uUseLogDepth == 1
       ? log2(max(1.0e-6, vFragDepth)) * uLogDepthFactor

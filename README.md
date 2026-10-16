@@ -63,10 +63,14 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 ### UV 與貼圖
 
 - Cube 可使用箱型 UV 或逐面 UV，每個面可獨立指定貼圖、旋轉、鏡像與剔除狀態。
+- 貼圖提供基礎圖層：新增、命名、選取、排序、顯示、透明度與刪除；繪畫落在當前圖層，模型顯示合成結果。圖層資料隨 `.cbmodel` 保存。
+- 貼圖本身可切換默認、平鋪、動畫三種模式；動畫目前為佔位。面各自保留普通 UV 和平鋪的單片寬高、X／Y 偏移，換貼圖不清除另一套資訊。
+- 拖動列表貼圖時顯示鼠標縮略圖，可直接賦予模型的面；多選時同時賦予所有所選元素的同方向面。平鋪渲染單片快取最高 1024 × 1024px，超出需求的面僅在渲染中拆片，不改動模型、導出結構或模板烘焙。
+- 元素顯示色與一般顏色欄可使用方形、圓形或三角形 HSV 彈窗；BBModel 的 Cube 調色板索引會轉換為對應顯示色，導出時選取最接近的標準色。
 - 貼圖窗口支援多面選取、UV 移動與拉伸、吸附、聚焦、縮放和平移。
 - UV 預覽只渲染選中內容，可選自動旋轉、面向配色、面旋轉及鏡像標記；繪畫時同步使用最新畫布，停用時停止渲染排程。
 - 可建立紋理模板、純色模板或空白貼圖。模板生成會按工程基礎吸附分辨率歸一化尺寸，為非零邊長保留至少 1px，並可清理零面積無效面；UV 使用緊密的矩形裝箱排列，畫布可選 2 冪或指定倍數。
-- 繪畫模式可直接在二維貼圖、Cube 與程序化 Shape 表面作畫，提供畫筆、橡皮擦、直線、矩形、橢圓、油漆桶、漸變與取色器；不同面可引用不同貼圖。
+- 繪畫模式可直接在二維貼圖、Cube 與程序化 Shape 表面作畫，提供畫筆、直線、矩形、橢圓、油漆桶、漸變與取色器；除漸變外，繪製工具可切換擦除模式，並各自記憶尺寸與透明度。鎖定透明度與忽視全透明像素是獨立開關；不同面可引用不同貼圖。
 - 繪畫時可按住 Alt 臨時切換至取色器，鬆開後立即返回原本工具；臨時切換不會清除尚未完成的漸變選點。
 - 畫筆支援方形／圓形筆尖、抗鋸齒、透明度與三維跨面連續筆畫。筆刷深度會沿 Cube 的實際鄰面及 UV 朝向延伸，疊加繪製只同步處理最前方完全重合的面，不會穿透模型。
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
@@ -139,7 +143,6 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 | 快捷鍵 | 工具 |
 | --- | --- |
 | `B` | 畫筆 |
-| `E` | 橡皮擦 |
 | `L` | 直線 |
 | `M` | 矩形 |
 | `O` | 橢圓 |
@@ -151,6 +154,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 畫筆可直接在二維貼圖或三維模型表面起筆。跨面筆畫會維持同一次筆畫的透明度與連續性。
 - 未分配貼圖的面不會在繪畫時自動綁定目前貼圖；三維視圖會提示先指定貼圖並保持模型資料不變。
 - 「筆刷深度」控制筆跡碰到 Cube 邊緣時向相鄰面的延伸像素數；「疊加繪製」只同步處理最前方完全重合的面。
+- 開啟「忽視全透明」時，三維繪畫會穿過完全透明的貼圖像素，選擇射線上第一個可繪畫的有色像素；單筆擦除以起筆時的透明度判定命中，避免擦開前層後繼續擦穿後層。
 - 面漸變要求兩點位於同一面；體漸變要求兩點位於同一 Cube。兩點只定義方向，漸變會覆蓋完整目標。
 - 雙色漸變先點擊第一色或第二色色槽，再在右側選色器調色；兩端 Alpha 可獨立設定。啟用「使用色卡」後會改用目前選中色卡的全部顏色。
 - 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。
@@ -173,7 +177,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 
 ## 文件格式
 
-- `.cbmodel`：CubeBricks 工程格式，保存可編輯的 Shape、曲線、修改器、操作器、層級和工程設定。
+- `.cbmodel`：CubeBricks 工程格式，以 ZIP 保存可編輯的 Shape、曲線、修改器、操作器、層級、貼圖和工程設定。桌面版在可配置的工作目錄記錄項目內的全局操作序列與各元素局部歷史；貼圖變更保存可雙向套用的像素差異，以便撤銷、重做和異常關閉後恢復。
 - `.bbmodel`：支援 Blockbench 模型匯入與導出；程序化物件和修改器會在導出時展開為兼容的 Cube／組資料。
 - 內置工程類型包含通用模型、圖像以及多種 Minecraft Java、Bedrock、模組實體、皮膚與 GeckoLib 類型；尚未完成的編輯器類型會明確標記為佔位。
 
@@ -308,13 +312,17 @@ The project is currently an evolving prototype focused on an extensible editor a
 ### UV and texturing
 
 - Cubes support box UV and per-face UV. Every face can independently select a texture, rotation, mirroring, and culling state.
+- Basic texture layers support creation, naming, selection, ordering, visibility, opacity, and deletion. Painting targets the active layer, while the model displays the composite. Layer data is saved in `.cbmodel` projects.
+- Texture assets switch between default, tiled, and animation modes; animation is currently a placeholder. Faces retain both ordinary UVs and tile dimensions/offsets when textures or modes change.
+- Drag textures from the list with a cursor thumbnail to assign them to model faces. Multi-selection assigns the same face direction across selected elements. Tiled render caches are capped at 1024 × 1024px per piece; larger faces are split only for rendering, without changing model data, export structure, or template baking.
+- Element display colors and ordinary color fields can use square, circular, or triangular HSV popups. BBModel cube palette indices are converted to display colors; export selects the nearest standard palette color.
 - The texture panel supports multi-face selection, UV movement and resizing, snapping, focus, zoom, and pan.
 - UV Preview renders only selected content and can show automatic rotation, face-direction colors, face rotation, and mirror markers. Painting uses the latest live canvas; disabling the panel stops its render scheduling.
 - Texture templates, solid-color templates, and blank textures can be created. Template generation normalizes sizes against the project base snapping resolution, preserves at least one pixel for non-zero edges, can remove zero-area faces, packs UV rectangles tightly, and supports power-of-two or custom-multiple canvases.
-- Paint mode works directly on the 2D texture, cubes, and procedural shape surfaces. It includes brush, eraser, line, rectangle, ellipse, fill, gradient, and eyedropper tools, while allowing each face to reference a different texture.
+- Paint mode works directly on 2D textures, cubes, and procedural shape surfaces. Brush, line, rectangle, ellipse, and fill each offer an erase mode and remember their own size and opacity. Alpha lock and ignore fully transparent pixels are separate options. Gradient and eyedropper remain available, and each face may reference a different texture.
 - Painting never assigns the active texture to an untextured face implicitly. The 3D viewport reports the missing assignment and leaves model data unchanged until a texture is explicitly attached.
 - Holding Alt temporarily activates the eyedropper and releasing it restores the previous tool. Temporary switching preserves an unfinished gradient selection.
-- Brushes support square and round tips, antialiasing, opacity, and continuous 3D strokes across faces. Brush depth follows actual shared cube edges and each neighboring face's UV orientation. Coincident painting affects only exactly overlapping frontmost faces and never paints through the model.
+- Brushes support square and round tips, antialiasing, opacity, and continuous 3D strokes across faces. Brush depth follows actual shared cube edges and each neighboring face's UV orientation. Coincident painting affects exactly overlapping surfaces at the first eligible depth. With "ignore fully transparent" enabled, 3D paint can reach colored pixels behind transparent faces; a stroke keeps its original alpha hit map so erasing the front face cannot tunnel into the next layer.
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
 - The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion.
 - Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient.
@@ -385,7 +393,6 @@ The project is currently an evolving prototype focused on an extensible editor a
 | Shortcut | Tool |
 | --- | --- |
 | `B` | Brush |
-| `E` | Eraser |
 | `L` | Line |
 | `M` | Rectangle |
 | `O` | Ellipse |
@@ -418,7 +425,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 
 ## File formats
 
-- `.cbmodel`: the CubeBricks project format, preserving editable shapes, curves, modifiers, operators, hierarchy, and project settings.
+- `.cbmodel`: a ZIP-based CubeBricks project preserving editable shapes, curves, modifiers, operators, hierarchy, textures, and settings. The desktop app keeps a configurable working directory with a project-scoped operation sequence and per-element history; texture edits use reversible pixel deltas for undo, redo, and crash recovery.
 - `.bbmodel`: Blockbench import and export. Procedural objects and modifiers are expanded into compatible cube/group data during export.
 - Built-in project types cover generic models, images, and several Minecraft Java, Bedrock, modded-entity, skin, and GeckoLib workflows. Editors that are not implemented yet are clearly marked as placeholders.
 

@@ -3,9 +3,12 @@ import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './co
 import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
 import { modifierRegistry } from './config/modifiers.js';
 import { operatorRegistry } from './config/operators.js';
+import { allocateGroupName, refreshAutomaticNodeName, setNodeName, setNodeUnnamed } from './model.js';
+import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerRasterCache, loadRaster, prepareLayers, tiledFaceRaster, tiledFaceReference, tiledFaceRegions, faceTileSize } from './core/texture-features.js';
 import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate, isCubeFaceCulled } from './render/webgl-renderer.js';
 import { DockManager } from './ui/dock-manager.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from './assets/player-reference.js';
+import { operationDefinition, operationIndex, requireOperation } from './core/operation-registry.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -19,7 +22,6 @@ const TOOL_REGISTRY = Object.freeze({
   knife: { modes: ['edit'] },
   faceSelect: { modes: ['edit', 'uv'] },
   brush: { modes: ['paint'] },
-  eraser: { modes: ['paint'] },
   line: { modes: ['paint'] },
   rectangle: { modes: ['paint'] },
   ellipse: { modes: ['paint'] },
@@ -27,17 +29,27 @@ const TOOL_REGISTRY = Object.freeze({
   gradient: { modes: ['paint'] },
   eyedropper: { modes: ['paint'] }
 });
-const PAINT_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse', 'fill', 'gradient', 'eyedropper']);
-const PAINT_STROKE_TOOLS = Object.freeze(['brush', 'eraser', 'line', 'rectangle', 'ellipse']);
+const PAINT_TOOLS = Object.freeze(['brush', 'line', 'rectangle', 'ellipse', 'fill', 'gradient', 'eyedropper']);
+const PAINT_STROKE_TOOLS = Object.freeze(['brush', 'line', 'rectangle', 'ellipse']);
 const PAINT_SHAPE_TOOLS = Object.freeze(['line', 'rectangle', 'ellipse']);
+const PAINT_ERASE_TOOLS = Object.freeze(['brush', 'line', 'rectangle', 'ellipse', 'fill']);
 const paintSymmetryRelationCache = new Map();
 const paintSymmetryBuildScheduled = new Set();
 const livePaintTextureSources = new Map();
+const blobTextureSourceCache = new Map();
+const animationRasterCache = new Map();
+const paintHitAlphaCache = new Map();
+let colorPickerPopupRoot = null;
+let colorPickerPopupApply = null;
+let recentRotationPress = null;
+let pendingRotationPress = null;
+let preciseRotationInput = null;
 
 const state = {
   project: new CubeBricksProject({ name: 'untitled' }),
   selectedUid: null,
   selectedUids: new Set(),
+  selectedGenerated: null,
   selectionAnchorUid: null,
   selectedCurveNodeIndex: null,
   selectedModifierUid: null,
@@ -66,6 +78,7 @@ const state = {
   previewShade: configRegistry.get(ConfigKey.PREVIEW_SHADE),
   playerReference: configRegistry.get(ConfigKey.SHOW_PLAYER_REFERENCE),
   geometryOnly: configRegistry.get(ConfigKey.SHOW_GEOMETRY_ONLY),
+  modifierResultGhost: configRegistry.get(ConfigKey.MODIFIER_RESULT_GHOST),
   settingsSnap: configRegistry.get(ConfigKey.SNAP),
   allowNegativeSize: configRegistry.get(ConfigKey.ALLOW_NEGATIVE_SIZE),
   modifierSnap: {
@@ -73,7 +86,6 @@ const state = {
     ctrl: { mode: configRegistry.get(ConfigKey.CTRL_SNAP_MODE), value: configRegistry.get(ConfigKey.CTRL_SNAP_VALUE) },
     shiftCtrl: { mode: configRegistry.get(ConfigKey.SHIFT_CTRL_SNAP_MODE), value: configRegistry.get(ConfigKey.SHIFT_CTRL_SNAP_VALUE) }
   },
-  symmetry: configRegistry.get(ConfigKey.SYMMETRY),
   alphaLock: configRegistry.get(ConfigKey.ALPHA_LOCK),
   lockedDefaultAlpha: configRegistry.get(ConfigKey.LOCKED_DEFAULT_ALPHA),
   lockedHoverFade: configRegistry.get(ConfigKey.LOCKED_HOVER_FADE),
@@ -109,6 +121,9 @@ const state = {
   paintBrushDepth: 0,
   paintBrushOverlay: false,
   paintBrushOpacity: 100,
+  paintToolSettings: Object.fromEntries(['line', 'rectangle', 'ellipse', 'fill', 'gradient'].map(tool => [tool, { size: 1, opacity: 100, erase: false }])),
+  paintBrushErase: false,
+  paintIgnoreTransparent: false,
   paintBucketScope: 'face',
   paintBucketSingleFace: true,
   paintGradientMode: 'face',
@@ -235,9 +250,11 @@ let referenceImportViewKey = 'general';
 let axisWidgetDrag = null;
 let suppressAxisWidgetClick = false;
 let playerReferenceTextureRevision = 0;
+const journalTimers = new Map();
+let suppressJournalRecording = false;
 
 const PROJECT_SESSION_KEYS = Object.freeze([
-  'project', 'selectedUid', 'selectedUids', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
+  'project', 'selectedUid', 'selectedUids', 'selectedGenerated', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
   'target', 'axisView', 'axisViewSign', 'axisViewCameras', 'generalCamera', 'referenceImageSelection', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
   'selectedUvFaces', 'textureView'
@@ -259,6 +276,7 @@ function createProjectSession(project, options = {}) {
     project,
     selectedUid,
     selectedUids: new Set(selectedUid ? [selectedUid] : []),
+    selectedGenerated: null,
     selectionAnchorUid: selectedUid,
     selectedCurveNodeIndex: null,
     selectedModifierUid: null,
@@ -354,7 +372,10 @@ function activateProjectTab(tabId, { render = true } = {}) {
   const tab = projectTabById(tabId);
   if (!tab) return false;
   if (tabId !== activeProjectTabId && subdivisionSession) exitSubdivisionEdit(false);
-  if (tabId !== activeProjectTabId) syncActiveProjectTab();
+  if (tabId !== activeProjectTabId) {
+    const previous = syncActiveProjectTab();
+    if (previous?.journalPending) void flushProjectJournal(previous);
+  }
   activeProjectTabId = tabId;
   for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
   state.dragging = null;
@@ -381,6 +402,7 @@ function addProjectTab(project, options = {}) {
     session: createProjectSession(project, options)
   };
   projectTabs.push(tab);
+  startProjectJournal(tab, options.journalId ? null : options.imported ? 'core.project.import' : 'core.project.create', options.journalId);
   activateProjectTab(tab.id, { render: options.render !== false });
   return tab;
 }
@@ -403,6 +425,7 @@ function closeProjectTab(tabId) {
     const project = new CubeBricksProject({ name: 'untitled', ...createModelProjectData('java_block_item', { name: 'untitled' }) });
     const replacement = { id: `project_${crypto.randomUUID()}`, displayName: null, session: createProjectSession(project) };
     projectTabs.push(replacement);
+    startProjectJournal(replacement, 'core.project.create');
     activeProjectTabId = null;
     activateProjectTab(replacement.id);
     return;
@@ -474,6 +497,8 @@ function applyProjectInfo() {
   };
   tab.displayName = null;
   tab.session.dirty = true;
+  tab.journalPending = 'core.project.information';
+  scheduleProjectJournal(tab);
   projectInfoDialog.close();
   editingProjectTabId = null;
   if (tab.id === activeProjectTabId) {
@@ -488,6 +513,7 @@ function initializeProjectTabs() {
   const tab = { id: `project_${crypto.randomUUID()}`, displayName: null, session: captureProjectSession() };
   projectTabs = [tab];
   activeProjectTabId = tab.id;
+  startProjectJournal(tab, 'core.project.create');
   renderProjectTabs();
   updateProjectStateLabel();
 }
@@ -496,7 +522,11 @@ function selected() {
   return state.project.getNode(state.selectedUid);
 }
 
-function snapshot() {
+function snapshot(operationId = 'core.element.property') {
+  requireOperation(operationId);
+  const tab = projectTabById(activeProjectTabId);
+  if (tab?.journalPending) void flushProjectJournal(tab);
+  if (tab) tab.journalPending = operationId;
   state.history.push(state.project.serialize());
   if (state.history.length > 60) state.history.shift();
   state.future.length = 0;
@@ -508,6 +538,7 @@ function restore(serialized) {
   const previousSelectionAnchorUid = state.selectionAnchorUid;
   subdivisionSession = null;
   state.project = new CubeBricksProject(JSON.parse(serialized));
+  state.selectedGenerated = null;
   state.selectedUids = new Set([...previousSelectedUids].filter(uidValue => state.project.getNode(uidValue)));
   state.selectedUid = previousSelectedUid && state.selectedUids.has(previousSelectedUid)
     ? previousSelectedUid
@@ -535,11 +566,14 @@ function restoreTexturePaintHistory(sourceStack, targetStack) {
       if (!asset) continue;
       targetStack.push({
         uid: asset._uid, source: asset.source,
+        layers: asset.layers ? structuredClone(asset.layers) : null, activeLayerUid: asset.activeLayerUid || null,
         width: asset.uvWidth || textureCanvas.width,
         height: asset.uvHeight || textureCanvas.height,
         group: entry.group || null
       });
       asset.source = entry.source;
+      asset.layers = entry.layers ? structuredClone(entry.layers) : null;
+      asset.activeLayerUid = entry.activeLayerUid || null;
       asset.uvWidth = entry.width;
       asset.uvHeight = entry.height;
       activeAsset ||= asset;
@@ -548,7 +582,7 @@ function restoreTexturePaintHistory(sourceStack, targetStack) {
     if (!activeAsset) continue;
     state.activeTextureUid = activeAsset._uid;
     renderTextureList();
-    loadTextureSource(activeAsset.source, activeAsset.name);
+    activateProjectTexture(state.textureAssets.indexOf(activeAsset));
     // A grouped stroke may touch several independent texture assets. Rebuild
     // the atlas as a unit so undo/redo cannot leave non-active faces showing
     // the previous GPU copy.
@@ -560,7 +594,34 @@ function restoreTexturePaintHistory(sourceStack, targetStack) {
   return false;
 }
 
-function undo() {
+async function navigateProjectJournal(direction) {
+  const tab = projectTabById(activeProjectTabId);
+  if (!tab?.journalId || !window.cubeBricksDesktop?.checkoutProjectJournal) return false;
+  try {
+    await flushProjectJournal(tab);
+    if (tab.journalPending) throw new Error('目前變更尚未寫入工作記錄');
+    await tab.journalWrites;
+    await tab.journalReady;
+    const result = await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId, direction });
+    if (!result) { toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作'); return true; }
+    const data = JSON.parse(result.content);
+    suppressJournalRecording = true;
+    try {
+      state.textureAssets = (data.textures || []).map(asset => ({
+        ...asset, _uid: textureUid(asset), uvWidth: asset.uv_width,
+        uvHeight: asset.uv_height, useAsDefault: asset.use_as_default === true,
+        groupId: asset.group_id || null, activeLayerUid: asset.active_layer_uid || null
+      }));
+      restore(JSON.stringify(data));
+      restoreProjectTextureView();
+      tab.journalHead = result.sequence;
+    } finally { suppressJournalRecording = false; }
+  } catch (error) { toast(`操作記錄切換失敗：${error.message}`); }
+  return true;
+}
+
+async function undo() {
+  if (await navigateProjectJournal('undo')) return;
   if (state.mode === 'paint') {
     if (!restoreTexturePaintHistory(state.paintHistory, state.paintFuture)) toast('沒有可撤銷的繪畫操作');
     return;
@@ -570,7 +631,8 @@ function undo() {
   restore(state.history.pop());
 }
 
-function redo() {
+async function redo() {
+  if (await navigateProjectJournal('redo')) return;
   if (state.mode === 'paint') {
     if (!restoreTexturePaintHistory(state.paintFuture, state.paintHistory)) toast('沒有可重做的繪畫操作');
     return;
@@ -587,8 +649,80 @@ function markDirty(value = true) {
   state.dirty = value;
   const tab = syncActiveProjectTab();
   if (tab) tab.session.dirty = value;
+  if (value && tab && !suppressJournalRecording) {
+    tab.journalPending ||= 'core.element.property';
+    scheduleProjectJournal(tab);
+  }
   updateProjectStateLabel();
   if (!tab || previousDirty !== value || previousLabel !== projectTabLabel(tab)) renderProjectTabs();
+}
+
+function startProjectJournal(tab, operationId = 'core.project.create', existingId = null) {
+  if (!window.cubeBricksDesktop?.initProjectJournal) return;
+  tab.journalId = existingId || tab.id;
+  if (existingId) {
+    tab.journalReady = Promise.resolve();
+    return;
+  }
+  const projectContent = tab.session.project.serialize();
+  tab.journalReady = serializableTextureAssets(structuredClone(tab.session.textureAssets))
+    .then(textures => window.cubeBricksDesktop.initProjectJournal({
+      journalId: tab.journalId,
+      operationId,
+      operationIndex: operationIndex(),
+      content: serializeCbmodel(textures, JSON.parse(projectContent))
+    }));
+  tab.journalReady.catch(error => toast(`工作目錄建立失敗：${error.message}`));
+}
+
+function scheduleProjectJournal(tab) {
+  if (!window.cubeBricksDesktop?.commitProjectJournal) return;
+  clearTimeout(journalTimers.get(tab.id));
+  journalTimers.set(tab.id, setTimeout(() => {
+    journalTimers.delete(tab.id);
+    if (tab.id === activeProjectTabId && (state.dragging || texturePaintDrag || textureUvDrag || referenceImageDrag)) {
+      scheduleProjectJournal(tab);
+      return;
+    }
+    void flushProjectJournal(tab);
+  }, 400));
+}
+
+function noteJournalOperation(operationId) {
+  const id = requireOperation(operationId);
+  const tab = projectTabById(activeProjectTabId);
+  if (!tab) return;
+  if (tab.journalPending && tab.journalPending !== id) void flushProjectJournal(tab);
+  tab.journalPending = id;
+  scheduleProjectJournal(tab);
+}
+
+async function flushProjectJournal(tab = projectTabById(activeProjectTabId)) {
+  if (!tab?.journalPending || !window.cubeBricksDesktop?.commitProjectJournal) return null;
+  clearTimeout(journalTimers.get(tab.id));
+  journalTimers.delete(tab.id);
+  if (tab.id === activeProjectTabId) syncActiveProjectTab();
+  const operationId = requireOperation(tab.journalPending);
+  tab.journalPending = null;
+  const session = tab.session;
+  const projectContent = session.project.serialize();
+  const assets = structuredClone(session.textureAssets);
+  const textureSnapshot = serializableTextureAssets(assets);
+  const write = async () => {
+    await tab.journalReady;
+    const textures = await textureSnapshot;
+    const content = serializeCbmodel(textures, JSON.parse(projectContent));
+    const result = await window.cubeBricksDesktop.commitProjectJournal({
+      journalId: tab.journalId, content, operationId,
+      operationLabel: operationDefinition(operationId).label,
+      operationIndex: operationIndex()
+    });
+    if (result?.sequence) tab.journalHead = result.sequence;
+    return result;
+  };
+  tab.journalWrites = (tab.journalWrites || Promise.resolve()).catch(() => {}).then(write);
+  try { return await tab.journalWrites; }
+  catch (error) { tab.journalPending ||= operationId; toast(`操作記錄失敗：${error.message}`); return null; }
 }
 
 function toast(message) {
@@ -621,6 +755,7 @@ function invalidateAllRenderGeometry() {
   textureUvEntryCache = null;
   selectionTransformContextCache = null;
   if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
+  if (textureAtlasEntries.some(entry => entry.tileSourceUid)) rebuildTextureAtlas();
   scheduleAllPaintSymmetryBuilds();
 }
 
@@ -650,6 +785,7 @@ function invalidateSelectionRenderGeometry(geometryChanged = true) {
     uvPreviewRenderer.invalidateGeometry();
     textureUvEntryCache = null;
     if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
+    if (textureAtlasEntries.some(entry => entry.tileSourceUid)) rebuildTextureAtlas();
   }
 }
 
@@ -659,12 +795,14 @@ function updateSelectionLabels() {
   const curveNodeSelected = isBezierElement(item) && Number.isInteger(state.selectedCurveNodeIndex)
     && item.nodes[state.selectedCurveNodeIndex];
   const format = modelFormatRegistry.get(state.project.formatId);
-  $('#selectionType').textContent = modifierAnchorSelected ? 'modifier_anchor'
+  $('#selectionType').textContent = state.selectedGenerated ? 'modifier_result' : modifierAnchorSelected ? 'modifier_anchor'
     : curveNodeSelected ? 'curve_node' : item?.type || format?.name || 'Scene';
-  $('#selectionName').textContent = modifierAnchorSelected ? '對稱軸點'
+  $('#selectionName').textContent = state.selectedGenerated
+    ? `${state.project.getNode(state.selectedGenerated.uid)?.name || '生成物'} · 唯讀`
+    : modifierAnchorSelected ? '對稱軸點'
     : curveNodeSelected ? `節點 ${state.selectedCurveNodeIndex + 1}`
     : state.selectedUids.size > 1 ? `已選 ${state.selectedUids.size} 項` : item?.name || state.project.name;
-  $('#uidChip').textContent = modifierAnchorSelected?.uid || curveNodeSelected?.uid || item?.uid || '—';
+  $('#uidChip').textContent = state.selectedGenerated?.uid || modifierAnchorSelected?.uid || curveNodeSelected?.uid || item?.uid || '—';
   const selectedCount = selectedElementUids().length;
   const counter = $('#outlinerSelectionCount');
   if (counter) counter.textContent = `${selectedCount}/${state.project.elements.filter(element => !element.subdivisionOwnerUid).length}`;
@@ -852,7 +990,7 @@ function subdivisionPatch(owner, cube, index) {
   }
   const inflateDelta = Number(cube.inflate || 0) - Number(base.inflate || 0);
   if (Math.abs(inflateDelta) > 1e-8) patch.inflateDelta = inflateDelta;
-  for (const field of ['name', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
+  for (const field of ['name', 'unnamed', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
     if (JSON.stringify(cube[field]) !== JSON.stringify(base[field])) patch[field] = structuredClone(cube[field]);
   }
   return Object.keys(patch).length ? patch : null;
@@ -961,6 +1099,7 @@ function symmetryModifierMarkup(owner, modifier) {
         <div class="option-row"><span>起始角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-modifier-field="rangeStart" data-modifier-uid="${modifier.uid}" value="${round(modifier.rangeStart)}" /></div></div>
         <div class="option-row"><span>結束角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-modifier-field="rangeEnd" data-modifier-uid="${modifier.uid}" value="${round(modifier.rangeEnd)}" /></div></div>` : ''}` : ''}
     <div class="option-row"><span>導出時建立父組</span><label class="switch"><input type="checkbox" data-modifier-field="wrapParent" data-modifier-uid="${modifier.uid}" ${modifier.wrapParent ? 'checked' : ''}/><i></i></label></div>
+    <div class="option-row"><span>忽視重複 Cube</span><label class="switch"><input type="checkbox" data-modifier-field="ignoreDuplicateCubes" data-modifier-uid="${modifier.uid}" ${modifier.ignoreDuplicateCubes ? 'checked' : ''}/><i></i></label></div>
     <div class="field-title"><span>內嵌軸點</span><button type="button" class="modifier-anchor-edit ${editingAnchor ? 'active' : ''}" data-edit-modifier-anchor="${modifier.uid}">${editingAnchor ? '結束軸點編輯' : '在主視圖編輯'}</button></div>
     <p class="modifier-anchor-note">不進入場景層級；可在主視圖點擊標記後移動或旋轉。</p>
     ${modifierVectorField('位置', modifier, 'anchor.position', modifier.anchor.position)}
@@ -1151,7 +1290,8 @@ function renderTrianglePickerCanvas(surface) {
 }
 
 function updatePaintColorPickerVisual() {
-  const surface = $('[data-color-picker-surface]');
+  const root = colorPickerPopupRoot || inspector;
+  const surface = $('[data-color-picker-surface]', root);
   if (!surface) return;
   const rgb = hexToRgb(state.paintColor);
   // Keep HSV as independent picker coordinates. Reading them back from rounded
@@ -1181,24 +1321,24 @@ function updatePaintColorPickerVisual() {
   }
   marker?.style.setProperty('left', state.paintColorPickerMode === 'triangle' ? `${markerX * 100}%` : insetControlPosition(markerX));
   marker?.style.setProperty('top', state.paintColorPickerMode === 'triangle' ? `${markerY * 100}%` : insetControlPosition(markerY));
-  const hueRail = $('[data-color-hue]', inspector);
+  const hueRail = $('[data-color-hue]', root);
   hueRail?.style.setProperty('--picker-bright', brightColor);
-  const hueMarker = $('.color-hue-marker', inspector);
+  const hueMarker = $('.color-hue-marker', root);
   if (hueMarker) hueMarker.style.top = insetControlPosition(state.paintColorPickerMode === 'circle' ? 1 - value : hue);
-  const ringMarker = $('.color-picker-ring-marker', inspector);
+  const ringMarker = $('.color-picker-ring-marker', root);
   if (ringMarker && state.paintColorPickerMode === 'triangle') {
     const angle = hue * Math.PI * 2;
     const radius = Math.max(1, (surface.clientWidth || 1) / 2 - TRIANGLE_RING_WIDTH / 2 - 2);
     ringMarker.style.left = `calc(50% + ${Math.sin(angle) * radius}px)`;
     ringMarker.style.top = `calc(50% - ${Math.cos(angle) * radius}px)`;
   }
-  const preview = $('.color-picker-current', inspector);
+  const preview = $('.color-picker-current', root);
   if (preview) preview.style.background = state.paintColor;
   ['r', 'g', 'b'].forEach((channel, index) => {
-    const input = $(`[data-paint-channel="${channel}"]`, inspector);
+    const input = $(`[data-paint-channel="${channel}"]`, root);
     if (input && document.activeElement !== input) input.value = String(rgb[index]);
   });
-  const hex = $('[data-paint-hex]', inspector);
+  const hex = $('[data-paint-hex]', root);
   if (hex && document.activeElement !== hex) hex.value = state.paintColor;
 }
 
@@ -1239,9 +1379,9 @@ function colorPickerPoint(surface, event, lockedZone = null) {
   return { hue: state.paintColorPickerHue, saturation: x, value: 1 - y };
 }
 
-function bindPaintColorPicker() {
-  const surface = $('[data-color-picker-surface]', inspector);
-  const hueRail = $('[data-color-hue]', inspector);
+function bindPaintColorPicker(root = inspector) {
+  const surface = $('[data-color-picker-surface]', root);
+  const hueRail = $('[data-color-hue]', root);
   let surfaceZone = null;
   const useSurface = (event, lockedZone = null) => {
     const point = colorPickerPoint(surface, event, lockedZone);
@@ -1289,27 +1429,27 @@ function bindPaintColorPicker() {
   surface.addEventListener('pointercancel', releaseSurface);
   surface.addEventListener('lostpointercapture', () => { surfaceZone = null; });
   if (hueRail) bindPointer(hueRail, useHue);
-  $$('[data-color-picker-mode]', inspector).forEach(button => button.addEventListener('click', () => {
+  $$('[data-color-picker-mode]', root).forEach(button => button.addEventListener('click', () => {
     state.paintColorPickerMode = button.dataset.colorPickerMode;
-    renderInspector();
+    if (colorPickerPopupRoot) renderPaintColorPicker(colorPickerPopupRoot);
+    else renderInspector();
   }));
-  $$('[data-paint-channel]', inspector).forEach(input => input.addEventListener('change', () => {
-    const rgb = ['r', 'g', 'b'].map(channel => Number($(`[data-paint-channel="${channel}"]`, inspector)?.value) || 0);
+  $$('[data-paint-channel]', root).forEach(input => input.addEventListener('change', () => {
+    const rgb = ['r', 'g', 'b'].map(channel => Number($(`[data-paint-channel="${channel}"]`, root)?.value) || 0);
     setPaintColor(rgbToHex(rgb));
   }));
-  $('[data-paint-hex]', inspector)?.addEventListener('change', event => setPaintColor(event.target.value));
-  $('[data-action="paintEyedropper"]', inspector)?.addEventListener('click', () => setTool('eyedropper'));
-  $('[data-action="addPaintSwatch"]', inspector)?.addEventListener('click', () => {
+  $('[data-paint-hex]', root)?.addEventListener('change', event => setPaintColor(event.target.value));
+  $('[data-action="paintEyedropper"]', root)?.addEventListener('click', () => setTool('eyedropper'));
+  $('[data-action="addPaintSwatch"]', root)?.addEventListener('click', () => {
     addPaintSwatchToSelection();
   });
   updatePaintColorPickerVisual();
 }
 
-function renderPaintColorPicker() {
-  $('#inspectorHeading').textContent = '選色器';
-  $('#inspectorMetaStrip').hidden = true;
+function renderPaintColorPicker(root = inspector) {
+  if (root === inspector) { $('#inspectorHeading').textContent = '選色器'; $('#inspectorMetaStrip').hidden = true; }
   const mode = ['square', 'circle', 'triangle'].includes(state.paintColorPickerMode) ? state.paintColorPickerMode : 'square';
-  inspector.innerHTML = `<div class="paint-color-picker">
+  root.innerHTML = `<div class="paint-color-picker">
     <nav class="color-picker-modes" aria-label="選色器形態">
       <button type="button" data-color-picker-mode="square" class="${mode === 'square' ? 'active' : ''}">方形</button>
       <button type="button" data-color-picker-mode="circle" class="${mode === 'circle' ? 'active' : ''}">圓形</button>
@@ -1326,11 +1466,34 @@ function renderPaintColorPicker() {
     </div>
     <div class="color-picker-footer">
       <i class="color-picker-current"></i><input type="text" maxlength="7" data-paint-hex value="${state.paintColor}">
-      <button type="button" data-action="addPaintSwatch" title="加入色卡">＋</button>
-      <button type="button" data-action="paintEyedropper" title="取色器">⌖</button>
+      ${root === inspector ? '<button type="button" data-action="addPaintSwatch" title="加入色卡">＋</button><button type="button" data-action="paintEyedropper" title="取色器">⌖</button>' : ''}
     </div>
   </div>`;
-  bindPaintColorPicker();
+  bindPaintColorPicker(root);
+}
+
+function openColorPickerPopup(color, apply) {
+  if (colorPickerPopupRoot) return;
+  const saved = Object.fromEntries(['paintColor', 'paintColorPickerHue', 'paintColorPickerSaturation', 'paintColorPickerValue', 'paintColorPickerMode'].map(key => [key, state[key]]));
+  const dialog = document.createElement('dialog');
+  dialog.className = 'theme-dialog color-picker-dialog';
+  dialog.innerHTML = '<form method="dialog"><div class="dialog-heading"><h2>選擇顏色</h2></div><div data-popup-picker></div><div class="dialog-actions"><button value="cancel">取消</button><button value="apply" class="primary">套用</button></div></form>';
+  document.body.append(dialog);
+  colorPickerPopupRoot = $('[data-popup-picker]', dialog);
+  colorPickerPopupApply = apply;
+  const hsv = rgbToHsv(hexToRgb(color));
+  state.paintColor = color;
+  [state.paintColorPickerHue, state.paintColorPickerSaturation, state.paintColorPickerValue] = hsv;
+  dialog.addEventListener('close', () => {
+    const value = state.paintColor, callback = colorPickerPopupApply;
+    colorPickerPopupRoot = null; colorPickerPopupApply = null;
+    Object.assign(state, saved); $('#paintColor').value = state.paintColor;
+    dialog.remove();
+    if (dialog.returnValue === 'apply') callback(value);
+    if (state.mode === 'paint') renderInspector();
+  }, { once: true });
+  dialog.showModal();
+  renderPaintColorPicker(colorPickerPopupRoot);
 }
 
 function renderInspector() {
@@ -1342,7 +1505,9 @@ function renderInspector() {
   $('#inspectorMetaStrip').hidden = false;
   const item = selected();
   if (!item) {
-    inspector.innerHTML = '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。</p></div>';
+    inspector.innerHTML = state.selectedGenerated
+      ? '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">已選中修改器生成結果；可作頂點捕捉參考，但不能直接編輯。請選擇來源物件或烘焙修改器。</p></div>'
+      : '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。</p></div>';
     return;
   }
   if (isBezierElement(item) && Number.isInteger(state.selectedCurveNodeIndex) && item.nodes[state.selectedCurveNodeIndex]) {
@@ -1426,6 +1591,7 @@ function renderInspector() {
   const basicPage = `<div class="field-section">
       <div class="field-title"><span>基本</span><span>${items.length > 1 ? `多選 ${items.length}` : typeLabel}</span></div>
       <input class="name-field" data-field="name" value="${escapeAttribute(item.name)}" aria-label="名稱" />
+      <div class="option-row"><span>系統命名</span><label class="switch"><input type="checkbox" data-field="unnamed" ${item.unnamed ? 'checked' : ''}/><i></i></label></div>
       <div class="option-row"><span>可見</span><label class="switch"><input type="checkbox" data-field="visible" ${item.visible ? 'checked' : ''}/><i></i></label></div>
     </div>
     <div class="field-section">
@@ -1444,7 +1610,7 @@ function renderInspector() {
     ${editOwner ? '' : `<div class="field-section"><button class="danger-button" data-action="deleteSelected">${items.length > 1 ? '刪除選中項' : `刪除${item.type === 'group' ? '組及其內容' : '物件'}`}</button></div>`}`;
   const appearancePage = `<div class="field-section">
       <div class="field-title"><span>外觀</span><span>預覽色</span></div>
-      ${item.color ? `<div class="option-row"><span>材質色</span><input type="color" data-field="color" value="${item.color}" /></div>` : ''}
+      ${item.color ? `<div class="option-row"><span>顯示色</span><button type="button" data-element-color-popup class="element-color-chip" style="background:${escapeAttribute(item.color)}" title="選擇顏色"></button></div>` : ''}
       <div class="option-row"><span>面陰影</span><label class="switch"><input type="checkbox" data-field="shade" ${item.shade !== false ? 'checked' : ''}/><i></i></label></div>
     </div>`;
   const uvPage = `<div class="field-section">
@@ -1521,11 +1687,15 @@ function bindInspector() {
   const item = selected();
   if (!item) return;
   const items = inspectorBatchNodes();
+  $('[data-element-color-popup]', inspector)?.addEventListener('click', () => openColorPickerPopup(item.color, color => {
+    snapshot('core.element.color'); items.filter(node => typeof node.color === 'string').forEach(node => { node.color = color; });
+    markDirty(); renderAll('selection');
+  }));
   $$('[data-field]', inspector).forEach(input => {
     input.addEventListener('change', () => {
       const key = input.dataset.field;
       if (input.type === 'number' && input.value === '') return;
-      snapshot();
+      snapshot(`core.element.field.${key.toLowerCase()}`);
       const value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
       const targets = key === 'name' ? [item]
         : key === 'shade' ? items.filter(node => node.type === 'cube' || isShapeElement(node) || isBezierElement(node) || node.type === 'group')
@@ -1534,7 +1704,9 @@ function bindInspector() {
         : key === 'color' ? items.filter(node => typeof node.color === 'string')
         : items.filter(node => key in node);
       for (const target of targets) {
-        if (['visible', 'shade', 'autoUv', 'uvMode', 'uvNormalized', 'exported', 'locked'].includes(key)) setNodeFlag(target, key, value);
+        if (key === 'name') setNodeName(state.project, target, value);
+        else if (key === 'unnamed') setNodeUnnamed(state.project, target, value);
+        else if (['visible', 'shade', 'autoUv', 'uvMode', 'uvNormalized', 'exported', 'locked'].includes(key)) setNodeFlag(target, key, value);
         else {
           target[key] = value;
           if (key === 'symmetricHandles' && value && target.type === 'node') {
@@ -1552,7 +1724,12 @@ function bindInspector() {
     const apply = () => {
       const value = Number(input.value);
       if (!Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      if (!snapshotTaken) {
+        const vectorName = input.dataset.vector.startsWith('curve-node:')
+          ? input.dataset.vector.split(':')[2] : input.dataset.vector;
+        snapshot(`core.element.vector.${vectorName.toLowerCase()}`);
+        snapshotTaken = true;
+      }
       delete input.dataset.mixed;
       const field = input.dataset.vector;
       const axis = Number(input.dataset.axis);
@@ -1618,7 +1795,7 @@ function bindInspector() {
     const apply = () => {
       const value = Number(input.value);
       if (!Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      if (!snapshotTaken) { snapshot(`core.shape.parameter.${input.dataset.parameter.toLowerCase()}`); snapshotTaken = true; }
       delete input.dataset.mixed;
       const key = input.dataset.parameter;
       const nextValue = key === 'sides' ? Math.max(3, Math.round(value))
@@ -1642,7 +1819,7 @@ function bindInspector() {
   $('[data-action="addModifier"]', inspector)?.addEventListener('click', () => {
     const type = $('[data-modifier-add-type]', inspector)?.value;
     if (!type) return;
-    snapshot();
+    snapshot(`modifier.${type}.add`);
     const modifier = addModifier(item, type);
     if (!modifier) return;
     state.selectedModifierUid = modifier.uid;
@@ -1658,12 +1835,12 @@ function bindInspector() {
   $$('[data-modifier-enabled]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const modifier = modifierByUid(toggle.dataset.modifierEnabled);
     if (!modifier) return;
-    snapshot(); modifier.enabled = toggle.checked;
+    snapshot(`modifier.${modifier.type}.toggle`); modifier.enabled = toggle.checked;
     if (!modifier.enabled && state.selectedModifierUid === modifier.uid) state.selectedModifierUid = null;
     sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
   }));
   $$('[data-modifier-remove]', inspector).forEach(button => button.addEventListener('click', () => {
-    snapshot();
+    snapshot(`modifier.${item.modifiers?.find(modifier => modifier.uid === button.dataset.modifierRemove)?.type || 'symmetry'}.remove`);
     item.modifiers = (item.modifiers || []).filter(modifier => modifier.uid !== button.dataset.modifierRemove);
     if (state.selectedModifierUid === button.dataset.modifierRemove) state.selectedModifierUid = null;
     state.collapsedModifiers.delete(button.dataset.modifierRemove);
@@ -1671,7 +1848,7 @@ function bindInspector() {
   }));
   $$('[data-modifier-bake]', inspector).forEach(button => button.addEventListener('click', () => {
     const modifierUid = button.dataset.modifierBake;
-    snapshot();
+    snapshot(`modifier.${item.modifiers?.find(modifier => modifier.uid === modifierUid)?.type || 'symmetry'}.bake`);
     const result = bakeModifier(state.project, item, modifierUid);
     if (!result) return toast('這個修改器目前無法烘焙');
     state.selectedModifierUid = null;
@@ -1698,13 +1875,13 @@ function bindInspector() {
     const index = item.modifiers?.findIndex(modifier => modifier.uid === button.dataset.modifierUid) ?? -1;
     const target = index + (button.dataset.modifierMove === 'up' ? -1 : 1);
     if (index < 0 || target < 0 || target >= item.modifiers.length) return;
-    snapshot(); [item.modifiers[index], item.modifiers[target]] = [item.modifiers[target], item.modifiers[index]];
+    snapshot(`modifier.${item.modifiers[index].type}.move`); [item.modifiers[index], item.modifiers[target]] = [item.modifiers[target], item.modifiers[index]];
     sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene();
   }));
   $$('[data-modifier-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const modifier = modifierByUid(toggle.dataset.modifierUid);
     if (!modifier) return;
-    snapshot(); modifier.axes[toggle.dataset.modifierAxis] = toggle.checked;
+    snapshot(`modifier.${modifier.type}.change`); modifier.axes[toggle.dataset.modifierAxis] = toggle.checked;
     sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
   }));
   $$('[data-modifier-field]', inspector).forEach(input => input.addEventListener('change', () => {
@@ -1714,7 +1891,7 @@ function bindInspector() {
     let value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
     if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
     if (!Number.isFinite(value) && input.type === 'number') return;
-    snapshot(); modifier[key] = value;
+    snapshot(`modifier.${modifier.type}.change`); modifier[key] = value;
     sceneRenderer.invalidateMirrorGeometry(); markDirty();
     if (key === 'mode' || key === 'distribution') renderInspector();
     renderScene();
@@ -1725,7 +1902,7 @@ function bindInspector() {
       const modifier = modifierByUid(input.dataset.modifierUid);
       const value = Number(input.value);
       if (!modifier || !Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      if (!snapshotTaken) { snapshot(`modifier.${modifier.type}.transform`); snapshotTaken = true; }
       const [scope, property] = input.dataset.modifierVector.split('.');
       modifier[scope][property][Number(input.dataset.axis)] = value;
       sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
@@ -1754,11 +1931,11 @@ function bindInspector() {
   $('[data-action="addOperator"]', inspector)?.addEventListener('click', () => {
     const type = $('[data-operator-add-type]', inspector)?.value;
     if (!type) return;
-    snapshot();
+    snapshot(`operator.${type}.add`);
     const operator = addOperator(item, type);
     if (!operator) return;
     invalidatePaintOperator(operator);
-    renderInspector();
+    renderInspector(); renderScene(); updateSelectionLabels();
   });
   $$('[data-operator-collapse]', inspector).forEach(button => button.addEventListener('click', () => {
     const uidValue = button.dataset.operatorCollapse;
@@ -1768,13 +1945,13 @@ function bindInspector() {
   $$('[data-operator-enabled]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const operator = operatorByUid(toggle.dataset.operatorEnabled);
     if (!operator) return;
-    snapshot(); operator.enabled = toggle.checked;
+    snapshot(`operator.${operator.type}.toggle`); operator.enabled = toggle.checked;
     if (!operator.enabled && state.selectedModifierUid === operator.uid) state.selectedModifierUid = null;
     invalidatePaintOperator(operator); renderInspector(); renderScene();
   }));
   $$('[data-operator-remove]', inspector).forEach(button => button.addEventListener('click', () => {
     const uidValue = button.dataset.operatorRemove;
-    snapshot(); item.operators = (item.operators || []).filter(operator => operator.uid !== uidValue);
+    snapshot(`operator.${item.operators?.find(operator => operator.uid === uidValue)?.type || 'paint_symmetry'}.remove`); item.operators = (item.operators || []).filter(operator => operator.uid !== uidValue);
     if (state.selectedModifierUid === uidValue) state.selectedModifierUid = null;
     state.collapsedOperators.delete(uidValue); paintSymmetryRelationCache.delete(uidValue);
     markDirty(); renderInspector(); renderScene();
@@ -1783,13 +1960,13 @@ function bindInspector() {
     const index = item.operators?.findIndex(operator => operator.uid === button.dataset.operatorUid) ?? -1;
     const target = index + (button.dataset.operatorMove === 'up' ? -1 : 1);
     if (index < 0 || target < 0 || target >= item.operators.length) return;
-    snapshot(); [item.operators[index], item.operators[target]] = [item.operators[target], item.operators[index]];
+    snapshot(`operator.${item.operators[index].type}.move`); [item.operators[index], item.operators[target]] = [item.operators[target], item.operators[index]];
     invalidatePaintOperator(item.operators[target]); renderInspector();
   }));
   $$('[data-operator-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const operator = operatorByUid(toggle.dataset.operatorUid);
     if (!operator) return;
-    snapshot(); operator.axes[toggle.dataset.operatorAxis] = toggle.checked;
+    snapshot(`operator.${operator.type}.change`); operator.axes[toggle.dataset.operatorAxis] = toggle.checked;
     invalidatePaintOperator(operator);
     renderScene();
   }));
@@ -1800,7 +1977,7 @@ function bindInspector() {
     let value = input.type === 'number' ? Number(input.value) : input.value;
     if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
     if (!Number.isFinite(value) && input.type === 'number') return;
-    snapshot(); operator[key] = value; invalidatePaintOperator(operator);
+    snapshot(`operator.${operator.type}.change`); operator[key] = value; invalidatePaintOperator(operator);
     if (key === 'mode' || key === 'distribution') renderInspector();
     renderScene();
   }));
@@ -1810,7 +1987,7 @@ function bindInspector() {
       const operator = operatorByUid(input.dataset.operatorUid);
       const value = Number(input.value);
       if (!operator || !Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      if (!snapshotTaken) { snapshot(`operator.${operator.type}.transform`); snapshotTaken = true; }
       const [scope, property] = input.dataset.operatorVector.split('.');
       operator[scope][property][Number(input.dataset.axis)] = value;
       invalidatePaintOperator(operator);
@@ -1821,12 +1998,12 @@ function bindInspector() {
     input.addEventListener('blur', () => { snapshotTaken = false; });
   });
   $('[data-shape-snap-mode]', inspector)?.addEventListener('change', event => {
-    snapshot();
+    snapshot('core.shape.snap_mode');
     for (const target of items.filter(isShapeElement)) target.parameters.snapMode = event.target.value === 'radius' ? 'radius' : 'edge';
     markDirty(); renderAll('selection');
   });
   $('[data-shape-inner-radius]', inspector)?.addEventListener('change', event => {
-    snapshot();
+    snapshot('core.shape.inner_radius');
     for (const target of items.filter(isShapeElement)) {
       discardSubdivisionEdits(target);
       target.parameters.innerRadiusEnabled = event.target.checked;
@@ -1834,7 +2011,7 @@ function bindInspector() {
     markDirty(); renderAll('selection');
   });
   $('[data-shape-inner-radius-mode]', inspector)?.addEventListener('change', event => {
-    snapshot();
+    snapshot('core.shape.inner_radius_mode');
     for (const target of items.filter(isShapeElement)) {
       discardSubdivisionEdits(target);
       target.parameters.innerRadiusMode = event.target.value === 'depth' ? 'depth' : 'radius';
@@ -1842,7 +2019,7 @@ function bindInspector() {
     markDirty(); renderAll('selection');
   });
   $('[data-curve-segmentation]', inspector)?.addEventListener('change', event => {
-    snapshot();
+    snapshot('core.curve.segmentation');
     for (const target of items.filter(isBezierElement)) {
       discardSubdivisionEdits(target);
       target.parameters.segmentationMode = event.target.value;
@@ -1857,12 +2034,12 @@ function bindInspector() {
   $$('[data-curve-node-toggle]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const node = item.nodes?.[Number(toggle.dataset.curveNodeToggle)];
     if (!node) return;
-    snapshot(); discardSubdivisionEdits(item); node.handlesEnabled = toggle.checked; markDirty(); renderAll('selection');
+    snapshot('core.curve.handle'); discardSubdivisionEdits(item); node.handlesEnabled = toggle.checked; markDirty(); renderAll('selection');
   }));
   $$('[data-curve-node-symmetric]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
     const node = item.nodes?.[Number(toggle.dataset.curveNodeSymmetric)];
     if (!node) return;
-    snapshot();
+    snapshot('core.curve.handle');
     discardSubdivisionEdits(item);
     node.symmetricHandles = toggle.checked;
     if (toggle.checked) setCurveHandle(node, 'handleOut', node.handleOut, item.dimension === 2);
@@ -1872,7 +2049,7 @@ function bindInspector() {
     const index = Number(toggle.dataset.curveNodeAuto);
     const node = item.nodes?.[index];
     if (!node) return;
-    snapshot();
+    snapshot('core.curve.tangent');
     discardSubdivisionEdits(item);
     if (!toggle.checked && node.autoTangent) bakeCurveNodeTangent(item, index);
     else node.autoTangent = toggle.checked;
@@ -1884,7 +2061,7 @@ function bindInspector() {
       const node = item.nodes?.[Number(input.dataset.curveNodeRoll)];
       const value = Number(input.value);
       if (!node || !Number.isFinite(value) || item.dimension !== 3) return;
-      if (!snapshotTaken) { snapshot(); snapshotTaken = true; }
+      if (!snapshotTaken) { snapshot('core.curve.roll'); snapshotTaken = true; }
       discardSubdivisionEdits(item);
       node.roll = value;
       markDirty(); invalidateSelectionRenderGeometry(); renderScene();
@@ -1895,7 +2072,7 @@ function bindInspector() {
   });
   $$('[data-remove-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
     if (!isBezierElement(item) || item.nodes.length <= 2) return;
-    snapshot();
+    snapshot('core.curve.node_remove');
     discardSubdivisionEdits(item);
     item.nodes.splice(Number(button.dataset.removeCurveNode), 1);
     state.selectedCurveNodeIndex = Math.min(item.nodes.length - 1, state.selectedCurveNodeIndex ?? 0);
@@ -1905,7 +2082,7 @@ function bindInspector() {
   $('[data-action="enterSubdivisionEdit"]', inspector)?.addEventListener('click', () => enterSubdivisionEdit(item));
   $('[data-action="exitSubdivisionEdit"]', inspector)?.addEventListener('click', () => exitSubdivisionEdit());
   $('[data-action="resetTransform"]', inspector)?.addEventListener('click', () => {
-    snapshot();
+    snapshot('core.element.reset_rotation');
     for (const target of items) {
       if (target.type !== 'group' && Array.isArray(target.rotation)) target.rotation = [0, 0, 0];
     }
@@ -1951,10 +2128,11 @@ function refreshSelectionUi() {
 }
 
 function clearSelection() {
-  if (!state.selectedUids.size && !state.selectedUid) return;
+  if (!state.selectedUids.size && !state.selectedUid && !state.selectedGenerated) return;
   sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
   state.selectedUids = new Set();
   state.selectedUid = null;
+  state.selectedGenerated = null;
   state.selectionAnchorUid = null;
   state.selectedCurveNodeIndex = null;
   state.selectedModifierUid = null;
@@ -1971,6 +2149,7 @@ function selectItem(uid, { revealInOutliner = false, toggle = false, range = fal
     return;
   }
   const previousSelectedUid = state.selectedUid;
+  state.selectedGenerated = null;
   sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
   if (range && state.selectionAnchorUid) {
     const rows = state.outlinerRows || [];
@@ -2106,6 +2285,7 @@ function insertNewNodeUid(uidValue) {
   if (!reference) {
     state.project.outliner.push(uidValue);
     state.project.invalidateHierarchyIndex();
+    refreshAutomaticNodeName(state.project, state.project.getNode(uidValue));
     return;
   }
   // A single selected group is an insertion target. In a multi-selection it is
@@ -2114,12 +2294,14 @@ function insertNewNodeUid(uidValue) {
     reference.children.push(uidValue);
     state.collapsedGroups.delete(reference.uid);
     state.project.invalidateHierarchyIndex();
+    refreshAutomaticNodeName(state.project, state.project.getNode(uidValue));
     return;
   }
   const { items } = nodeContainer(reference.uid);
   const index = items.indexOf(reference.uid);
   items.splice(index < 0 ? items.length : index + 1, 0, uidValue);
   state.project.invalidateHierarchyIndex();
+  refreshAutomaticNodeName(state.project, state.project.getNode(uidValue));
 }
 
 function selectCreatedNode(uidValue) {
@@ -2131,9 +2313,8 @@ function selectCreatedNode(uidValue) {
 
 function addCube() {
   if (state.mode === 'paint') return;
-  snapshot();
-  const count = state.project.elements.filter(item => item.type === 'cube').length + 1;
-  const cube = new Cube({ name: `cube_${count}`, position: [-3, 1, -3], size: [6, 6, 6], pivot: [0, 4, 0], color: '#a7d352' });
+  snapshot('core.cube.create');
+  const cube = new Cube({ position: [-3, 1, -3], size: [6, 6, 6], pivot: [0, 4, 0], color: '#a7d352' });
   state.project.elements.push(cube);
   insertNewNodeUid(cube.uid);
   selectCreatedNode(cube.uid);
@@ -2142,9 +2323,9 @@ function addCube() {
 
 function addShape(shapeType = 'polygon_prism') {
   if (state.mode === 'paint') return;
-  snapshot();
+  snapshot('core.shape.create');
   const type = ['dodecahedron', 'truncated_icosahedron'].includes(shapeType) ? shapeType : 'polygon_prism';
-  const shape = new Shape({ type, shapeType: type, name: type, origin: [0, 2, 0], pivot: [0, 2, 0] });
+  const shape = new Shape({ type, shapeType: type, origin: [0, 2, 0], pivot: [0, 2, 0] });
   state.project.elements.push(shape);
   insertNewNodeUid(shape.uid);
   selectCreatedNode(shape.uid);
@@ -2154,9 +2335,8 @@ function addShape(shapeType = 'polygon_prism') {
 
 function addLocator() {
   if (state.mode === 'paint') return;
-  snapshot();
-  const count = state.project.elements.filter(item => item.type === 'locator').length + 1;
-  const locator = new Locator({ name: `locator_${count}`, position: [0, 4, 0] });
+  snapshot('core.locator.create');
+  const locator = new Locator({ position: [0, 4, 0] });
   state.project.elements.push(locator);
   insertNewNodeUid(locator.uid);
   selectCreatedNode(locator.uid);
@@ -2165,10 +2345,9 @@ function addLocator() {
 
 function addBezierElement(dimension) {
   if (state.mode === 'paint') return;
-  snapshot();
+  snapshot('core.curve.create');
   const type = dimension === 2 ? 'bezier2d' : 'bezier3d';
-  const count = state.project.elements.filter(item => item.type === type).length + 1;
-  const curve = new BezierElement({ name: `${type}_${count}`, origin: [0, 4, 0] }, dimension);
+  const curve = new BezierElement({ origin: [0, 4, 0] }, dimension);
   state.project.elements.push(curve);
   insertNewNodeUid(curve.uid);
   selectCreatedNode(curve.uid);
@@ -2179,8 +2358,8 @@ function addBezierElement(dimension) {
 function addGroup() {
   if (state.mode === 'paint') return;
   const previousRowPositions = captureOutlinerRowPositions();
-  snapshot();
-  const group = new Group({ name: `group_${state.project.groups.length + 1}`, children: [] });
+  snapshot('core.group.create');
+  const group = new Group({ name: allocateGroupName(state.project), unnamed: true, children: [] });
   const hadMultipleSelection = selectedNodeUids().length > 1;
   const selectedIds = topLevelSelectedUids();
   state.project.groups.push(group);
@@ -2222,18 +2401,19 @@ function addGroup() {
     insertNewNodeUid(group.uid);
   }
   state.project.invalidateHierarchyIndex();
+  group.children.forEach(childUid => refreshAutomaticNodeName(state.project, state.project.getNode(childUid)));
   selectCreatedNode(group.uid);
   markDirty(); renderAll(); animateOutlinerReorder(previousRowPositions); toast('已新增組');
 }
 
-function deleteSelected() {
+function deleteSelected(operationId = 'core.element.delete') {
   if (state.mode === 'paint') return;
   const selectedIds = topLevelSelectedUids();
   if (!selectedIds.length) return;
   if (subdivisionSession && selectedIds.some(uidValue => state.project.getNode(uidValue)?.subdivisionOwnerUid)) {
     return toast('細分 Cube 由 Shape 管理，不能單獨刪除');
   }
-  snapshot();
+  snapshot(operationId);
   selectedIds.forEach(uidValue => state.project.removeNode(uidValue));
   state.selectedUid = null;
   state.selectedUids = new Set();
@@ -2269,15 +2449,20 @@ function copySelected({ notify = true } = {}) {
   return true;
 }
 
-function instantiateClipboard(payload, renameRoots = false) {
+function instantiateClipboard(payload) {
   if (!payload?.records?.length) return null;
   const instances = new Map();
-  const rootSet = new Set(payload.roots);
+  const reservedGroupNames = [];
   for (const [oldUid, source] of payload.records) {
     const data = structuredClone(source);
     delete data.uid;
     delete data.uuid;
-    if (renameRoots && rootSet.has(oldUid)) data.name = `${data.name || data.type} 副本`;
+    if (data.type === 'group') {
+      data.name = allocateGroupName(state.project, data.unnamed ? 'group_1' : data.name || 'group', {
+        duplicate: true, reservedNames: reservedGroupNames
+      });
+      reservedGroupNames.push(data.name);
+    }
     let node;
     if (data.type === 'group') node = new Group({ ...data, children: [] });
     else if (data.type === 'shape' || data.type === 'polygon_prism' || data.type === 'dodecahedron' || data.type === 'truncated_icosahedron') node = new Shape(data);
@@ -2327,9 +2512,9 @@ function pasteElements({ inPlace = false } = {}) {
   if (state.mode === 'paint') return;
   const payload = inPlace ? captureSelectedElements() : elementClipboard;
   if (!payload) return toast(inPlace ? '沒有可複製的選中項' : '元素剪貼簿是空的');
-  const cloned = instantiateClipboard(payload, true);
+  const cloned = instantiateClipboard(payload);
   if (!cloned?.roots.length) return;
-  snapshot();
+  snapshot(inPlace ? 'core.element.duplicate' : 'core.element.paste');
   for (const node of cloned.nodes) {
     if (node.type === 'group') state.project.groups.push(node);
     else state.project.elements.push(node);
@@ -2348,7 +2533,7 @@ function cutSelected() {
   if (state.mode === 'paint') return;
   if (!copySelected({ notify: false })) return;
   const count = elementClipboard.roots.length;
-  deleteSelected();
+  deleteSelected('core.element.cut');
   toast(count > 1 ? `已剪切 ${count} 項` : '已剪切選中項');
 }
 
@@ -2431,7 +2616,7 @@ function moveSelectedNodes(targetUid = null, zone = 'after') {
   })) return toast('不能把組拖進它自己的子級');
 
   const previousRowPositions = captureOutlinerRowPositions();
-  snapshot();
+  snapshot('core.element.reparent');
   const order = new Map((state.outlinerRows || []).map((row, index) => [row.node.uid, index]));
   moving.sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity));
   for (const uidValue of moving) {
@@ -2442,6 +2627,7 @@ function moveSelectedNodes(targetUid = null, zone = 'after') {
   }
   destination.splice(Math.max(0, insertionIndex), 0, ...moving);
   state.project.invalidateHierarchyIndex();
+  moving.forEach(uidValue => refreshAutomaticNodeName(state.project, state.project.getNode(uidValue)));
   if (destinationParent) state.collapsedGroups.delete(destinationParent.uid);
   markDirty();
   renderAll();
@@ -2733,6 +2919,7 @@ function selectedUvFaceData(create = false) {
 }
 
 function updateUvFaceUi() {
+  renderTextureTileControls();
   const selection = state.uvPreviewSelectedFace;
   const data = selectedUvFaceData(false);
   const controls = $$('[data-uv-face-action]');
@@ -2779,7 +2966,7 @@ function editSelectedUvFace(action) {
   }
   const data = selectedUvFaceData(true);
   if (!data) return toast('請先在 UV 預覽中選擇 Cube 的面');
-  snapshot();
+  snapshot(action === 'rotate' ? 'core.uv.rotate' : 'core.uv.mirror');
   if (!Array.isArray(data.face.uv) || data.face.uv.length < 4) data.face.uv = [...data.uv];
   if (action === 'rotate') data.face.rotation = ((Number(data.face.rotation) || 0) + 90) % 360;
   if (action === 'mirror-x') [data.face.uv[0], data.face.uv[2]] = [data.face.uv[2], data.face.uv[0]];
@@ -2806,7 +2993,7 @@ function toggleSelectedUvFacesCull() {
   })).filter(entry => entry.cube?.type === 'cube' && CUBE_FACE_NAMES.includes(entry.faceName));
   if (!targets.length) return;
   const culled = !isCubeFaceCulled(current.cube.faces?.[selection.faceName]);
-  snapshot();
+  snapshot('core.uv.cull_face');
   targets.forEach(entry => setCubeFaceCulled(entry.cube, entry.faceName, culled));
 
   const removed = new Set();
@@ -3327,7 +3514,7 @@ function updateProjectionControls() {
   });
 }
 
-function enterAxisView(axis) {
+function enterAxisView(axis, sign = 1) {
   if (!['x', 'y', 'z'].includes(axis)) return;
   cancelCameraFocus();
   bakeCameraPan();
@@ -3347,7 +3534,7 @@ function enterAxisView(axis) {
       target: [...general.target]
     });
     state.axisView = axis;
-    state.axisViewSign = 1;
+    state.axisViewSign = sign < 0 ? -1 : 1;
   }
   const orientation = axisViewOrientation(axis, state.axisViewSign);
   state.yaw = orientation.yaw;
@@ -3517,7 +3704,7 @@ function beginReferenceImageImport() {
 function resetReferenceImage() {
   const record = currentReferenceImage();
   if (!record) return;
-  snapshot();
+  snapshot('core.reference.reset');
   record.offset = [0, 0];
   record.scale = referenceDefaultScale(record);
   markDirty();
@@ -3529,7 +3716,7 @@ function removeReferenceImage() {
   const records = referenceImagesForView(key);
   const record = currentReferenceImage(key);
   if (!record) return;
-  snapshot();
+  snapshot('core.reference.remove');
   const index = records.indexOf(record);
   records.splice(index, 1);
   const next = records[Math.min(index, records.length - 1)] || null;
@@ -3572,7 +3759,7 @@ async function loadReferenceImageFiles(files, key) {
   const settled = await Promise.allSettled(candidates.map(file => readReferenceImageFile(file, key)));
   const records = settled.filter(result => result.status === 'fulfilled').map(result => result.value);
   if (!records.length) return toast('無法讀取這些參考圖');
-  snapshot();
+  snapshot('core.reference.add');
   referenceImagesForView(key).push(...records);
   state.referenceImageSelection[key] = records.at(-1).uid;
   referenceImageEditing = key === referenceViewKey();
@@ -3667,7 +3854,7 @@ function moveReferenceImageDrag(event) {
   const dy = event.clientY - drag.y;
   if (!drag.snapshotTaken && Math.hypot(dx, dy) < .5) return;
   if (!drag.snapshotTaken) {
-    snapshot();
+    snapshot('core.reference.move');
     drag.snapshotTaken = true;
   }
   const record = currentReferenceImage();
@@ -3699,7 +3886,7 @@ function scaleReferenceImage(event) {
   const record = currentReferenceImage();
   if (!record) return;
   event.preventDefault();
-  snapshot();
+  snapshot('core.reference.scale');
   const factor = event.deltaY > 0 ? .9 : 1.1;
   record.scale = Math.max(.00001, Math.min(100, record.scale * factor));
   markDirty();
@@ -3707,25 +3894,34 @@ function scaleReferenceImage(event) {
 }
 
 function updateAxisWidget() {
-  const cp = Math.cos(state.pitch), sp = Math.sin(state.pitch), cy = Math.cos(state.yaw), sy = Math.sin(state.yaw);
-  const forward = [-sy * cp, -sp, -cy * cp];
-  const right = normalize3(cross3(forward, [0, 1, 0]));
-  const up = normalize3(cross3(right, forward));
+  const frame = sceneRenderer.getCameraFrame();
+  if (!frame) return;
+  const { forward, right, up } = frame;
   const axes = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
-  for (const [name, axis] of Object.entries(axes)) {
+  const widget = $('.axis-widget');
+  const endpoints = $$('[data-view-axis]', widget).map(button => {
+    const name = button.dataset.viewAxis;
+    const sign = Number(button.dataset.axisSign) < 0 ? -1 : 1;
+    const axis = axes[name].map(value => value * sign);
     const x = 33 + dot3(axis, right) * 22;
     const y = 33 - dot3(axis, up) * 22;
     const depth = dot3(axis, forward);
-    const line = $(`#axisLine${name.toUpperCase()}`);
+    return { button, name, sign, x, y, depth };
+  }).sort((first, second) => second.depth - first.depth);
+  // Camera-forward depth increases away from the viewer. Draw the far end
+  // first, including pointer hit testing when the projected circles overlap.
+  for (let index = 0; index < endpoints.length; index++) {
+    const { button, name, sign, x, y, depth } = endpoints[index];
+    const line = $(`[data-axis-line="${name}"][data-axis-sign="${sign}"]`, widget);
     line.setAttribute('x2', x); line.setAttribute('y2', y);
-    line.style.opacity = String(.45 + Math.max(0, depth) * .55);
-    const button = $(`[data-view-axis="${name}"]`);
+    line.style.opacity = String(.65 - depth * .25);
+    line.parentNode.appendChild(line);
     button.style.left = `${x}px`; button.style.top = `${y}px`;
-    button.style.zIndex = depth > 0 ? '2' : '1';
-    button.style.opacity = String(.6 + Math.max(0, depth) * .4);
-    const active = state.axisView === name;
+    button.style.zIndex = String(index + 1);
+    button.style.setProperty('--axis-tone', `color-mix(in srgb, var(--axis-color) ${Math.round(75 - depth * 25)}%, var(--panel))`);
+    const active = state.axisView === name && state.axisViewSign === sign;
     button.classList.toggle('active', active);
-    button.dataset.direction = active ? (state.axisViewSign > 0 ? '+' : '−') : '';
+    button.setAttribute('aria-pressed', String(active));
   }
   $('#viewHint').innerHTML = state.axisView
     ? '<kbd>中鍵</kbd> 平移 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>拖動輪盤</kbd> 一般視圖'
@@ -3745,6 +3941,7 @@ function beginAxisWidgetDrag(event) {
     y: event.clientY,
     moved: false,
     sourceAxis: event.target.closest('[data-view-axis]')?.dataset.viewAxis || null,
+    sourceSign: Number(event.target.closest('[data-view-axis]')?.dataset.axisSign) < 0 ? -1 : 1,
     yaw: state.yaw,
     pitch: state.pitch
   };
@@ -3776,6 +3973,7 @@ function endAxisWidgetDrag(event) {
   if (!axisWidgetDrag || axisWidgetDrag.pointerId !== event.pointerId) return;
   const moved = axisWidgetDrag.moved;
   const sourceAxis = axisWidgetDrag.sourceAxis;
+  const sourceSign = axisWidgetDrag.sourceSign;
   const widget = event.currentTarget;
   if (widget.hasPointerCapture?.(event.pointerId)) widget.releasePointerCapture(event.pointerId);
   axisWidgetDrag = null;
@@ -3785,7 +3983,7 @@ function endAxisWidgetDrag(event) {
     suppressAxisWidgetClick = true;
     setTimeout(() => { suppressAxisWidgetClick = false; }, 0);
   }
-  if (!moved && sourceAxis) enterAxisView(sourceAxis);
+  if (event.type !== 'pointercancel' && !moved && sourceAxis) enterAxisView(sourceAxis, sourceSign);
 }
 
 function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
@@ -4460,7 +4658,10 @@ function infiniteGuideMarkup(handle, width, height, axisClass) {
 function renderVertexSnapGizmo(gizmo, width, height) {
   const item = selected();
   const points = [];
-  for (const vertex of sceneRenderer.getWorldVertices(state.project, item.uid)) {
+  const generatedSourceUids = item.type === 'group'
+    ? state.project.getDescendantElementUids(item.uid) : [item.uid];
+  for (const vertex of [...sceneRenderer.getWorldVertices(state.project, item.uid),
+    ...generatedSourceUids.flatMap(uidValue => sceneRenderer.getGeneratedWorldVertices(uidValue))]) {
     const projected = projectViewportPoint(vertex.point);
     if (projected.behind || projected.x < -12 || projected.y < -12 || projected.x > width + 12 || projected.y > height + 12) continue;
     points.push({ ...vertex, pointType: 'vertex', projected });
@@ -4487,7 +4688,7 @@ function renderVertexSnapGizmo(gizmo, width, height) {
       && state.vertexSnapSource.pointType === entry.pointType
       && state.vertexSnapSource.nodeIndex === entry.nodeIndex
       && state.vertexSnapSource.point.every((value, axis) => Math.abs(value - entry.point[axis]) < 1e-5);
-    const classes = ['gizmo-control', 'vertex-snap-control', 'source-candidate', sourceActive ? 'source-active' : ''].filter(Boolean).join(' ');
+    const classes = ['gizmo-control', 'vertex-snap-control', 'source-candidate', entry.generated ? 'generated-reference' : '', sourceActive ? 'source-active' : ''].filter(Boolean).join(' ');
     if (entry.pointType === 'pivot') return `<g class="${classes} vertex-snap-pivot-control pivot-marker" data-kind="vertex" data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected], 'front')}>
       <circle class="gizmo-hit-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="17"/>
       <path class="gizmo-visible pivot-marker-ring" d="M${entry.projected.x},${entry.projected.y - 11} L${entry.projected.x + 11},${entry.projected.y} L${entry.projected.x},${entry.projected.y + 11} L${entry.projected.x - 11},${entry.projected.y} Z"/>
@@ -4707,6 +4908,7 @@ function textureUvEntries() {
     if (cube?.type !== 'cube') continue;
     for (const faceName of CUBE_FACE_NAMES) {
       const face = cube.faces?.[faceName];
+      if (isFaceTiled(face)) continue;
       const textureReference = effectiveFaceTextureReference(face);
       if (activeReferences && !activeReferences.has(String(textureReference))) continue;
       let uv = Array.isArray(face?.uv) && face.uv.length >= 4
@@ -4737,13 +4939,18 @@ function selectedTextureUvEntries(entries = textureUvEntries()) {
     ? textureUvEntryCache.byKey
     : new Map(entries.map(entry => [entry.key, entry]));
   const selected = [];
+  const retainedTileKeys = [];
   let removedInvalid = false;
   for (const key of state.selectedUvFaces) {
     const entry = byKey.get(key);
     if (entry) selected.push(entry);
-    else removedInvalid = true;
+    else {
+      const parsed = parseUvFaceKey(key);
+      if (parsed && isFaceTiled(state.project.getNode(parsed.uid)?.faces?.[parsed.faceName])) retainedTileKeys.push(key);
+      else removedInvalid = true;
+    }
   }
-  if (removedInvalid) state.selectedUvFaces = new Set(selected.map(entry => entry.key));
+  if (removedInvalid) state.selectedUvFaces = new Set([...selected.map(entry => entry.key), ...retainedTileKeys]);
   return selected;
 }
 
@@ -4776,6 +4983,7 @@ function updateTextureUvFields(selectedEntries) {
 }
 
 function renderTextureUvOverlay(selectionOnly = false) {
+  renderTextureTileControls();
   const overlay = $('#textureUvOverlay');
   if (!overlay || !textureViewLayout) return;
   const layout = textureViewLayout;
@@ -5001,7 +5209,7 @@ function materializeUvFaces(entries) {
 
 function beginTextureUvMutation(drag) {
   if (drag.snapshotTaken) return;
-  snapshot();
+  snapshot(drag.kind === 'resize' ? 'core.uv.resize' : 'core.uv.move');
   materializeUvFaces(selectedTextureUvEntries());
   const entries = selectedTextureUvEntries();
   drag.entries = entries;
@@ -5064,7 +5272,7 @@ function activeTextureAsset() {
 function setPaintColor(color, notify = false, preservePickerHue = false) {
   if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
   state.paintColor = String(color).toLowerCase();
-  if (state.tool === 'gradient' && !state.paintGradientPalette) {
+  if (!colorPickerPopupRoot && state.tool === 'gradient' && !state.paintGradientPalette) {
     if (state.paintGradientStop === 'end') state.paintGradientEnd = state.paintColor;
     else state.paintGradientStart = state.paintColor;
   }
@@ -5087,6 +5295,20 @@ function selectPaintGradientStop(stop) {
   state.paintGradientStop = stop === 'end' ? 'end' : 'start';
   setPaintColor(state.paintGradientStop === 'end' ? state.paintGradientEnd : state.paintGradientStart);
   updateToolOptions();
+}
+
+function paintSetting(tool = state.tool) {
+  return tool === 'brush'
+    ? { size: state.paintBrushSize, opacity: state.paintBrushOpacity, erase: state.paintBrushErase }
+    : state.paintToolSettings[tool] || { size: 1, opacity: 100, erase: false };
+}
+
+function paintToolErasing(tool = state.tool) {
+  return PAINT_ERASE_TOOLS.includes(tool) && paintSetting(tool).erase === true;
+}
+
+function paintToolOpacity(tool = state.tool) {
+  return clamp(Number(paintSetting(tool).opacity) || 100, 1, 100) / 100;
 }
 
 function paintBrushOffsets(size, shape = state.paintBrushShape, antialias = state.paintBrushAa) {
@@ -5129,6 +5351,7 @@ function paintPointInside(point) {
 
 function faceUvPixelSlots(cube, faceName) {
   const face = cube?.faces?.[faceName] || {};
+  if (isFaceTiled(face)) return null;
   const rectangle = Array.isArray(face.uv) && face.uv.length >= 4
     ? face.uv : getBlockbenchBoxUv(cube, faceName);
   return rectangle ? createBlockbenchFaceUvSlots(rectangle, face.rotation || 0) : null;
@@ -5218,15 +5441,17 @@ function compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity) {
   const base = prepareHolisticPaintSurface(surface);
   if (!base) return false;
   const pixel = y * base.canvas.width + x;
+  const offset = pixel * 4;
+  const source = base.strokeBasePixels;
+  if (state.paintIgnoreTransparent && source[offset + 3] === 0) return true;
+  if (paintToolErasing(tool) && state.alphaLock) return true;
   const coverageByte = Math.round(clamp(coverage, 0, 1) * 255);
   if (coverageByte <= base.strokeCoverage[pixel]) return true;
   base.strokeCoverage[pixel] = coverageByte;
   const blend = opacity * coverageByte / 255;
-  const offset = pixel * 4;
-  const source = base.strokeBasePixels;
   const output = base.strokeImage.data;
   const sourceAlpha = source[offset + 3] / 255;
-  if (tool === 'eraser') {
+  if (paintToolErasing(tool)) {
     output[offset] = source[offset]; output[offset + 1] = source[offset + 1]; output[offset + 2] = source[offset + 2];
     output[offset + 3] = Math.round(source[offset + 3] * (1 - blend));
   } else if (state.alphaLock) {
@@ -5248,8 +5473,10 @@ function drawPaintPixel(surface, x, y, coverage, tool, opacity) {
   if (!surface?.canvas || !surface.context || x < 0 || y < 0 || x >= surface.canvas.width || y >= surface.canvas.height) return;
   if (surface.rootDrag?.holisticStroke && compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity)) return;
   const context = surface.context;
+  if (paintToolErasing(tool) && state.alphaLock) return;
+  if (state.paintIgnoreTransparent && context.getImageData(x, y, 1, 1).data[3] === 0) return;
   context.globalAlpha = opacity * coverage;
-  context.globalCompositeOperation = tool === 'eraser'
+  context.globalCompositeOperation = paintToolErasing(tool)
     ? 'destination-out' : state.alphaLock ? 'source-atop' : 'source-over';
   context.fillStyle = state.paintColor;
   context.fillRect(x, y, 1, 1);
@@ -5312,13 +5539,13 @@ function updateTextureBrushCursor(event) {
     return;
   }
   const previewRect = preview.getBoundingClientRect();
-  const diameter = ['eyedropper', 'fill'].includes(state.tool) ? 7 : Math.max(3, state.paintBrushSize * textureViewLayout.scale);
+  const diameter = ['eyedropper', 'fill'].includes(state.tool) ? 7 : Math.max(3, paintSetting().size * textureViewLayout.scale);
   cursor.style.left = `${event.clientX - previewRect.left}px`;
   cursor.style.top = `${event.clientY - previewRect.top}px`;
   cursor.style.width = `${diameter}px`;
   cursor.style.height = `${diameter}px`;
-  cursor.classList.toggle('eraser', state.tool === 'eraser');
-  cursor.classList.toggle('square', ['brush', 'eraser'].includes(state.tool) && state.paintBrushShape === 'square');
+  cursor.classList.toggle('eraser', paintToolErasing());
+  cursor.classList.toggle('square', state.tool === 'brush' && state.paintBrushShape === 'square');
   cursor.hidden = false;
   preview.style.cursor = 'none';
 }
@@ -5342,9 +5569,9 @@ function queuePaintedTextureSync(asset, canvas) {
 
 function drawPaintSegment(drag, from, to, sync = true) {
   const { canvas, context, asset, tool } = drag;
-  const size = clamp(Math.round(state.paintBrushSize) || 1, 1, 64);
-  const opacity = clamp(Number(state.paintBrushOpacity) || 100, 1, 100) / 100;
-  const offsets = paintBrushOffsets(size);
+  const size = clamp(Math.round(paintSetting(tool).size) || 1, 1, 64);
+  const opacity = paintToolOpacity(tool);
+  const offsets = paintBrushOffsets(size, tool === 'brush' ? state.paintBrushShape : 'square', tool === 'brush' && state.paintBrushAa);
   const dx = to[0] - from[0], dy = to[1] - from[1];
   const steps = Math.max(1, Math.max(Math.abs(dx), Math.abs(dy)));
   touchScenePaintSurface(drag);
@@ -5377,7 +5604,12 @@ function drawPaintSegment(drag, from, to, sync = true) {
 
 function drawPaintShape(drag, to, restoreBase = true) {
   if (!drag?.baseImage || !drag.start || !PAINT_SHAPE_TOOLS.includes(drag.tool)) return;
-  if (restoreBase) drag.context.putImageData(drag.baseImage, 0, 0);
+  if (restoreBase) {
+    drag.context.putImageData(drag.baseImage, 0, 0);
+    const base = drag.baseSurface || drag;
+    base.strokeImage = null;
+    base.strokeCoverage = null;
+  }
   const [startX, startY] = drag.start;
   const [endX, endY] = to;
   if (drag.tool === 'line') drawPaintSegment(drag, drag.start, to, false);
@@ -5401,6 +5633,7 @@ function drawPaintShape(drag, to, restoreBase = true) {
 
 function paintUvBounds(cube, faceName, canvas) {
   const face = cube.faces?.[faceName] || {};
+  if (isFaceTiled(face)) return { minU: 0, minV: 0, maxU: canvas.width, maxV: canvas.height };
   const uv = Array.isArray(face.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
   return {
     minU: clamp(Math.floor(Math.min(uv[0], uv[2])), 0, canvas.width),
@@ -5411,16 +5644,15 @@ function paintUvBounds(cube, faceName, canvas) {
 }
 
 function fillPaintRects(result, asset, rectangles) {
-  const opacity = clamp(Number(state.paintBrushOpacity) || 100, 1, 100) / 100;
-  result.context.save();
-  result.context.imageSmoothingEnabled = false;
-  result.context.globalAlpha = opacity;
-  result.context.globalCompositeOperation = state.alphaLock ? 'source-atop' : 'source-over';
-  result.context.fillStyle = state.paintColor;
-  rectangles.forEach(rectangle => result.context.fillRect(
-    rectangle.minU, rectangle.minV,
-    Math.max(0, rectangle.maxU - rectangle.minU), Math.max(0, rectangle.maxV - rectangle.minV)));
-  result.context.restore();
+  const { canvas, context } = result;
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const color = paintColorBytes(), opacity = paintToolOpacity('fill');
+  for (const rectangle of rectangles) {
+    const minX = clamp(Math.floor(rectangle.minU), 0, canvas.width), maxX = clamp(Math.ceil(rectangle.maxU), 0, canvas.width);
+    const minY = clamp(Math.floor(rectangle.minV), 0, canvas.height), maxY = clamp(Math.ceil(rectangle.maxV), 0, canvas.height);
+    for (let y = minY; y < maxY; y++) for (let x = minX; x < maxX; x++) blendPaintPixel(image.data, (y * canvas.width + x) * 4, color, opacity, 'fill');
+  }
+  context.putImageData(image, 0, 0);
   queuePaintedTextureSync(asset, result.canvas);
 }
 
@@ -5429,8 +5661,13 @@ function paintColorBytes() {
   return [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16));
 }
 
-function blendPaintPixel(data, offset, color, opacity) {
+function blendPaintPixel(data, offset, color, opacity, tool = 'fill') {
   const destinationAlpha = data[offset + 3] / 255;
+  if (state.paintIgnoreTransparent && destinationAlpha <= 0) return;
+  if (paintToolErasing(tool)) {
+    if (!state.alphaLock) data[offset + 3] = Math.round(data[offset + 3] * (1 - opacity));
+    return;
+  }
   if (state.alphaLock && destinationAlpha <= 0) return;
   if (state.alphaLock) {
     for (let channel = 0; channel < 3; channel++) data[offset + channel] = Math.round(data[offset + channel] * (1 - opacity) + color[channel] * opacity);
@@ -5456,7 +5693,7 @@ function replacePaintColor(result, point, contiguous, clip = null) {
   };
   const insideClip = (x, y) => !clip || (x >= clip.minU && y >= clip.minV && x < clip.maxU && y < clip.maxV);
   const color = paintColorBytes();
-  const opacity = clamp(Number(state.paintBrushOpacity) || 100, 1, 100) / 100;
+  const opacity = paintToolOpacity('fill');
   if (!contiguous) {
     for (let pixel = 0; pixel < canvas.width * canvas.height; pixel++) {
       const x = pixel % canvas.width, y = Math.floor(pixel / canvas.width);
@@ -5487,6 +5724,7 @@ function allTextureUvEntriesForAsset(asset) {
   for (const cube of state.project.elements.filter(element => element.type === 'cube')) {
     for (const faceName of CUBE_FACE_NAMES) {
       const face = cube.faces?.[faceName];
+      if (isFaceTiled(face)) continue;
       if (isCubeFaceCulled(face) || !references.has(String(effectiveFaceTextureReference(face)))) continue;
       const uv = Array.isArray(face?.uv) && face.uv.length >= 4 ? face.uv.map(Number) : getBlockbenchBoxUv(cube, faceName).map(Number);
       entries.push({ cube, faceName, uv });
@@ -5570,10 +5808,14 @@ async function applyTextureBucket(asset, point, hitEntry = null) {
   await paintBucketAsset(asset, point, null, state.paintBucketScope === 'contiguous', singleFaceClip);
 }
 
-function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null) {
+function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null, operationId = null) {
+  const id = requireOperation(operationId || `core.texture.${PAINT_TOOLS.includes(state.tool) ? state.tool : 'paint'}`);
+  noteJournalOperation(id);
   state.paintHistory.push({
     uid: asset._uid,
-    source: canvas.toDataURL('image/png'),
+    source: asset.layers?.length ? asset.source : canvas.toDataURL('image/png'),
+    layers: asset.layers ? structuredClone(asset.layers) : null,
+    activeLayerUid: asset.activeLayerUid || null,
     width: canvas.width,
     height: canvas.height,
     group
@@ -5584,7 +5826,11 @@ function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null) {
 
 function commitPaintedTextureAsset(asset, canvas) {
   if (!asset || !canvas) return;
-  asset.source = canvas.toDataURL('image/png');
+  paintHitAlphaCache.delete(asset._uid);
+  const layer = activeLayer(asset);
+  if (layer) layer.source = canvas.toDataURL('image/png');
+  const composite = layer ? compositeLayers(asset, canvas) : canvas;
+  asset.source = composite.toDataURL('image/png');
   asset.uvWidth = canvas.width;
   asset.uvHeight = canvas.height;
   asset.kind = 'PNG';
@@ -5596,7 +5842,7 @@ function commitPaintedTextureAsset(asset, canvas) {
     textureCtx.drawImage(canvas, 0, 0);
     updateTexturePreviewFrame(canvas.width, canvas.height);
   }
-  syncRendererTextureAsset(asset, canvas);
+  syncRendererTextureAsset(asset, composite, true);
   const item = $$('.texture-item').find(node => node.dataset.textureUid === asset._uid);
   const thumbnail = item?.querySelector('.texture-thumb');
   if (thumbnail) thumbnail.style.backgroundImage = `url("${asset.source}")`;
@@ -5652,7 +5898,7 @@ function useTexturePaintGradient(asset, point, hit) {
   for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
     const projection = (x + .5 - anchor.point[0]) * direction[0] + (y + .5 - anchor.point[1]) * direction[1];
     const rgba = samplePaintGradient((projection - minProjection) / projectionSpan, stops);
-    blendRgbaPixel(image.data, (y * textureCanvas.width + x) * 4, rgba, clamp(state.paintBrushOpacity / 100, 0, 1));
+    blendRgbaPixel(image.data, (y * textureCanvas.width + x) * 4, rgba, paintToolOpacity('gradient'));
   }
   textureCtx.putImageData(image, 0, 0);
   commitPaintedTextureAsset(asset, textureCanvas);
@@ -5684,10 +5930,6 @@ function startTexturePaintPointer(event) {
     updateToolOptions();
     return;
   }
-  if (state.tool === 'eraser' && state.alphaLock) {
-    toast('鎖定透明度時橡皮擦不會改變貼圖');
-    return;
-  }
   const historyGroup = crypto.randomUUID();
   pushTexturePaintHistory(asset, textureCanvas, historyGroup);
   texturePaintDrag = {
@@ -5695,7 +5937,7 @@ function startTexturePaintPointer(event) {
     canvas: textureCanvas, context: textureCtx, tool: state.tool, start: point, last: point,
     baseImage: PAINT_SHAPE_TOOLS.includes(state.tool) ? textureCtx.getImageData(0, 0, textureCanvas.width, textureCanvas.height) : null,
     historyGroup, historyAssets: new Set([asset._uid]), touchedSurfaces: new Set(), pendingPoints: [point],
-    holisticStroke: ['brush', 'eraser'].includes(state.tool),
+    holisticStroke: true,
     ready: true, ended: false, finished: false
   };
   texturePaintDrag.rootDrag = texturePaintDrag;
@@ -5707,20 +5949,32 @@ function startTexturePaintPointer(event) {
 
 function moveTexturePaintPointer(event) {
   if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
-  const point = paintPointFromEvent(event);
+  let point = paintPointFromEvent(event);
+  const outside = !paintPointInside(point);
+  if (outside && texturePaintDrag.last && !PAINT_SHAPE_TOOLS.includes(texturePaintDrag.tool)) {
+    const [startX, startY] = texturePaintDrag.last;
+    const dx = point[0] - startX, dy = point[1] - startY;
+    const limits = [dx < 0 ? (0 - startX) / dx : dx > 0 ? (textureCanvas.width - 1 - startX) / dx : 1,
+      dy < 0 ? (0 - startY) / dy : dy > 0 ? (textureCanvas.height - 1 - startY) / dy : 1];
+    const ratio = clamp(Math.min(...limits), 0, 1);
+    point = [clamp(Math.round(startX + dx * ratio), 0, textureCanvas.width - 1),
+      clamp(Math.round(startY + dy * ratio), 0, textureCanvas.height - 1)];
+  }
   if (!texturePaintDrag.ready) {
     texturePaintDrag.pendingPoints.push(point);
     return true;
   }
   if (PAINT_SHAPE_TOOLS.includes(texturePaintDrag.tool)) drawPaintShape(texturePaintDrag, point);
-  else drawPaintSegment(texturePaintDrag, texturePaintDrag.last, point);
+  else drawPaintSegment(texturePaintDrag, texturePaintDrag.outside ? point : texturePaintDrag.last, point);
   texturePaintDrag.last = point;
+  texturePaintDrag.outside = outside;
   return true;
 }
 
 function endTexturePaintPointer(event) {
   if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
   const drag = texturePaintDrag;
+  if (drag.ready && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) moveTexturePaintPointer(event);
   texturePaintDrag = null;
   const preview = $('#texturePreview');
   if (preview.hasPointerCapture?.(event.pointerId)) preview.releasePointerCapture(event.pointerId);
@@ -5772,13 +6026,13 @@ function showTextureFaceDropTarget(surface, renderer, hit, overlaySelector) {
 }
 
 function textureDropCubes(hit) {
-  const hitCube = hit && state.project.getNode(hit.uid);
+  const hitCube = hit?.cube?.type === 'cube' ? hit.cube : hit && state.project.getNode(hit.uid);
   if (hitCube?.type !== 'cube') return [];
   const expansion = getSelectionExpansion();
-  if (!expansion.elementSet.has(hit.uid)) return [hitCube];
+  if (expansion.elementUids.length < 2 && !expansion.elementSet.has(hit.uid)) return [hitCube];
   const cubes = expansion.elementUids
     .map(uidValue => state.project.getNode(uidValue))
-    .filter(element => element?.type === 'cube');
+    .flatMap(element => element?.type === 'cube' ? [element] : element?.toCubes?.() || []);
   return cubes.length ? cubes : [hitCube];
 }
 
@@ -5787,13 +6041,15 @@ function applyTextureAssetToFace(asset, hit) {
   const cubes = textureDropCubes(hit);
   if (!cubes.length) return false;
   const reference = faceTextureReference(asset);
-  snapshot();
+  snapshot('core.texture.assign');
   for (const cube of cubes) {
     const face = ensureCubeFaceRecord(cube, hit.faceName);
+    if (!Array.isArray(face.uv)) face.uv = [...getBlockbenchBoxUv(cube, hit.faceName)];
     face.texture = reference;
     delete face.enabled;
     delete face[CULLED_FACE_TEXTURE_KEY];
     cube.autoUv = false;
+    persistGeneratedPaintCube(cube);
   }
   markDirty();
   uvPreviewProjectCache = null;
@@ -5889,6 +6145,17 @@ function barycentricPoint(point, a, b, c) {
 function facePaintUvPoint(hit, target, canvas) {
   if (!hit?.point || !hit.facePoints?.length || !target || !canvas) return null;
   const face = target.cube.faces?.[target.faceName] || {};
+  if (isFaceTiled(face)) {
+    const uAxis = hit.facePoints[1].map((value, axis) => value - hit.facePoints[0][axis]);
+    const vAxis = hit.facePoints[2].map((value, axis) => value - hit.facePoints[0][axis]);
+    const offset = hit.point.map((value, axis) => value - hit.facePoints[0][axis]);
+    const size = faceTileSize(target.cube, target.faceName);
+    const u = dot3(offset, uAxis) / Math.max(1e-8, dot3(uAxis, uAxis)) * size[0];
+    const v = dot3(offset, vAxis) / Math.max(1e-8, dot3(vAxis, vAxis)) * size[1];
+    const fraction = value => ((value % 1) + 1) % 1;
+    return [Math.floor(fraction((u + (Number(face.tiling?.offsetX) || 0)) / Math.max(.0001, Number(face.tiling?.width) || 16)) * canvas.width),
+      Math.floor(fraction((v + (Number(face.tiling?.offsetY) || 0)) / Math.max(.0001, Number(face.tiling?.height) || 16)) * canvas.height)];
+  }
   const rectangle = Array.isArray(face.uv) && face.uv.length >= 4
     ? face.uv
     : getBlockbenchBoxUv(target.cube, target.faceName);
@@ -5927,6 +6194,7 @@ function facePixelWorldPoint(cube, faceName, facePoints, x, y) {
 function blendRgbaPixel(data, offset, source, opacity = 1) {
   const sourceAlpha = clamp(source[3] * opacity, 0, 1);
   const destinationAlpha = data[offset + 3] / 255;
+  if (state.paintIgnoreTransparent && destinationAlpha <= 0) return;
   if (sourceAlpha <= 0 || (state.alphaLock && destinationAlpha <= 0)) return;
   if (state.alphaLock) {
     for (let channel = 0; channel < 3; channel++) data[offset + channel] = Math.round(
@@ -6113,7 +6381,7 @@ async function bakePaintGradient(anchorHit, endHit) {
       const offset = pixel * 4, alphaSum = surface.samples[offset + 3];
       const rgba = [0, 1, 2].map(channel => alphaSum > 0 ? surface.samples[offset + channel] / alphaSum : 0);
       rgba.push(alphaSum / count);
-      blendRgbaPixel(surface.image.data, offset, rgba, clamp(state.paintBrushOpacity / 100, 0, 1));
+      blendRgbaPixel(surface.image.data, offset, rgba, paintToolOpacity('gradient'));
     }
     surface.context.putImageData(surface.image, 0, 0);
     commitPaintedTextureAsset(surface.asset, surface.canvas);
@@ -6154,18 +6422,61 @@ function cloneCanvas(source) {
 }
 
 async function paintCanvasForAsset(asset) {
+  if (asset.layers?.length) {
+    await prepareLayers(asset);
+    return cloneCanvas(layerRasterCache.get(activeLayer(asset).uid).canvas);
+  }
   const image = await loadTextureAssetImage(asset);
   return image ? cloneCanvas(image) : null;
 }
 
+function paintHitVisibleAtStart(hit, drag = null) {
+  const target = facePaintTarget(hit);
+  if (!target) return true;
+  const layer = activeLayer(target.asset);
+  const raster = (layer && layerRasterCache.get(layer.uid)?.canvas)
+    || animationRasterCache.get(target.asset._uid)?.canvas;
+  if (!raster) return true;
+  const snapshot = drag?.paintHitAlphaSnapshots || paintHitAlphaCache;
+  let cached = snapshot.get(target.asset._uid);
+  if (!cached || (!drag && cached.canvas !== raster)) {
+    cached = { canvas: raster, pixels: raster.getContext('2d').getImageData(0, 0, raster.width, raster.height).data };
+    snapshot.set(target.asset._uid, cached);
+  }
+  const point = facePaintUvPoint(hit, target, cached.canvas);
+  if (!point) return true;
+  return cached.pixels[(point[1] * cached.canvas.width + point[0]) * 4 + 3] !== 0;
+}
+
+function paintHitAlphaSnapshot() {
+  return new Map([...paintHitAlphaCache].filter(([uid, cached]) => {
+    const asset = state.textureAssets.find(entry => entry._uid === uid);
+    const layer = activeLayer(asset);
+    return cached.canvas === ((layer && layerRasterCache.get(layer.uid)?.canvas)
+      || animationRasterCache.get(uid)?.canvas);
+  }));
+}
+
 function scenePaintHit(clientX, clientY, drag = null) {
   const rect = sceneCanvas.getBoundingClientRect();
-  const hits = state.tool === 'brush' && state.paintBrushOverlay
-    ? sceneRenderer.pickCoincident(state.project, clientX - rect.left, clientY - rect.top, true)
-    : [];
-  const hit = hits[0] || sceneRenderer.pickDetailed(state.project, clientX - rect.left, clientY - rect.top, true);
+  const x = clientX - rect.left, y = clientY - rect.top;
+  let hit, hits = [];
+  if (state.paintIgnoreTransparent) {
+    const ordered = sceneRenderer.pickCoincident(state.project, x, y, true, true);
+    hit = ordered.find(candidate => paintHitVisibleAtStart(candidate, drag)) || null;
+    if (hit && state.tool === 'brush' && state.paintBrushOverlay) {
+      const tolerance = Math.max(1e-5, Math.abs(hit.distance) * 1e-6);
+      hits = ordered.filter(candidate => Math.abs(candidate.distance - hit.distance) <= tolerance
+        && Math.abs(dot3(candidate.normal, hit.normal)) >= .99999
+        && paintHitVisibleAtStart(candidate, drag));
+    }
+  } else {
+    hits = state.tool === 'brush' && state.paintBrushOverlay
+      ? sceneRenderer.pickCoincident(state.project, x, y, true) : [];
+    hit = hits[0] || sceneRenderer.pickDetailed(state.project, x, y, true);
+  }
   if (!hit?.faceName) return null;
-  if (drag && (hit.uid !== drag.uid
+  if (drag && !drag.multiSurface && (hit.uid !== drag.uid
     || (hit.cubeUid || hit.uid) !== (drag.cubeUid || drag.uid)
     || hit.faceName !== drag.faceName)) return null;
   if (hits.length > 1) hit.coincidentHits = hits;
@@ -6195,11 +6506,12 @@ async function sceneBrushSurfaceForHit(drag, hit) {
   const clip = paintUvBounds(target.cube, target.faceName, base.canvas);
   const surface = {
     ...base, baseSurface: base, rootDrag: drag, clip,
+    tool: drag.tool,
     cube: target.cube, faceName: target.faceName,
     paintFace: { cube: target.cube, faceName: target.faceName, facePoints: hit.facePoints },
     depthEdges: []
   };
-  if (state.paintBrushDepth > 0) {
+  if (state.paintBrushDepth > 0 && !isFaceTiled(target.cube.faces?.[target.faceName])) {
     const neighbors = paintFaceDepthNeighbors(hit, target);
     for (const neighbor of neighbors) {
       const asset = adjacentPaintFaceAsset(target.cube, neighbor.faceName);
@@ -6485,7 +6797,10 @@ function queueSceneBrushHit(drag, hit) {
       // Each concrete face owns its own UV-space cursor. This keeps a single
       // 3D stroke continuous while preventing lines between unrelated UVs.
       const faceKey = `${sceneBrushHitKey(paintHit)}::${surface.asset._uid}::${(paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`;
-      const previous = drag.lastByFace.get(faceKey);
+      const previousPoint = drag.lastByFace.get(faceKey);
+      const wrapped = isFaceTiled(surface.cube.faces?.[surface.faceName]) && previousPoint
+        && (Math.abs(previousPoint[0] - point[0]) > surface.canvas.width / 2 || Math.abs(previousPoint[1] - point[1]) > surface.canvas.height / 2);
+      const previous = wrapped ? null : previousPoint;
       drawPaintSegment(surface, previous || point, point);
       drag.lastByFace.set(faceKey, point);
       activeKeys.add(faceKey);
@@ -6499,13 +6814,13 @@ function sceneBrushHitKey(hit) {
   return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.faceName}` : '';
 }
 
-function sceneBrushBoundary(from, to) {
+function sceneBrushBoundary(from, to, drag) {
   const fromKey = sceneBrushHitKey(from.hit), toKey = sceneBrushHitKey(to.hit);
   if (!fromKey || !toKey || fromKey === toKey) return null;
   let left = from, right = to;
-  for (let iteration = 0; iteration < 9; iteration++) {
+  for (let iteration = 0; iteration < 11; iteration++) {
     const x = (left.x + right.x) / 2, y = (left.y + right.y) / 2;
-    const hit = scenePaintHit(x, y);
+    const hit = scenePaintHit(x, y, drag);
     const sample = { x, y, hit };
     if (sceneBrushHitKey(hit) === fromKey) left = sample;
     else right = sample;
@@ -6514,7 +6829,7 @@ function sceneBrushBoundary(from, to) {
 }
 
 function queueSceneBrushPointer(drag, clientX, clientY) {
-  const current = { x: clientX, y: clientY, hit: scenePaintHit(clientX, clientY) };
+  const current = { x: clientX, y: clientY, hit: scenePaintHit(clientX, clientY, drag) };
   const previous = drag.lastPointerSample;
   if (!previous) {
     drag.lastPointerSample = current;
@@ -6522,7 +6837,7 @@ function queueSceneBrushPointer(drag, clientX, clientY) {
     return;
   }
   const distance = Math.hypot(clientX - previous.x, clientY - previous.y);
-  const sampleCount = Math.max(1, Math.min(24, Math.ceil(distance / 10)));
+  const sampleCount = Math.max(1, Math.min(128, Math.ceil(distance / 6)));
   let prior = previous;
   for (let index = 1; index <= sampleCount; index++) {
     const ratio = index / sampleCount;
@@ -6530,9 +6845,9 @@ function queueSceneBrushPointer(drag, clientX, clientY) {
       x: previous.x + (clientX - previous.x) * ratio,
       y: previous.y + (clientY - previous.y) * ratio
     };
-    if (!sample.hit) sample.hit = scenePaintHit(sample.x, sample.y);
+    if (!sample.hit) sample.hit = scenePaintHit(sample.x, sample.y, drag);
     if (sceneBrushHitKey(prior.hit) !== sceneBrushHitKey(sample.hit)) {
-      const boundary = sceneBrushBoundary(prior, sample);
+      const boundary = sceneBrushBoundary(prior, sample, drag);
       if (boundary) {
         queueSceneBrushHit(drag, boundary.before);
         queueSceneBrushHit(drag, boundary.after);
@@ -6548,6 +6863,10 @@ function finishScenePaintDrag(drag) {
   if (!drag || drag.finished) return;
   drag.finished = true;
   if (drag.multiSurface) {
+    if (drag.lastPointerSample && drag.latestClient
+      && (drag.lastPointerSample.x !== drag.latestClient[0] || drag.lastPointerSample.y !== drag.latestClient[1])) {
+      queueSceneBrushPointer(drag, drag.latestClient[0], drag.latestClient[1]);
+    }
     drag.queue.then(() => {
       if (drag.canceled) return;
       syncPaintedTextureNow();
@@ -6618,6 +6937,8 @@ async function finalizeScenePaintShapeSymmetry(drag) {
   }
   for (const group of assets.values()) {
     group.context.putImageData(group.baseImage, 0, 0);
+    group.strokeImage = null;
+    group.strokeCoverage = null;
     const rootDrag = { holisticStroke: true, historyAssets: new Set([group.asset._uid]), touchedSurfaces: new Set(), historyGroup: null };
     group.rootDrag = rootDrag;
     group.baseSurface = group;
@@ -6655,11 +6976,7 @@ function moveScenePaintDrag(event, drag = state.dragging) {
 }
 
 function startScenePaintPointer(event, x, y) {
-  const coincidentHits = state.tool === 'brush' && state.paintBrushOverlay
-    ? sceneRenderer.pickCoincident(state.project, x, y, true)
-    : [];
-  const hit = coincidentHits[0] || sceneRenderer.pickDetailed(state.project, x, y, true);
-  if (hit && coincidentHits.length > 1) hit.coincidentHits = coincidentHits;
+  const hit = scenePaintHit(event.clientX, event.clientY);
   if (state.tool === 'gradient') {
     if (!hit?.faceName) { toast('請指向一個 Cube 面'); return true; }
     const cube = hit.cube?.type === 'cube' ? hit.cube : state.project.getNode(hit.uid);
@@ -6672,10 +6989,6 @@ function startScenePaintPointer(event, x, y) {
   const target = facePaintTarget(hit);
   if (!target) {
     toast(hit?.faceName ? '這個面尚未分配貼圖，無法繪製' : '請指向一個 Cube 面');
-    return true;
-  }
-  if (state.tool === 'eraser' && state.alphaLock) {
-    toast('鎖定透明度時橡皮擦不會改變貼圖');
     return true;
   }
   event.preventDefault();
@@ -6709,7 +7022,7 @@ function startScenePaintPointer(event, x, y) {
     return true;
   }
   sceneCanvas.setPointerCapture(event.pointerId);
-  if (state.tool === 'brush' || state.tool === 'eraser') {
+  if (state.tool === 'brush') {
     const drag = {
       type: 'texture-paint-3d', multiSurface: true, pointerId: event.pointerId, tool: state.tool,
       latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
@@ -6717,6 +7030,7 @@ function startScenePaintPointer(event, x, y) {
       paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
       historyGroup: crypto.randomUUID(), last: null, lastFaceKey: null,
       lastByFace: new Map(),
+      paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
       holisticStroke: true, lastPointerSample: { x: event.clientX, y: event.clientY, hit },
       ready: true, ended: false, canceled: false, finished: false
     };
@@ -6730,8 +7044,12 @@ function startScenePaintPointer(event, x, y) {
     asset: target.asset, cube: target.cube, tool: state.tool,
     initialHit: hit, latestClient: [event.clientX, event.clientY],
     canvas: null, context: null, last: null, ready: false, ended: false, canceled: false, finished: false,
-    holisticStroke: state.tool === 'eraser'
+    holisticStroke: true,
+    paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
+    historyAssets: new Set([target.asset._uid]), touchedSurfaces: new Set()
   };
+  drag.rootDrag = drag;
+  drag.baseSurface = drag;
   const face = target.cube.faces?.[target.faceName] || {};
   const faceUv = Array.isArray(face.uv) && face.uv.length >= 4
     ? face.uv : getBlockbenchBoxUv(target.cube, target.faceName);
@@ -6744,6 +7062,7 @@ function startScenePaintPointer(event, x, y) {
     if (!result || drag.canceled) return;
     drag.canvas = result.canvas;
     drag.context = result.context;
+    drag.clip = paintUvBounds(target.cube, target.faceName, drag.canvas);
     pushTexturePaintHistory(drag.asset, drag.canvas);
     drag.ready = true;
     const initial = facePaintUvPoint(drag.initialHit, drag, drag.canvas);
@@ -6878,7 +7197,7 @@ function endTexturePointer(event) {
     snapTexturePan();
     updateTextureStageTransform();
   } else if (drag.kind === 'assign' && drag.moved && drag.entries.length) {
-    snapshot();
+    snapshot('core.uv.assign');
     materializeUvFaces(drag.entries);
     const [width, height] = texturePreviewSize;
     const u1 = clamp(snapValue(Math.min(drag.startUv[0], drag.currentUv[0]), event), 0, width);
@@ -6944,7 +7263,7 @@ function wheelTextureView(event) {
 function setUvCoordinate(coordinate, value) {
   const entries = selectedTextureUvEntries();
   if (!entries.length || !Number.isFinite(value)) return;
-  snapshot();
+  snapshot('core.uv.coordinate');
   const maximum = coordinate % 2 === 0 ? texturePreviewSize[0] : texturePreviewSize[1];
   const nextValue = clamp(value, 0, maximum);
   materializeUvFaces(entries);
@@ -7012,9 +7331,30 @@ async function rebuildTextureAtlasNow() {
   const records = (await Promise.all(state.textureAssets.map(async (asset, index) => {
     const image = await loadTextureAssetImage(asset);
     if (!image) return null;
-    return { asset, index, image, width: image.naturalWidth || image.width, height: image.naturalHeight || image.height };
+    const original = imageCanvas(image);
+    animationRasterCache.set(asset._uid, { canvas: original, source: asset.source });
+    const frame = flipbookFrame(asset, original, asset.animation?.currentFrame || 0);
+    return { asset, index, image: frame, width: frame.width, height: frame.height };
   }))).filter(Boolean);
   if (revision !== textureAtlasRevision) return false;
+  const tileKeys = new Set();
+  for (const element of state.project.elements) {
+    const cubes = element.type === 'cube' ? [element] : element.toCubes?.() || [];
+    for (const cube of cubes) for (const faceName of CUBE_FACE_NAMES) {
+      const asset = textureAssetForReference(cube.faces?.[faceName]?.texture);
+      if (asset?.mode !== 'tiled' || isCubeFaceCulled(cube.faces?.[faceName])) continue;
+      const source = records.find(record => record.asset === asset)?.image;
+      if (!source) continue;
+      for (const region of tiledFaceRegions(cube, faceName, source.width, source.height)) {
+        const reference = tiledFaceReference(cube, faceName, asset, region);
+        if (tileKeys.has(reference)) continue;
+        tileKeys.add(reference);
+        const image = tiledFaceRaster(cube, faceName, source, region);
+        records.push({ asset: { _uid: reference }, index: -1, image, width: image.width, height: image.height,
+          references: [reference], tileSourceUid: asset._uid, tileCube: cube, tileFaceName: faceName, tileRegion: region });
+      }
+    }
+  }
   if (!records.length) {
     textureAtlasEntries = [];
     textureAtlasLayoutByUid = new Map();
@@ -7038,8 +7378,10 @@ async function rebuildTextureAtlasNow() {
     packed.push({
       uid: record.asset._uid, x: cursorX + 1, y: cursorY + 1,
       width: record.width, height: record.height,
-      references: textureAtlasReferences(record.asset, record.index),
-      default: record.asset.useAsDefault === true || record.index === 0,
+      references: record.references || textureAtlasReferences(record.asset, record.index),
+      mode: record.asset.mode || 'default',
+      tileSourceUid: record.tileSourceUid, tileCube: record.tileCube, tileFaceName: record.tileFaceName, tileRegion: record.tileRegion,
+      default: !record.tileSourceUid && (record.asset.useAsDefault === true || record.index === 0),
       source: record.image
     });
     cursorX += outerWidth;
@@ -7060,9 +7402,15 @@ async function rebuildTextureAtlasNow() {
   return true;
 }
 
-function syncRendererTextureAsset(asset, source) {
+function syncRendererTextureAsset(asset, source, composited = false) {
+  if (asset?.layers?.length) {
+    if (!composited) source = compositeLayers(asset, source);
+    updateLayerCompositePreview(asset, source);
+  }
+  if (asset && source) animationRasterCache.set(asset._uid, { canvas: imageCanvas(source), source: asset.source });
   if (asset?._uid && source) livePaintTextureSources.set(asset._uid, { source, savedSource: asset.source });
   const atlasEntry = asset && textureAtlasLayoutByUid.get(asset._uid);
+  if (asset?.animation?.enabled && source) source = flipbookFrame(asset, imageCanvas(source), asset.animation.currentFrame || 0);
   let atlasPatch = null;
   if (atlasEntry && source?.width === atlasEntry.width && source?.height === atlasEntry.height) {
     textureAtlasRevision++;
@@ -7092,6 +7440,7 @@ function syncRendererTextureAsset(asset, source) {
     uvPreviewTextureDirty = false;
   }
   scheduleSceneRender();
+  if (asset && source) refreshDerivedTileEntries(asset, source);
 }
 
 function syncRendererTexture(source) {
@@ -7100,6 +7449,7 @@ function syncRendererTexture(source) {
 
 function renderTexture() {
   textureLoadRevision++;
+  updateLayerCompositePreview(null, null);
   const width = Math.max(1, Number(state.project.textureSize?.[0]) || 16);
   const height = Math.max(1, Number(state.project.textureSize?.[1]) || 16);
   textureCanvas.width = width;
@@ -7152,7 +7502,7 @@ function renderPalette() {
     const item = event.currentTarget.closest('.swatch-item');
     selectedPaletteRowId = item.dataset.paletteRowId;
     selectedPaletteColorIndex = Number(item.dataset.paletteColorIndex);
-    if (state.mode !== 'paint') snapshot();
+    if (state.mode !== 'paint') snapshot('core.texture.palette');
     applyPaletteColor(swatch.dataset.color);
     renderPalette();
   }));
@@ -7217,7 +7567,7 @@ function renderPalette() {
   $$('[data-gradient-picker]').forEach(picker => {
     picker.addEventListener('pointerdown', event => {
       event.preventDefault();
-      if (state.mode !== 'paint') snapshot();
+      if (state.mode !== 'paint') snapshot('core.texture.palette');
       picker.setPointerCapture(event.pointerId);
       pickGradientColor(picker, event);
     });
@@ -7276,6 +7626,7 @@ function applyPaletteColor(color, notify = true) {
   }
   const item = selected();
   if (!item) return toast('先選擇一個物件');
+  noteJournalOperation('core.element.color');
   item.color = color;
   markDirty(); renderAll('selection');
   if (notify) toast(`已套用 ${color}`);
@@ -7298,6 +7649,7 @@ function cycleSnap(direction = 1) {
     ? direction < 0 ? values.length - 1 : 0
     : (currentIndex + direction + values.length) % values.length;
   const next = values[nextIndex];
+  noteJournalOperation('core.project.snap');
   if (!state.project.snap) state.project.snap = {};
   state.project.snap.subdivisions = next;
   updateSnapButton();
@@ -7328,15 +7680,159 @@ function renderTextureList() {
     </section>`;
   }).join('');
   list.innerHTML = ungrouped.map(asset => textureItemMarkup(asset, state.textureAssets.indexOf(asset))).join('') + groups;
+  renderTextureFeatureControls();
 }
 
 function addTextureGroup() {
+  noteJournalOperation('core.texture.group');
   const group = { id: `texture_group_${crypto.randomUUID()}`, name: `貼圖組 ${state.textureGroups.length + 1}`, collapsed: false };
   state.textureGroups.push(group);
   const active = state.textureAssets.find(asset => asset._uid === state.activeTextureUid);
   if (active) active.groupId = group.id;
   renderTextureList();
+  markDirty();
   toast('已新增貼圖組');
+}
+
+function updateLayerCompositePreview(asset, canvas) {
+  if (asset && asset._uid !== state.activeTextureUid) return;
+  const preview = $('#textureLayerComposite');
+  const layered = Boolean(asset?.layers?.length);
+  preview.hidden = !layered;
+  textureCanvas.style.opacity = layered ? '0' : '';
+  if (layered && canvas) {
+    preview.width = canvas.width; preview.height = canvas.height;
+    const context = preview.getContext('2d');
+    context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(canvas, 0, 0);
+  }
+}
+
+function selectedTilingFaces() {
+  const targets = [];
+  for (const key of state.selectedUvFaces) {
+    const parsed = parseUvFaceKey(key);
+    const cube = parsed && state.project.getNode(parsed.uid);
+    if (cube?.type === 'cube') targets.push({ cube, faceName: parsed.faceName });
+  }
+  if (!targets.length) {
+    const data = selectedUvFaceData(false);
+    if (data?.cube && state.uvPreviewSelectedFace?.faceName) targets.push({ cube: data.cube, faceName: state.uvPreviewSelectedFace.faceName });
+  }
+  return targets;
+}
+
+function renderTextureTileControls() {
+  const root = $('#textureTileControls');
+  if (!root) return;
+  const targets = selectedTilingFaces();
+  if (!targets.length) { delete root.dataset.renderKey; root.innerHTML = '<span>在主視圖或 UV 預覽選中面</span>'; return; }
+  const first = targets[0].cube.faces?.[targets[0].faceName]?.tiling || {};
+  const key = JSON.stringify([targets.map(target => [target.cube.uid, target.faceName, isFaceTiled(target.cube.faces?.[target.faceName])]), first]);
+  if (root.dataset.renderKey === key) return;
+  root.dataset.renderKey = key;
+  root.innerHTML = `<span>平鋪參數（${targets.length} 面；僅平鋪貼圖使用，換回普通貼圖仍保留）</span>
+    <div class="texture-feature-grid">${[['width', '單片寬度', 16], ['height', '單片高度', 16], ['offsetX', 'X 偏移', 0], ['offsetY', 'Y 偏移', 0]].map(([property, label, fallback]) => `<label>${label}<input type="number" step="any" data-tile-field="${property}" value="${first[property] ?? fallback}"></label>`).join('')}</div>`;
+  $$('[data-tile-field]', root).forEach(input => input.addEventListener('change', () => {
+    const property = input.dataset.tileField;
+    let value = input.type === 'checkbox' ? input.checked : Number(input.value);
+    if (input.type !== 'checkbox' && !Number.isFinite(value)) return;
+    if (property === 'width' || property === 'height') value = Math.max(.0001, value);
+    snapshot('core.uv.tiling');
+    for (const { cube, faceName } of targets) {
+      const face = ensureCubeFaceRecord(cube, faceName);
+      face.tiling ||= { width: 16, height: 16, offsetX: 0, offsetY: 0 };
+      face.tiling[property] = value;
+      persistGeneratedPaintCube(cube);
+    }
+    uvPreviewProjectCache = null; textureUvEntryCache = null;
+    rebuildTextureAtlas(); markDirty(); renderAll('selection');
+  }));
+}
+
+function refreshDerivedTileEntries(asset, source) {
+  for (const entry of textureAtlasEntries) {
+    if (entry.tileSourceUid !== asset._uid || !entry.tileCube) continue;
+    const canvas = tiledFaceRaster(entry.tileCube, entry.tileFaceName, imageCanvas(source), entry.tileRegion);
+    if (canvas.width !== entry.width || canvas.height !== entry.height) { rebuildTextureAtlas(); continue; }
+    drawTextureAtlasEntry(canvas, entry);
+    const patch = textureAtlasPatch(entry);
+    sceneRenderer.updateTextureAtlasRegion(patch, entry.x - 1, entry.y - 1);
+    if (uvPreviewIsActive()) uvPreviewRenderer.updateTextureAtlasRegion(patch, entry.x - 1, entry.y - 1);
+    else uvPreviewTextureDirty = true;
+  }
+}
+
+function scheduleTextureAnimation() {
+  // Animation is an asset-mode placeholder; no frame loop is started.
+}
+
+async function refreshLayeredTexture(asset) {
+  await prepareLayers(asset);
+  const canvas = compositeLayers(asset);
+  if (!canvas) return;
+  asset.source = canvas.toDataURL('image/png');
+  livePaintTextureSources.delete(asset._uid);
+  animationRasterCache.set(asset._uid, { canvas, source: asset.source });
+  updateLayerCompositePreview(asset, canvas);
+  rebuildTextureAtlas();
+  renderTextureList(); activateProjectTexture(state.textureAssets.indexOf(asset));
+  markDirty();
+}
+
+async function addTextureLayer() {
+  const asset = activeTextureAsset();
+  if (!asset) return toast('請先建立或導入貼圖');
+  pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
+  if (!asset.layers?.length) {
+    const raster = await loadRaster(asset.source);
+    asset.uvWidth = raster.width; asset.uvHeight = raster.height;
+    asset.layers = [{ uid: crypto.randomUUID(), name: '底圖', source: raster.toDataURL('image/png'), visible: true, opacity: 100 }];
+  }
+  await prepareLayers(asset);
+  const canvas = document.createElement('canvas'); canvas.width = asset.uvWidth || textureCanvas.width; canvas.height = asset.uvHeight || textureCanvas.height;
+  const layer = { uid: crypto.randomUUID(), name: `圖層 ${asset.layers.length + 1}`, source: canvas.toDataURL('image/png'), visible: true, opacity: 100 };
+  asset.layers.push(layer); asset.activeLayerUid = layer.uid;
+  await refreshLayeredTexture(asset);
+}
+
+function renderTextureFeatureControls() {
+  const root = $('#textureFeatureControls'), asset = activeTextureAsset();
+  if (!asset) { root.innerHTML = '<span>請先選擇貼圖</span>'; return; }
+  root.innerHTML = `<button type="button" data-add-layer>＋ 圖層</button>${(asset.layers || []).map((layer, index) => `<div class="texture-layer-row">
+    <input type="checkbox" data-layer-visible="${layer.uid}" ${layer.visible !== false ? 'checked' : ''} title="顯示圖層">
+    <button type="button" data-layer-select="${layer.uid}" class="${activeLayer(asset)?.uid === layer.uid ? 'active' : ''}" title="選擇圖層">◇</button>
+    <input type="text" data-layer-name="${layer.uid}" value="${escapeAttribute(layer.name)}" title="圖層名稱">
+    <input type="number" min="0" max="100" value="${layer.opacity ?? 100}" data-layer-opacity="${layer.uid}" title="透明度 %">
+    <button type="button" data-layer-up="${index}" title="上移" ${index === asset.layers.length - 1 ? 'disabled' : ''}>↑</button>
+    <button type="button" data-layer-down="${index}" title="下移" ${index === 0 ? 'disabled' : ''}>↓</button>
+    <button type="button" data-layer-delete="${layer.uid}" title="刪除圖層" ${asset.layers.length < 2 ? 'disabled' : ''}>×</button></div>`).reverse().join('')}
+    <label>貼圖模式 <select data-texture-mode><option value="default" ${!asset.mode || asset.mode === 'default' ? 'selected' : ''}>默認</option><option value="tiled" ${asset.mode === 'tiled' ? 'selected' : ''}>平鋪</option><option value="animation" ${asset.mode === 'animation' ? 'selected' : ''}>動畫（佔位）</option></select></label>
+    ${asset.mode === 'animation' ? '<span>動畫邏輯待完善，目前顯示原始貼圖。</span>' : ''}`;
+  $('[data-texture-mode]', root).addEventListener('change', event => {
+    noteJournalOperation('core.texture.mode');
+    asset.mode = event.target.value;
+    textureUvEntryCache = null;
+    invalidateUvPreviewTextureState();
+    rebuildTextureAtlas(); renderTextureFeatureControls(); renderTextureTileControls(); markDirty();
+  });
+  $('[data-add-layer]', root).addEventListener('click', () => addTextureLayer().catch(error => toast(error.message)));
+  $$('[data-layer-select]', root).forEach(button => button.addEventListener('click', () => { noteJournalOperation('core.texture.layer'); asset.activeLayerUid = button.dataset.layerSelect; activateProjectTexture(state.textureAssets.indexOf(asset)); renderTextureFeatureControls(); markDirty(); }));
+  $$('[data-layer-name]', root).forEach(input => input.addEventListener('change', () => {
+    const layer = asset.layers.find(entry => entry.uid === input.dataset.layerName);
+    noteJournalOperation('core.texture.layer'); layer.name = input.value.trim() || layer.name; markDirty();
+  }));
+  const mutate = async action => { pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer'); action(); await refreshLayeredTexture(asset); };
+  $$('[data-layer-visible]', root).forEach(input => input.addEventListener('change', () => mutate(() => { asset.layers.find(layer => layer.uid === input.dataset.layerVisible).visible = input.checked; })));
+  $$('[data-layer-opacity]', root).forEach(input => input.addEventListener('change', () => mutate(() => { asset.layers.find(layer => layer.uid === input.dataset.layerOpacity).opacity = clamp(Number(input.value), 0, 100); })));
+  $$('[data-layer-up], [data-layer-down]', root).forEach(button => button.addEventListener('click', () => mutate(() => {
+    const index = Number(button.dataset.layerUp ?? button.dataset.layerDown), next = index + (button.dataset.layerUp !== undefined ? 1 : -1);
+    [asset.layers[index], asset.layers[next]] = [asset.layers[next], asset.layers[index]];
+  })));
+  $$('[data-layer-delete]', root).forEach(button => button.addEventListener('click', () => mutate(() => {
+    asset.layers = asset.layers.filter(layer => layer.uid !== button.dataset.layerDelete);
+    asset.activeLayerUid = activeLayer(asset)?.uid;
+  })));
+
 }
 
 const TEMPLATE_FACE_COLORS = Object.freeze({
@@ -7354,6 +7850,10 @@ function textureAssetForReference(reference) {
   const normalized = raw.startsWith('#') ? raw.slice(1) : raw;
   return state.textureAssets.find((asset, index) => [asset._uid, asset.uuid, asset.id, String(index), asset.name]
     .filter(value => value !== undefined && value !== null).some(value => String(value) === normalized || String(value) === raw)) || null;
+}
+
+function isFaceTiled(face) {
+  return textureAssetForReference(face?.texture)?.mode === 'tiled';
 }
 
 function remapNumericFaceTextureReferences(previousAssets) {
@@ -7600,6 +8100,11 @@ function drawTemplateFace(ctx, entry, destination, sourceImages) {
   const { width, height, sourceUv, sourceAsset, faceName } = entry;
   if (width <= 0 || height <= 0) return;
   const image = sourceAsset ? sourceImages.get(sourceAsset._uid) : null;
+  if (image && sourceAsset.mode === 'tiled') {
+    const raster = tiledFaceRaster(entry.target.cube, faceName, imageCanvas(image), null, [width, height]);
+    ctx.drawImage(raster, destination.x, destination.y);
+    return;
+  }
   if (image && sourceUv) {
     const left = Math.min(sourceUv[0], sourceUv[2]);
     const top = Math.min(sourceUv[1], sourceUv[3]);
@@ -7654,6 +8159,7 @@ function registerGeneratedTexture(canvas, name, kind) {
   state.textureAssets.push(asset);
   state.activeTextureUid = asset._uid;
   state.project.textureSize = [canvas.width, canvas.height];
+  invalidateUvPreviewTextureState();
   renderTextureList();
   activateProjectTexture(state.textureAssets.length - 1);
   markDirty();
@@ -7684,7 +8190,7 @@ async function createTextureTemplate(options) {
   const cleanedFaceCount = invalidFaces.length;
   const faceCount = initialFaceCount - cleanedFaceCount;
   if (!faceCount) {
-    snapshot();
+    snapshot('core.uv.cull_face');
     invalidFaces.forEach(({ target, faceName }) => setCubeFaceCulled(target.cube, faceName, true));
     syncGeneratedTemplateEdits(targets);
     invalidateAllRenderGeometry();
@@ -7692,7 +8198,7 @@ async function createTextureTemplate(options) {
     renderAll('all');
     return toast(cleanedFaceCount ? `已清理 ${cleanedFaceCount} 個無效面；沒有可建立模板的面` : '目前沒有可建立模板的面');
   }
-  snapshot();
+  snapshot('core.texture.generate');
   const progress = beginTextureGenerationProgress(faceCount);
   try {
   await progress.prepare(`正在準備 ${faceCount} 個面…`);
@@ -7709,7 +8215,7 @@ async function createTextureTemplate(options) {
     const sourceAsset = textureAssetForReference(face?.texture);
     if (sourceAsset) sourceAssets.add(sourceAsset);
     const duplicateKey = !options.keepMultiTexture && !boxEntry
-      ? `${sourceAsset?._uid || 'color'}:${faceName}:${sourceUv.join(',')}:${width}x${height}` : null;
+      ? `${sourceAsset?._uid || 'color'}:${faceName}:${sourceAsset?.mode === 'tiled' ? JSON.stringify([faceTileSize(cube, faceName), face?.tiling]) : sourceUv.join(',')}:${width}x${height}` : null;
     let entry = duplicateKey ? sharedEntries.get(duplicateKey) : null;
     if (!entry) {
       entry = boxEntry || { width, height, faceName, sourceUv, sourceAsset, targets: [] };
@@ -7736,14 +8242,14 @@ async function createTextureTemplate(options) {
       };
       for (const faceName of CUBE_FACE_NAMES) {
         const face = cube.faces?.[faceName];
-        if (isCubeFaceCulled(face) || invalidFacesByCube.get(cube)?.has(faceName)) continue;
+      if (isCubeFaceCulled(face) || invalidFacesByCube.get(cube)?.has(faceName)) continue;
         const [ox, oy, width, height] = offsets[faceName];
         addFaceEntry(target, faceName, width, height, boxEntry, { x: ox, y: oy });
       }
     } else {
       for (const faceName of CUBE_FACE_NAMES) {
         const face = cube.faces?.[faceName];
-        if (isCubeFaceCulled(face) || invalidFacesByCube.get(cube)?.has(faceName)) continue;
+      if (isCubeFaceCulled(face) || invalidFacesByCube.get(cube)?.has(faceName)) continue;
         const [width, height] = facePixelSize(cube, faceName, subdivisions);
         addFaceEntry(target, faceName, width, height);
       }
@@ -7802,6 +8308,7 @@ async function createTextureTemplate(options) {
     }
   }
   syncGeneratedTemplateEdits(targets);
+  invalidateUvPreviewTextureState();
   invalidateAllRenderGeometry();
   renderAll('all');
   toast(`已建立 ${side} × ${side} 紋理模板${cleanedFaceCount ? `，並清理 ${cleanedFaceCount} 個無效面` : ''}`);
@@ -7811,7 +8318,7 @@ async function createTextureTemplate(options) {
 }
 
 function createSimpleTexture(options) {
-  snapshot();
+  snapshot('core.texture.create');
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(options.width));
   canvas.height = Math.max(1, Math.round(options.height));
@@ -7855,6 +8362,12 @@ function importTexture(file) {
   const image = new Image();
   image.onload = () => {
     if (revision !== textureLoadRevision) return;
+    noteJournalOperation('core.texture.import');
+    const asset = { _uid: textureUid(), name: file.name, source: url, uvWidth: image.naturalWidth, uvHeight: image.naturalHeight,
+      kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null };
+    state.textureAssets.push(asset);
+    state.activeTextureUid = asset._uid;
+    updateLayerCompositePreview(asset, null);
     textureCanvas.width = image.naturalWidth;
     textureCanvas.height = image.naturalHeight;
     textureCtx.imageSmoothingEnabled = false;
@@ -7862,13 +8375,11 @@ function importTexture(file) {
     textureCtx.drawImage(image, 0, 0);
     syncRendererTexture(textureCanvas);
     renderScene();
+    renderTextureFeatureControls();
     updateTexturePreviewFrame(image.naturalWidth, image.naturalHeight);
-    const asset = { _uid: textureUid(), name: file.name, source: url, uvWidth: image.naturalWidth, uvHeight: image.naturalHeight,
-      kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null };
-    state.textureAssets.push(asset);
-    state.activeTextureUid = asset._uid;
     renderTextureList();
     rebuildTextureAtlas();
+    markDirty();
     toast(`已導入貼圖 ${file.name}`);
   };
   image.onerror = () => { URL.revokeObjectURL(url); toast('無法讀取這張圖片'); };
@@ -7880,6 +8391,8 @@ function loadTextureSource(source, name) {
   const image = new Image();
   image.onload = () => {
     if (revision !== textureLoadRevision) return;
+    const asset = activeTextureAsset();
+    if (asset) { asset.uvWidth = image.naturalWidth; asset.uvHeight = image.naturalHeight; }
     textureCanvas.width = image.naturalWidth;
     textureCanvas.height = image.naturalHeight;
     textureCtx.imageSmoothingEnabled = false;
@@ -7890,6 +8403,7 @@ function loadTextureSource(source, name) {
     const activeName = $('.texture-item.active strong');
     if (activeName) activeName.textContent = name;
     renderScene();
+    renderTextureFeatureControls();
   };
   image.src = source;
 }
@@ -7914,7 +8428,24 @@ function activateProjectTexture(index) {
   if (!asset) return;
   state.activeTextureUid = asset._uid;
   $$('.texture-item').forEach(item => item.classList.toggle('active', item.dataset.textureUid === asset._uid));
-  loadTextureSource(asset.source, asset.name);
+  renderTextureFeatureControls();
+  if (asset.layers?.length) prepareLayers(asset).then(() => {
+    if (state.activeTextureUid !== asset._uid) return;
+    loadTextureSource(activeLayer(asset).source, asset.name);
+    updateLayerCompositePreview(asset, compositeLayers(asset));
+  }).catch(error => toast(error.message));
+  else { updateLayerCompositePreview(asset, null); loadTextureSource(asset.source, asset.name); }
+  scheduleTextureAnimation();
+}
+
+function invalidateUvPreviewTextureState() {
+  // Preview cubes copy their face records. Regenerate those copies whenever
+  // template creation replaces UV rectangles or texture assignments.
+  uvPreviewProjectCache = null;
+  state.uvPreviewSelectedFace = null;
+  uvPreviewTextureDirty = true;
+  uvPreviewRenderDirty = true;
+  uvPreviewRenderer.invalidateGeometry();
 }
 
 function toolSupportsMode(tool, mode = state.mode) {
@@ -8006,7 +8537,7 @@ function updateToolOptions() {
   const lane = $('#toolOptionsLane');
   const labels = {
     move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇',
-    brush: '畫筆', eraser: '橡皮擦', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', gradient: '漸變', eyedropper: '取色器'
+    brush: '畫筆', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', gradient: '漸變', eyedropper: '取色器'
   };
   const paintTool = PAINT_TOOLS.includes(state.tool);
   lane.hidden = !labels[state.tool];
@@ -8020,10 +8551,12 @@ function updateToolOptions() {
   $('#vertexSnapStatus').textContent = state.vertexSnapSource ? '再選目標頂點' : '先選來源頂點';
   $('#knifeStatus').hidden = state.tool !== 'knife';
   $('#paintToolOptions').hidden = !paintTool;
+  $('#paintEraseControl').hidden = !PAINT_ERASE_TOOLS.includes(state.tool);
+  $('#paintEraseMode').checked = paintToolErasing();
   $('#paintBrushSize').disabled = ['eyedropper', 'fill', 'gradient'].includes(state.tool);
   $('#paintBrushOpacity').disabled = state.tool === 'eyedropper';
   $('#paintBucketScopeControl').hidden = state.tool !== 'fill';
-  const brushTipTool = ['brush', 'eraser'].includes(state.tool);
+  const brushTipTool = state.tool === 'brush';
   $('#paintBrushShapeControl').hidden = !brushTipTool;
   $('#paintBrushAaControl').hidden = !brushTipTool || state.paintBrushShape !== 'circle';
   $('#paintBrushDepthControl').hidden = state.tool !== 'brush';
@@ -8046,12 +8579,12 @@ function updateToolOptions() {
   $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
   if (!lane.hidden) $('#toolContext').textContent = labels[state.tool];
   if (document.activeElement !== $('#paintColor')) $('#paintColor').value = state.paintColor;
-  if (document.activeElement !== $('#paintBrushSize')) $('#paintBrushSize').value = String(state.paintBrushSize);
+  if (document.activeElement !== $('#paintBrushSize')) $('#paintBrushSize').value = String(paintSetting().size);
   if (document.activeElement !== $('#paintBrushShape')) $('#paintBrushShape').value = state.paintBrushShape;
   $('#paintBrushAa').checked = state.paintBrushAa;
   if (document.activeElement !== $('#paintBrushDepth')) $('#paintBrushDepth').value = String(state.paintBrushDepth);
   $('#paintBrushOverlay').checked = state.paintBrushOverlay;
-  if (document.activeElement !== $('#paintBrushOpacity')) $('#paintBrushOpacity').value = String(state.paintBrushOpacity);
+  if (document.activeElement !== $('#paintBrushOpacity')) $('#paintBrushOpacity').value = String(paintSetting().opacity);
   if (document.activeElement !== $('#paintBucketScope')) $('#paintBucketScope').value = state.paintBucketScope;
   $('#paintBucketSingleFace').checked = state.paintBucketSingleFace;
   $('#paintGradientMode').value = state.paintGradientMode;
@@ -8062,7 +8595,8 @@ function updateToolOptions() {
   $('#paintGradientEndControl').style.setProperty('--gradient-color', state.paintGradientEnd);
   $('#paintGradientStartAlpha').value = String(state.paintGradientStartAlpha);
   $('#paintGradientEndAlpha').value = String(state.paintGradientEndAlpha);
-  $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
+  $('#paintBrushOpacityOutput').textContent = `${paintSetting().opacity}%`;
+  $('#paintIgnoreTransparentToggle').checked = state.paintIgnoreTransparent;
   updateTransformSpaceButtons();
   updateRotationModeButtons();
   updateScaleHandleModeButtons();
@@ -8099,34 +8633,42 @@ async function openProject() {
     if (window.cubeBricksDesktop) {
       const result = await window.cubeBricksDesktop.openProject();
       if (!result) return;
-      loadProjectContent(result.content, result.filePath, result.textureAssets || []);
+      loadProjectContent(result.content, result.filePath, result.textureAssets || [], result.journalId || null);
     } else fileInput.click();
   } catch (error) { toast(`打開失敗：${error.message}`); }
 }
 
-async function serializableTextureAssets() {
-  return Promise.all(state.textureAssets.map(async texture => {
+async function serializableTextureAssets(assets = state.textureAssets) {
+  return Promise.all(assets.map(async texture => {
     if (!String(texture.source || '').startsWith('blob:')) return texture;
-    const blob = await fetch(texture.source).then(response => response.blob());
-    const source = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error || new Error('貼圖轉換失敗'));
-      reader.readAsDataURL(blob);
-    });
+    let sourcePromise = blobTextureSourceCache.get(texture.source);
+    if (!sourcePromise) {
+      sourcePromise = fetch(texture.source).then(response => response.blob()).then(blob => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('貼圖轉換失敗'));
+        reader.readAsDataURL(blob);
+      }));
+      blobTextureSourceCache.set(texture.source, sourcePromise);
+    }
+    const source = await sourcePromise;
     return { ...texture, source };
   }));
 }
 
-function serializeCbmodel(textureAssets = []) {
-  const data = JSON.parse(state.project.serialize());
+function serializeCbmodel(textureAssets = [], project = state.project) {
+  const data = typeof project.serialize === 'function' ? JSON.parse(project.serialize()) : structuredClone(project);
   data.textures = textureAssets.map((texture, index) => ({
     uuid: texture.uuid || texture._uid || `texture_${index + 1}`,
     id: texture.id || String(index),
     name: texture.name || `texture_${index + 1}.png`,
     source: texture.source,
-    uv_width: texture.uvWidth || state.project.textureSize[0],
-    uv_height: texture.uvHeight || state.project.textureSize[1],
+    mode: texture.mode || 'default',
+    layers: texture.layers ? structuredClone(texture.layers) : null,
+    active_layer_uid: texture.activeLayerUid || null,
+    animation: texture.animation ? Object.fromEntries(Object.entries(texture.animation).filter(([key]) => !key.startsWith('_'))) : null,
+    uv_width: texture.uvWidth || data.textureSize[0],
+    uv_height: texture.uvHeight || data.textureSize[1],
     use_as_default: texture.useAsDefault === true,
     group_id: texture.groupId || null,
     kind: texture.kind || 'IMAGE'
@@ -8134,30 +8676,57 @@ function serializeCbmodel(textureAssets = []) {
   return JSON.stringify(data, null, 2);
 }
 
-function loadProjectContent(content, filePath = '', resolvedTextures = []) {
+function loadProjectContent(content, filePath = '', resolvedTextures = [], journalId = null, options = {}) {
   const data = JSON.parse(content);
   const project = filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format ? importBlockbench(data) : new CubeBricksProject(data);
   const savedPath = filePath.toLowerCase().endsWith('.cbmodel') ? filePath : null;
   const embeddedTextures = (data.textures || []).filter(texture => typeof texture.source === 'string' && texture.source.startsWith('data:image/')).map(texture => ({
     uuid: texture.uuid, id: texture.id, name: texture.name || 'embedded_texture.png', source: texture.source,
     uvWidth: texture.uv_width, uvHeight: texture.uv_height, useAsDefault: texture.use_as_default === true,
-    groupId: texture.group_id || null, kind: texture.kind || 'IMAGE'
+    groupId: texture.group_id || null, kind: texture.kind || 'IMAGE',
+    mode: texture.mode || 'default',
+    layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null
   }));
   addProjectTab(project, {
     filePath: savedPath,
     displayName: filePath ? filePath.split(/[\\/]/).pop() : null,
     textureAssets: resolvedTextures.length ? resolvedTextures : embeddedTextures,
-    dirty: !savedPath
+    dirty: options.dirty ?? !savedPath,
+    journalId,
+    imported: true
   });
-  markDirty(!savedPath);
+  if (options.dirty !== undefined) {
+    suppressJournalRecording = true;
+    try { markDirty(options.dirty); } finally { suppressJournalRecording = false; }
+  } else markDirty(!savedPath);
   toast(`已打開 ${project.name}`);
+}
+
+async function offerProjectRecovery() {
+  if (!window.cubeBricksDesktop?.listRecoverableProjects) return;
+  try {
+    const projects = await window.cubeBricksDesktop.listRecoverableProjects();
+    if (!projects.length) return;
+    const prompt = projects.length === 1
+      ? `找到未保存的工作項目「${projects[0].name}」。要恢復嗎？`
+      : `找到 ${projects.length} 個未保存的工作項目。要全部恢復到分頁嗎？`;
+    if (!window.confirm(prompt)) return;
+    for (const project of projects) {
+      const result = await window.cubeBricksDesktop.recoverProjectJournal(project);
+      loadProjectContent(result.content, project.filePath || '', [], result.journalId, { dirty: true });
+    }
+    if (projects.length > 1) toast(`已恢復 ${projects.length} 個工作項目`);
+  } catch (error) { toast(`工作項目恢復失敗：${error.message}`); }
 }
 
 async function saveProject(saveAs = false) {
   try {
+    const activeTab = projectTabById(activeProjectTabId);
+    await flushProjectJournal(activeTab);
+    await activeTab?.journalWrites;
     const content = serializeCbmodel(await serializableTextureAssets());
     if (window.cubeBricksDesktop) {
-      const result = await window.cubeBricksDesktop.saveProject({ filePath: saveAs ? null : state.filePath, name: state.project.name, content });
+      const result = await window.cubeBricksDesktop.saveProject({ filePath: saveAs ? null : state.filePath, name: state.project.name, content, journalId: activeTab?.journalId });
       if (!result) return;
       state.filePath = result.filePath;
       const tab = projectTabById(activeProjectTabId);
@@ -8169,12 +8738,15 @@ async function saveProject(saveAs = false) {
 
 async function exportProject() {
   try {
+    const activeTab = projectTabById(activeProjectTabId);
+    await flushProjectJournal(activeTab);
+    await activeTab?.journalWrites;
     const textureAssets = await serializableTextureAssets();
     const cbmodelContent = serializeCbmodel(textureAssets);
     const bbmodelContent = JSON.stringify(exportBlockbench(state.project, textureAssets), null, 2);
     if (window.cubeBricksDesktop?.exportProject) {
       const result = await window.cubeBricksDesktop.exportProject({
-        name: state.project.name, cbmodelContent, bbmodelContent
+        name: state.project.name, cbmodelContent, bbmodelContent, journalId: activeTab?.journalId
       });
       if (!result) return;
       toast(result.extension === '.cbmodel'
@@ -8373,12 +8945,16 @@ function applyRegisteredConfig(id, value, notify = false) {
   if (id === ConfigKey.CTRL_SNAP_VALUE) state.modifierSnap.ctrl.value = value;
   if (id === ConfigKey.SHIFT_CTRL_SNAP_MODE) state.modifierSnap.shiftCtrl.mode = value;
   if (id === ConfigKey.SHIFT_CTRL_SNAP_VALUE) state.modifierSnap.shiftCtrl.value = value;
-  if (id === ConfigKey.SYMMETRY) { state.symmetry = value; $('#symmetryToggle').checked = value; }
   if (id === ConfigKey.ALPHA_LOCK) { state.alphaLock = value; $('#alphaLockToggle').checked = value; }
   if (id === ConfigKey.PREVIEW_SHADE) { state.previewShade = value; $('#previewShadeToggle').checked = value; }
   if (id === ConfigKey.SHOW_PLAYER_REFERENCE) { state.playerReference = value; $('#playerReferenceToggle').checked = value; }
   if (id === ConfigKey.PLAYER_REFERENCE_TEXTURE) updatePlayerReferenceTexture(value);
   if (id === ConfigKey.SHOW_GEOMETRY_ONLY) { state.geometryOnly = value; $('#geometryOnlyToggle').checked = value; }
+  if (id === ConfigKey.MODIFIER_RESULT_GHOST) {
+    state.modifierResultGhost = value;
+    $('#modifierResultGhostToggle').checked = value;
+    if (value && state.selectedGenerated) clearSelection();
+  }
   if (id === ConfigKey.PROJECTION) {
     if (state.projection && state.projection !== value) {
       if (state.axisView && state.generalCamera) {
@@ -8508,7 +9084,7 @@ function showElementContextMenu(event, uidValue, source = null) {
     items: [
       { icon: '⌖', label: '聚焦此物件', action: focusSelected },
       { icon: allVisible ? '○' : '◉', label: allVisible ? '隱藏選中項' : '顯示選中項', action: () => {
-        snapshot(); selectedNodes.forEach(entry => setNodeVisibility(entry, !allVisible)); markDirty(); renderAll();
+        snapshot('core.element.visibility'); selectedNodes.forEach(entry => setNodeVisibility(entry, !allVisible)); markDirty(); renderAll();
       } },
       ...(node.type === 'group' ? [{
         icon: openIconMarkup(state.collapsedGroups.has(node.uid) ? 'down' : 'up', 'context-open-icon'),
@@ -8556,7 +9132,15 @@ function bindContextMenus() {
       return;
     }
     const rect = sceneCanvas.getBoundingClientRect();
-    const hitUid = sceneRenderer.pick(state.project, event.clientX - rect.left, event.clientY - rect.top, state.geometryOnly);
+    const hit = sceneRenderer.pickDetailed(state.project, event.clientX - rect.left, event.clientY - rect.top,
+      state.geometryOnly, { includeGenerated: !state.modifierResultGhost });
+    if (hit?.generated) {
+      showContextMenu(event, { title: '修改器結果 · 唯讀', items: [
+        { icon: '⌖', label: '選擇來源物件', action: () => selectItem(hit.uid, { revealInOutliner: true }) }
+      ] });
+      return;
+    }
+    const hitUid = hit?.uid;
     if (hitUid) {
       showElementContextMenu(event, hitUid);
       return;
@@ -8619,7 +9203,7 @@ function bindContextMenus() {
       showContextMenu(event, { title: `節點 ${index + 1}`, source: item, items: [
         { icon: '×', label: '刪除節點', danger: true, action: () => {
           if (curve.nodes.length <= 2) return toast('曲線至少需要兩個節點');
-          snapshot(); discardSubdivisionEdits(curve); curve.nodes.splice(index, 1);
+          snapshot('core.curve.node_remove'); discardSubdivisionEdits(curve); curve.nodes.splice(index, 1);
           state.selectedCurveNodeIndex = Math.min(index, curve.nodes.length - 1);
           markDirty(); renderAll('selection');
         } }
@@ -8643,7 +9227,11 @@ function bindContextMenus() {
     if (state.mode === 'paint') return;
     if (event.target !== sceneCanvas) return;
     const rect = sceneCanvas.getBoundingClientRect();
-    const uidValue = sceneRenderer.pick(state.project, event.clientX - rect.left, event.clientY - rect.top, state.geometryOnly);
+    const selectedHit = sceneRenderer.pickDetailed(state.project,
+      event.clientX - rect.left, event.clientY - rect.top, state.geometryOnly,
+      { includeGenerated: !state.modifierResultGhost });
+    if (selectedHit?.generated) return;
+    const uidValue = selectedHit?.uid;
     if (!uidValue) {
       if (!subdivisionSession) return;
       event.preventDefault();
@@ -8666,6 +9254,7 @@ function bindContextMenus() {
         { icon: '▰', label: '移到新貼圖組', action: addTextureGroup },
         { separator: true },
         { icon: '×', label: '刪除貼圖', danger: true, action: () => {
+          noteJournalOperation('core.texture.delete');
           const previousAssets = [...state.textureAssets];
           state.textureAssets = state.textureAssets.filter(entry => entry._uid !== asset?._uid);
           remapNumericFaceTextureReferences(previousAssets);
@@ -8686,8 +9275,9 @@ function bindContextMenus() {
       return showContextMenu(event, { title: group?.name || '貼圖組', source: groupNode, items: [
         { icon: openIconMarkup(group?.collapsed ? 'down' : 'up', 'context-open-icon'), label: group?.collapsed ? '展開組' : '折疊組', action: () => { group.collapsed = !group.collapsed; renderTextureList(); } },
         { icon: '×', label: '解散貼圖組', action: () => {
+          noteJournalOperation('core.texture.group');
           state.textureAssets.forEach(asset => { if (asset.groupId === group.id) asset.groupId = null; });
-          state.textureGroups = state.textureGroups.filter(entry => entry.id !== group.id); renderTextureList();
+          state.textureGroups = state.textureGroups.filter(entry => entry.id !== group.id); renderTextureList(); markDirty();
         } }
       ] });
     }
@@ -8720,7 +9310,7 @@ function bindContextMenus() {
     if (!item) return;
     showContextMenu(event, { title: item.name, source: event.target.closest('.field-section'), items: [
       { icon: '⌖', label: '聚焦此物件', action: focusSelected },
-      { icon: item.visible ? '◉' : '○', label: item.visible ? '隱藏' : '顯示', action: () => { snapshot(); setNodeVisibility(item, !item.visible); markDirty(); renderAll(); } }
+      { icon: item.visible ? '◉' : '○', label: item.visible ? '隱藏' : '顯示', action: () => { snapshot('core.element.visibility'); setNodeVisibility(item, !item.visible); markDirty(); renderAll(); } }
     ] });
   });
   $('.workspace').addEventListener('contextmenu', event => {
@@ -8748,7 +9338,7 @@ function addCurveNodeAtViewportPoint(curve, event, rect = sceneCanvas.getBoundin
   if (curve.dimension === 2) local[1] = 0;
   const node = new CurveNode({ position: local }, curve.dimension === 2);
   const insertionIndex = selectedIndex === 0 ? 0 : selectedIndex + 1;
-  snapshot();
+  snapshot('core.curve.node_add');
   discardSubdivisionEdits(curve);
   curve.nodes.splice(insertionIndex, 0, node);
   state.selectedCurveNodeIndex = insertionIndex;
@@ -8772,6 +9362,12 @@ function getCurveWorldPlane(curve, planePoint = null) {
 }
 
 function bindEvents() {
+  document.addEventListener('click', event => {
+    const input = event.target.closest('input[type="color"]');
+    if (!input || input.disabled) return;
+    event.preventDefault();
+    openColorPickerPopup(input.value, color => { input.value = color; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); });
+  });
   // Chromium may promote a pointer-focused button to :focus-visible when a
   // modifier key is pressed later. Only Tab explicitly enters keyboard focus
   // navigation, so Shift used for snapping never resurrects a stale outline.
@@ -8896,7 +9492,19 @@ function bindEvents() {
   $('[data-action="export"]').addEventListener('click', exportProject);
   $('[data-action="undo"]').addEventListener('click', undo);
   $('[data-action="redo"]').addEventListener('click', redo);
-  $('[data-action="theme"]').addEventListener('click', () => themeDialog.showModal());
+  $('[data-action="theme"]').addEventListener('click', async () => {
+    themeDialog.showModal();
+    const label = $('#projectWorkspaceDirectory');
+    if (window.cubeBricksDesktop?.projectWorkspaceRoot) label.textContent = await window.cubeBricksDesktop.projectWorkspaceRoot();
+    else label.textContent = '瀏覽器預覽不使用展開式工作目錄';
+  });
+  $('[data-action="chooseProjectWorkspace"]').addEventListener('click', async () => {
+    if (!window.cubeBricksDesktop?.chooseProjectWorkspaceRoot) return toast('僅桌面版可更改工作目錄');
+    try {
+      const directory = await window.cubeBricksDesktop.chooseProjectWorkspaceRoot();
+      if (directory) { $('#projectWorkspaceDirectory').textContent = directory; toast('新項目將使用新的工作目錄'); }
+    } catch (error) { toast(`工作目錄更改失敗：${error.message}`); }
+  });
   $$('[data-settings-page]').forEach(button => button.addEventListener('click', () => {
     $$('[data-settings-page]').forEach(entry => entry.classList.toggle('active', entry === button));
     $$('[data-settings-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.settingsPanel === button.dataset.settingsPage));
@@ -8919,10 +9527,10 @@ function bindEvents() {
     toast('已恢復內置玩家紋理');
   });
   playerReferenceTextureInput.addEventListener('change', () => importPlayerReferenceTexture(playerReferenceTextureInput.files?.[0]));
-  $('#symmetryToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SYMMETRY, event.target.checked, { source: 'toolbar' }));
   $('#alphaLockToggle').addEventListener('change', event => configRegistry.set(ConfigKey.ALPHA_LOCK, event.target.checked, { source: 'toolbar' }));
   $('#previewShadeToggle').addEventListener('change', event => configRegistry.set(ConfigKey.PREVIEW_SHADE, event.target.checked, { source: 'toolbar' }));
   $('#playerReferenceToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SHOW_PLAYER_REFERENCE, event.target.checked, { source: 'toolbar' }));
+  $('#modifierResultGhostToggle').addEventListener('change', event => configRegistry.set(ConfigKey.MODIFIER_RESULT_GHOST, event.target.checked, { source: 'bottom-options' }));
   $('#uvPreviewEnabled').addEventListener('change', event => {
     state.uvPreviewEnabled = event.target.checked;
     if (!state.uvPreviewEnabled) stopUvPreviewAnimation();
@@ -9047,8 +9655,10 @@ function bindEvents() {
   }));
   $('#paintColor').addEventListener('input', event => setPaintColor(event.target.value));
   $('#paintBrushSize').addEventListener('input', event => {
-    state.paintBrushSize = clamp(Math.round(Number(event.target.value)) || 1, 1, 64);
-    event.target.value = String(state.paintBrushSize);
+    const size = clamp(Math.round(Number(event.target.value)) || 1, 1, 64);
+    if (state.tool === 'brush') state.paintBrushSize = size;
+    else if (state.paintToolSettings[state.tool]) state.paintToolSettings[state.tool].size = size;
+    event.target.value = String(size);
   });
   $('#paintBrushShape').addEventListener('change', event => {
     state.paintBrushShape = event.target.value === 'circle' ? 'circle' : 'square';
@@ -9065,9 +9675,16 @@ function bindEvents() {
     state.paintBrushOverlay = event.target.checked;
   });
   $('#paintBrushOpacity').addEventListener('input', event => {
-    state.paintBrushOpacity = clamp(Math.round(Number(event.target.value)) || 100, 1, 100);
-    $('#paintBrushOpacityOutput').textContent = `${state.paintBrushOpacity}%`;
+    const opacity = clamp(Math.round(Number(event.target.value)) || 100, 1, 100);
+    if (state.tool === 'brush') state.paintBrushOpacity = opacity;
+    else if (state.paintToolSettings[state.tool]) state.paintToolSettings[state.tool].opacity = opacity;
+    $('#paintBrushOpacityOutput').textContent = `${opacity}%`;
   });
+  $('#paintEraseMode').addEventListener('change', event => {
+    if (state.tool === 'brush') state.paintBrushErase = event.target.checked;
+    else if (state.paintToolSettings[state.tool]) state.paintToolSettings[state.tool].erase = event.target.checked;
+  });
+  $('#paintIgnoreTransparentToggle').addEventListener('change', event => { state.paintIgnoreTransparent = event.target.checked; });
   $('#paintBucketScope').addEventListener('change', event => {
     state.paintBucketScope = ['face', 'element', 'color', 'contiguous'].includes(event.target.value) ? event.target.value : 'face';
     updateToolOptions();
@@ -9208,13 +9825,13 @@ function bindEvents() {
     if (!event.target.closest('.reference-image-control')) setReferenceImageMenu(false);
   });
   $('#minecraftRenderType').addEventListener('change', event => {
-    snapshot();
+    snapshot('core.project.render_type');
     state.project.renderType = event.target.value;
     markDirty();
     renderScene();
   });
   $('#cullFaces').addEventListener('change', event => {
-    snapshot();
+    snapshot('core.project.face_culling');
     state.project.cullFaces = event.target.checked;
     markDirty();
     renderScene();
@@ -9287,7 +9904,7 @@ function bindEvents() {
       const targets = state.selectedUids.has(node.uid) && state.selectedUids.size > 1
         ? inspectorBatchNodes()
         : [node];
-      snapshot();
+      snapshot(`core.element.field.${key.toLowerCase()}`);
       for (const target of targets) setNodeFlag(target, key, !current);
       markDirty();
       if (key === 'locked') sceneRenderer.invalidateLockState();
@@ -9405,6 +10022,15 @@ function bindEvents() {
     if (!item && !group) return;
     state.textureDrag = item ? { type: 'asset', id: item.dataset.textureUid } : { type: 'group', id: group.dataset.textureGroup };
     (item || group).classList.add('is-dragging');
+    if (item) {
+      const preview = item.querySelector('.texture-thumb')?.cloneNode(true);
+      if (preview) {
+        preview.classList.add('texture-drag-preview');
+        document.body.append(preview);
+        event.dataTransfer.setDragImage(preview, 18, 18);
+        requestAnimationFrame(() => preview.remove());
+      }
+    }
     event.dataTransfer.effectAllowed = item ? 'copyMove' : 'move';
     event.dataTransfer.setData('text/x-cubebricks-texture', `${state.textureDrag.type}:${state.textureDrag.id}`);
   });
@@ -9422,6 +10048,7 @@ function bindEvents() {
   $('#textureList').addEventListener('drop', event => {
     if (!state.textureDrag) return;
     event.preventDefault();
+    noteJournalOperation(state.textureDrag.type === 'asset' ? 'core.texture.reorder' : 'core.texture.group');
     const item = event.target.closest('.texture-item');
     const groupNode = !item && event.target.closest('.texture-group');
     const previousAssets = [...state.textureAssets];
@@ -9458,7 +10085,7 @@ function bindEvents() {
       event.stopPropagation();
       return;
     }
-    enterAxisView(button.dataset.viewAxis);
+    enterAxisView(button.dataset.viewAxis, Number(button.dataset.axisSign));
   }));
   const axisWidget = $('.axis-widget');
   axisWidget.addEventListener('pointerdown', beginAxisWidgetDrag);
@@ -9490,6 +10117,15 @@ function bindEvents() {
       useVertexSnapPoint(state.vertexSnapPoints?.[Number(handle.dataset.vertexIndex)]);
       return;
     }
+    if (state.tool === 'rotate' && handle.dataset.kind?.startsWith('rotate')) {
+      const signature = `${handle.dataset.kind}:${handle.dataset.axis || 'view'}:${handle.dataset.sign || 1}`;
+      pendingRotationPress = {
+        x: event.clientX, y: event.clientY,
+        signature, selectedUid: state.selectedUid,
+        serialized: state.project.serialize(), historyLength: state.history.length,
+        future: [...state.future], dirty: state.dirty
+      };
+    } else pendingRotationPress = null;
     const axisKey = handle.dataset.axis;
     const axisIndex = /^[0-2]$/.test(axisKey) ? Number(axisKey) : null;
     const axisIndices = handle.dataset.axes
@@ -9502,6 +10138,30 @@ function bindEvents() {
       Number(handle.dataset.sign || 1), handle, axisKey, axisIndices, axisSigns);
   });
   $('#transformGizmo').addEventListener('pointermove', event => { updateGizmoDepthHover(event); onPointerMove(event); });
+  $('#transformGizmo').addEventListener('click', event => {
+    if (event.detail === 1 && pendingRotationPress) recentRotationPress = pendingRotationPress;
+  });
+  $('#viewport').addEventListener('dblclick', event => {
+    const prior = recentRotationPress;
+    if (!prior || state.tool !== 'rotate' || prior.selectedUid !== state.selectedUid
+      || Math.hypot(event.clientX - prior.x, event.clientY - prior.y) >= 12) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    recentRotationPress = null;
+    // The browser's dblclick event uses the operating system's click timing.
+    // Both pointer drags may already have committed by now; roll them back.
+    if (state.project.serialize() !== prior.serialized) {
+      state.history.length = prior.historyLength;
+      state.future = prior.future;
+      restore(prior.serialized);
+      markDirty(prior.dirty);
+    }
+    const matching = control => control
+      && `${control.dataset.kind}:${control.dataset.axis || 'view'}:${control.dataset.sign || 1}` === prior.signature;
+    const resolved = resolveGizmoHandle(event);
+    const handle = matching(resolved) ? resolved
+      : [...$('#transformGizmo').querySelectorAll('.gizmo-control')].find(matching);
+    if (handle) openPreciseRotationInput(event, handle);
+  }, true);
   $('#transformGizmo').addEventListener('pointerleave', () => {
     $('#transformGizmo').querySelectorAll('.depth-hover').forEach(control => control.classList.remove('depth-hover'));
   });
@@ -9555,7 +10215,7 @@ function bindEvents() {
       else event.shiftKey ? focusSceneOrigin() : focusSelected();
     }
     if (state.mode === 'paint' && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      const paintShortcuts = { b: 'brush', e: 'eraser', l: 'line', m: 'rectangle', o: 'ellipse', g: 'fill', j: 'gradient', i: 'eyedropper' };
+      const paintShortcuts = { b: 'brush', l: 'line', m: 'rectangle', o: 'ellipse', g: 'fill', j: 'gradient', i: 'eyedropper' };
       const paintTool = paintShortcuts[event.key.toLowerCase()];
       if (paintTool) {
         event.preventDefault();
@@ -9573,6 +10233,7 @@ function bindEvents() {
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
   });
   window.addEventListener('blur', endTemporaryEyedropper);
+  document.addEventListener('visibilitychange', scheduleTextureAnimation);
 }
 
 let timelineAnimation = null;
@@ -9712,13 +10373,16 @@ function onPointerDown(event) {
     }
     state.selectedCurveNodeIndex = null;
   }
-  const hitUid = sceneRenderer.pick(state.project, x, y, state.geometryOnly);
+  const selectionHit = sceneRenderer.pickDetailed(state.project, x, y, state.geometryOnly,
+    { includeGenerated: !state.modifierResultGhost });
+  const hitUid = selectionHit?.generated ? null : selectionHit?.uid || null;
   event.preventDefault();
   sceneCanvas.setPointerCapture(event.pointerId);
   state.dragging = {
     type: 'selection-box', pointerId: event.pointerId,
     x: event.clientX, y: event.clientY, startX: x, startY: y,
     currentX: x, currentY: y, moved: false, hitUid,
+    generatedHit: selectionHit?.generated ? selectionHit : null,
     selection: new Set(state.selectedUids),
     mode: viewportSelectionMode(event), suppressBlankDeselect
   };
@@ -9758,6 +10422,7 @@ function applyViewportBoxSelection(hitUids, drag) {
     }
   } else hitUids.forEach(uidValue => next.add(uidValue));
   state.selectedUids = next;
+  state.selectedGenerated = null;
   const lastHit = [...hitUids].reverse().find(uidValue => next.has(uidValue));
   state.selectedUid = lastHit || (next.has(state.selectedUid) ? state.selectedUid : [...next].at(-1) || null);
   state.selectionAnchorUid = state.selectedUid;
@@ -9769,7 +10434,7 @@ function applyViewportBoxSelection(hitUids, drag) {
 function startCameraDrag(event, captureTarget) {
   event.preventDefault();
   cancelCameraFocus();
-  captureTarget.setPointerCapture(event.pointerId);
+  if (Number.isFinite(event.pointerId)) captureTarget.setPointerCapture(event.pointerId);
   bakeCameraPan();
   const frame = sceneRenderer.getCameraFrame();
   state.dragging = event.shiftKey || state.axisView
@@ -9874,6 +10539,7 @@ function useVertexSnapPoint(pointEntry) {
   const currentItem = selected();
   if (!currentItem || !pointEntry) return;
   if (!state.vertexSnapSource) {
+    if (pointEntry.generated) return toast('修改器結果只能作為目標捕捉點');
     state.vertexSnapSource = { rootUid: currentItem.uid, uid: pointEntry.uid, pointType: pointEntry.pointType,
       nodeIndex: pointEntry.nodeIndex, point: [...pointEntry.point] };
     updateToolOptions();
@@ -9888,7 +10554,7 @@ function useVertexSnapPoint(pointEntry) {
   }
   if (state.vertexSnapMode === 'scale' && sourceItem.type !== 'cube') return toast('縮放捕捉目前只適用於 Cube');
   if (state.vertexSnapMode === 'rotate' && !sourceItem.rotation) return toast('這個物件不能旋轉捕捉');
-  snapshot();
+  snapshot('core.element.vertex_snap');
   if (state.vertexSnapMode === 'move') {
     if (state.vertexSnapSource.pointType === 'curveNode' && isBezierElement(sourceItem)) {
       const node = sourceItem.nodes[state.vertexSnapSource.nodeIndex];
@@ -9957,7 +10623,9 @@ function cubeLocalPointToWorld(cube, localPoint) {
 
 function getKnifeCandidate(event) {
   const rect = sceneCanvas.getBoundingClientRect();
-  const hit = sceneRenderer.pickDetailed(state.project, event.clientX - rect.left, event.clientY - rect.top, true);
+  const hit = sceneRenderer.pickDetailed(state.project, event.clientX - rect.left, event.clientY - rect.top,
+    true, { includeGenerated: !state.modifierResultGhost });
+  if (hit?.generated) return null;
   const cube = hit && state.project.getNode(hit.uid);
   const faceAxes = hit && getKnifeFaceAxes(hit.faceName);
   if (!hit || cube?.type !== 'cube' || !faceAxes) return null;
@@ -10018,7 +10686,7 @@ function cancelKnifeSelection(notify = true) {
 }
 
 function completeKnifeCut(cube, axis, coordinate) {
-  snapshot();
+  snapshot('core.knife.cube');
   freezeCubeUvs(cube, true);
   const second = splitCubeAt(cube, axis, coordinate);
   if (!second) {
@@ -10044,11 +10712,11 @@ function splitBezierAtSegment(curve, segmentIndex) {
   if (!isBezierElement(curve) || segmentIndex < 1 || segmentIndex > curve.nodes.length - 3) {
     return toast('切割後兩端都必須至少保留兩個節點');
   }
-  snapshot();
+  snapshot('core.knife.curve');
   const originalNodes = curve.nodes.map(node => new CurveNode(structuredClone(node), curve.dimension === 2));
   curve.nodes = originalNodes.slice(0, segmentIndex + 1);
   const second = new BezierElement({
-    name: `${curve.name}_split`,
+    name: curve.name, unnamed: curve.unnamed,
     origin: [...curve.origin], rotation: [...curve.rotation],
     nodes: originalNodes.slice(segmentIndex + 1).map(node => structuredClone(node)),
     parameters: structuredClone(curve.parameters), autoUv: curve.autoUv,
@@ -10430,7 +11098,7 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
       if (state.tool === 'resize' && item.type !== 'group') storedAxis = inverseRotateVector(storedAxis, item.rotation || [0, 0, 0]);
     }
   }
-  captureTarget.setPointerCapture(event.pointerId);
+  if (Number.isFinite(event.pointerId)) captureTarget.setPointerCapture(event.pointerId);
   handleElement?.classList.add('active');
   sceneRenderer.clearSelectionPreviewTransform();
   const gizmoCenter = referenceHandle
@@ -10478,6 +11146,99 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   sceneCanvas.classList.add(`is-${state.tool}`);
 }
 
+function dismissPreciseRotationInput() {
+  preciseRotationInput?.remove();
+  preciseRotationInput = null;
+}
+
+function openPreciseRotationInput(event, handle) {
+  dismissPreciseRotationInput();
+  if (!handle || !handle.dataset.kind?.startsWith('rotate')) return;
+  const gizmo = $('#transformGizmo');
+  const axisKey = handle.dataset.axis || 'view';
+  const axisIndex = /^[0-2]$/.test(axisKey) ? Number(axisKey) : null;
+  startTransformDrag(event, axisIndex, gizmo, handle.dataset.kind, Number(handle.dataset.sign || 1),
+    handle, axisKey, axisIndex === null ? [] : [axisIndex], [Number(handle.dataset.sign || 1)]);
+  const drag = state.dragging;
+  if (!drag || drag.type !== 'transform') return;
+  state.dragging = null;
+  if (Number.isFinite(event.pointerId) && gizmo.hasPointerCapture?.(event.pointerId))
+    gizmo.releasePointerCapture(event.pointerId);
+  handle.classList.remove('active');
+  sceneRenderer.endTransformGhost();
+  sceneCanvas.classList.remove('is-rotate');
+  const viewport = $('#viewport');
+  const rect = viewport.getBoundingClientRect();
+  const field = document.createElement('div');
+  field.className = 'precise-rotation-input';
+  field.style.left = `${Math.min(rect.width - 118, Math.max(8, event.clientX - rect.left + 14))}px`;
+  field.style.top = `${Math.max(8, event.clientY - rect.top - 32)}px`;
+  field.innerHTML = '<input type="number" step="any" value="0" aria-label="旋轉角度（度）"/><span>°</span>';
+  viewport.append(field);
+  preciseRotationInput = field;
+  const input = field.querySelector('input');
+  input.focus(); input.select();
+  const outside = down => {
+    if (field.contains(down.target)) return;
+    document.removeEventListener('pointerdown', outside, true);
+    dismissPreciseRotationInput();
+  };
+  document.addEventListener('pointerdown', outside, true);
+  input.addEventListener('keydown', keyEvent => {
+    if (keyEvent.key !== 'Enter') return;
+    const degrees = Number(input.value);
+    if (!Number.isFinite(degrees)) return;
+    keyEvent.preventDefault();
+    if (degrees) {
+      snapshot('core.element.precise_rotation');
+      applyExactRotation(drag, degrees * drag.rotationScreenSign);
+      invalidateSelectionRenderGeometry();
+      sceneRenderer.invalidateMirrorGeometry();
+      markDirty();
+      renderInspector();
+      renderScene();
+    }
+    document.removeEventListener('pointerdown', outside, true);
+    dismissPreciseRotationInput();
+  });
+}
+
+function applyExactRotation(drag, degrees) {
+  if (drag.targets.length > 1) {
+    const commonAxis = drag.axis?.vector.map(value => value * drag.sign) || [0, 1, 0];
+    const commonPivot = drag.selectionContext.pivot || drag.selectionContext.center || state.gizmoOrigin;
+    for (const target of drag.targets) {
+      const separate = drag.multiTransformMode === 'separate';
+      const targetAxis = separate && drag.kind === 'rotate' ? target.transformAxes[drag.axisIndex] : commonAxis;
+      if (!separate) {
+        const next = rotatePointAroundAxis(target.worldAnchor, commonPivot, targetAxis, degrees);
+        translateCapturedTarget(target, localDeltaFromWorld(target,
+          next.map((value, axis) => value - target.worldAnchor[axis])));
+      }
+      applyTargetRotation(target, targetAxis, degrees, {
+        separate, selfRelative: separate && drag.kind === 'rotate' && state.transformSpace === 'self',
+        axisIndex: drag.axisIndex
+      });
+    }
+    return;
+  }
+  if (drag.curveNodeContext?.curve.dimension === 3 && state.transformSpace === 'self'
+    && drag.kind === 'rotate' && drag.axisIndex === 2) {
+    drag.curveNodeContext.node.roll = drag.nodeRoll + degrees;
+    return;
+  }
+  if (drag.curveNodeContext?.node.autoTangent) bakeCurveNodeTangent(drag.curveNodeContext.curve, drag.curveNodeContext.index);
+  const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || drag.item;
+  const turn = quaternionFromAxisAngle(drag.rotationAxis, degrees);
+  const current = quaternionFromEuler(drag.rotation);
+  target.rotation = eulerFromQuaternion(state.transformSpace === 'self' && drag.kind !== 'rotate-view'
+    ? quaternionMultiply(current, turn) : quaternionMultiply(turn, current));
+  if (drag.curveNodeContext?.curve.dimension === 2) {
+    target.rotation[0] = 0; target.rotation[2] = 0;
+  }
+  if (drag.curveNodeContext) drag.curveNodeContext.node.autoTangent = false;
+}
+
 function onPointerMove(event) {
   if (state.dragging?.type === 'texture-paint-3d') {
     event.preventDefault?.();
@@ -10507,7 +11268,7 @@ function onPointerMove(event) {
     const drag = state.dragging;
     if (!drag.snapshotTaken && Math.hypot(dx, dy) < .5) return;
     if (!drag.snapshotTaken) {
-      snapshot();
+      snapshot('core.curve.node_move');
       discardSubdivisionEdits(drag.curve);
       drag.snapshotTaken = true;
       markDirty();
@@ -10545,7 +11306,9 @@ function onPointerMove(event) {
   if (state.dragging.type === 'transform') {
     if (Math.hypot(dx, dy) < .5) return;
     if (!state.dragging.snapshotTaken) {
-      snapshot();
+      snapshot(state.dragging.tool === 'resize' ? 'core.element.scale'
+        : state.dragging.tool === 'rotate' ? 'core.element.rotate'
+          : state.dragging.tool === 'pivot' ? 'core.element.pivot' : 'core.element.move');
       if (state.dragging.tool === 'resize') {
         state.dragging.targets.forEach(target => discardSubdivisionEdits(target.node));
       }
@@ -10643,6 +11406,11 @@ function endPointerDrag(event) {
   if (!state.dragging) return;
   const finishedDrag = state.dragging;
   if (finishedDrag.type === 'texture-paint-3d') {
+    if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+      finishedDrag.latestClient = [event.clientX, event.clientY];
+      if (finishedDrag.multiSurface) queueSceneBrushPointer(finishedDrag, event.clientX, event.clientY);
+      else if (finishedDrag.ready) moveScenePaintDrag(event, finishedDrag);
+    }
     state.dragging = null;
     const captureTarget = event.currentTarget;
     if (captureTarget.hasPointerCapture?.(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
@@ -10671,7 +11439,16 @@ function endPointerDrag(event) {
       }, state.geometryOnly);
       applyViewportBoxSelection(hitUids, finishedDrag);
     } else if (event.type !== 'pointercancel') {
-      if (finishedDrag.hitUid) selectItem(finishedDrag.hitUid, {
+      if (finishedDrag.generatedHit && !state.modifierResultGhost) {
+        sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
+        state.selectedUids = new Set(); state.selectedUid = null;
+        state.selectedGenerated = {
+          uid: finishedDrag.generatedHit.uid,
+          instanceKey: finishedDrag.generatedHit.instanceKey
+        };
+        state.selectedCurveNodeIndex = null; state.selectedModifierUid = null;
+        refreshSelectionUi();
+      } else if (finishedDrag.hitUid) selectItem(finishedDrag.hitUid, {
         revealInOutliner: true,
         toggle: event.ctrlKey || event.metaKey,
         range: event.shiftKey
@@ -11247,3 +12024,4 @@ bindEvents();
 updateToolVisibility();
 renderAll();
 markDirty(false);
+void offerProjectRecovery();

@@ -1,9 +1,54 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
+const syncFs = require('fs');
+const crypto = require('crypto');
+const { ProjectJournal, atomicWrite } = require('./project-journal.cjs');
 const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform === 'win32' ? 'shortcut-icon.ico' : 'shortcut-icon.png');
+const journals = new Map();
+const journalQueues = new Map();
+const workspaceSettingsPath = () => path.join(app.getPath('userData'), 'project-workspace.json');
+async function workspaceRoot() {
+  try {
+    const settings = JSON.parse(await fs.readFile(workspaceSettingsPath(), 'utf8'));
+    if (typeof settings.directory === 'string' && path.isAbsolute(settings.directory)) return settings.directory;
+  } catch { /* The default is under userData on the system drive. */ }
+  return path.join(app.getPath('userData'), 'working-projects');
+}
+async function journalDirectory(id) { return path.join(await workspaceRoot(), id); }
+function queueJournal(id, task) {
+  const previous = journalQueues.get(id) || Promise.resolve();
+  const current = previous.catch(() => {}).then(task);
+  journalQueues.set(id, current);
+  current.finally(() => { if (journalQueues.get(id) === current) journalQueues.delete(id); }).catch(() => {});
+  return current;
+}
+function safeSessionId(value) {
+  const id = String(value || '');
+  if (!/^project_[a-f0-9-]{20,50}$/.test(id)) throw new Error('項目工作階段 ID 不合法');
+  return id;
+}
 
 app.commandLine.appendSwitch('disable-features', 'WinUseBrowserSpellChecker');
+
+// Multiple application processes must not compete for Chromium's disk cache.
+// Keep sessionData/userData unchanged: theme, settings and dock layout live in
+// localStorage there. Only disposable caches are isolated per process.
+let instanceCacheDirectory = null;
+try {
+  instanceCacheDirectory = syncFs.mkdtempSync(path.join(app.getPath('temp'), 'cubebricks-cache-'));
+  app.commandLine.appendSwitch('disk-cache-dir', instanceCacheDirectory);
+} catch {
+  app.commandLine.appendSwitch('disable-http-cache');
+}
+// This disables disk persistence only; GPU rendering and in-memory program
+// caching remain available, including the software-rendering fallback below.
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+app.once('quit', () => {
+  if (!instanceCacheDirectory) return;
+  try { syncFs.rmSync(instanceCacheDirectory, { recursive: true, force: true }); }
+  catch { /* Windows may still hold a cache handle while Chromium exits. */ }
+});
 
 // Keep WebGL available on remote/virtual Windows sessions by using SwiftShader.
 if (process.env.CUBEBRICKS_SOFTWARE_RENDERING === '1') {
@@ -48,8 +93,99 @@ ipcMain.handle('project:open', async () => {
   });
   if (picked.canceled || !picked.filePaths[0]) return null;
   const filePath = picked.filePaths[0];
-  const content = await fs.readFile(filePath, 'utf8');
+  const bytes = await fs.readFile(filePath);
+  if (bytes.subarray(0, 2).toString('ascii') === 'PK') {
+    const journalId = `project_${crypto.randomUUID()}`;
+    const journal = await ProjectJournal.fromArchive(bytes, await journalDirectory(journalId));
+    await atomicWrite(path.join(journal.directory, 'saved_state'), JSON.stringify({ sequence: journal.state.activeHead, filePath, savedAt: new Date().toISOString() }));
+    journals.set(journalId, journal);
+    const content = await journal.content();
+    return { filePath, content, journalId, textureAssets: await readTextureAssets(content, filePath) };
+  }
+  const content = bytes.toString('utf8');
   return { filePath, content, textureAssets: await readTextureAssets(content, filePath) };
+});
+
+ipcMain.handle('project:journal-init', async (_event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  return queueJournal(id, async () => {
+    if (journals.has(id)) return { journalId: id };
+    const journal = await new ProjectJournal(await journalDirectory(id)).initialize(payload.content, payload.operationId || 'core.project.create', payload.operationIndex || []);
+    journals.set(id, journal);
+    return { journalId: id };
+  });
+});
+
+ipcMain.handle('project:journal-commit', async (_event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  return queueJournal(id, async () => {
+    const journal = journals.get(id);
+    if (!journal) throw new Error('項目工作目錄尚未建立');
+    return journal.commit(payload.content, payload.operationId, payload.operationLabel, payload.operationIndex || []);
+  });
+});
+
+ipcMain.handle('project:journal-checkout', async (_event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  return queueJournal(id, async () => {
+    const journal = journals.get(id);
+    if (!journal) throw new Error('項目工作目錄尚未建立');
+    if (payload.direction) return journal.navigate(payload.direction);
+    return { content: await journal.checkout(payload.sequence), sequence: Number(payload.sequence) };
+  });
+});
+
+ipcMain.handle('project:journal-state', async (_event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  return queueJournal(id, async () => {
+    const journal = journals.get(id);
+    return journal ? { ...journal.state } : null;
+  });
+});
+
+ipcMain.handle('project:journal-list-recoverable', async () => {
+  const root = await workspaceRoot();
+  let entries;
+  try { entries = await fs.readdir(root, { withFileTypes: true }); }
+  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  const recoverable = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^project_[a-f0-9-]{20,50}$/.test(entry.name)) continue;
+    try {
+      const journal = await new ProjectJournal(path.join(root, entry.name)).load();
+      const saved = JSON.parse(await fs.readFile(path.join(root, entry.name, 'saved_state'), 'utf8').catch(() => 'null'));
+      if (saved?.sequence === journal.state.activeHead) continue;
+      const manifest = journal.activeManifest;
+      if (manifest.sequence === 1 && !manifest.elementOrder.length && !manifest.textureIds.length) continue;
+      recoverable.push({ journalId: entry.name, name: manifest.information.name || '未命名',
+        sequence: journal.state.activeHead, modifiedAt: manifest.timestamp, filePath: saved?.filePath || null });
+    } catch { /* A corrupt directory stays untouched for manual recovery. */ }
+  }
+  return recoverable.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
+});
+
+ipcMain.handle('project:journal-recover', async (_event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  const journal = await new ProjectJournal(await journalDirectory(id)).load();
+  journals.set(id, journal);
+  const content = await journal.content();
+  return { journalId: id, content, filePath: payload.filePath || null };
+});
+
+ipcMain.handle('project:workspace-root', async () => workspaceRoot());
+ipcMain.handle('project:choose-workspace-root', async () => {
+  const picked = await dialog.showOpenDialog({ title: '選擇項目工作目錄', properties: ['openDirectory', 'createDirectory'] });
+  if (picked.canceled || !picked.filePaths[0]) return null;
+  const directory = picked.filePaths[0];
+  await fs.mkdir(directory, { recursive: true });
+  await atomicWrite(workspaceSettingsPath(), JSON.stringify({ directory }, null, 2));
+  return directory;
+});
+ipcMain.handle('project:set-workspace-root', async (_event, directory) => {
+  if (typeof directory !== 'string' || !path.isAbsolute(directory)) throw new Error('請選擇絕對路徑');
+  await fs.mkdir(directory, { recursive: true });
+  await atomicWrite(workspaceSettingsPath(), JSON.stringify({ directory }, null, 2));
+  return directory;
 });
 
 async function readTextureAssets(content, modelPath) {
@@ -84,7 +220,9 @@ async function readTextureAssets(content, modelPath) {
       uvHeight: texture.uv_height,
       useAsDefault: texture.use_as_default === true,
       groupId: texture.group_id || null,
-      kind: texture.kind || 'IMAGE'
+      kind: texture.kind || 'IMAGE',
+      mode: texture.mode || 'default',
+      layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null
     });
   }
   return assets;
@@ -101,7 +239,15 @@ ipcMain.handle('project:save', async (_event, payload) => {
     if (picked.canceled || !picked.filePath) return null;
     filePath = picked.filePath;
   }
-  await fs.writeFile(filePath, payload.content, 'utf8');
+  const id = payload.journalId ? safeSessionId(payload.journalId) : `project_${crypto.randomUUID()}`;
+  await queueJournal(id, async () => {
+    let journal = journals.get(id);
+    if (!journal) {
+      journal = await new ProjectJournal(await journalDirectory(id)).initialize(payload.content);
+      journals.set(id, journal);
+    } else if (payload.content) await journal.commit(payload.content, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
+    await journal.archive(filePath);
+  });
   return { filePath };
 });
 
@@ -121,8 +267,17 @@ ipcMain.handle('project:export', async (_event, payload) => {
     extension = '.bbmodel';
     filePath += extension;
   }
-  const content = extension === '.cbmodel' ? payload.cbmodelContent : payload.bbmodelContent;
-  await fs.writeFile(filePath, content, 'utf8');
+  if (extension === '.cbmodel') {
+    const id = payload.journalId ? safeSessionId(payload.journalId) : `project_${crypto.randomUUID()}`;
+    await queueJournal(id, async () => {
+      let journal = journals.get(id);
+      if (!journal) {
+        journal = await new ProjectJournal(await journalDirectory(id)).initialize(payload.cbmodelContent);
+        journals.set(id, journal);
+      } else await journal.commit(payload.cbmodelContent, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
+      await journal.archive(filePath);
+    });
+  } else await atomicWrite(filePath, payload.bbmodelContent);
   return { filePath, extension };
 });
 

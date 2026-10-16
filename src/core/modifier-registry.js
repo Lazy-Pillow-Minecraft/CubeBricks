@@ -1,3 +1,5 @@
+import { registerEntityOperations } from './operation-registry.js';
+
 export class ModifierRegistry {
   constructor() {
     this.definitions = new Map();
@@ -14,6 +16,7 @@ export class ModifierRegistry {
       targets: [...(definition.targets || [])]
     };
     this.definitions.set(normalized.id, normalized);
+    registerEntityOperations('modifier', normalized.id, normalized.label);
     return normalized;
   }
 

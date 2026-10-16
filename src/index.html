@@ -71,12 +71,6 @@
         <button data-action="undo">撤銷</button>
         <button data-action="redo">重做</button>
       </nav>
-      <div class="mode-tabs" role="tablist">
-        <button class="mode-tab active" data-mode="edit"><span>◇</span> 編輯</button>
-        <button class="mode-tab" data-mode="uv" id="uvModeTab" hidden><span>▱</span> UV</button>
-        <button class="mode-tab" data-mode="paint"><span>◒</span> 繪畫</button>
-        <button class="mode-tab" data-mode="animate"><span>⌁</span> 動畫</button>
-      </div>
       <div class="title-actions">
         <button class="icon-button" data-action="theme" title="設定"><svg class="title-action-icon object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button>
         <button class="primary-button" data-action="export">導出</button>
@@ -98,7 +92,6 @@
         <button class="tool" data-tool="knife" title="刀具切割" aria-label="刀具切割"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 186.43 167.88"><rect x="108.09" y="-1.84" width="50.7" height="113.72" rx="9.86" ry="9.86" transform="translate(71.97 -75.57) rotate(42.39)"/><path d="M81.17,88.28c-3.74-3.41-9.53-3.15-12.94.59L0,163.62c25.67,9.52,66.11,3.06,104.54-19.13,6.34-3.66,12.34-7.59,17.95-11.71.89-3.22-.02-6.8-2.65-9.2l-38.68-35.3Z"/></svg></button>
         <button class="tool" data-tool="faceSelect" title="面選擇" aria-label="面選擇"><span>▱</span></button>
         <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆（B）" aria-label="畫筆"><span>◍</span></button>
-        <button class="tool mode-only paint-tool" data-tool="eraser" title="橡皮擦（E）" aria-label="橡皮擦"><span>▰</span></button>
         <button class="tool mode-only paint-tool" data-tool="line" title="直線（L）" aria-label="直線"><span>╱</span></button>
         <button class="tool mode-only paint-tool" data-tool="rectangle" title="矩形（M）" aria-label="矩形"><span>□</span></button>
         <button class="tool mode-only paint-tool" data-tool="ellipse" title="橢圓（O）" aria-label="橢圓"><span>○</span></button>
@@ -141,12 +134,13 @@
         <span class="tool-status" id="knifeStatus" hidden>選擇切割點</span>
         <div class="paint-tool-options" id="paintToolOptions" hidden>
           <label class="paint-color-control" title="繪畫顏色"><span>顏色</span><input id="paintColor" type="color" value="#91ad52" /></label>
-          <label title="筆刷尺寸"><span>尺寸</span><input id="paintBrushSize" type="number" min="1" max="64" step="1" value="1" /></label>
+          <label id="paintEraseControl" title="目前工具以設定透明度擦除像素" hidden><input id="paintEraseMode" type="checkbox" /><span>擦除</span></label>
+          <label title="目前工具的尺寸"><span>尺寸</span><input id="paintBrushSize" type="number" min="1" max="64" step="1" value="1" /></label>
           <label id="paintBrushShapeControl" title="筆刷形狀"><span>形狀</span><select id="paintBrushShape"><option value="square">方形</option><option value="circle">圓形</option></select></label>
           <label id="paintBrushAaControl" title="圓形筆刷邊緣抗鋸齒" hidden><input id="paintBrushAa" type="checkbox" /><span>AA 邊緣</span></label>
           <label id="paintBrushDepthControl" title="筆跡碰到 Cube 邊緣時，向相鄰面的貼圖延伸指定像素" hidden><span>深度</span><input id="paintBrushDepth" type="number" min="0" max="32" step="1" value="0" /></label>
           <label id="paintBrushOverlayControl" title="只在最前方命中位置，同時繪製完全重合的共面表面" hidden><input id="paintBrushOverlay" type="checkbox" /><span>疊加繪製</span></label>
-          <label class="paint-opacity-control" title="筆刷透明度"><span>透明度</span><input id="paintBrushOpacity" type="range" min="1" max="100" step="1" value="100" /><output id="paintBrushOpacityOutput">100%</output></label>
+          <label class="paint-opacity-control" title="目前工具的透明度"><span>透明度</span><input id="paintBrushOpacity" type="range" min="1" max="100" step="1" value="100" /><output id="paintBrushOpacityOutput">100%</output></label>
           <label class="paint-bucket-scope" id="paintBucketScopeControl" title="油漆桶填充範圍" hidden><span>範圍</span><select id="paintBucketScope"><option value="face">面</option><option value="element">元素</option><option value="color">顏色</option><option value="contiguous">連續顏色</option></select></label>
           <label id="paintBucketSingleFaceControl" title="同色填充只在目前面的 UV 範圍內搜尋" hidden><input id="paintBucketSingleFace" type="checkbox" checked /><span>單面局限</span></label>
           <label id="paintGradientModeControl" title="面漸變限制在同一個面；體漸變可跨同一 Cube 的多個面" hidden><span>模式</span><select id="paintGradientMode"><option value="face">面漸變</option><option value="volume">體漸變</option></select></label>
@@ -159,11 +153,12 @@
         <button class="toolbar-option" id="snapButton" data-action="cycleSnap" title="左鍵下一檔，右鍵上一檔">吸附 1.0</button>
       </div>
       <div class="toolbar-lane global-options-lane" aria-label="全局選項">
-        <label class="toolbar-check" title="全局開啟或關閉面陰影預覽；不會覆蓋物件自身的陰影設定"><input type="checkbox" id="previewShadeToggle" checked /><span>◐</span> 面陰影</label>
-        <label class="toolbar-check" title="顯示玩家尺寸與姿態參考；只用於預覽，不會寫入模型工程或導出檔。"><input type="checkbox" id="playerReferenceToggle" /><span>♙</span> 玩家參考</label>
-        <label class="toolbar-check" title="只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件"><input type="checkbox" id="geometryOnlyToggle" /><span>◇</span> 僅幾何</label>
-        <label class="toolbar-check" title="沿 X 軸對稱編輯"><input type="checkbox" id="symmetryToggle" /><span>◫</span> 對稱</label>
-        <label class="toolbar-check" title="繪畫時鎖定透明度"><input type="checkbox" id="alphaLockToggle" /><span>◩</span> 鎖透明</label>
+        <div class="mode-tabs" role="tablist">
+          <button class="mode-tab active" data-mode="edit"><span>◇</span> 編輯</button>
+          <button class="mode-tab" data-mode="uv" id="uvModeTab" hidden><span>▱</span> UV</button>
+          <button class="mode-tab" data-mode="paint"><span>◒</span> 繪畫</button>
+          <button class="mode-tab" data-mode="animate"><span>⌁</span> 動畫</button>
+        </div>
       </div>
     </nav>
 
@@ -191,6 +186,7 @@
           <div class="texture-stage" id="textureStage">
             <div class="checkerboard"></div>
             <canvas id="textureCanvas" width="1" height="1"></canvas>
+            <canvas id="textureLayerComposite" width="1" height="1" hidden></canvas>
           </div>
           <svg class="texture-uv-overlay" id="textureUvOverlay" aria-label="UV 編輯區"></svg>
           <div class="texture-brush-cursor" id="textureBrushCursor" hidden></div>
@@ -202,6 +198,8 @@
           <label><span>U2</span><input type="number" step="any" data-uv-coordinate="2" placeholder="-" /></label>
           <label><span>V2</span><input type="number" step="any" data-uv-coordinate="3" placeholder="-" /></label>
         </div>
+        <details class="texture-features" id="textureFeatures"><summary>圖層與貼圖模式</summary><div id="textureFeatureControls"></div></details>
+        <details class="texture-features"><summary>選中面的平鋪</summary><div id="textureTileControls"></div></details>
         <div class="texture-list" id="textureList"></div>
       </section>
       <section class="dock-panel uv-preview-panel" data-panel="uvPreview">
@@ -299,10 +297,20 @@
             </div>
           </div>
           <div class="axis-widget" aria-label="座標軸">
-            <svg viewBox="0 0 66 66" aria-hidden="true"><line id="axisLineX" x1="33" y1="33"/><line id="axisLineY" x1="33" y1="33"/><line id="axisLineZ" x1="33" y1="33"/></svg>
-            <button class="axis-y" data-view-axis="y" title="頂視圖">Y</button>
-            <button class="axis-x" data-view-axis="x" title="右視圖">X</button>
-            <button class="axis-z" data-view-axis="z" title="正視圖">Z</button>
+            <svg viewBox="0 0 66 66" aria-hidden="true">
+              <line class="axis-x" data-axis-line="x" data-axis-sign="1" x1="33" y1="33"/>
+              <line class="axis-x" data-axis-line="x" data-axis-sign="-1" x1="33" y1="33"/>
+              <line class="axis-y" data-axis-line="y" data-axis-sign="1" x1="33" y1="33"/>
+              <line class="axis-y" data-axis-line="y" data-axis-sign="-1" x1="33" y1="33"/>
+              <line class="axis-z" data-axis-line="z" data-axis-sign="1" x1="33" y1="33"/>
+              <line class="axis-z" data-axis-line="z" data-axis-sign="-1" x1="33" y1="33"/>
+            </svg>
+            <button class="axis-y" data-view-axis="y" data-axis-sign="1" title="頂視圖 (+Y)" aria-label="頂視圖 (+Y)">Y</button>
+            <button class="axis-x" data-view-axis="x" data-axis-sign="1" title="右視圖 (+X)" aria-label="右視圖 (+X)">X</button>
+            <button class="axis-z" data-view-axis="z" data-axis-sign="1" title="正視圖 (+Z)" aria-label="正視圖 (+Z)">Z</button>
+            <button class="axis-y axis-negative" data-view-axis="y" data-axis-sign="-1" title="底視圖 (−Y)" aria-label="底視圖 (−Y)"></button>
+            <button class="axis-x axis-negative" data-view-axis="x" data-axis-sign="-1" title="左視圖 (−X)" aria-label="左視圖 (−X)"></button>
+            <button class="axis-z axis-negative" data-view-axis="z" data-axis-sign="-1" title="背視圖 (−Z)" aria-label="背視圖 (−Z)"></button>
           </div>
           <div class="view-hint" id="viewHint"><kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心</div>
           <div class="selection-badge"><span id="selectionType">Cube</span><strong id="selectionName">body</strong></div>
@@ -362,6 +370,14 @@
         </section>
       </aside>
     </main>
+    <div class="workspace-options-bar" aria-label="模式選項">
+      <label class="toolbar-check" title="全局開啟或關閉面陰影預覽；不會覆蓋物件自身的陰影設定"><input type="checkbox" id="previewShadeToggle" checked /><span>◐</span> 面陰影</label>
+      <label class="toolbar-check" title="顯示玩家尺寸與姿態參考；只用於預覽，不會寫入模型工程或導出檔。"><input type="checkbox" id="playerReferenceToggle" /><span>♙</span> 玩家參考</label>
+      <label class="toolbar-check" title="只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件"><input type="checkbox" id="geometryOnlyToggle" /><span>◇</span> 僅幾何</label>
+      <label class="toolbar-check paint-only-option" title="繪畫時鎖定透明度"><input type="checkbox" id="alphaLockToggle" /><span>◩</span> 鎖透明</label>
+      <label class="toolbar-check paint-only-option" title="繪畫時略過原本完全透明的像素"><input type="checkbox" id="paintIgnoreTransparentToggle" /><span>◌</span> 忽視全透明</label>
+      <label class="toolbar-check" title="生成物以 75% 透明度顯示，並禁止選取及頂點捕捉"><input type="checkbox" id="modifierResultGhostToggle" /><span>◈</span> 修改器結果虛化</label>
+    </div>
   </div>
 
   <dialog id="newProjectDialog" class="theme-dialog new-project-dialog">
@@ -407,6 +423,7 @@
               <label class="config-toggle-label"><span>獨立 UV 編輯模式<small>editor.separate-uv-mode</small></span><input type="checkbox" data-config-key="editor.separate-uv-mode" /></label>
               <label class="config-toggle-label"><span>對稱編輯<small>editor.symmetry</small></span><input type="checkbox" data-config-key="editor.symmetry" /></label>
               <label class="config-toggle-label"><span>鎖定透明度<small>paint.alpha-lock</small></span><input type="checkbox" data-config-key="paint.alpha-lock" /></label>
+              <div class="player-reference-texture-setting"><div><strong>項目工作目錄</strong><small>展開式操作記錄保存位置；更改後新打開的項目使用新位置</small><span id="projectWorkspaceDirectory">讀取中…</span></div><div class="player-reference-texture-actions"><button type="button" data-action="chooseProjectWorkspace">更改位置</button></div></div>
             </div>
           </section>
           <section class="settings-page" data-settings-panel="viewport">
