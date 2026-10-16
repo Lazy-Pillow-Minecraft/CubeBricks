@@ -395,12 +395,22 @@
       <div class="project-info-grid">
         <label class="wide"><span>項目名稱<small>project.name</small></span><input id="projectInfoName" type="text" maxlength="128" required /></label>
         <label class="wide"><span>模型格式<small>project.formatId</small></span><output id="projectInfoFormat"></output></label>
+        <label class="wide" id="projectInfoJavaVersionRow" hidden><span>Java 方塊／物品版本<small>決定 Cube 旋轉限制</small></span><select id="projectInfoJavaVersion"><option value="1.9-1.21.5">1.9 – 1.21.5 · 22.5°／單軸</option><option value="1.21.6-1.21.10">1.21.6 – 1.21.10 · 自由角度／單軸</option><option value="1.21.11+">1.21.11+ · 無限制</option></select></label>
         <label><span>貼圖寬度<small>textureSize[0]</small></span><input id="projectInfoTextureWidth" type="number" min="1" step="1" required /></label>
         <label><span>貼圖高度<small>textureSize[1]</small></span><input id="projectInfoTextureHeight" type="number" min="1" step="1" required /></label>
         <label class="wide"><span>標準吸附精度<small>16 ÷ 精度 = 像素步長</small></span><input id="projectInfoSnap" type="number" min="0.0001" step="any" required /></label>
         <label class="wide project-description-field"><span>項目描述<small>formatData.projectDescription</small></span><textarea id="projectInfoDescription" rows="3" maxlength="1000"></textarea></label>
       </div>
       <div class="dialog-actions project-info-actions"><button type="button" data-action="closeProjectInfo">取消</button><button class="primary-button" type="submit">套用</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="closeProjectsDialog" class="theme-dialog close-projects-dialog">
+    <form id="closeProjectsForm">
+      <div class="dialog-heading"><div><span class="eyebrow">CLOSE CUBEBRICKS</span><h2>關閉軟體</h2></div></div>
+      <p>勾選下次要恢復的分頁。取消勾選會刪除該項目的本機工作記錄，不會刪除已保存的模型檔。</p>
+      <div id="closeProjectsList" class="close-projects-list"></div>
+      <div class="dialog-actions"><button type="button" data-action="cancelCloseProjects">取消</button><button class="primary-button" type="submit">確認並關閉</button></div>
     </form>
   </dialog>
 

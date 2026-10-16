@@ -60,6 +60,7 @@ const coreOperations = {
   'core.element.precise_rotation': '精確旋轉',
   'core.cube.create': '建立 Cube',
   'core.shape.create': '建立 Shape',
+  'core.shape.bake': '烘焙 Shape 為 Cube 組',
   'core.locator.create': '建立 Locator',
   'core.curve.create': '建立貝塞爾曲線',
   'core.group.create': '建立組',

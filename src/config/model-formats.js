@@ -63,7 +63,7 @@ modelFormatRegistry.registerMany([
     aliases: ['java_block_item'],
     snap: standardSnap,
     defaults: { uvMode: 'face', textureSize: [16, 16], renderType: 'cutout', cullFaces: true },
-    capabilities: { ...cubeCapabilities }
+    capabilities: { ...cubeCapabilities, boxUv: false }
   },
   {
     id: ModelFormatId.BEDROCK_ENTITY,
@@ -98,7 +98,7 @@ modelFormatRegistry.registerMany([
     aliases: ['java_entity'],
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 32], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true }
+    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true, faceUv: false }
   },
   {
     id: ModelFormatId.MINECRAFT_SKIN,

@@ -119,3 +119,152 @@ test('locator files update only for changed nodes and recover after an interrupt
     assert.equal(reopened.state.pointerSyncFrom, undefined);
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+async function withJournal(run) {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-regression-'));
+  try { await run(root); }
+  finally { await fs.rm(root, { recursive: true, force: true }); }
+}
+
+test('missing old root does not block intact adjacent undo and redo', () => withJournal(async root => {
+  const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+  const journal = await new ProjectJournal(root).initialize(model([cube]));
+  await journal.commit(model([{ ...cube, position: [1, 0, 0] }]), 'core.element.move');
+  await journal.commit(model([{ ...cube, position: [2, 0, 0] }]), 'core.element.move');
+  await fs.unlink(path.join(root, 'transactions/1.json'));
+  assert.equal(JSON.parse((await journal.navigate('undo')).content).elements[0].position[0], 1);
+  assert.equal(JSON.parse((await journal.navigate('redo')).content).elements[0].position[0], 2);
+  await journal.navigate('undo');
+  await assert.rejects(journal.navigate('undo'), /操作 1 的記錄缺失/);
+  assert.equal(journal.state.activeHead, 2);
+  assert.equal(JSON.parse(await journal.content()).elements[0].position[0], 1);
+}));
+
+test('deleted working directory cannot be silently recreated by a stale writer', () => withJournal(async root => {
+  const working = path.join(root, 'working');
+  const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+  const journal = await new ProjectJournal(working).initialize(model([cube]));
+  await fs.rename(working, path.join(root, 'preserved'));
+  await assert.rejects(journal.commit(model([{ ...cube, position: [4, 0, 0] }]), 'core.element.move'), /移除/);
+  await assert.rejects(fs.access(working), { code: 'ENOENT' });
+}));
+
+test('damaged target snapshot fails before changing committed head or textures', () => withJournal(async root => {
+  const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+  const journal = await new ProjectJournal(root).initialize(model([cube]));
+  await journal.commit(model([{ ...cube, position: [4, 0, 0] }]), 'core.element.move');
+  const record = path.join(root, 'elements/geometric/cubes/cube_a/1.json');
+  const corrupted = JSON.parse(await fs.readFile(record));
+  corrupted.state.position[0] = 999;
+  await fs.writeFile(record, JSON.stringify(corrupted));
+  await assert.rejects(journal.checkout(1), /快照損壞/);
+  assert.equal(JSON.parse(await fs.readFile(path.join(root, 'current_state'))).activeHead, 2);
+  assert.equal(JSON.parse(await journal.content()).elements[0].position[0], 4);
+}));
+
+test('missing pointer cannot silently drop an element during restoration', () => withJournal(async root => {
+  const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+  const journal = await new ProjectJournal(root).initialize(model([cube]));
+  delete journal.activeManifest.pointers.cube_a;
+  await assert.rejects(journal.content(), /元素索引損壞/);
+}));
+
+test('failed post-commit finalization is recovered before another write in the same process', () => withJournal(async root => {
+  const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+  const texture = { uuid: 'texture_a', source: image(10) };
+  const journal = await new ProjectJournal(root).initialize(model([cube], [texture]));
+  const writePointers = journal.writeNodePointers;
+  journal.writeNodePointers = async () => { throw new Error('injected finalization failure'); };
+  const updated = model([{ ...cube, position: [6, 0, 0] }], [{ ...texture, source: image(80) }]);
+  await assert.rejects(journal.commit(updated, 'core.element.move'), /injected/);
+  journal.writeNodePointers = writePointers;
+  assert.equal((await journal.commit(updated, 'core.element.move')).changed, false);
+  assert.equal(journal.state.pointerSyncFrom, undefined);
+  const undo = JSON.parse((await journal.navigate('undo')).content);
+  assert.equal(undo.elements[0].position[0], 0);
+  assert.equal(undo.textures[0].source, texture.source);
+}));
+
+test('committed texture staging finishes after crash, incomplete staging rolls back', () => withJournal(async root => {
+  const texture = { uuid: 'texture_a', source: image(10) };
+  const journal = await new ProjectJournal(root).initialize(model([], [texture]));
+  await journal.commit(model([], [{ ...texture, source: image(80) }]), 'core.paint.stroke');
+  await fs.writeFile(path.join(root, 'textures/texture_a/current'), JSON.stringify(texture));
+  await fs.writeFile(path.join(root, 'textures/texture_a/next'), JSON.stringify({ sequence: 2, purpose: 'commit', texture: { ...texture, source: image(80) } }));
+  const restored = await new ProjectJournal(root).load();
+  assert.equal(JSON.parse(await restored.content()).textures[0].source, image(80));
+  await fs.writeFile(path.join(root, 'current_state'), JSON.stringify({ ...restored.state, status: 'checking_out', targetHead: 1 }));
+  await fs.writeFile(path.join(root, 'textures/texture_a/next'), JSON.stringify({ sequence: 1, purpose: 'checkout', texture }));
+  const rolledBack = await new ProjectJournal(root).load();
+  assert.equal(rolledBack.state.activeHead, 2);
+  assert.equal(JSON.parse(await rolledBack.content()).textures[0].source, image(80));
+  assert.equal(rolledBack.state.targetHead, undefined);
+}));
+
+test('bulk texture assignment undoes all faces, UV flags, hierarchy and texture folders together', () => withJournal(async root => {
+  const nodes = ['a', 'b'].map(id => ({ uid: `cube_${id}`, type: 'cube', autoUv: true,
+    position: [0, 0, 0], faces: { north: { texture: 'old_texture', uv: [2, 3, 6, 9] } } }));
+  const before = JSON.parse(model(nodes));
+  before.groups = [{ uid: 'group_a', type: 'group', children: nodes.map(node => node.uid), pivot: [1, 2, 3], rotation: [12, 17, 26] }];
+  before.outliner = ['group_a'];
+  before.textureGroups = [{ uid: 'folder_a', name: 'folder' }];
+  const journal = await new ProjectJournal(root).initialize(before);
+  const after = structuredClone(before);
+  after.elements.forEach(cube => { cube.faces.north.texture = 'new_texture'; cube.autoUv = false; });
+  const result = await journal.commit(after, 'core.texture.assign');
+  assert.equal(result.globalSequence, '2_T');
+  assert.deepEqual(JSON.parse((await journal.navigate('undo')).content), before);
+  assert.deepEqual(JSON.parse((await journal.navigate('redo')).content), after);
+}));
+
+test('duplicate node IDs are rejected rather than overwriting a different snapshot', () => withJournal(async root => {
+  const node = { uid: 'cube_a', type: 'cube' };
+  await assert.rejects(new ProjectJournal(root).initialize(model([node, node])), /重複/);
+}));
+
+function withPngComment(source) {
+  const chunk = Buffer.alloc(16);
+  chunk.writeUInt32BE(4, 0);
+  chunk.write('tEXt', 4); chunk.write('test', 8);
+  let crc = 0xffffffff;
+  for (const byte of chunk.subarray(4, 12)) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? 0xedb88320 ^ crc >>> 1 : crc >>> 1;
+  }
+  chunk.writeUInt32BE((crc ^ 0xffffffff) >>> 0, 12);
+  const png = Buffer.from(source.slice(22), 'base64');
+  return `data:image/png;base64,${Buffer.concat([png.subarray(0, -12), chunk, png.subarray(-12)]).toString('base64')}`;
+}
+
+test('reencoded PNG after undo does not create a false edit or destroy redo', () => withJournal(async root => {
+  const texture = { uuid: 'texture_a', source: withPngComment(image(10)), layers: null };
+  const journal = await new ProjectJournal(root).initialize(model([], [texture]));
+  await journal.commit(model([], [{ ...texture, source: image(80) }]), 'core.paint.stroke');
+  const undone = await journal.navigate('undo');
+  assert.notEqual(JSON.parse(undone.content).textures[0].source, texture.source);
+  assert.equal((await journal.commit(undone.content, 'core.element.property')).changed, false);
+  assert.equal((await journal.navigate('redo')).sequence, 2);
+}));
+
+test('legacy texture hashes compare actual pixels instead of creating false history', () => withJournal(async root => {
+  const texture = { uuid: 'texture_a', source: withPngComment(image(10)), layers: null };
+  const journal = await new ProjectJournal(root).initialize(model([], [texture]));
+  delete journal.activeManifest.textureHashVersion;
+  journal.activeManifest.textureHashes.texture_a = 'legacy-encoding-hash';
+  await fs.writeFile(path.join(root, 'transactions/1.json'), JSON.stringify(journal.activeManifest));
+  assert.equal((await journal.commit(model([], [{ ...texture, source: image(10) }]), 'core.element.property')).changed, false);
+}));
+
+test('redo returns to the branch actually undone, including after reopen', () => withJournal(async root => {
+  const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+  const journal = await new ProjectJournal(root).initialize(model([cube]));
+  await journal.commit(model([{ ...cube, position: [2, 0, 0] }]), 'core.element.move');
+  await journal.checkout(1);
+  await journal.commit(model([{ ...cube, position: [3, 0, 0] }]), 'core.element.move');
+  await journal.checkout(2);
+  await journal.navigate('undo');
+  const reopened = await new ProjectJournal(root).load();
+  const result = await reopened.navigate('redo');
+  assert.equal(result.sequence, 2);
+  assert.equal(JSON.parse(result.content).elements[0].position[0], 2);
+}));

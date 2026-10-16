@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, addModifier, bakeModifier, buildModifierRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
+import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, addModifier, bakeModifier, bakeProceduralShape, buildModifierRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
 import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
 import { ModelFormatRegistry } from '../src/core/model-format-registry.js';
 import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/config/model-formats.js';
@@ -589,5 +589,59 @@ assert.equal(chooseKnifeCutAxis([3, 4, 0], [3.1, 8, 0], 'north', knifeCube), 0, 
 assert.equal(chooseKnifeCutAxis([3, 4, 0], [8, 4.1, 0], 'north', knifeCube), 1, 'a point near the horizontal guide chooses a Y cut');
 assert.equal(chooseKnifeCutAxis([0, 4, 0], [.1, 8, 0], 'north', knifeCube), 1, 'a boundary cut is rejected in favour of the other valid axis');
 assert.equal(chooseKnifeCutAxis([0, 0, 0], [1, 1, 0], 'north', knifeCube), null, 'two boundary coordinates cannot define a cut');
+
+const uvOnlyImport = importBlockbench({
+  name: 'uv_only', textures: [{ id: 'skin', uuid: 'texture_skin' }],
+  elements: [{ type: 'cube', uuid: 'uv_cube', from: [0, 0, 0], to: [4, 4, 4],
+    box_uv: false, faces: {
+      north: { uv: [0, 0, 4, 4] },
+      south: { uv: [0, 0, 4, 4], texture: null },
+      east: { uv: [0, 0, 4, 4], texture: '#other' },
+      west: { uv: [0, 0, 4, 4], enabled: false }
+    } }], outliner: ['uv_cube']
+});
+assert.equal(uvOnlyImport.elements[0].faces.north.texture, '#skin', 'UV-only imported faces use the first texture');
+assert.equal(uvOnlyImport.elements[0].faces.south.texture, null, 'explicitly culled faces stay culled');
+assert.equal(uvOnlyImport.elements[0].faces.east.texture, '#other', 'explicit texture references stay unchanged');
+assert.equal(uvOnlyImport.elements[0].faces.west.texture, undefined, 'disabled faces are not assigned a texture');
+const boxUvOnlyImport = importBlockbench({
+  textures: [{ id: 'skin' }],
+  elements: [{ type: 'cube', uuid: 'box_cube', from: [0, 0, 0], to: [4, 4, 4], box_uv: true, uv_offset: [0, 0] }],
+  outliner: ['box_cube']
+});
+assert.equal(Object.keys(boxUvOnlyImport.elements[0].faces).length, 6, 'box-UV-only cubes receive six default-textured faces');
+assert.ok(Object.values(boxUvOnlyImport.elements[0].faces).every(face => face.texture === '#skin'));
+
+for (const shapeType of ['polygon_prism', 'dodecahedron', 'truncated_icosahedron']) {
+  const source = new Shape({ shapeType, name: `${shapeType}_source`, origin: [10, 5, -2], pivot: [2, 3, 4], rotation: [8, 35, -5],
+    subdivisionEdits: { 0: { faces: { north: { uv: [1, 2, 5, 6], texture: '#skin' } } } } });
+  const sibling = new Cube({ name: 'sibling' });
+  const parent = new Group({ name: 'parent', children: [sibling.uid, source.uid], pivot: [3, 0, 0], rotation: [0, 20, 0] });
+  const project = new CubeBricksProject({ elements: [source, sibling], groups: [parent], outliner: [parent.uid] });
+  const original = project.getNode(source.uid);
+  addModifier(original, 'symmetry', { enabled: false });
+  const expected = original.toCubes()[0];
+  const result = bakeProceduralShape(project, source.uid);
+  assert.ok(result?.cubes.length > 0, `${shapeType} can be baked`);
+  assert.deepEqual(project.getNode(parent.uid).children, [sibling.uid, result.group.uid], 'baked group keeps the original sibling position');
+  assert.deepEqual(result.group.rotation, original.rotation, 'owner rotation moves to the baked group');
+  assert.deepEqual(result.group.pivot, original.pivot, 'owner pivot moves to the baked group');
+  assert.deepEqual(result.cubes[0].position, expected.position.map((value, axis) => value + original.origin[axis]));
+  assert.deepEqual(result.cubes[0].pivot, expected.pivot.map((value, axis) => value + original.origin[axis]));
+  const originalStart = expected.position.map((value, axis) => value + original.origin[axis]);
+  const originalCubePivot = expected.pivot.map((value, axis) => value + original.origin[axis]);
+  const originalWorldPoint = applyGroupTransforms(
+    rotatePoint(rotatePoint(originalStart, originalCubePivot, expected.rotation), original.pivot, original.rotation),
+    [parent]
+  );
+  const bakedWorldPoint = applyGroupTransforms(
+    rotatePoint(result.cubes[0].position, result.cubes[0].pivot, result.cubes[0].rotation),
+    [parent, result.group]
+  );
+  assert.ok(almostEqual(originalWorldPoint, bakedWorldPoint), 'baking preserves geometry through parent and owner rotations');
+  assert.deepEqual(result.cubes[0].faces, expected.faces, 'baking keeps subdivided UV and face data');
+  assert.equal(result.group.modifiers.length, original.modifiers.length, 'owner modifiers move to the baked group');
+  assert.equal(project.getNode(source.uid), null, 'the procedural source is replaced');
+}
 
 console.log('Model group import tests passed.');

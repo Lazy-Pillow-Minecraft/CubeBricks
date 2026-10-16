@@ -1,5 +1,6 @@
 import { buildModifierRenderInstances } from '../model.js';
 import { tiledFaceReference, tiledFaceRegions } from '../core/texture-features.js';
+import { constrainCube, formatRules } from '../core/format-constraints.js';
 
 const DEG = Math.PI / 180;
 const MIPPED_SUPERSAMPLE = 1.5;
@@ -1800,6 +1801,7 @@ function collectLockedState(project) {
 
 function buildElementGeometry(project, elements, selection, selectionOutline = [1, 1, 1], faceDistinct = false, textureLayout = null) {
   const selectedUids = normalizeSelectedNodeUids(selection);
+  const renderFormatRules = formatRules(project);
   const triangles = [];
   const faces = [];
   const edges = [];
@@ -1845,7 +1847,7 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
     const cubes = subdivisionOwner
       ? [{ cube: element, offset: subdivisionOwner.origin || [0, 0, 0], ownerRotation: subdivisionOwner.rotation || [0, 0, 0], ownerOrigin: subdivisionOwner.pivot || subdivisionOwner.origin || [0, 0, 0], groupChain, textureSize: project.textureSize, shade: element.shade !== false && subdivisionOwner.shade !== false }]
       : typeof element.toCubes === 'function'
-      ? element.toCubes().map((cube, cubeIndex) => ({ cube, cubeIndex, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.pivot || element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
+      ? element.toCubes().map((cube, cubeIndex) => ({ cube: renderFormatRules.javaBlock || renderFormatRules.moddedEntity ? constrainCube(cube, renderFormatRules) : cube, cubeIndex, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.pivot || element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
       : [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
 
     if (!element.visible) {
@@ -2285,7 +2287,8 @@ function textureLayoutEntry(layout, reference) {
 
 function getFaceUv(cube, faceName, textureSize, textureLayout = null) {
   const face = cube.faces?.[faceName] || {};
-  const uv = face.uv?.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
+  const uv = cube.uvMode === 'box' ? getBlockbenchBoxUv(cube, faceName)
+    : face.uv?.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
   const rectangle = uv?.length >= 4 ? [...uv] : [0, 0, textureSize[0], textureSize[1]];
   const atlasEntry = textureLayoutEntry(textureLayout, face.texture);
   if (atlasEntry) {
@@ -2344,7 +2347,11 @@ export function createBlockbenchFaceUvSlots(rectangle, rotation = 0) {
 
 export function getBlockbenchBoxUv(cube, faceName) {
   const [u, v] = cube.uv || [0, 0];
-  const [x, y, z] = cube.size.map(Math.abs);
+  const scale = Number(cube.uvScale) || 1;
+  const [x, y, z] = cube.size.map(value => {
+    const length = Math.abs(Number(value) || 0) * scale;
+    return scale === 1 ? length : length > 0 ? Math.max(1, Math.round(length)) : 0;
+  });
   const rectangles = {
     east: [u, v + z, u + z, v + z + y],
     north: [u + z, v + z, u + z + x, v + z + y],

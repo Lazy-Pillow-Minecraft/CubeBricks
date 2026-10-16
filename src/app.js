@@ -1,4 +1,4 @@
-import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, addOperator, bakeModifier, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
+import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, addOperator, bakeModifier, bakeProceduralShape, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
 import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
 import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
 import { modifierRegistry } from './config/modifiers.js';
@@ -9,6 +9,7 @@ import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, 
 import { DockManager } from './ui/dock-manager.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from './assets/player-reference.js';
 import { operationDefinition, operationIndex, requireOperation } from './core/operation-registry.js';
+import { JavaBlockVersion, formatRules, constrainNode, constrainProject } from './core/format-constraints.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -228,6 +229,7 @@ let texturePaintSyncFrame = null;
 const texturePaintSyncTargets = new Map();
 let textureFaceDropTarget = null;
 let textureLoadRevision = 0;
+let pendingTextureImage = null;
 const textureAtlasCanvas = document.createElement('canvas');
 const textureAtlasCtx = textureAtlasCanvas.getContext('2d');
 const textureAtlasPatchCanvas = document.createElement('canvas');
@@ -246,12 +248,15 @@ let mirrorGuideHideTimer = null;
 let subdivisionSession = null;
 let referenceImageEditing = false;
 let referenceImageDrag = null;
+let referenceControlsProject = null;
+let referenceControlsKey = '';
 let referenceImportViewKey = 'general';
 let axisWidgetDrag = null;
 let suppressAxisWidgetClick = false;
 let playerReferenceTextureRevision = 0;
 const journalTimers = new Map();
 let suppressJournalRecording = false;
+let closingProjects = false;
 
 const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectedGenerated', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
@@ -301,7 +306,7 @@ function createProjectSession(project, options = {}) {
     referenceImageSelection: { general: null, x: null, y: null, z: null },
     collapsedGroups: new Set(),
     textureAssets,
-    textureGroups: [],
+    textureGroups: structuredClone(options.textureGroups || []),
     activeTextureUid: preferredTexture?._uid || null,
     paintHistory: [],
     paintFuture: [],
@@ -355,9 +360,15 @@ function updateProjectStateLabel() {
 }
 
 function restoreProjectTextureView() {
+  // Texture previews and the scene atlas are separate consumers. Rebuild the
+  // atlas as soon as a project becomes active; otherwise an image-load callback
+  // for the currently selected preview is the only thing that starts it.
+  textureLoadRevision++;
   textureAtlasRevision++;
   textureAtlasEntries = [];
   textureAtlasLayoutByUid = new Map();
+  livePaintTextureSources.clear();
+  animationRasterCache.clear();
   renderTextureList();
   if (!state.textureAssets.length) {
     renderTexture();
@@ -366,6 +377,7 @@ function restoreProjectTextureView() {
   let index = state.textureAssets.findIndex(asset => asset._uid === state.activeTextureUid);
   if (index < 0) index = Math.max(0, state.textureAssets.findIndex(asset => asset.useAsDefault));
   activateProjectTexture(index);
+  rebuildTextureAtlas();
 }
 
 function activateProjectTab(tabId, { render = true } = {}) {
@@ -419,7 +431,10 @@ function closeProjectTab(tabId) {
   if (index < 0) return;
   const tab = projectTabs[index];
   if (tab.session.dirty && !window.confirm(`「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？`)) return;
-  disposeProjectTab(tab);
+  void flushProjectJournal(tab);
+  // Blob-backed textures must remain readable until the captured final write
+  // has converted them into durable image data.
+  Promise.resolve(tab.journalWrites).catch(() => {}).then(() => disposeProjectTab(tab));
   projectTabs.splice(index, 1);
   if (!projectTabs.length) {
     const project = new CubeBricksProject({ name: 'untitled', ...createModelProjectData('java_block_item', { name: 'untitled' }) });
@@ -469,6 +484,8 @@ function openProjectInfo(tabId) {
   const project = tab.session.project;
   $('#projectInfoName').value = project.name || '';
   $('#projectInfoFormat').textContent = modelFormatRegistry.get(project.formatId)?.name || project.formatId;
+  $('#projectInfoJavaVersionRow').hidden = project.formatId !== 'java_block_item';
+  $('#projectInfoJavaVersion').value = project.formatData?.javaBlockVersion || JavaBlockVersion.LEGACY;
   $('#projectInfoTextureWidth').value = project.textureSize?.[0] || 16;
   $('#projectInfoTextureHeight').value = project.textureSize?.[1] || 16;
   $('#projectInfoSnap').value = project.snap?.subdivisions || state.settingsSnap;
@@ -485,6 +502,8 @@ function applyProjectInfo() {
   const height = Math.max(1, Math.round(Number($('#projectInfoTextureHeight').value)));
   const snap = Number($('#projectInfoSnap').value);
   if (!name || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(snap) || snap <= 0) return;
+  if (tab.journalPending) void flushProjectJournal(tab);
+  tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
   tab.session.history.push(tab.session.project.serialize());
   if (tab.session.history.length > 60) tab.session.history.shift();
   tab.session.future.length = 0;
@@ -493,8 +512,10 @@ function applyProjectInfo() {
   tab.session.project.snap = { subdivisions: snap };
   tab.session.project.formatData = {
     ...(tab.session.project.formatData || {}),
-    projectDescription: $('#projectInfoDescription').value.trim()
+    projectDescription: $('#projectInfoDescription').value.trim(),
+    ...($('#projectInfoJavaVersionRow').hidden ? {} : { javaBlockVersion: $('#projectInfoJavaVersion').value })
   };
+  constrainProject(tab.session.project);
   tab.displayName = null;
   tab.session.dirty = true;
   tab.journalPending = 'core.project.information';
@@ -518,6 +539,47 @@ function initializeProjectTabs() {
   updateProjectStateLabel();
 }
 
+function requestProjectClose() {
+  if (closingProjects) return;
+  syncActiveProjectTab();
+  const dialog = $('#closeProjectsDialog');
+  if (dialog.open) return;
+  $('#closeProjectsList').innerHTML = projectTabs.map(tab => `<label class="close-project-row">
+    <input type="checkbox" data-retain-tab="${escapeAttribute(tab.id)}" checked />
+    <span title="${escapeAttribute(tab.session.filePath || projectTabLabel(tab))}">${escapeHtml(projectTabLabel(tab))}</span>
+    <small>${tab.session.dirty ? '未保存' : '已保存'}</small>
+  </label>`).join('');
+  dialog.showModal();
+}
+
+async function confirmProjectClose() {
+  if (closingProjects) return;
+  closingProjects = true;
+  const submit = $('#closeProjectsForm button[type="submit"]');
+  submit.disabled = true;
+  try {
+    syncActiveProjectTab();
+    await Promise.all(projectTabs.map(async tab => {
+      await flushProjectJournal(tab);
+      await tab.journalReady;
+      await tab.journalWrites;
+    }));
+    const retained = [], discarded = [];
+    for (const tab of projectTabs) {
+      if (!tab.journalId) continue;
+      const keep = $(`[data-retain-tab="${tab.id}"]`, $('#closeProjectsList'))?.checked;
+      if (keep) retained.push({ journalId: tab.journalId, filePath: tab.session.filePath, dirty: tab.session.dirty,
+        active: tab.id === activeProjectTabId });
+      else discarded.push(tab.journalId);
+    }
+    await window.cubeBricksDesktop.confirmProjectClose({ retained, discarded });
+  } catch (error) {
+    closingProjects = false;
+    submit.disabled = false;
+    toast(`關閉失敗：${error.message}`);
+  }
+}
+
 function selected() {
   return state.project.getNode(state.selectedUid);
 }
@@ -525,6 +587,7 @@ function selected() {
 function snapshot(operationId = 'core.element.property') {
   requireOperation(operationId);
   const tab = projectTabById(activeProjectTabId);
+  if (tab) tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
   if (tab?.journalPending) void flushProjectJournal(tab);
   if (tab) tab.journalPending = operationId;
   state.history.push(state.project.serialize());
@@ -532,26 +595,43 @@ function snapshot(operationId = 'core.element.property') {
   state.future.length = 0;
 }
 
-function restore(serialized) {
-  const previousSelectedUids = new Set(state.selectedUids);
-  const previousSelectedUid = state.selectedUid;
-  const previousSelectionAnchorUid = state.selectionAnchorUid;
-  subdivisionSession = null;
-  state.project = new CubeBricksProject(JSON.parse(serialized));
-  state.selectedGenerated = null;
-  state.selectedUids = new Set([...previousSelectedUids].filter(uidValue => state.project.getNode(uidValue)));
-  state.selectedUid = previousSelectedUid && state.selectedUids.has(previousSelectedUid)
+function restoredProjectSession(session, data, restoreTextures = false) {
+  const previousSelectedUids = new Set(session.selectedUids);
+  const previousSelectedUid = session.selectedUid;
+  const previousSelectionAnchorUid = session.selectionAnchorUid;
+  const restored = { ...session, project: new CubeBricksProject(data), selectedGenerated: null, dirty: true };
+  restored.selectedUids = new Set([...previousSelectedUids].filter(uidValue => restored.project.getNode(uidValue)));
+  restored.selectedUid = previousSelectedUid && restored.selectedUids.has(previousSelectedUid)
     ? previousSelectedUid
-    : [...state.selectedUids].at(-1) || null;
-  state.selectionAnchorUid = previousSelectionAnchorUid && state.project.getNode(previousSelectionAnchorUid)
+    : [...restored.selectedUids].at(-1) || null;
+  restored.selectionAnchorUid = previousSelectionAnchorUid && restored.project.getNode(previousSelectionAnchorUid)
     ? previousSelectionAnchorUid
-    : state.selectedUid;
-  const restoredSelection = state.project.getNode(state.selectedUid);
-  if (!isBezierElement(restoredSelection) || state.selectedCurveNodeIndex >= restoredSelection.nodes.length) state.selectedCurveNodeIndex = null;
-  if (![...(restoredSelection?.modifiers || []), ...(restoredSelection?.operators || [])].some(modifier => modifier.uid === state.selectedModifierUid)) state.selectedModifierUid = null;
-  if (state.vertexSnapSource && !state.project.getNode(state.vertexSnapSource.rootUid)) state.vertexSnapSource = null;
-  if (state.knifeSelection && !state.project.getNode(state.knifeSelection.uid)) cancelKnifeSelection(false);
-  markDirty(true);
+    : restored.selectedUid;
+  const restoredSelection = restored.project.getNode(restored.selectedUid);
+  if (!isBezierElement(restoredSelection) || restored.selectedCurveNodeIndex >= restoredSelection.nodes.length) restored.selectedCurveNodeIndex = null;
+  if (![...(restoredSelection?.modifiers || []), ...(restoredSelection?.operators || [])].some(modifier => modifier.uid === restored.selectedModifierUid)) restored.selectedModifierUid = null;
+  if (restored.vertexSnapSource && !restored.project.getNode(restored.vertexSnapSource.rootUid)) restored.vertexSnapSource = null;
+  if (restored.knifeSelection && !restored.project.getNode(restored.knifeSelection.uid)) restored.knifeSelection = null;
+  if (restoreTextures) {
+    restored.textureAssets = (data.textures || []).map(asset => ({
+      ...asset, _uid: textureUid(asset), uvWidth: asset.uv_width,
+      uvHeight: asset.uv_height, useAsDefault: asset.use_as_default === true,
+      groupId: asset.group_id || null, activeLayerUid: asset.active_layer_uid || null
+    }));
+    restored.textureGroups = structuredClone(data.textureGroups || []);
+    if (!restored.textureAssets.some(asset => asset._uid === restored.activeTextureUid)) {
+      restored.activeTextureUid = restored.textureAssets.find(asset => asset.useAsDefault)?._uid
+        || restored.textureAssets[0]?._uid || null;
+    }
+  }
+  return restored;
+}
+
+function restore(serialized) {
+  const restored = restoredProjectSession(captureProjectSession(), JSON.parse(serialized));
+  subdivisionSession = null;
+  for (const key of PROJECT_SESSION_KEYS) state[key] = restored[key];
+  markDirty(true, { constrain: false });
   renderAll();
 }
 
@@ -597,25 +677,43 @@ function restoreTexturePaintHistory(sourceStack, targetStack) {
 async function navigateProjectJournal(direction) {
   const tab = projectTabById(activeProjectTabId);
   if (!tab?.journalId || !window.cubeBricksDesktop?.checkoutProjectJournal) return false;
-  try {
-    await flushProjectJournal(tab);
-    if (tab.journalPending) throw new Error('目前變更尚未寫入工作記錄');
-    await tab.journalWrites;
+  // Reserve a place in the same queue as commits before yielding. Rapid undo /
+  // redo and writes from a subsequent edit must never overtake one another.
+  void flushProjectJournal(tab);
+  const requestedRevision = tab.journalEditRevision || 0;
+  const previousWrite = tab.journalWrites || Promise.resolve();
+  const navigate = async () => {
     await tab.journalReady;
+    if ((tab.journalEditRevision || 0) !== requestedRevision) return;
+    if (tab.journalPending) throw new Error('目前變更尚未寫入工作記錄');
     const result = await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId, direction });
-    if (!result) { toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作'); return true; }
-    const data = JSON.parse(result.content);
+    if (!result) { toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作'); return; }
+    tab.journalHead = result.sequence;
+    if ((tab.journalEditRevision || 0) !== requestedRevision) {
+      // An edit made during IPC already owns a later slot in journalWrites (or
+      // is pending). Keep that newer visible state; never overwrite it with an
+      // older asynchronous checkout result.
+      tab.journalPending ||= 'core.element.property';
+      scheduleProjectJournal(tab);
+      return;
+    }
+    if (!projectTabs.includes(tab)) return;
+    if (tab.id === activeProjectTabId) syncActiveProjectTab();
+    tab.session = restoredProjectSession(tab.session, JSON.parse(result.content), true);
+    if (tab.id !== activeProjectTabId) { renderProjectTabs(); return; }
     suppressJournalRecording = true;
     try {
-      state.textureAssets = (data.textures || []).map(asset => ({
-        ...asset, _uid: textureUid(asset), uvWidth: asset.uv_width,
-        uvHeight: asset.uv_height, useAsDefault: asset.use_as_default === true,
-        groupId: asset.group_id || null, activeLayerUid: asset.active_layer_uid || null
-      }));
-      restore(JSON.stringify(data));
+      subdivisionSession = null;
+      for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
+      markDirty(true, { constrain: false });
       restoreProjectTextureView();
-      tab.journalHead = result.sequence;
+      renderAll();
     } finally { suppressJournalRecording = false; }
+  };
+  const navigation = previousWrite.catch(() => {}).then(navigate);
+  tab.journalWrites = navigation;
+  try {
+    await navigation;
   } catch (error) { toast(`操作記錄切換失敗：${error.message}`); }
   return true;
 }
@@ -642,7 +740,13 @@ async function redo() {
   restore(state.future.pop());
 }
 
-function markDirty(value = true) {
+function markDirty(value = true, { constrain = true } = {}) {
+  if (value && constrain && !suppressJournalRecording && state.mode === 'edit') {
+    const rules = formatRules(state.project);
+    if (rules.javaBlock || rules.moddedEntity) {
+      for (const uidValue of state.selectedUids) constrainNode(state.project.getNode(uidValue), rules);
+    }
+  }
   const activeTab = projectTabById(activeProjectTabId);
   const previousDirty = activeTab?.session.dirty;
   const previousLabel = activeTab ? projectTabLabel(activeTab) : '';
@@ -650,6 +754,7 @@ function markDirty(value = true) {
   const tab = syncActiveProjectTab();
   if (tab) tab.session.dirty = value;
   if (value && tab && !suppressJournalRecording) {
+    tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
     tab.journalPending ||= 'core.element.property';
     scheduleProjectJournal(tab);
   }
@@ -665,12 +770,13 @@ function startProjectJournal(tab, operationId = 'core.project.create', existingI
     return;
   }
   const projectContent = tab.session.project.serialize();
+  const textureGroups = structuredClone(tab.session.textureGroups);
   tab.journalReady = serializableTextureAssets(structuredClone(tab.session.textureAssets))
     .then(textures => window.cubeBricksDesktop.initProjectJournal({
       journalId: tab.journalId,
       operationId,
       operationIndex: operationIndex(),
-      content: serializeCbmodel(textures, JSON.parse(projectContent))
+      content: serializeCbmodel(textures, JSON.parse(projectContent), textureGroups)
     }));
   tab.journalReady.catch(error => toast(`工作目錄建立失敗：${error.message}`));
 }
@@ -692,6 +798,7 @@ function noteJournalOperation(operationId) {
   const id = requireOperation(operationId);
   const tab = projectTabById(activeProjectTabId);
   if (!tab) return;
+  tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
   if (tab.journalPending && tab.journalPending !== id) void flushProjectJournal(tab);
   tab.journalPending = id;
   scheduleProjectJournal(tab);
@@ -706,12 +813,13 @@ async function flushProjectJournal(tab = projectTabById(activeProjectTabId)) {
   tab.journalPending = null;
   const session = tab.session;
   const projectContent = session.project.serialize();
+  const textureGroups = structuredClone(session.textureGroups);
   const assets = structuredClone(session.textureAssets);
   const textureSnapshot = serializableTextureAssets(assets);
   const write = async () => {
     await tab.journalReady;
     const textures = await textureSnapshot;
-    const content = serializeCbmodel(textures, JSON.parse(projectContent));
+    const content = serializeCbmodel(textures, JSON.parse(projectContent), textureGroups);
     const result = await window.cubeBricksDesktop.commitProjectJournal({
       journalId: tab.journalId, content, operationId,
       operationLabel: operationDefinition(operationId).label,
@@ -907,9 +1015,9 @@ function outlinerFlag(node, key, enabled, onIcon, offIcon, onTitle, offTitle, av
 function outlinerStateMarkup(node) {
   const visible = outlinerFlag(node, 'visible', node.visible !== false, 'icon-show', 'icon-unshow', '可見', '隱藏');
   if (!state.outlinerDetailed) return visible;
-  const autoUvAvailable = node.type === 'cube' || isShapeElement(node) || isBezierElement(node) || node.type === 'group';
+  const autoUvAvailable = isUvCapable(node) && node.uvMode !== 'box';
   return [
-    outlinerFlag(node, 'autoUv', nodeAutoUvEnabled(node), 'icon-uv-update', 'icon-unuv-update', '自動 UV', '不自動更新 UV', autoUvAvailable),
+    ...(autoUvAvailable ? [outlinerFlag(node, 'autoUv', nodeAutoUvEnabled(node), 'icon-uv-update', 'icon-unuv-update', '自動 UV', '不自動更新 UV', true)] : []),
     outlinerFlag(node, 'uvNormalized', nodeUvNormalizedEnabled(node), 'icon-uv-normalize', 'icon-unuv-normalize', 'UV 歸一化', '保留原 UV 像素', isUvCapable(node)),
     outlinerFlag(node, 'exported', node.exported !== false, 'icon-save', 'icon-unsave', '參與後續格式轉換', '不參與後續格式轉換'),
     outlinerFlag(node, 'locked', node.locked === true, 'icon-locked', 'icon-unlocked', '鎖定', '解鎖'),
@@ -1613,9 +1721,10 @@ function renderInspector() {
       ${item.color ? `<div class="option-row"><span>顯示色</span><button type="button" data-element-color-popup class="element-color-chip" style="background:${escapeAttribute(item.color)}" title="選擇顏色"></button></div>` : ''}
       <div class="option-row"><span>面陰影</span><label class="switch"><input type="checkbox" data-field="shade" ${item.shade !== false ? 'checked' : ''}/><i></i></label></div>
     </div>`;
+  const rules = formatRules(state.project);
   const uvPage = `<div class="field-section">
       <div class="field-title"><span>UV</span><span>${item.uvMode === 'face' ? 'PER FACE' : 'BOX'}</span></div>
-      <div class="option-row"><span>UV 模式</span><select data-field="uvMode"><option value="box" ${item.uvMode !== 'face' ? 'selected' : ''}>箱型 UV</option><option value="face" ${item.uvMode === 'face' ? 'selected' : ''}>逐面 UV</option></select></div>
+      <div class="option-row"><span>UV 模式</span><select data-field="uvMode" ${!rules.allowBoxUv || !rules.allowFaceUv ? 'disabled' : ''}><option value="box" ${item.uvMode !== 'face' ? 'selected' : ''} ${!rules.allowBoxUv ? 'disabled' : ''}>箱型 UV</option><option value="face" ${item.uvMode === 'face' ? 'selected' : ''} ${!rules.allowFaceUv ? 'disabled' : ''}>逐面 UV</option></select></div>
       <div class="option-row"><span>UV 歸一化</span><label class="switch"><input type="checkbox" data-field="uvNormalized" ${item.uvNormalized !== false ? 'checked' : ''}/><i></i></label></div>
     </div>`;
   const content = state.inspectorPage === 'appearance' ? appearancePage
@@ -1629,7 +1738,10 @@ function renderInspector() {
 
 function vectorField(label, field, values, nodes = [selected()]) {
   const displayed = sharedVectorValues(nodes, field, values);
-  return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="0.0001" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} /></label>`).join('')}</div>`;
+  const rules = formatRules(state.project);
+  const step = field === 'size' && rules.integerCubeSize ? '1' : field === 'rotation' && rules.rotationStep ? String(rules.rotationStep) : '0.0001';
+  const disabled = field === 'rotation' && rules.moddedEntity && nodes[0]?.type === 'cube' ? 'disabled title="Cube 不能旋轉；請旋轉其所屬的組"' : '';
+  return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="${step}" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} ${disabled} /></label>`).join('')}</div>`;
 }
 
 function scalarField(label, field, value, nodes = [selected()]) {
@@ -1655,6 +1767,7 @@ function setNodeVisibility(node, visible, cascadeGroup = true) {
 
 function setNodeAutoUv(node, enabled) {
   if (!node) return;
+  if (node.uvMode === 'box') enabled = true;
   node.autoUv = enabled;
   if (node.type === 'cube') {
     if (enabled) {
@@ -1674,10 +1787,16 @@ function setNodeAutoUv(node, enabled) {
 function setNodeFlag(node, key, value) {
   if (!node) return;
   if ((key === 'uvMode' || key === 'uvNormalized') && !isUvCapable(node)) return;
+  const rules = formatRules(state.project);
+  if (key === 'uvMode') {
+    if (value === 'box' && !rules.allowBoxUv || value === 'face' && !rules.allowFaceUv) return;
+    if (value === 'box') node.autoUv = true;
+  }
   if (key === 'visible') return setNodeVisibility(node, value);
   if (key === 'autoUv') return setNodeAutoUv(node, value);
   if (key === 'shade' && node.type === 'locator') return;
   node[key] = value;
+  if (key === 'uvMode' && node.type === 'cube') constrainNode(node, rules);
   if (node.type === 'group') {
     for (const childUid of node.children) setNodeFlag(state.project.getNode(childUid), key, value);
   }
@@ -1757,9 +1876,11 @@ function bindInspector() {
         return;
       }
       for (const target of items.filter(node => Array.isArray(node[field]))) {
+        const rules = formatRules(state.project);
+        const requested = target.type === 'cube' && field === 'size' && rules.integerCubeSize ? Math.round(value) : value;
         const nextValue = target.type === 'cube' && field === 'size' && !state.allowNegativeSize
-          ? Math.max(0, value)
-          : value;
+          ? Math.max(0, requested)
+          : requested;
         if (target.type === 'cube' && field === 'position') {
           const delta = nextValue - target.position[axis];
           target.position[axis] = nextValue;
@@ -1781,6 +1902,7 @@ function bindInspector() {
             translateModifierAnchors(target, [0, 1, 2].map(index => index === axis ? delta : 0));
           }
         }
+        if (field === 'rotation' || field === 'size') constrainNode(target, rules);
       }
       const displayedValue = item.type === 'cube' && field === 'size' && !state.allowNegativeSize ? Math.max(0, value) : value;
       if (displayedValue !== value) input.value = String(displayedValue);
@@ -2966,12 +3088,13 @@ function editSelectedUvFace(action) {
   }
   const data = selectedUvFaceData(true);
   if (!data) return toast('請先在 UV 預覽中選擇 Cube 的面');
+  if (data.cube.uvMode === 'box' && action !== 'rotate') return toast('箱型 UV 的面不能單獨鏡像');
   snapshot(action === 'rotate' ? 'core.uv.rotate' : 'core.uv.mirror');
-  if (!Array.isArray(data.face.uv) || data.face.uv.length < 4) data.face.uv = [...data.uv];
+  if (data.cube.uvMode !== 'box' && (!Array.isArray(data.face.uv) || data.face.uv.length < 4)) data.face.uv = [...data.uv];
   if (action === 'rotate') data.face.rotation = ((Number(data.face.rotation) || 0) + 90) % 360;
   if (action === 'mirror-x') [data.face.uv[0], data.face.uv[2]] = [data.face.uv[2], data.face.uv[0]];
   if (action === 'mirror-y') [data.face.uv[1], data.face.uv[3]] = [data.face.uv[3], data.face.uv[1]];
-  data.cube.autoUv = false;
+  data.cube.autoUv = data.cube.uvMode === 'box';
   markDirty();
   uvPreviewProjectCache = null;
   invalidateSelectionRenderGeometry();
@@ -3333,7 +3456,7 @@ function updateLocatorOverlay() {
   const height = rect.height;
   overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
   if (state.geometryOnly) {
-    overlay.innerHTML = '';
+    if (overlay.childElementCount) overlay.replaceChildren();
     overlay.setAttribute('hidden', '');
     return;
   }
@@ -3349,9 +3472,29 @@ function updateLocatorOverlay() {
       return [{ element, point, size: sceneRenderer.getLocatorScreenSize(world), opacity: lockedObjectOpacity(element.uid, point) }];
     })
     .sort((left, right) => right.point.depth - left.point.depth);
-  overlay.innerHTML = icons.map(({ element, point, size, opacity }) => `<svg class="locator-screen-icon ${selectedElements.has(element.uid) ? 'selected' : ''}"
-      data-locator-uid="${element.uid}" x="${point.x - size / 2}" y="${point.y - size / 2}" width="${size}" height="${size}"
-      opacity="${opacity}" viewBox="0 0 197.49 189.08" preserveAspectRatio="xMidYMid meet" aria-label="${escapeHtml(element.name)}">${LOCATOR_ICON_SHAPES}</svg>`).join('');
+  const existing = new Map([...overlay.querySelectorAll('[data-locator-uid]')]
+    .map(node => [node.dataset.locatorUid, node]));
+  icons.forEach(({ element, point, size, opacity }, index) => {
+    let node = existing.get(element.uid);
+    if (!node) {
+      node = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      node.classList.add('locator-screen-icon');
+      node.dataset.locatorUid = element.uid;
+      node.setAttribute('viewBox', '0 0 197.49 189.08');
+      node.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      node.innerHTML = LOCATOR_ICON_SHAPES;
+    }
+    existing.delete(element.uid);
+    node.classList.toggle('selected', selectedElements.has(element.uid));
+    node.setAttribute('x', point.x - size / 2);
+    node.setAttribute('y', point.y - size / 2);
+    node.setAttribute('width', size);
+    node.setAttribute('height', size);
+    node.setAttribute('opacity', opacity);
+    node.setAttribute('aria-label', element.name);
+    if (overlay.children[index] !== node) overlay.insertBefore(node, overlay.children[index] || null);
+  });
+  existing.forEach(node => node.remove());
   overlay.toggleAttribute('hidden', icons.length === 0);
 }
 
@@ -3607,6 +3750,11 @@ function updateReferenceImageControls() {
   const key = referenceViewKey();
   const records = referenceImagesForView(key);
   const record = currentReferenceImage(key);
+  const renderKey = JSON.stringify([key, record?.uid, referenceImageEditing,
+    records.map(entry => [entry.uid, entry.name])]);
+  if (referenceControlsProject === state.project && referenceControlsKey === renderKey) return;
+  referenceControlsProject = state.project;
+  referenceControlsKey = renderKey;
   const labels = { general: '一般視圖參考圖', x: 'X 軸視圖參考圖', y: 'Y 軸視圖參考圖', z: 'Z 軸視圖參考圖' };
   $('#referenceImageViewLabel').textContent = labels[key];
   $('#referenceImageName').textContent = record ? `${record.name} · ${records.indexOf(record) + 1}/${records.length}` : '尚未導入';
@@ -3653,8 +3801,10 @@ function updateReferenceImageLayer() {
   const records = referenceImagesForView(key);
   const selected = currentReferenceImage(key);
   if (!records.length) {
-    referenceImageLayer.hidden = true;
-    referenceImageLayer.querySelectorAll('img').forEach(image => image.remove());
+    if (!referenceImageLayer.hidden) {
+      referenceImageLayer.hidden = true;
+      referenceImageLayer.querySelectorAll('img').forEach(image => image.remove());
+    }
     updateReferenceImageControls();
     return;
   }
@@ -4911,7 +5061,7 @@ function textureUvEntries() {
       if (isFaceTiled(face)) continue;
       const textureReference = effectiveFaceTextureReference(face);
       if (activeReferences && !activeReferences.has(String(textureReference))) continue;
-      let uv = Array.isArray(face?.uv) && face.uv.length >= 4
+      let uv = cube.uvMode !== 'box' && Array.isArray(face?.uv) && face.uv.length >= 4
         ? face.uv.map(Number)
         : getBlockbenchBoxUv(cube, faceName).map(Number);
       if (!uv.every(Number.isFinite)) uv = getBlockbenchBoxUv(cube, faceName).map(Number);
@@ -4972,12 +5122,14 @@ function textureUvPath(entries, layout) {
 }
 
 function updateTextureUvFields(selectedEntries) {
+  const boxUv = selectedEntries.some(entry => entry.cube.uvMode === 'box');
   $$('[data-uv-coordinate]').forEach(input => {
     const coordinate = Number(input.dataset.uvCoordinate);
     const first = selectedEntries[0]?.uv[coordinate];
     const shared = selectedEntries.length && selectedEntries.every(entry => Math.abs(entry.uv[coordinate] - first) < 1e-8);
     if (document.activeElement !== input) input.value = shared ? String(round(first)) : '';
-    input.disabled = !selectedEntries.length;
+    input.disabled = !selectedEntries.length || boxUv;
+    input.title = boxUv ? '箱型 UV 的各面位置固定；可在預覽中整體移動' : '';
     input.dataset.mixed = selectedEntries.length && !shared ? 'true' : 'false';
   });
 }
@@ -5194,6 +5346,7 @@ function constrainUvMoveDelta(bounds, delta) {
 
 function materializeUvFaces(entries) {
   for (const entry of entries) {
+    if (entry.cube.uvMode === 'box') continue;
     entry.cube.faces ||= {};
     const existing = entry.cube.faces[entry.faceName];
     if (existing === null) continue;
@@ -5213,8 +5366,12 @@ function beginTextureUvMutation(drag) {
   materializeUvFaces(selectedTextureUvEntries());
   const entries = selectedTextureUvEntries();
   drag.entries = entries;
-  drag.originals = new Map(entries.map(entry => [entry.key, [...entry.cube.faces[entry.faceName].uv]]));
-  drag.bounds = normalizedUvBounds(entries);
+  drag.boxCubes = new Map(entries.filter(entry => entry.cube.uvMode === 'box')
+    .map(entry => [entry.cube.uid, { cube: entry.cube, uv: [...entry.cube.uv] }]));
+  drag.originals = new Map(entries.map(entry => [entry.key, entry.cube.uvMode === 'box'
+    ? [...getBlockbenchBoxUv(entry.cube, entry.faceName)] : [...entry.cube.faces[entry.faceName].uv]]));
+  const boxBounds = [...drag.boxCubes.values()].flatMap(({ cube }) => CUBE_FACE_NAMES.map(faceName => ({ uv: getBlockbenchBoxUv(cube, faceName) })));
+  drag.bounds = normalizedUvBounds([...entries, ...boxBounds]);
   drag.snapshotTaken = true;
 }
 
@@ -5228,9 +5385,11 @@ function applyTextureUvDrag(event) {
   if (drag.kind === 'move') {
     delta = constrainUvMoveDelta(drag.bounds, delta);
     drag.entries.forEach(entry => {
+      if (entry.cube.uvMode === 'box') return;
       const original = drag.originals.get(entry.key);
       entry.cube.faces[entry.faceName].uv = [original[0] + delta[0], original[1] + delta[1], original[2] + delta[0], original[3] + delta[1]];
     });
+    for (const { cube, uv } of drag.boxCubes.values()) cube.uv = [uv[0] + delta[0], uv[1] + delta[1]];
   } else {
     const original = drag.bounds;
     let next = { ...original };
@@ -5246,6 +5405,7 @@ function applyTextureUvDrag(event) {
     const oldWidth = Math.max(1e-8, original.maxU - original.minU);
     const oldHeight = Math.max(1e-8, original.maxV - original.minV);
     drag.entries.forEach(entry => {
+      if (entry.cube.uvMode === 'box') return;
       const source = drag.originals.get(entry.key);
       entry.cube.faces[entry.faceName].uv = source.map((value, index) => index % 2 === 0
         ? next.minU + (value - original.minU) / oldWidth * (next.maxU - next.minU)
@@ -5253,6 +5413,7 @@ function applyTextureUvDrag(event) {
     });
   }
   if (!state.dirty) markDirty();
+  textureUvEntryCache = null;
   invalidateSelectionRenderGeometry();
   renderTextureUvOverlay();
   scheduleSceneRender();
@@ -6044,11 +6205,11 @@ function applyTextureAssetToFace(asset, hit) {
   snapshot('core.texture.assign');
   for (const cube of cubes) {
     const face = ensureCubeFaceRecord(cube, hit.faceName);
-    if (!Array.isArray(face.uv)) face.uv = [...getBlockbenchBoxUv(cube, hit.faceName)];
+    if (cube.uvMode !== 'box' && !Array.isArray(face.uv)) face.uv = [...getBlockbenchBoxUv(cube, hit.faceName)];
     face.texture = reference;
     delete face.enabled;
     delete face[CULLED_FACE_TEXTURE_KEY];
-    cube.autoUv = false;
+    cube.autoUv = cube.uvMode === 'box';
     persistGeneratedPaintCube(cube);
   }
   markDirty();
@@ -7104,6 +7265,10 @@ function startTexturePointer(event) {
   const entries = textureUvEntries();
   let selectedEntries = selectedTextureUvEntries(entries);
   if (event.altKey && selectedEntries.length) {
+    if (selectedEntries.some(entry => entry.cube.uvMode === 'box')) {
+      toast('箱型 UV 只能整體移動，不能逐面重新指定');
+      return;
+    }
     textureUvDrag = {
       kind: 'assign', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
       startUv: point, currentUv: point, entries: selectedEntries, moved: false, blank: false, snapshotTaken: false
@@ -7112,7 +7277,7 @@ function startTexturePointer(event) {
     return;
   }
   const bounds = normalizedUvBounds(selectedEntries);
-  const handle = textureUvHandleAt(point, bounds);
+  const handle = selectedEntries.some(entry => entry.cube.uvMode === 'box') ? null : textureUvHandleAt(point, bounds);
   const hit = textureUvHit(entries, point);
   if (!handle && hit) {
     const next = event.shiftKey || event.ctrlKey || event.metaKey
@@ -7235,7 +7400,7 @@ function updateTextureUvCursor(event) {
   const point = clientToTextureUv(event.clientX, event.clientY);
   const selectedEntries = selectedTextureUvEntries();
   const bounds = normalizedUvBounds(selectedEntries);
-  const handle = textureUvHandleAt(point, bounds);
+  const handle = selectedEntries.some(entry => entry.cube.uvMode === 'box') ? null : textureUvHandleAt(point, bounds);
   const cursors = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
   preview.style.cursor = cursors[handle]
     || (textureUvHit(selectedEntries, point) ? 'move' : '');
@@ -7263,6 +7428,7 @@ function wheelTextureView(event) {
 function setUvCoordinate(coordinate, value) {
   const entries = selectedTextureUvEntries();
   if (!entries.length || !Number.isFinite(value)) return;
+  if (entries.some(entry => entry.cube.uvMode === 'box')) return toast('箱型 UV 的六面相對位置固定，不能單獨修改面座標');
   snapshot('core.uv.coordinate');
   const maximum = coordinate % 2 === 0 ? texturePreviewSize[0] : texturePreviewSize[1];
   const nextValue = clamp(value, 0, maximum);
@@ -7336,7 +7502,12 @@ async function rebuildTextureAtlasNow() {
     const frame = flipbookFrame(asset, original, asset.animation?.currentFrame || 0);
     return { asset, index, image: frame, width: frame.width, height: frame.height };
   }))).filter(Boolean);
-  if (revision !== textureAtlasRevision) return false;
+  if (revision !== textureAtlasRevision) {
+    // A preview switch or paint patch superseded this asynchronous build.
+    // Ensure the current project's atlas still gets its own final pass.
+    rebuildTextureAtlas();
+    return false;
+  }
   const tileKeys = new Set();
   for (const element of state.project.elements) {
     const cubes = element.type === 'cube' ? [element] : element.toCubes?.() || [];
@@ -7420,10 +7591,12 @@ function syncRendererTextureAsset(asset, source, composited = false) {
       sceneRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
     }
   } else if (state.textureAssets.length) {
-    if (source) sceneRenderer.setTexture(source);
+    // A project's faces may reference several textures. Uploading the active
+    // preview as a temporary single texture discards the atlas layout and
+    // forces a full mesh rebuild (and shows unrelated faces incorrectly).
+    // Keep the previous atlas until the new one is ready.
     rebuildTextureAtlas();
-  }
-  else {
+  } else {
     textureAtlasRevision++;
     textureAtlasEntries = [];
     textureAtlasLayoutByUid = new Map();
@@ -7436,7 +7609,7 @@ function syncRendererTextureAsset(asset, source, composited = false) {
       if (!uvPreviewRenderer.updateTextureAtlasRegion(atlasPatch, atlasEntry.x - 1, atlasEntry.y - 1)) {
         uvPreviewRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
       }
-    } else if (source) uvPreviewRenderer.setTexture(source);
+    }
     uvPreviewTextureDirty = false;
   }
   scheduleSceneRender();
@@ -7449,6 +7622,7 @@ function syncRendererTexture(source) {
 
 function renderTexture() {
   textureLoadRevision++;
+  pendingTextureImage = null;
   updateLayerCompositePreview(null, null);
   const width = Math.max(1, Number(state.project.textureSize?.[0]) || 16);
   const height = Math.max(1, Number(state.project.textureSize?.[1]) || 16);
@@ -8202,7 +8376,7 @@ async function createTextureTemplate(options) {
   const progress = beginTextureGenerationProgress(faceCount);
   try {
   await progress.prepare(`正在準備 ${faceCount} 個面…`);
-  const subdivisions = activeSnapSubdivisions();
+  const subdivisions = options.boxUv && formatRules(state.project).moddedEntity ? 16 : activeSnapSubdivisions();
   const padding = options.paddingEnabled ? Math.max(0, Math.round(options.padding)) : 0;
   const sourceAssets = new Set();
   const rectangles = [];
@@ -8232,7 +8406,7 @@ async function createTextureTemplate(options) {
       const scaled = Math.abs(Number(value) || 0) * subdivisions / 16;
       return scaled > 0 ? Math.max(1, Math.round(scaled)) : 0;
     });
-    if (options.boxUv && cube.uvNormalized !== false) {
+    if (options.boxUv) {
       const [x, y, z] = dimensions;
       const boxEntry = { width: 2 * (x + z), height: y + z, faceName: 'north', sourceUv: null, sourceAsset: null, targets: [] };
       rectangles.push(boxEntry);
@@ -8293,21 +8467,24 @@ async function createTextureTemplate(options) {
   state.project.uvMode = options.boxUv ? 'box' : 'face';
   for (const target of targets) {
     target.cube.uvMode = options.boxUv ? 'box' : 'face';
-    target.cube.autoUv = false;
+    target.cube.autoUv = Boolean(options.boxUv);
+    if (options.boxUv) target.cube.uvScale = subdivisions / 16;
     if (target.owner) {
       target.owner.uvMode = target.cube.uvMode;
-      target.owner.autoUv = false;
+      target.owner.autoUv = Boolean(options.boxUv);
     }
     for (const assignment of assignments.filter(entry => entry.target === target)) {
       target.cube.faces[assignment.faceName].texture = `#${asset.id}`;
     }
     const boxAssignment = assignments.find(assignment => assignment.target === target && assignment.offset);
-    if (boxAssignment && assignments.filter(assignment => assignment.target === target).length === CUBE_FACE_NAMES.length) {
+    if (boxAssignment) {
       const placement = packed.placements.get(boxAssignment.entry);
       target.cube.uv = [placement.x, placement.y];
     }
+    if (options.boxUv) for (const face of Object.values(target.cube.faces || {})) if (face) delete face.uv;
   }
   syncGeneratedTemplateEdits(targets);
+  markDirty();
   invalidateUvPreviewTextureState();
   invalidateAllRenderGeometry();
   renderAll('all');
@@ -8346,7 +8523,10 @@ function updateTextureCreateDialog() {
 function openTextureCreateDialog() {
   $('#textureCreateWidth').value = String(state.project.textureSize?.[0] || 64);
   $('#textureCreateHeight').value = String(state.project.textureSize?.[1] || 64);
-  $('#textureTemplateBoxUv').checked = state.project.uvMode === 'box';
+  const rules = formatRules(state.project);
+  $('#textureTemplateBoxUv').checked = rules.moddedEntity || rules.allowBoxUv && state.project.uvMode === 'box';
+  $('#textureTemplateBoxUv').disabled = !rules.allowBoxUv || !rules.allowFaceUv;
+  $('#textureTemplateBoxUv').closest('label').hidden = !rules.allowBoxUv || !rules.allowFaceUv;
   $('#textureTemplateSelectedOnly').checked = false;
   $('#textureTemplateSelectedOnly').disabled = selectedElementUids().length === 0;
   const subdivisions = activeSnapSubdivisions();
@@ -8389,8 +8569,10 @@ function importTexture(file) {
 function loadTextureSource(source, name) {
   const revision = ++textureLoadRevision;
   const image = new Image();
+  pendingTextureImage = image;
   image.onload = () => {
     if (revision !== textureLoadRevision) return;
+    pendingTextureImage = null;
     const asset = activeTextureAsset();
     if (asset) { asset.uvWidth = image.naturalWidth; asset.uvHeight = image.naturalHeight; }
     textureCanvas.width = image.naturalWidth;
@@ -8398,12 +8580,17 @@ function loadTextureSource(source, name) {
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, image.naturalWidth, image.naturalHeight);
     textureCtx.drawImage(image, 0, 0);
-    syncRendererTexture(textureCanvas);
     updateTexturePreviewFrame(image.naturalWidth, image.naturalHeight);
     const activeName = $('.texture-item.active strong');
     if (activeName) activeName.textContent = name;
+    syncRendererTexture(textureCanvas);
     renderScene();
     renderTextureFeatureControls();
+  };
+  image.onerror = () => {
+    if (revision !== textureLoadRevision) return;
+    pendingTextureImage = null;
+    toast(`貼圖載入失敗：${name || '未命名貼圖'}`);
   };
   image.src = source;
 }
@@ -8656,8 +8843,9 @@ async function serializableTextureAssets(assets = state.textureAssets) {
   }));
 }
 
-function serializeCbmodel(textureAssets = [], project = state.project) {
+function serializeCbmodel(textureAssets = [], project = state.project, textureGroups = state.textureGroups) {
   const data = typeof project.serialize === 'function' ? JSON.parse(project.serialize()) : structuredClone(project);
+  data.textureGroups = structuredClone(textureGroups || []);
   data.textures = textureAssets.map((texture, index) => ({
     uuid: texture.uuid || texture._uid || `texture_${index + 1}`,
     id: texture.id || String(index),
@@ -8678,7 +8866,10 @@ function serializeCbmodel(textureAssets = [], project = state.project) {
 
 function loadProjectContent(content, filePath = '', resolvedTextures = [], journalId = null, options = {}) {
   const data = JSON.parse(content);
-  const project = filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format ? importBlockbench(data) : new CubeBricksProject(data);
+  // A journal already contains native snapshots, regardless of the original
+  // imported filename recorded in saved_state.
+  const project = !journalId && (filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format)
+    ? importBlockbench(data) : new CubeBricksProject(data);
   const savedPath = filePath.toLowerCase().endsWith('.cbmodel') ? filePath : null;
   const embeddedTextures = (data.textures || []).filter(texture => typeof texture.source === 'string' && texture.source.startsWith('data:image/')).map(texture => ({
     uuid: texture.uuid, id: texture.id, name: texture.name || 'embedded_texture.png', source: texture.source,
@@ -8691,31 +8882,55 @@ function loadProjectContent(content, filePath = '', resolvedTextures = [], journ
     filePath: savedPath,
     displayName: filePath ? filePath.split(/[\\/]/).pop() : null,
     textureAssets: resolvedTextures.length ? resolvedTextures : embeddedTextures,
+    textureGroups: data.textureGroups || [],
     dirty: options.dirty ?? !savedPath,
     journalId,
     imported: true
   });
   if (options.dirty !== undefined) {
     suppressJournalRecording = true;
-    try { markDirty(options.dirty); } finally { suppressJournalRecording = false; }
-  } else markDirty(!savedPath);
+    try { markDirty(options.dirty, { constrain: false }); } finally { suppressJournalRecording = false; }
+  } else markDirty(!savedPath, { constrain: false });
   toast(`已打開 ${project.name}`);
 }
 
 async function offerProjectRecovery() {
   if (!window.cubeBricksDesktop?.listRecoverableProjects) return;
   try {
+    const retained = await window.cubeBricksDesktop.retainedProjectTabs?.() || [];
+    const restored = new Set();
+    for (const tab of retained) {
+      try {
+        const result = await window.cubeBricksDesktop.recoverProjectJournal(tab);
+        loadProjectContent(result.content, tab.filePath || '', [], result.journalId, { dirty: tab.dirty === true });
+        restored.add(tab.journalId);
+      } catch (error) { toast(`分頁恢復失敗：${error.message}`); }
+    }
+    if (restored.size && projectTabs.length > 1) {
+      const initial = projectTabs[0];
+      if (!initial.session.project.elements.length && !initial.session.project.groups.length
+        && !initial.session.dirty && !initial.session.filePath) {
+        projectTabs.shift();
+        renderProjectTabs();
+      }
+      const preferred = retained.find(tab => tab.active && restored.has(tab.journalId));
+      if (preferred) {
+        const projectTab = projectTabs.find(tab => tab.journalId === preferred.journalId);
+        if (projectTab) activateProjectTab(projectTab.id);
+      }
+    }
     const projects = await window.cubeBricksDesktop.listRecoverableProjects();
-    if (!projects.length) return;
-    const prompt = projects.length === 1
-      ? `找到未保存的工作項目「${projects[0].name}」。要恢復嗎？`
-      : `找到 ${projects.length} 個未保存的工作項目。要全部恢復到分頁嗎？`;
+    const pending = projects.filter(project => !restored.has(project.journalId));
+    if (!pending.length) return;
+    const prompt = pending.length === 1
+      ? `找到未保存的工作項目「${pending[0].name}」。要恢復嗎？`
+      : `找到 ${pending.length} 個未保存的工作項目。要全部恢復到分頁嗎？`;
     if (!window.confirm(prompt)) return;
-    for (const project of projects) {
+    for (const project of pending) {
       const result = await window.cubeBricksDesktop.recoverProjectJournal(project);
       loadProjectContent(result.content, project.filePath || '', [], result.journalId, { dirty: true });
     }
-    if (projects.length > 1) toast(`已恢復 ${projects.length} 個工作項目`);
+    if (pending.length > 1) toast(`已恢復 ${pending.length} 個工作項目`);
   } catch (error) { toast(`工作項目恢復失敗：${error.message}`); }
 }
 
@@ -8743,7 +8958,9 @@ async function exportProject() {
     await activeTab?.journalWrites;
     const textureAssets = await serializableTextureAssets();
     const cbmodelContent = serializeCbmodel(textureAssets);
-    const bbmodelContent = JSON.stringify(exportBlockbench(state.project, textureAssets), null, 2);
+    const exportModel = new CubeBricksProject(JSON.parse(state.project.serialize()));
+    constrainProject(exportModel);
+    const bbmodelContent = JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2);
     if (window.cubeBricksDesktop?.exportProject) {
       const result = await window.cubeBricksDesktop.exportProject({
         name: state.project.name, cbmodelContent, bbmodelContent, journalId: activeTab?.journalId
@@ -9099,6 +9316,28 @@ function showElementContextMenu(event, uidValue, source = null) {
         icon: subdivisionSession?.ownerUid === node.uid ? '◆' : '◇',
         label: subdivisionSession?.ownerUid === node.uid ? '完成細分編輯' : '進入細分編輯',
         action: () => subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node)
+      }] : []),
+      ...(isProceduralShape(node) ? [{
+        icon: '▣', label: '烘焙為 Cube 組', action: () => {
+          if (subdivisionSession?.ownerUid === node.uid) exitSubdivisionEdit(false);
+          const generated = node.toCubes();
+          if (!generated.length) return toast('這個 Shape 沒有可烘焙的 Cube');
+          snapshot('core.shape.bake');
+          const result = bakeProceduralShape(state.project, node.uid, generated);
+          if (!result) return toast('這個 Shape 沒有可烘焙的 Cube');
+          result.group.operators.forEach(operator => paintSymmetryRelationCache.delete(operator.uid));
+          state.selectedUid = result.group.uid;
+          state.selectedUids = new Set([result.group.uid]);
+          state.selectionAnchorUid = result.group.uid;
+          state.selectedGenerated = null;
+          state.selectedCurveNodeIndex = null;
+          state.selectedModifierUid = null;
+          state.selectedUvFaces = new Set();
+          sceneRenderer.invalidateMirrorGeometry();
+          sceneRenderer.invalidateLockState();
+          markDirty(); renderAll();
+          toast(`已烘焙為 ${result.cubes.length} 個 Cube`);
+        }
       }] : []),
       ...(node.subdivisionOwnerUid ? [{ icon: '◆', label: '完成細分編輯', action: () => exitSubdivisionEdit() }] : []),
       { separator: true },
@@ -10184,7 +10423,7 @@ function bindEvents() {
   sceneCanvas.addEventListener('pointercancel', endPointerDrag);
   sceneCanvas.addEventListener('lostpointercapture', endPointerDrag);
   sceneCanvas.addEventListener('auxclick', event => { if (event.button === 1) event.preventDefault(); });
-  sceneCanvas.addEventListener('wheel', event => { event.preventDefault(); cancelCameraFocus(); state.zoom = Math.max(.002, Math.min(100, state.zoom * (event.deltaY > 0 ? .9 : 1.1))); renderScene(); }, { passive: false });
+  sceneCanvas.addEventListener('wheel', event => { event.preventDefault(); cancelCameraFocus(); state.zoom = Math.max(.002, Math.min(100, state.zoom * (event.deltaY > 0 ? .9 : 1.1))); scheduleSceneRender(); }, { passive: false });
   window.addEventListener('resize', renderScene);
   document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
@@ -11027,6 +11266,14 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   let item = selected();
   if (state.tool === 'pivot' && selectionContext.multiple) item = selectionContext.commonGroup;
   if (!item || !['move', 'resize', 'rotate', 'pivot'].includes(state.tool)) return;
+  if (state.tool === 'rotate' && formatRules(state.project).moddedEntity && item.type === 'cube') {
+    toast('模組版實體的 Cube 不能旋轉；請把它放入組後旋轉組');
+    return;
+  }
+  if (state.tool === 'rotate' && formatRules(state.project).singleAxisRotation && axisIndex === null) {
+    toast('目前 Java 版本只允許單軸旋轉，請拖動 X、Y 或 Z 軸圓環');
+    return;
+  }
   const targetNodes = state.tool === 'resize'
     ? selectedElementUids().map(uidValue => state.project.getNode(uidValue)).filter(Boolean)
     : selectionContext.nodes;
@@ -11192,6 +11439,9 @@ function openPreciseRotationInput(event, handle) {
     if (degrees) {
       snapshot('core.element.precise_rotation');
       applyExactRotation(drag, degrees * drag.rotationScreenSign);
+      const rules = formatRules(state.project);
+      constrainNode(drag.item, rules);
+      for (const target of drag.targets || []) constrainNode(target.node, rules);
       invalidateSelectionRenderGeometry();
       sceneRenderer.invalidateMirrorGeometry();
       markDirty();
@@ -11342,7 +11592,9 @@ function onPointerMove(event) {
     state.yaw = ((state.dragging.yaw - dx * .01) % fullTurn + fullTurn) % fullTurn;
     state.pitch = Math.max(-Math.PI / 2 + .001, Math.min(Math.PI / 2 - .001, state.dragging.pitch + dy * .01));
   }
-  renderScene();
+  // Pointer events can arrive far faster than the display refresh rate. Keep
+  // the latest camera state, but render it only once per animation frame.
+  scheduleSceneRender();
 }
 
 function onScenePointerMove(event) {
@@ -11363,6 +11615,11 @@ function applyPendingTransform(drag) {
   if (!pending) return false;
   drag.pendingTransform = null;
   applyTransformDrag(drag, pending.dx, pending.dy, pending.event);
+  const rules = formatRules(state.project);
+  if (rules.javaBlock || rules.moddedEntity) {
+    constrainNode(drag.item, rules);
+    for (const target of drag.targets || []) constrainNode(target.node, rules);
+  }
   updateTransformTooltip(pending.event, drag);
   if (!drag.batchPreview) invalidateSelectionRenderGeometry();
   if (!state.dirty) markDirty();
@@ -11386,6 +11643,7 @@ function commitBatchTransform(drag) {
       const worldDelta = nextWorldAnchor.map((value, axis) => value - target.worldAnchor[axis]);
       translateCapturedTarget(target, localDeltaFromWorld(target, worldDelta));
       applyTargetRotation(target, preview.axis, preview.degrees);
+      constrainNode(target.node, formatRules(state.project));
     }
   }
   sceneRenderer.clearSelectionPreviewTransform();
@@ -11974,6 +12232,8 @@ function getSnapSubdivisions(event = {}) {
 function getSnapStep(event = {}) { return 16 / Math.max(.0001, getSnapSubdivisions(event)); }
 function snapValue(value, event) { const step = getSnapStep(event); return Math.round(value / step) * step; }
 function getAngleSnapStep(event = {}) {
+  const requiredStep = formatRules(state.project).rotationStep;
+  if (requiredStep) return requiredStep;
   const ctrl = event.ctrlKey || event.metaKey;
   if (event.shiftKey && ctrl) return .05;
   if (event.shiftKey) return .5;
@@ -12017,6 +12277,11 @@ modelFormatRegistry.subscribe(() => {
 loadTheme();
 sceneRenderer.setSelectionOutline(getComputedStyle(document.documentElement).getPropertyValue('--selection-outline').trim());
 initializeProjectTabs();
+if (window.cubeBricksDesktop?.onCloseRequested) {
+  window.cubeBricksDesktop.onCloseRequested(requestProjectClose);
+  $('#closeProjectsForm').addEventListener('submit', event => { event.preventDefault(); void confirmProjectClose(); });
+  $('[data-action="cancelCloseProjects"]').addEventListener('click', () => $('#closeProjectsDialog').close());
+}
 renderTexture();
 renderPalette();
 renderModelFormatPicker();

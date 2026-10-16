@@ -13,5 +13,8 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
   projectWorkspaceRoot: () => ipcRenderer.invoke('project:workspace-root'),
   chooseProjectWorkspaceRoot: () => ipcRenderer.invoke('project:choose-workspace-root'),
   setProjectWorkspaceRoot: (directory) => ipcRenderer.invoke('project:set-workspace-root', directory),
+  onCloseRequested: (listener) => ipcRenderer.on('app:request-close', () => listener()),
+  retainedProjectTabs: () => ipcRenderer.invoke('app:retained-tabs'),
+  confirmProjectClose: (payload) => ipcRenderer.invoke('app:confirm-close', payload),
   platform: process.platform
 });

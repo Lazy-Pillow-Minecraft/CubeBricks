@@ -76,7 +76,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
 - 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算。
 - 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。
-- 繪畫模式不顯示編輯選中高亮。場景層級只保留索引、選取、展開與聚焦，禁止新建、刪除、拖動重排及幾何操作，也不允許進入 Shape 細分編輯；撤銷／重做只處理繪畫歷史。
+- 繪畫模式不顯示編輯選中高亮。場景層級只保留索引、選取、展開與聚焦，禁止新建、刪除、拖動重排及幾何操作，也不允許進入 Shape 細分編輯；桌面版會在項目操作記錄中保存繪畫變更。
 - 全部剔除的 Cube 會被移除；單面剔除會同時取消該面的主視圖拾取，但仍可在 UV 預覽中處理。
 
 ### 工作區與配置
@@ -84,8 +84,9 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 左、右、底部面板使用統一停靠物件，可取下、靠近自動吸附、重新排序、折疊及調整整欄寬度。
 - 物件屬性按「基礎／外觀／UV／修改器／操作器」分類，避免長頁面持續向下堆疊。
 - 多項目以頁籤方式同時打開，可切換、拖動排序、編輯項目信息或關閉。
+- 關閉桌面程式時會列出已開啟項目，預設全部勾選保留；取消勾選的工作目錄會在確認後移除。下次啟動會恢復保留的頁籤。
 - 配置註冊表統一管理繁體中文、簡體中文、英語、外觀、視圖、吸附與工作區選項。
-- 模型格式使用可擴展註冊表，格式可提供自己的初始工程資料、吸附基準、貼圖尺寸與能力標記。
+- 模型格式使用可擴展註冊表，格式可提供自己的初始工程資料、吸附基準、貼圖尺寸與能力標記。Java 方塊／物品可在項目信息中選擇三檔旋轉規則：1.9–1.21.5 為 22.5° 倍數單軸、1.21.6–1.21.10 為自由角度單軸、1.21.11+ 不限角度與軸數；該格式使用逐面 UV。模組版實體使用箱型 UV、整數 Cube 尺寸與組旋轉，Cube 自身不旋轉。
 
 ## 操作指南
 
@@ -95,6 +96,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 2. 使用項目頁籤切換同時打開的工程；頁籤可拖動排序，右鍵可編輯項目信息，中鍵或叉號可關閉。
 3. 在場景層級上方建立 Cube、Shape、Locator 或組。選中元素後建立的新內容會依目前層級插入。
 4. `Ctrl+S` 保存，`Ctrl+Shift+S` 另存；導出時可依副檔名選擇 `.cbmodel` 或 `.bbmodel`。
+5. 關閉程式時，勾選要在下次開啟時恢復的項目；若取消勾選，確認關閉後會刪除該項目的工作記錄。
 
 ### 視角與選取
 
@@ -158,7 +160,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 面漸變要求兩點位於同一面；體漸變要求兩點位於同一 Cube。兩點只定義方向，漸變會覆蓋完整目標。
 - 雙色漸變先點擊第一色或第二色色槽，再在右側選色器調色；兩端 Alpha 可獨立設定。啟用「使用色卡」後會改用目前選中色卡的全部顏色。
 - 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。
-- 繪畫模式中的場景層級用於查找、選取與聚焦內容；修改模型幾何需回到編輯模式。`Ctrl+Z`／`Ctrl+Shift+Z` 在繪畫模式只撤銷／重做繪畫。
+- 繪畫模式中的場景層級用於查找、選取與聚焦內容；修改模型幾何需回到編輯模式。桌面版的 `Ctrl+Z`／`Ctrl+Shift+Z` 依當前項目的操作記錄撤銷／重做，包含繪畫與貼圖指派。
 
 ### 使用繪畫對稱
 
@@ -178,6 +180,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 ## 文件格式
 
 - `.cbmodel`：CubeBricks 工程格式，以 ZIP 保存可編輯的 Shape、曲線、修改器、操作器、層級、貼圖和工程設定。桌面版在可配置的工作目錄記錄項目內的全局操作序列與各元素局部歷史；貼圖變更保存可雙向套用的像素差異，以便撤銷、重做和異常關閉後恢復。
+- 工作記錄會保存貼圖分組、拖貼圖到模型面的批量指派，以及撤銷後實際走過的重做分支。多開桌面程式時，同一工作項目只允許一個視窗寫入；遇到缺失或損壞的操作快照時會停止跨越該記錄，保留目前模型狀態。
 - `.bbmodel`：支援 Blockbench 模型匯入與導出；程序化物件和修改器會在導出時展開為兼容的 Cube／組資料。
 - 內置工程類型包含通用模型、圖像以及多種 Minecraft Java、Bedrock、模組實體、皮膚與 GeckoLib 類型；尚未完成的編輯器類型會明確標記為佔位。
 
@@ -216,6 +219,7 @@ npm run check
 npm run test:config
 npm run test:model
 npm run test:render
+npm run test:journal
 ```
 
 ## Windows 單文件打包
@@ -326,7 +330,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
 - The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion.
 - Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient.
-- Paint mode hides edit-selection highlighting. The hierarchy provides indexing, selection, expansion, and focus, while creation, deletion, reordering, geometry operations, and shape subdivision editing are disabled. Undo and redo affect painting history only.
+- Paint mode hides edit-selection highlighting. The hierarchy provides indexing, selection, expansion, and focus, while creation, deletion, reordering, geometry operations, and shape subdivision editing are disabled. The desktop app records painting changes in the project operation journal.
 - Culling every face removes the cube. A culled individual face is no longer pickable in the main viewport but remains available in UV Preview.
 
 ### Workspace and configuration
@@ -334,8 +338,9 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Left, right, and bottom panels use a shared docking object model. Panels can detach, auto-dock when nearby, reorder, collapse, and resize their entire dock column.
 - Object properties are split into Basic, Appearance, UV, Modifiers, and Operators pages instead of one continuously stacked panel.
 - Multiple projects can remain open as tabs that support selection, drag ordering, project-information editing, and closing.
+- On exit, the desktop app lists open projects with every tab checked for retention by default. Unchecking a tab removes its working directory after confirmation; retained tabs reopen at the next launch.
 - A configuration registry manages Traditional Chinese, Simplified Chinese, English, appearance, viewport, snapping, and workspace settings.
-- Model formats use an extensible registry and may provide their own initial project data, snapping baseline, texture size, and capability flags.
+- Model formats use an extensible registry and may provide their own initial project data, snapping baseline, texture size, and capability flags. Java Block/Item offers three rotation rules in Project Information: 1.9–1.21.5 uses single-axis 22.5° increments; 1.21.6–1.21.10 allows any angle on one axis; 1.21.11+ allows unrestricted angles and axes. It uses per-face UVs. Modded Entity uses box UVs, integer cube dimensions, and group rotation rather than cube rotation.
 
 ## Operation guide
 
@@ -345,6 +350,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 2. Use project tabs to switch between open projects. Tabs can be reordered by dragging, edited from the context menu, and closed with the middle mouse button or close icon.
 3. Create cubes, shapes, locators, or groups from the controls above the scene hierarchy. New content is inserted relative to the current hierarchy selection.
 4. Use `Ctrl+S` to save and `Ctrl+Shift+S` to save as. Export chooses `.cbmodel` or `.bbmodel` from the selected or typed extension.
+5. When exiting, keep checked the projects you want to reopen. Confirming with a tab unchecked removes that project's working history.
 
 ### Camera and selection
 
@@ -406,7 +412,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - A face gradient requires both points on one face; a volume gradient requires both points on one cube. The points define direction only, and the gradient covers the complete target.
 - In two-color mode, click the first or second stop button and edit that stop in the right-side picker. Each stop has independent alpha. Enabling **Use Palette** switches to every color in the selected palette row.
 - Palette rows independently support discrete or gradient display and allow color selection, insertion, deletion, and drag reordering.
-- The hierarchy in Paint mode is for finding, selecting, and focusing content. Return to Edit mode to change model geometry. `Ctrl+Z` and `Ctrl+Shift+Z` undo and redo painting only in Paint mode.
+- The hierarchy in Paint mode is for finding, selecting, and focusing content. Return to Edit mode to change model geometry. In the desktop app, `Ctrl+Z` and `Ctrl+Shift+Z` follow the active project's operation journal, including painting and texture assignment.
 
 ### Using Paint Symmetry
 
@@ -426,6 +432,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 ## File formats
 
 - `.cbmodel`: a ZIP-based CubeBricks project preserving editable shapes, curves, modifiers, operators, hierarchy, textures, and settings. The desktop app keeps a configurable working directory with a project-scoped operation sequence and per-element history; texture edits use reversible pixel deltas for undo, redo, and crash recovery.
+- The operation journal also preserves texture folders, bulk face assignment by dragging textures onto a model, and the redo branch actually traversed by the user. Only one app window may write a given working project at a time. If an operation snapshot is missing or damaged, navigation stops at that boundary and preserves the current model.
 - `.bbmodel`: Blockbench import and export. Procedural objects and modifiers are expanded into compatible cube/group data during export.
 - Built-in project types cover generic models, images, and several Minecraft Java, Bedrock, modded-entity, skin, and GeckoLib workflows. Editors that are not implemented yet are clearly marked as placeholders.
 
@@ -464,6 +471,7 @@ npm run check
 npm run test:config
 npm run test:model
 npm run test:render
+npm run test:journal
 ```
 
 ## Windows single-file build

@@ -107,6 +107,13 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .45; }
 .project-tab-close { width: 19px; height: 19px; display: grid; place-items: center; padding: 0; border-radius: 4px; color: var(--subtle); font-size: .8rem; line-height: 1; opacity: 0; pointer-events: none; transition: opacity .1s, color .1s, background-color .1s; }
 .project-tab:hover .project-tab-close,.project-tab.active:hover .project-tab-close,.project-tab-close:focus-visible { opacity: 1; pointer-events: auto; }
 .project-tab-close:hover { color: var(--text); background: var(--line-strong); }
+.close-projects-dialog { min-width: min(540px, 92vw); }
+.close-projects-list { display: grid; gap: 7px; max-height: min(50vh, 380px); overflow: auto; margin: 16px 0; }
+.close-project-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--panel-2); }
+.close-project-row input { accent-color: var(--accent); }
+.close-project-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.close-project-row small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+.theme-dialog label[hidden] { display: none; }
 .project-tab-new { flex: 0 0 27px; width: 27px; height: 26px; margin-bottom: 1px; border-radius: 6px; color: var(--muted); font-size: .9rem; }
 .project-tab-new:hover { color: var(--accent); background: rgba(var(--accent-rgb), .1); }
 

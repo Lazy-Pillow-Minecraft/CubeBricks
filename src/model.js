@@ -1,6 +1,7 @@
 import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './config/model-formats.js';
 import { modifierRegistry } from './config/modifiers.js';
 import { operatorRegistry } from './config/operators.js';
+import { constrainCube, formatRules } from './core/format-constraints.js';
 
 const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID()}`;
 // Blockbench's standard marker palette (pastel viewport colours).
@@ -245,6 +246,7 @@ export class Cube {
     this.uvMode = data.uvMode || 'box';
     this.uvNormalized = booleanProperty(data.uvNormalized ?? data.uv_normalized, true);
     this.uv = data.uv || [0, 0];
+    this.uvScale = Number.isFinite(Number(data.uvScale)) && Number(data.uvScale) > 0 ? Number(data.uvScale) : 1;
     this.mirrorUv = data.mirrorUv ?? data.mirror_uv ?? false;
     this.faces = data.faces || null;
     this.autoUv = booleanProperty(data.autoUv ?? data.autouv, !hasAssignedTexture(this.faces));
@@ -1306,7 +1308,52 @@ export class CubeBricksProject {
   }
 }
 
+export function bakeProceduralShape(project, shapeUid, generatedCubes = null) {
+  const owner = project.getNode(shapeUid);
+  if (!owner || owner.type === 'cube' || typeof owner.toCubes !== 'function') return null;
+  const generated = generatedCubes || owner.toCubes();
+  if (!generated.length) return null;
+  const parent = project.getParentGroup(owner.uid);
+  const siblings = parent ? parent.children : project.outliner;
+  const index = siblings.indexOf(owner.uid);
+  if (index < 0) return null;
+  const offset = owner.origin || [0, 0, 0];
+  const cubes = generated.map((source, cubeIndex) => new Cube({
+    ...source,
+    uid: uid('cube'),
+    name: source.name || `${owner.name}_${cubeIndex + 1}`,
+    unnamed: false,
+    position: source.position.map((value, axis) => value + offset[axis]),
+    pivot: source.pivot.map((value, axis) => value + offset[axis]),
+    color: owner.color || source.color,
+    shade: owner.shade !== false && source.shade !== false,
+    visible: owner.visible !== false && source.visible !== false,
+    locked: owner.locked === true || source.locked === true,
+    exported: owner.exported !== false && source.exported !== false
+  }));
+  cubes.forEach(cube => constrainCube(cube, formatRules(project)));
+  const group = new Group({
+    uid: uid('group'), name: owner.name, unnamed: false,
+    pivot: [...(owner.pivot || offset)], rotation: [...(owner.rotation || [0, 0, 0])],
+    uvMode: owner.uvMode, uvNormalized: owner.uvNormalized, autoUv: owner.autoUv,
+    exported: owner.exported, locked: owner.locked, shade: owner.shade,
+    visible: owner.visible, modifiers: owner.modifiers, operators: owner.operators,
+    children: cubes.map(cube => cube.uid)
+  });
+  if (formatRules(project).moddedEntity) { group.uvMode = 'box'; group.autoUv = true; }
+  siblings.splice(index, 1, group.uid);
+  project.elements = project.elements.filter(element => element.uid !== owner.uid);
+  project.elements.push(...cubes);
+  project.groups.push(group);
+  project.invalidateHierarchyIndex();
+  return { group, cubes };
+}
+
 export function importBlockbench(data) {
+  const firstTexture = (data.textures || [])[0];
+  const firstTextureKey = firstTexture?.id !== undefined && firstTexture?.id !== null && String(firstTexture.id) !== ''
+    ? firstTexture.id : firstTexture?.uuid || 0;
+  const fallbackTexture = firstTexture ? `#${firstTextureKey}` : null;
   const elements = (data.elements || []).filter(item => item.type !== 'mesh').map(item => {
     if (item.type === 'locator') return new Locator({
       uid: item.uuid,
@@ -1318,6 +1365,15 @@ export function importBlockbench(data) {
       visible: booleanProperty(item.visibility ?? item.visible, true)
     });
     if (item.type && item.type !== 'cube') return null;
+    const faces = item.faces ? structuredClone(item.faces)
+      : fallbackTexture && Array.isArray(item.uv_offset) && item.box_uv !== false
+        ? Object.fromEntries(['north', 'south', 'east', 'west', 'up', 'down'].map(direction => [direction, {}]))
+        : item.faces;
+    if (fallbackTexture) for (const face of Object.values(faces || {})) {
+      // An omitted texture reference in an external bbmodel means its UVs use
+      // the first texture. Explicit null still means a culled face.
+      if (face && typeof face === 'object' && face.enabled !== false && face.texture === undefined) face.texture = fallbackTexture;
+    }
     return new Cube({
       uid: item.uuid,
       name: item.name,
@@ -1330,7 +1386,7 @@ export function importBlockbench(data) {
       uvNormalized: booleanProperty(item.uv_normalized, true),
       uv: item.uv_offset,
       mirrorUv: item.mirror_uv,
-      faces: item.faces,
+      faces,
       autoUv: booleanProperty(item.autouv, false),
       exported: booleanProperty(item.export, true),
       locked: booleanProperty(item.locked, false),
@@ -1400,8 +1456,27 @@ export function importBlockbench(data) {
 function blockbenchCube(cube, offset = [0, 0, 0]) {
   const from = cube.position.map((value, axis) => value + offset[axis]);
   const origin = cube.pivot.map((value, axis) => value + offset[axis]);
-  const hasExplicitFaceUv = Object.values(cube.faces || {}).some(face => Array.isArray(face?.uv) && face.uv.length >= 4);
-  const faces = cube.faces ? structuredClone(cube.faces) : undefined;
+  const scaledBoxUv = cube.uvMode === 'box' && Number(cube.uvScale || 1) !== 1;
+  const faces = cube.faces ? structuredClone(cube.faces) : scaledBoxUv ? {} : undefined;
+  if (scaledBoxUv) {
+    const [u, v] = cube.uv || [0, 0];
+    const [x, y, z] = cube.size.map(value => {
+      const length = Math.abs(Number(value) || 0) * cube.uvScale;
+      return length > 0 ? Math.max(1, Math.round(length)) : 0;
+    });
+    const layout = {
+      east: [u, v + z, u + z, v + z + y],
+      north: [u + z, v + z, u + z + x, v + z + y],
+      west: [u + z + x, v + z, u + z + x + z, v + z + y],
+      south: [u + z + x + z, v + z, u + z + x + z + x, v + z + y],
+      up: [u + z + x, v + z, u + z, v],
+      down: [u + z + x + x, v, u + z + x, v + z]
+    };
+    for (const [direction, uv] of Object.entries(layout)) if (faces[direction] !== null) {
+      faces[direction] = { ...(faces[direction] || {}), uv };
+    }
+  }
+  const hasExplicitFaceUv = Object.values(faces || {}).some(face => Array.isArray(face?.uv) && face.uv.length >= 4);
   for (const face of Object.values(faces || {})) {
     if (face && typeof face === 'object') delete face._cubebricksCulledTexture;
   }
@@ -2015,7 +2090,7 @@ export function exportBlockbench(project, textureAssets = []) {
     elements.push(element);
   };
   const proceduralGroup = element => {
-    const generated = element.toCubes();
+    const generated = element.toCubes().map(cube => constrainCube(cube, formatRules(project)));
     const children = generated.map((cube, index) => {
       cube.uid = `${element.uid}_cube_${index + 1}`;
       pushElement(blockbenchCube(cube, element.origin || [0, 0, 0]));

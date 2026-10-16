@@ -4,10 +4,13 @@ const fs = require('fs/promises');
 const syncFs = require('fs');
 const crypto = require('crypto');
 const { ProjectJournal, atomicWrite } = require('./project-journal.cjs');
+const { JournalOwnership } = require('./journal-ownership.cjs');
 const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform === 'win32' ? 'shortcut-icon.ico' : 'shortcut-icon.png');
 const journals = new Map();
 const journalQueues = new Map();
+const journalOwnership = new JournalOwnership();
 const workspaceSettingsPath = () => path.join(app.getPath('userData'), 'project-workspace.json');
+const retainedTabsPath = () => path.join(app.getPath('userData'), 'retained-project-tabs.json');
 async function workspaceRoot() {
   try {
     const settings = JSON.parse(await fs.readFile(workspaceSettingsPath(), 'utf8'));
@@ -16,9 +19,24 @@ async function workspaceRoot() {
   return path.join(app.getPath('userData'), 'working-projects');
 }
 async function journalDirectory(id) { return path.join(await workspaceRoot(), id); }
+async function openWorkingJournal(id, loader) {
+  const existing = journals.get(id);
+  if (existing) { await existing.ensureReady(); return existing; }
+  const directory = await journalDirectory(id);
+  await journalOwnership.acquire(directory);
+  try {
+    const journal = await loader(directory);
+    journals.set(id, journal);
+    return journal;
+  } catch (error) { await journalOwnership.release(directory); throw error; }
+}
 function queueJournal(id, task) {
   const previous = journalQueues.get(id) || Promise.resolve();
-  const current = previous.catch(() => {}).then(task);
+  const current = previous.catch(() => {}).then(async () => {
+    const journal = journals.get(id);
+    if (journal) await journalOwnership.assertOwned(journal.directory);
+    return task();
+  });
   journalQueues.set(id, current);
   current.finally(() => { if (journalQueues.get(id) === current) journalQueues.delete(id); }).catch(() => {});
   return current;
@@ -79,8 +97,67 @@ const createWindow = () => {
   });
 
   win.removeMenu();
+  let closeApproved = false;
+  win.on('close', event => {
+    if (closeApproved) return;
+    event.preventDefault();
+    win.webContents.send('app:request-close');
+  });
+  win.on('closed', () => { closeApproved = false; });
+  win.approveProjectClose = () => { closeApproved = true; win.close(); };
   win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
 };
+
+ipcMain.handle('app:retained-tabs', async () => {
+  try {
+    const tabs = JSON.parse(await fs.readFile(retainedTabsPath(), 'utf8'));
+    if (!Array.isArray(tabs)) return [];
+    const available = [];
+    for (const tab of tabs) {
+      if (/^project_[a-f0-9-]{20,50}$/.test(tab.journalId)
+        && !await journalOwnership.isLocked(await journalDirectory(tab.journalId))) available.push(tab);
+    }
+    return available;
+  } catch { return []; }
+});
+
+ipcMain.handle('app:confirm-close', async (event, payload) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) throw new Error('關閉視窗已不存在');
+  const retained = (payload.retained || []).map(tab => ({
+    journalId: safeSessionId(tab.journalId),
+    filePath: typeof tab.filePath === 'string' ? tab.filePath : null,
+    dirty: tab.dirty === true,
+    active: tab.active === true
+  }));
+  const discarded = (payload.discarded || []).map(safeSessionId);
+  const keepIds = new Set(retained.map(tab => tab.journalId));
+  if (discarded.some(id => keepIds.has(id))) throw new Error('同一項目不能同時保留和刪除');
+  for (const id of [...keepIds, ...discarded]) {
+    const journal = journals.get(id);
+    if (!journal || !journalOwnership.owned.has(path.resolve(journal.directory))) throw new Error('不能修改其他視窗的工作項目');
+  }
+  for (const id of discarded) {
+    await queueJournal(id, async () => {
+      // Use the directory claimed when opening, even if settings now point to
+      // another workspace. Never delete a different instance's directory.
+      const target = path.resolve(journals.get(id).directory);
+      if (path.basename(target) !== id || path.dirname(target) === target) throw new Error('工作目錄不在項目根目錄內');
+      await fs.rm(target, { recursive: true, force: true });
+      journals.delete(id);
+      await journalOwnership.release(target);
+    });
+  }
+  // Keep tabs belonging to other app instances when this one closes.
+  let previousTabs = [];
+  try { previousTabs = JSON.parse(await fs.readFile(retainedTabsPath(), 'utf8')); } catch { /* First close. */ }
+  const handled = new Set([...journals.keys(), ...discarded]);
+  const otherTabs = Array.isArray(previousTabs) ? previousTabs.filter(tab => !handled.has(tab.journalId)) : [];
+  await atomicWrite(retainedTabsPath(), JSON.stringify([...otherTabs, ...retained]));
+  await journalOwnership.releaseAll();
+  win.approveProjectClose();
+  return true;
+});
 
 ipcMain.handle('project:open', async () => {
   const picked = await dialog.showOpenDialog({
@@ -96,7 +173,7 @@ ipcMain.handle('project:open', async () => {
   const bytes = await fs.readFile(filePath);
   if (bytes.subarray(0, 2).toString('ascii') === 'PK') {
     const journalId = `project_${crypto.randomUUID()}`;
-    const journal = await ProjectJournal.fromArchive(bytes, await journalDirectory(journalId));
+    const journal = await openWorkingJournal(journalId, directory => ProjectJournal.fromArchive(bytes, directory));
     await atomicWrite(path.join(journal.directory, 'saved_state'), JSON.stringify({ sequence: journal.state.activeHead, filePath, savedAt: new Date().toISOString() }));
     journals.set(journalId, journal);
     const content = await journal.content();
@@ -109,9 +186,7 @@ ipcMain.handle('project:open', async () => {
 ipcMain.handle('project:journal-init', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
-    if (journals.has(id)) return { journalId: id };
-    const journal = await new ProjectJournal(await journalDirectory(id)).initialize(payload.content, payload.operationId || 'core.project.create', payload.operationIndex || []);
-    journals.set(id, journal);
+    await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.content, payload.operationId || 'core.project.create', payload.operationIndex || []));
     return { journalId: id };
   });
 });
@@ -151,25 +226,32 @@ ipcMain.handle('project:journal-list-recoverable', async () => {
   const recoverable = [];
   for (const entry of entries) {
     if (!entry.isDirectory() || !/^project_[a-f0-9-]{20,50}$/.test(entry.name)) continue;
+    const directory = path.join(root, entry.name);
+    if (journals.has(entry.name)) continue;
+    let claimed = false;
     try {
-      const journal = await new ProjectJournal(path.join(root, entry.name)).load();
+      await journalOwnership.acquire(directory);
+      claimed = true;
+      const journal = await new ProjectJournal(directory).load();
       const saved = JSON.parse(await fs.readFile(path.join(root, entry.name, 'saved_state'), 'utf8').catch(() => 'null'));
       if (saved?.sequence === journal.state.activeHead) continue;
       const manifest = journal.activeManifest;
       if (manifest.sequence === 1 && !manifest.elementOrder.length && !manifest.textureIds.length) continue;
       recoverable.push({ journalId: entry.name, name: manifest.information.name || '未命名',
         sequence: journal.state.activeHead, modifiedAt: manifest.timestamp, filePath: saved?.filePath || null });
-    } catch { /* A corrupt directory stays untouched for manual recovery. */ }
+    } catch { /* Busy or incomplete projects must not be opened by another writer. */ }
+    finally { if (claimed) await journalOwnership.release(directory); }
   }
   return recoverable.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
 });
 
 ipcMain.handle('project:journal-recover', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
-  const journal = await new ProjectJournal(await journalDirectory(id)).load();
-  journals.set(id, journal);
-  const content = await journal.content();
-  return { journalId: id, content, filePath: payload.filePath || null };
+  return queueJournal(id, async () => {
+    const journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).load());
+    const content = await journal.content();
+    return { journalId: id, content, filePath: payload.filePath || null };
+  });
 });
 
 ipcMain.handle('project:workspace-root', async () => workspaceRoot());
@@ -243,8 +325,7 @@ ipcMain.handle('project:save', async (_event, payload) => {
   await queueJournal(id, async () => {
     let journal = journals.get(id);
     if (!journal) {
-      journal = await new ProjectJournal(await journalDirectory(id)).initialize(payload.content);
-      journals.set(id, journal);
+      journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.content));
     } else if (payload.content) await journal.commit(payload.content, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
     await journal.archive(filePath);
   });
@@ -272,8 +353,7 @@ ipcMain.handle('project:export', async (_event, payload) => {
     await queueJournal(id, async () => {
       let journal = journals.get(id);
       if (!journal) {
-        journal = await new ProjectJournal(await journalDirectory(id)).initialize(payload.cbmodelContent);
-        journals.set(id, journal);
+        journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.cbmodelContent));
       } else await journal.commit(payload.cbmodelContent, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
       await journal.archive(filePath);
     });

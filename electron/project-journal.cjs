@@ -2,13 +2,20 @@ const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 const { packZip, unpackZip } = require('./zip-store.cjs');
-const { createTextureDelta, applyTextureDelta } = require('./texture-delta.cjs');
+const { createTextureDelta, applyTextureDelta, textureSourceFingerprint } = require('./texture-delta.cjs');
 
 const FORMAT = 'cubebricks-journal';
 const VERSION = 1;
 const pretty = value => JSON.stringify(value, null, 2);
 const comparable = value => JSON.stringify(value);
 const digest = value => crypto.createHash('sha256').update(comparable(value)).digest('hex');
+const canonical = value => Array.isArray(value) ? value.map(canonical)
+  : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+function textureDigest(asset) {
+  if (!asset) return null;
+  return digest(canonical({ ...asset, source: textureSourceFingerprint(asset.source),
+    ...(Array.isArray(asset.layers) ? { layers: asset.layers.map(layer => ({ ...layer, source: textureSourceFingerprint(layer.source) })) } : {}) }));
+}
 function comparableInformation(information) {
   const copy = structuredClone(information);
   if (copy.meta) delete copy.meta.modifiedAt;
@@ -44,6 +51,14 @@ function nodeFolder(node) {
 function separate(content) {
   const document = typeof content === 'string' ? JSON.parse(content) : structuredClone(content);
   const elements = document.elements || [], groups = document.groups || [], textures = document.textures || [];
+  const identifiers = new Set();
+  for (const node of [...groups, ...elements]) {
+    const id = safeId(node.uid);
+    if (identifiers.has(id)) throw new Error(`重複的元素識別器：${id}`);
+    identifiers.add(id);
+  }
+  const textureIds = textures.map(textureId);
+  if (new Set(textureIds).size !== textureIds.length) throw new Error('貼圖識別器重複，不能安全寫入操作記錄');
   delete document.elements; delete document.groups; delete document.textures;
   return { information: document, elements, groups, textures };
 }
@@ -62,10 +77,12 @@ function placementsFor(data) {
 }
 function textureFields(asset) {
   if (!asset) return null;
-  return {
-    ...asset, source: undefined,
-    layers: asset.layers?.map(layer => ({ ...layer, source: undefined })) || null
-  };
+  const fields = { ...asset };
+  delete fields.source;
+  if (Array.isArray(asset.layers)) fields.layers = asset.layers.map(layer => {
+    const fields = { ...layer }; delete fields.source; return fields;
+  });
+  return fields;
 }
 function textureChangeRecord(id, before, after) {
   const beforeLayers = new Map((before?.layers || []).map(layer => [layer.uid, layer]));
@@ -88,10 +105,20 @@ class ProjectJournal {
     this.state = null;
     this.activeManifest = null;
     this.operationIndexHash = null;
+    this.recoveryRequired = false;
   }
-  file(relative) { return path.join(this.directory, ...relative.split('/')); }
+  file(relative) {
+    const root = path.resolve(this.directory);
+    const target = path.resolve(root, relative);
+    if (target !== root && !target.startsWith(`${root}${path.sep}`)) throw new Error('操作記錄包含不安全的文件路徑');
+    return target;
+  }
   async initialize(content, operationId = 'core.project.create', operationIndex = []) {
-    if (await readJson(this.file('current_state'))) return this.load();
+    let existingFiles = [];
+    try { existingFiles = await fs.readdir(this.directory); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (existingFiles.includes('current_state') || existingFiles.includes('current_state.previous')) return this.load();
+    if (existingFiles.length) throw new Error('工作目錄已有未完成的記錄，不能覆寫初始化；請保留原目錄以便恢復');
     const data = separate(content);
     const placements = placementsFor(data);
     await fs.mkdir(this.directory, { recursive: true });
@@ -113,7 +140,7 @@ class ProjectJournal {
     for (const [index, texture] of data.textures.entries()) {
       const id = textureId(texture, index);
       textureIds.push(id);
-      textureHashes[id] = digest(texture);
+      textureHashes[id] = textureDigest(texture);
       await writeJson(this.file(`textures/${id}/current`), texture);
     }
     const manifest = {
@@ -121,7 +148,7 @@ class ProjectJournal {
       operationLabel: '建立項目', timestamp: new Date().toISOString(),
       information: data.information, elementOrder: data.elements.map(node => node.uid),
       groupOrder: data.groups.map(node => node.uid), textureIds, pointers, placements,
-      nodeHashes, textureHashes,
+      nodeHashes, textureHashes, textureHashVersion: 2,
       changed: Object.keys(pointers), textureChanges: []
     };
     await writeJson(this.file('transactions/1.json'), manifest);
@@ -144,22 +171,43 @@ class ProjectJournal {
     if (this.state.status !== 'complete') {
       this.state.sequence = this.state.lastCommitted;
       this.state.status = 'complete';
-      await writeJson(this.file('current_state'), this.state);
     }
+    delete this.state.targetHead;
+    delete this.state.operationId;
     this.activeManifest = await this.manifest(this.state.activeHead);
     this.operationIndexHash = digest(await readJson(this.file('operation_index.json'), []));
     await this.recoverPendingTextures();
+    await this.content();
     if (this.state.pointerSyncFrom) {
-      const previousManifest = await this.manifest(this.state.pointerSyncFrom);
-      await this.syncNodePointers(this.activeManifest, previousManifest);
+      const previousManifest = await readJson(this.file(`transactions/${this.state.pointerSyncFrom}.json`));
+      if (previousManifest?.format === FORMAT) await this.syncNodePointers(this.activeManifest, previousManifest);
+      else await this.writeNodePointers(this.activeManifest);
       delete this.state.pointerSyncFrom;
-      await writeJson(this.file('current_state'), this.state);
     }
+    await writeJson(this.file('project_information.json'), this.activeManifest.information);
+    await writeJson(this.file('current_state'), this.state);
+    this.recoveryRequired = false;
     return this;
+  }
+  async ensureReady() {
+    if (this.recoveryRequired) await this.load();
+    const diskState = await readJson(this.file('current_state'));
+    if (!diskState || diskState.activeHead !== this.state?.activeHead
+      || diskState.lastCommitted !== this.state?.lastCommitted || diskState.status !== 'complete') {
+      throw new Error('工作記錄已被其他視窗修改或移除。已停止寫入以保護目前模型，請先保留此視窗');
+    }
+    // Never silently recreate a deleted working directory from an in-memory
+    // head: that creates transaction 2+ without the initial transaction.
+    await this.manifest(this.state.activeHead);
   }
   async manifest(sequence) {
     const data = await readJson(this.file(`transactions/${Number(sequence)}.json`));
-    if (!data || data.format !== FORMAT) throw new Error(`操作 ${sequence} 的記錄缺失`);
+    if (!data || data.format !== FORMAT || data.sequence !== Number(sequence)) {
+      throw new Error(`操作 ${sequence} 的記錄缺失或損壞；目前模型未變更，無法跨越這筆記錄撤回`);
+    }
+    if (data.parent !== null && (!Number.isInteger(data.parent) || data.parent < 1 || data.parent >= data.sequence)) {
+      throw new Error(`操作 ${sequence} 的父記錄無效`);
+    }
     return data;
   }
   async writeNodePointers(manifest, affectedUids = Object.keys(manifest.pointers), previousManifest = null) {
@@ -214,32 +262,42 @@ class ProjectJournal {
       await fs.rm(next, { force: true });
     }
   }
+  async readNodes(manifest) {
+    const elements = [], groups = [];
+    const seen = new Set();
+    for (const [order, output] of [[manifest.groupOrder, groups], [manifest.elementOrder, elements]]) {
+      for (const uid of order) {
+        const pointer = manifest.pointers[uid];
+        if (!pointer || seen.has(uid)) throw new Error(`元素索引損壞：${uid}`);
+        seen.add(uid);
+        const record = await readJson(this.file(`${pointer.folder}/${pointer.local}.json`));
+        if (!record || record.deleted || record.identifier !== uid || record.state?.uid !== uid
+          || (manifest.nodeHashes?.[uid] && digest(record.state) !== manifest.nodeHashes[uid])) {
+          throw new Error(`元素快照損壞：${uid}`);
+        }
+        output.push(record.state);
+      }
+    }
+    return { elements, groups };
+  }
   async content() {
     const manifest = this.activeManifest;
-    const elements = [], groups = [];
-    for (const uid of manifest.groupOrder) {
-      const pointer = manifest.pointers[uid];
-      if (!pointer) continue;
-      const record = await readJson(this.file(`${pointer.folder}/${pointer.local}.json`));
-      if (!record || record.deleted || record.identifier !== uid) throw new Error(`組快照損壞：${uid}`);
-      groups.push(record.state);
-    }
-    for (const uid of manifest.elementOrder) {
-      const pointer = manifest.pointers[uid];
-      if (!pointer) continue;
-      const record = await readJson(this.file(`${pointer.folder}/${pointer.local}.json`));
-      if (!record || record.deleted || record.identifier !== uid) throw new Error(`元素快照損壞：${uid}`);
-      elements.push(record.state);
-    }
+    const { elements, groups } = await this.readNodes(manifest);
     const textures = [];
     for (const id of manifest.textureIds) {
       const texture = await readJson(this.file(`textures/${id}/current`));
       if (!texture) throw new Error(`貼圖狀態損壞：${id}`);
+      if (manifest.textureHashVersion === 2 && textureDigest(texture) !== manifest.textureHashes[id]) throw new Error(`貼圖狀態校驗失敗：${id}`);
       textures.push(texture);
     }
     return pretty({ ...manifest.information, elements, groups, textures });
   }
   async commit(content, operationId, operationLabel = operationId, operationIndex = []) {
+    await this.ensureReady();
+    try { return await this.commitTransaction(content, operationId, operationLabel, operationIndex); }
+    catch (error) { this.recoveryRequired = true; throw error; }
+  }
+  async commitTransaction(content, operationId, operationLabel, operationIndex) {
     if (!/^[a-z][a-z0-9_.-]*$/.test(operationId)) throw new Error('操作 ID 不合法');
     const data = separate(content);
     const placements = placementsFor(data);
@@ -251,13 +309,14 @@ class ProjectJournal {
       || comparable(placements[node.uid]) !== comparable(old.placements?.[node.uid]));
     const removed = Object.keys(old.pointers).filter(uid => !nextUids.has(uid));
     const textureIds = data.textures.map(textureId);
-    const textureHashes = Object.fromEntries(data.textures.map((texture, index) => [textureIds[index], digest(texture)]));
+    const textureHashes = Object.fromEntries(data.textures.map((texture, index) => [textureIds[index], textureDigest(texture)]));
     const textureChanges = [];
     for (const [index, texture] of data.textures.entries()) {
       const id = textureIds[index];
-      if (textureHashes[id] !== old.textureHashes?.[id]) {
+      if (old.textureHashVersion !== 2 || textureHashes[id] !== old.textureHashes?.[id]) {
         const previous = old.textureIds.includes(id) ? await readJson(this.file(`textures/${id}/current`)) : null;
-        textureChanges.push({ id, before: previous, after: texture });
+        if (old.textureIds.includes(id) && !previous) throw new Error(`貼圖狀態損壞：${id}`);
+        if (textureHashes[id] !== textureDigest(previous)) textureChanges.push({ id, before: previous, after: texture });
       }
     }
     for (const id of old.textureIds) {
@@ -314,13 +373,13 @@ class ProjectJournal {
       operationId, operationLabel, timestamp: new Date().toISOString(),
       information: data.information, elementOrder: data.elements.map(node => node.uid),
       groupOrder: data.groups.map(node => node.uid), textureIds, pointers, placements,
-      nodeHashes, textureHashes,
+      nodeHashes, textureHashes, textureHashVersion: 2,
       changed: affected, textureChanges: textureChanges.map(change => change.id)
     };
     await writeJson(this.file(`transactions/${sequence}.json`), manifest);
     this.state = { format: FORMAT, version: VERSION, status: 'complete', sequence,
       lastCommitted: sequence, activeHead: sequence, previousCommitted: old.sequence,
-      pointerSyncFrom: old.sequence };
+      pointerSyncFrom: old.sequence, redoHeads: [] };
     await writeJson(this.file('current_state'), this.state);
     this.activeManifest = manifest;
     for (const { id } of textureChanges) {
@@ -357,31 +416,50 @@ class ProjectJournal {
     await writeJson(file, maximum + 1);
     return maximum + 1;
   }
-  async checkout(targetSequence) {
+  async checkout(targetSequence, { redoHeads = [] } = {}) {
+    await this.ensureReady();
+    try { return await this.checkoutTransaction(targetSequence, redoHeads); }
+    catch (error) { this.recoveryRequired = true; throw error; }
+  }
+  async checkoutTransaction(targetSequence, redoHeads) {
     const target = await this.manifest(targetSequence);
     if (target.sequence === this.activeManifest.sequence) return this.content();
     const previousManifest = this.activeManifest;
     // Texture patches carry both old and new pixels, so navigating a branch
     // never needs to recompute from the original image.
-    const currentAncestors = new Set();
-    for (let cursor = this.activeManifest; cursor; cursor = cursor.parent ? await this.manifest(cursor.parent) : null) currentAncestors.add(cursor.sequence);
+    const backward = [];
     const forward = [];
-    let common = target;
-    while (!currentAncestors.has(common.sequence)) {
-      forward.unshift(common);
-      common = common.parent ? await this.manifest(common.parent) : null;
-      if (!common) throw new Error('操作分支沒有共同祖先');
+    let current = this.activeManifest, destination = target;
+    // Sequences increase monotonically along each branch. Walk only as far
+    // as the shared ancestor, not through unrelated (possibly missing) roots.
+    while (current.sequence !== destination.sequence) {
+      if (current.sequence > destination.sequence) {
+        backward.push(current);
+        if (!current.parent) throw new Error('操作分支沒有共同祖先');
+        current = await this.manifest(current.parent);
+      } else {
+        forward.unshift(destination);
+        if (!destination.parent) throw new Error('操作分支沒有共同祖先');
+        destination = await this.manifest(destination.parent);
+      }
     }
+    await this.readNodes(target);
     const textureStates = new Map();
-    for (let cursor = this.activeManifest; cursor.sequence !== common.sequence; cursor = await this.manifest(cursor.parent)) await this.applyTextureChange(cursor, 'before', textureStates);
+    for (const manifest of backward) await this.applyTextureChange(manifest, 'before', textureStates);
     for (const manifest of forward) await this.applyTextureChange(manifest, 'after', textureStates);
+    for (const id of target.textureIds) {
+      const texture = textureStates.has(id) ? textureStates.get(id) : await readJson(this.file(`textures/${id}/current`));
+      if (!texture || (target.textureHashVersion === 2 && target.textureHashes[id] !== textureDigest(texture))) {
+        throw new Error(`貼圖還原校驗失敗：${id}`);
+      }
+    }
     await writeJson(this.file('current_state.previous'), this.state);
     await writeJson(this.file('current_state'), { ...this.state, status: 'checking_out', targetHead: target.sequence });
     for (const [id, texture] of textureStates) await writeJson(this.file(`textures/${id}/next`), {
       sequence: target.sequence, purpose: 'checkout', texture
     });
     this.state = { ...this.state, activeHead: target.sequence, status: 'complete',
-      pointerSyncFrom: this.activeManifest.sequence };
+      pointerSyncFrom: this.activeManifest.sequence, redoHeads };
     await writeJson(this.file('current_state'), this.state);
     for (const [id, texture] of textureStates) {
       if (texture) await writeJson(this.file(`textures/${id}/current`), texture);
@@ -396,11 +474,20 @@ class ProjectJournal {
     return this.content();
   }
   async navigate(direction) {
+    await this.ensureReady();
     if (direction === 'undo') {
       if (!this.activeManifest.parent) return null;
-      return { sequence: this.activeManifest.parent, content: await this.checkout(this.activeManifest.parent) };
+      const redoHeads = [...(this.state.redoHeads || []), this.activeManifest.sequence];
+      return { sequence: this.activeManifest.parent, content: await this.checkout(this.activeManifest.parent, { redoHeads }) };
     }
     if (direction === 'redo') {
+      const redoHeads = [...(this.state.redoHeads || [])];
+      if (redoHeads.length) {
+        const sequence = redoHeads.pop();
+        const child = await this.manifest(sequence);
+        if (child.parent !== this.activeManifest.sequence) throw new Error('重做分支與目前記錄不一致');
+        return { sequence, content: await this.checkout(sequence, { redoHeads }) };
+      }
       const maximum = Number(await readJson(this.file('index_number'), this.state.lastCommitted)) || this.state.lastCommitted;
       for (let sequence = maximum; sequence > this.activeManifest.sequence; sequence--) {
         const child = await readJson(this.file(`transactions/${sequence}.json`));
@@ -426,11 +513,13 @@ class ProjectJournal {
         return { ...layer, source: patch
           ? applyTextureDelta(currentLayers.get(layer.uid)?.source || null, patch, direction)
           : currentLayers.get(layer.uid)?.source || null };
-      }) || null;
-      textureStates.set(id, { ...fields, source, layers });
+      });
+      textureStates.set(id, { ...fields, source, ...(Array.isArray(layers) ? { layers } : {}) });
     }
   }
   async archive(filePath) {
+    await this.ensureReady();
+    await this.content();
     const files = [];
     const visit = async directory => {
       for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
