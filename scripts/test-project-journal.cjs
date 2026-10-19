@@ -32,6 +32,30 @@ test('archive reader rejects unsafe Windows paths', () => {
   assert.throws(() => unpackZip(packZip([['texture:alt', Buffer.from('x')]])), /不安全路徑/);
 });
 
+test('legacy archive receives one persistent project UUID on first expansion', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-legacy-uuid-test-'));
+  try {
+    const original = await new ProjectJournal(path.join(root, 'source')).initialize(model([]));
+    const archivePath = path.join(root, 'legacy.cbmodel');
+    await original.archive(archivePath);
+    const entries = unpackZip(await fs.readFile(archivePath));
+    entries.delete('project_uuid');
+    for (const name of ['project_information.json', 'transactions/1.json']) {
+      const record = JSON.parse(entries.get(name).toString());
+      delete (name === 'project_information.json' ? record : record.information).projectUuid;
+      entries.set(name, Buffer.from(JSON.stringify(record)));
+    }
+    const legacy = packZip([...entries]);
+    assert.equal(ProjectJournal.inspectArchive(legacy).projectUuid, null);
+    const expanded = await ProjectJournal.fromArchive(legacy, path.join(root, 'expanded'));
+    const uuid = JSON.parse(await expanded.content()).projectUuid;
+    assert.match(uuid, /^[0-9a-f-]{36}$/);
+    await expanded.archive(archivePath);
+    assert.equal(ProjectJournal.inspectArchive(await fs.readFile(archivePath)).projectUuid, uuid);
+    assert.equal((await new ProjectJournal(path.join(root, 'expanded')).load()).projectUuid, uuid);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
 test('texture delta stores only changed tiles, not a full image per operation', () => {
   const beforePixels = Buffer.alloc(64 * 64 * 4);
   const afterPixels = Buffer.from(beforePixels);
@@ -45,6 +69,58 @@ test('texture delta stores only changed tiles, not a full image per operation', 
   assert.deepEqual([delta.tiles[0].x, delta.tiles[0].y], [32, 32]);
   assert.equal(applyTextureDelta(before, delta, 'after'), after);
   assert.equal(applyTextureDelta(after, delta, 'before'), before);
+});
+
+test('reference images are stored once and indexed by every journal state', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-reference-test-'));
+  try {
+    const source = image(73);
+    const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+    const referenceImages = {
+      general: [{ uid: 'ref_a', source, offset: [0, 0], scale: 1 }],
+      x: [{ uid: 'ref_b', source, offset: [0, 0], scale: 1 }], y: [], z: []
+    };
+    const content = (position, offset) => JSON.stringify({
+      ...JSON.parse(model([{ ...cube, position: [position, 0, 0] }])),
+      referenceImages: { ...referenceImages,
+        general: [{ ...referenceImages.general[0], offset: [offset, 0] }] }
+    });
+    const working = path.join(root, 'working');
+    const journal = await new ProjectJournal(working).initialize(content(0, 0));
+    await journal.commit(content(2, 7), 'core.element.move', '移動元素');
+    const first = await journal.manifest(1);
+    const second = await journal.manifest(2);
+    assert.equal(first.information.referenceImages.general[0].source, undefined);
+    assert.equal(second.information.referenceImages.general[0].source, undefined);
+    assert.equal(first.information.referenceImages.general[0].sourceRef,
+      first.information.referenceImages.x[0].sourceRef);
+    assert.equal(second.information.referenceImages.general[0].sourceRef,
+      first.information.referenceImages.general[0].sourceRef);
+    assert.equal((await fs.readdir(path.join(working, 'reference_images'))).length, 1);
+    assert.equal(JSON.parse(await journal.content()).referenceImages.general[0].source, source);
+    await journal.checkout(1);
+    assert.equal(JSON.parse(await journal.content()).referenceImages.x[0].source, source);
+    const archive = path.join(root, 'references.cbmodel');
+    await journal.archive(archive);
+    const reopened = await ProjectJournal.fromArchive(await fs.readFile(archive), path.join(root, 'reopened'));
+    assert.equal(JSON.parse(await reopened.content()).referenceImages.general[0].source, source);
+
+    // Existing journals that inlined the image in each manifest remain readable.
+    const legacy = await reopened.manifest(1);
+    for (const record of [legacy.information.referenceImages.general[0], legacy.information.referenceImages.x[0]]) {
+      record.source = source;
+      delete record.sourceRef;
+    }
+    await fs.writeFile(path.join(root, 'reopened', 'transactions', '1.json'), JSON.stringify(legacy));
+    await fs.rm(path.join(root, 'reopened', 'reference_images'), { recursive: true });
+    const legacyJournal = await new ProjectJournal(path.join(root, 'reopened')).load();
+    const compactedArchive = path.join(root, 'legacy-compacted.cbmodel');
+    await legacyJournal.archive(compactedArchive);
+    const archivedEntries = unpackZip(await fs.readFile(compactedArchive));
+    assert.equal([...archivedEntries.keys()].filter(name => name.startsWith('reference_images/')).length, 1);
+    assert.equal(JSON.parse(archivedEntries.get('transactions/1.json').toString()).information.referenceImages.general[0].source,
+      undefined, 'saving an older journal compacts its inline reference image history');
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 
 test('multi-element operation, branch preservation, archive and recovery', async () => {
@@ -209,6 +285,7 @@ test('bulk texture assignment undoes all faces, UV flags, hierarchy and texture 
   before.outliner = ['group_a'];
   before.textureGroups = [{ uid: 'folder_a', name: 'folder' }];
   const journal = await new ProjectJournal(root).initialize(before);
+  before.projectUuid = journal.projectUuid;
   const after = structuredClone(before);
   after.elements.forEach(cube => { cube.faces.north.texture = 'new_texture'; cube.autoUv = false; });
   const result = await journal.commit(after, 'core.texture.assign');

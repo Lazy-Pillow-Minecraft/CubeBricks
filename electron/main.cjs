@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 const syncFs = require('fs');
@@ -45,6 +45,88 @@ function safeSessionId(value) {
   const id = String(value || '');
   if (!/^project_[a-f0-9-]{20,50}$/.test(id)) throw new Error('項目工作階段 ID 不合法');
   return id;
+}
+const fileHash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const sameFilePath = (left, right) => typeof left === 'string' && typeof right === 'string'
+  && (process.platform === 'win32'
+    ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
+    : path.resolve(left) === path.resolve(right));
+async function journalCandidatesForFile(filePath) {
+  const root = await workspaceRoot();
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(error => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
+  const candidates = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^project_[a-f0-9-]{20,50}$/.test(entry.name)) continue;
+    const directory = path.join(root, entry.name);
+    const saved = await fs.readFile(path.join(directory, 'saved_state'), 'utf8')
+      .then(JSON.parse).catch(() => null);
+    if (!sameFilePath(saved?.filePath, filePath)) continue;
+    if (!journals.has(entry.name) && await journalOwnership.isLocked(directory)) continue;
+    const state = await fs.readFile(path.join(directory, 'current_state'), 'utf8')
+      .then(JSON.parse).catch(() => null);
+    if (state?.status !== 'complete' || !Number.isInteger(state.activeHead)) continue;
+    const projectUuid = await fs.readFile(path.join(directory, 'project_uuid'), 'utf8')
+      .then(JSON.parse).catch(() => null);
+    candidates.push({ id: entry.name, directory, saved, state, projectUuid });
+  }
+  return candidates.sort((left, right) => String(right.saved.savedAt || '').localeCompare(String(left.saved.savedAt || '')));
+}
+async function classifyJournalCandidate(candidate, archive) {
+  if (archive.projectUuid && candidate.projectUuid && archive.projectUuid !== candidate.projectUuid) return 'divergent';
+  const localHead = candidate.state.activeHead;
+  const localManifest = await fs.readFile(path.join(candidate.directory, 'transactions', `${localHead}.json`), 'utf8')
+    .then(JSON.parse).catch(() => null);
+  if (!localManifest) return 'divergent';
+  if (archive.hasAncestor(localHead) && archive.signature(localHead) === ProjectJournal.historySignature(localManifest))
+    return localHead === archive.activeHead ? 'same' : 'archive-ahead';
+  const ancestor = await fs.readFile(path.join(candidate.directory, 'transactions', `${archive.activeHead}.json`), 'utf8')
+    .then(JSON.parse).catch(() => null);
+  if (ancestor && archive.signature(archive.activeHead) === ProjectJournal.historySignature(ancestor)) {
+    let current = localHead;
+    const visited = new Set();
+    while (Number.isInteger(current) && !visited.has(current)) {
+      if (current === archive.activeHead) return 'workspace-ahead';
+      visited.add(current);
+      const manifest = current === localHead ? localManifest
+        : await fs.readFile(path.join(candidate.directory, 'transactions', `${current}.json`), 'utf8')
+          .then(JSON.parse).catch(() => null);
+      current = manifest?.parent;
+    }
+  }
+  return 'divergent';
+}
+async function removeRetainedJournal(id) {
+  const previous = await fs.readFile(retainedTabsPath(), 'utf8').then(JSON.parse).catch(() => null);
+  if (!Array.isArray(previous) || !previous.some(tab => tab.journalId === id)) return;
+  await atomicWrite(retainedTabsPath(), JSON.stringify(previous.filter(tab => tab.journalId !== id)));
+}
+async function discardOwnedJournal(id) {
+  const journal = journals.get(id);
+  if (!journal) return false;
+  await journalOwnership.assertOwned(journal.directory);
+  const target = path.resolve(journal.directory);
+  if (path.basename(target) !== id || path.dirname(target) === target) throw new Error('工作目錄不在項目根目錄內');
+  await fs.rm(target, { recursive: true, force: true });
+  journals.delete(id);
+  await journalOwnership.release(target);
+  await removeRetainedJournal(id);
+  return true;
+}
+async function discardIdleJournal(candidate) {
+  if (journals.has(candidate.id)) return false;
+  await journalOwnership.acquire(candidate.directory);
+  try {
+    const saved = await fs.readFile(path.join(candidate.directory, 'saved_state'), 'utf8').then(JSON.parse);
+    if (!sameFilePath(saved.filePath, candidate.saved.filePath)) return false;
+    const state = await fs.readFile(path.join(candidate.directory, 'current_state'), 'utf8').then(JSON.parse);
+    if (state.activeHead !== candidate.state.activeHead || state.lastCommitted !== candidate.state.lastCommitted) return false;
+    await fs.rm(candidate.directory, { recursive: true, force: true });
+    await removeRetainedJournal(candidate.id);
+    return true;
+  } finally { await journalOwnership.release(candidate.directory); }
 }
 
 app.commandLine.appendSwitch('disable-features', 'WinUseBrowserSpellChecker');
@@ -114,8 +196,11 @@ ipcMain.handle('app:retained-tabs', async () => {
     if (!Array.isArray(tabs)) return [];
     const available = [];
     for (const tab of tabs) {
-      if (/^project_[a-f0-9-]{20,50}$/.test(tab.journalId)
-        && !await journalOwnership.isLocked(await journalDirectory(tab.journalId))) available.push(tab);
+      if (/^project_[a-f0-9-]{20,50}$/.test(tab.journalId)) {
+        const directory = await journalDirectory(tab.journalId);
+        if (await fs.stat(directory).then(stat => stat.isDirectory()).catch(() => false)
+          && !await journalOwnership.isLocked(directory)) available.push(tab);
+      }
     }
     return available;
   } catch { return []; }
@@ -172,11 +257,66 @@ ipcMain.handle('project:open', async () => {
   const filePath = picked.filePaths[0];
   const bytes = await fs.readFile(filePath);
   if (bytes.subarray(0, 2).toString('ascii') === 'PK') {
+    const archive = ProjectJournal.inspectArchive(bytes);
+    archive.fileHash = fileHash(bytes);
+    const candidates = await journalCandidatesForFile(filePath);
+    let matched = null;
+    let divergent = null;
+    for (const candidate of candidates) {
+      const relation = await classifyJournalCandidate(candidate, archive);
+      if (relation === 'divergent') { divergent ||= candidate; continue; }
+      matched = { candidate, relation };
+      break;
+    }
+    if (matched && ['same', 'workspace-ahead'].includes(matched.relation)) {
+      const { candidate } = matched;
+      try {
+        const journal = await openWorkingJournal(candidate.id, directory => new ProjectJournal(directory).load());
+        const content = await journal.content();
+        return { filePath, content, journalId: candidate.id,
+          dirty: candidate.saved.sequence !== journal.state.activeHead,
+          textureAssets: await readTextureAssets(content, filePath) };
+      } catch (error) {
+        if (error.code !== 'JOURNAL_BUSY') throw error;
+        // Another process claimed the candidate after our read-only scan.
+        // Keep its data untouched and open this archive in a separate session.
+      }
+    }
+    let replace = matched?.relation === 'archive-ahead'
+      && matched.candidate.saved.sequence === matched.candidate.state.activeHead
+      && matched.candidate.state.lastCommitted === matched.candidate.state.activeHead
+      ? matched.candidate : null;
+    if (!matched && divergent) {
+      const active = journals.has(divergent.id);
+      const choice = await dialog.showMessageBox({
+        type: 'warning', title: '同一項目的工作記錄不同',
+        message: '這個文件與已有的展開工作記錄不屬於同一條歷史。',
+        detail: active
+          ? '現有工作副本仍在目前視窗使用；可以切換回它，或另外打開文件。'
+          : '可以用文件取代舊工作副本，或保留兩份並另外打開。原始文件不會因此被改寫。',
+        buttons: active ? ['另開一份', '切換到工作副本', '取消'] : ['另開一份', '以文件覆蓋工作副本', '取消'],
+        defaultId: 0, cancelId: 2, noLink: true
+      });
+      if (choice.response === 2) return null;
+      if (choice.response === 1 && active) {
+        const journal = journals.get(divergent.id);
+        const content = await journal.content();
+        return { filePath, content, journalId: divergent.id, dirty: true,
+          textureAssets: await readTextureAssets(content, filePath) };
+      }
+      if (choice.response === 1) replace = divergent;
+    }
     const journalId = `project_${crypto.randomUUID()}`;
-    const journal = await openWorkingJournal(journalId, directory => ProjectJournal.fromArchive(bytes, directory));
-    await atomicWrite(path.join(journal.directory, 'saved_state'), JSON.stringify({ sequence: journal.state.activeHead, filePath, savedAt: new Date().toISOString() }));
-    journals.set(journalId, journal);
+    const journal = await openWorkingJournal(journalId, directory => ProjectJournal.fromArchive(bytes, directory, archive.entries));
+    await atomicWrite(path.join(journal.directory, 'saved_state'), JSON.stringify({
+      sequence: journal.state.activeHead, filePath, projectUuid: journal.projectUuid,
+      fileHash: archive.fileHash, savedAt: new Date().toISOString()
+    }));
     const content = await journal.content();
+    if (replace && !journals.has(replace.id)) {
+      try { await discardIdleJournal(replace); }
+      catch { /* Keep the old copy if another window claimed it meanwhile. */ }
+    }
     return { filePath, content, journalId, textureAssets: await readTextureAssets(content, filePath) };
   }
   const content = bytes.toString('utf8');
@@ -189,6 +329,11 @@ ipcMain.handle('project:journal-init', async (_event, payload) => {
     await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.content, payload.operationId || 'core.project.create', payload.operationIndex || []));
     return { journalId: id };
   });
+});
+
+ipcMain.handle('project:journal-discard', async (_event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  return queueJournal(id, () => discardOwnedJournal(id));
 });
 
 ipcMain.handle('project:journal-commit', async (_event, payload) => {
@@ -359,6 +504,35 @@ ipcMain.handle('project:export', async (_event, payload) => {
     });
   } else await atomicWrite(filePath, payload.bbmodelContent);
   return { filePath, extension };
+});
+
+function capturePngBuffer(dataUrl) {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!match) throw new Error('模型截圖不是有效的 PNG');
+  const buffer = Buffer.from(match[1], 'base64');
+  if (!buffer.length || buffer.length > 64 * 1024 * 1024) throw new Error('模型截圖尺寸無效');
+  return buffer;
+}
+
+ipcMain.handle('image:save-capture', async (_event, payload) => {
+  const image = capturePngBuffer(payload?.dataUrl);
+  const safeName = path.basename(String(payload?.name || 'model-capture.png')).replace(/[<>:"/\\|?*]/g, '_');
+  const picked = await dialog.showSaveDialog({
+    title: '另存模型截圖', defaultPath: safeName,
+    filters: [{ name: 'PNG 圖片', extensions: ['png'] }]
+  });
+  if (picked.canceled || !picked.filePath) return null;
+  const filePath = path.extname(picked.filePath).toLowerCase() === '.png'
+    ? picked.filePath : `${picked.filePath}.png`;
+  await fs.writeFile(filePath, image);
+  return { filePath };
+});
+
+ipcMain.handle('image:copy-capture', (_event, dataUrl) => {
+  const image = nativeImage.createFromBuffer(capturePngBuffer(dataUrl));
+  if (image.isEmpty()) throw new Error('無法讀取模型截圖');
+  clipboard.writeImage(image);
+  return true;
 });
 
 app.whenReady().then(() => {

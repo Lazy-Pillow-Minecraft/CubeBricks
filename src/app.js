@@ -5,11 +5,12 @@ import { modifierRegistry } from './config/modifiers.js';
 import { operatorRegistry } from './config/operators.js';
 import { allocateGroupName, refreshAutomaticNodeName, setNodeName, setNodeUnnamed } from './model.js';
 import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerRasterCache, loadRaster, prepareLayers, tiledFaceRaster, tiledFaceReference, tiledFaceRegions, faceTileSize } from './core/texture-features.js';
-import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate, isCubeFaceCulled } from './render/webgl-renderer.js';
+import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate, getMinecraftRenderType, isCubeFaceCulled } from './render/webgl-renderer.js';
 import { DockManager } from './ui/dock-manager.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from './assets/player-reference.js';
 import { operationDefinition, operationIndex, requireOperation } from './core/operation-registry.js';
 import { JavaBlockVersion, formatRules, constrainNode, constrainProject } from './core/format-constraints.js';
+import { findVertexSnapIntersections } from './core/vertex-intersections.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -75,6 +76,7 @@ const state = {
   vertexSnapSource: null,
   vertexSnapMode: 'move',
   vertexSnapRotationMode: 'pivot',
+  vertexSnapIntersections: false,
   projection: configRegistry.get(ConfigKey.PROJECTION),
   previewShade: configRegistry.get(ConfigKey.PREVIEW_SHADE),
   playerReference: configRegistry.get(ConfigKey.SHOW_PLAYER_REFERENCE),
@@ -106,6 +108,7 @@ const state = {
   axisViewCameras: { x: null, y: null, z: null },
   generalCamera: null,
   referenceImageSelection: { general: null, x: null, y: null, z: null },
+  referenceImageSources: new Map(),
   history: [],
   future: [],
   hitAreas: [],
@@ -173,6 +176,10 @@ const sceneCanvas = $('#sceneCanvas');
 const viewport = $('#viewport');
 const selectionMarquee = $('#selectionMarquee');
 const sceneRenderer = new WebGLSceneRenderer(sceneCanvas);
+const modelCaptureCanvas = document.createElement('canvas');
+let modelCaptureRenderer = null;
+let modelCaptureImageCanvas = null;
+let modelCaptureDataUrl = null;
 const uvPreviewCanvas = $('#uvPreviewCanvas');
 const uvPreviewViewport = $('#uvPreviewViewport');
 const uvPreviewRenderer = new WebGLSceneRenderer(uvPreviewCanvas);
@@ -196,6 +203,57 @@ const playerReferenceProject = createPlayerReferenceProject();
 let toastTimer;
 let outlinerFrame = null;
 let outlinerDragGhost = null;
+function createListDragAutoScroll(container, isDragging, onScroll = () => {}) {
+  let frame = null;
+  let lastTime = 0;
+  let pointer = null;
+  const updatePointer = event => { pointer = { x: event.clientX, y: event.clientY }; schedule(); };
+  const speedAtPointer = () => {
+    if (!pointer) return 0;
+    const rect = container.getBoundingClientRect();
+    if (pointer.x < rect.left - 24 || pointer.x > rect.right + 24
+      || pointer.y < rect.top - 64 || pointer.y > rect.bottom + 64) return 0;
+    const edge = Math.min(68, Math.max(24, rect.height * .22));
+    const top = Math.max(0, Math.min(1.5, (edge - (pointer.y - rect.top)) / edge));
+    const bottom = Math.max(0, Math.min(1.5, (edge - (rect.bottom - pointer.y)) / edge));
+    const amount = bottom - top;
+    return amount ? Math.sign(amount) * (2 + 20 * amount * amount) : 0;
+  };
+  const tick = now => {
+    frame = null;
+    if (!isDragging()) return;
+    const speed = speedAtPointer();
+    if (speed) {
+      const before = container.scrollTop;
+      container.scrollTop += speed * Math.min(2, (now - (lastTime || now)) / 16.67 || 1);
+      if (container.scrollTop !== before) onScroll(pointer);
+    }
+    lastTime = now;
+    if (speed) schedule();
+  };
+  function schedule() { if (frame === null && isDragging()) frame = requestAnimationFrame(tick); }
+  const onWheel = event => {
+    if (!isDragging()) return;
+    event.preventDefault();
+    pointer = { x: event.clientX, y: event.clientY };
+    const before = container.scrollTop;
+    container.scrollTop += event.deltaY * (event.deltaMode === 1 ? 31 : event.deltaMode === 2 ? container.clientHeight : 1);
+    if (container.scrollTop !== before) onScroll(pointer);
+  };
+  container.addEventListener('wheel', onWheel, { passive: false });
+  return {
+    start() {
+      container.classList.add('is-drag-scrolling');
+      document.addEventListener('dragover', updatePointer, true);
+    },
+    stop() {
+      document.removeEventListener('dragover', updatePointer, true);
+      container.classList.remove('is-drag-scrolling');
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null; lastTime = 0; pointer = null;
+    }
+  };
+}
 let dockManager = null;
 let cameraFocusFrame = null;
 let lockedHoverFrame = null;
@@ -222,6 +280,7 @@ let draggingProjectTabId = null;
 let draggingProjectTabInsertIndex = null;
 let selectionExpansionCache = null;
 let selectionTransformContextCache = null;
+let vertexSnapIntersectionCache = null;
 let focusedDockHotspot = null;
 let textureUvDrag = null;
 let texturePaintDrag = null;
@@ -261,7 +320,7 @@ let closingProjects = false;
 const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectedGenerated', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
-  'target', 'axisView', 'axisViewSign', 'axisViewCameras', 'generalCamera', 'referenceImageSelection', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
+  'target', 'axisView', 'axisViewSign', 'axisViewCameras', 'generalCamera', 'referenceImageSelection', 'referenceImageSources', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
   'selectedUvFaces', 'textureView'
 ]);
 
@@ -304,6 +363,7 @@ function createProjectSession(project, options = {}) {
     axisViewCameras: { x: null, y: null, z: null },
     generalCamera: null,
     referenceImageSelection: { general: null, x: null, y: null, z: null },
+    referenceImageSources: new Map(),
     collapsedGroups: new Set(),
     textureAssets,
     textureGroups: structuredClone(options.textureGroups || []),
@@ -420,9 +480,19 @@ function addProjectTab(project, options = {}) {
 }
 
 function disposeProjectTab(tab) {
+  tab.session.referenceImageSources?.clear();
   for (const asset of tab.session.textureAssets || []) {
     if (typeof asset.source === 'string' && asset.source.startsWith('blob:')) URL.revokeObjectURL(asset.source);
   }
+}
+
+async function discardProjectTabJournal(tab) {
+  if (!tab?.journalId || !window.cubeBricksDesktop?.discardProjectJournal) return;
+  await flushProjectJournal(tab);
+  if (tab.journalPending) throw new Error('尚有未寫入的操作，工作目錄已保留');
+  await tab.journalReady;
+  await tab.journalWrites;
+  await window.cubeBricksDesktop.discardProjectJournal({ journalId: tab.journalId });
 }
 
 function closeProjectTab(tabId) {
@@ -431,10 +501,16 @@ function closeProjectTab(tabId) {
   if (index < 0) return;
   const tab = projectTabs[index];
   if (tab.session.dirty && !window.confirm(`「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？`)) return;
-  void flushProjectJournal(tab);
+  const discard = tab.session.dirty || !tab.session.filePath;
+  const pending = discard ? discardProjectTabJournal(tab) : (async () => {
+    await flushProjectJournal(tab);
+    await tab.journalReady;
+    await tab.journalWrites;
+  })();
+  pending.catch(error => toast(`關閉工作項目失敗：${error.message}`));
   // Blob-backed textures must remain readable until the captured final write
   // has converted them into durable image data.
-  Promise.resolve(tab.journalWrites).catch(() => {}).then(() => disposeProjectTab(tab));
+  pending.catch(() => {}).then(() => disposeProjectTab(tab));
   projectTabs.splice(index, 1);
   if (!projectTabs.length) {
     const project = new CubeBricksProject({ name: 'untitled', ...createModelProjectData('java_block_item', { name: 'untitled' }) });
@@ -504,7 +580,7 @@ function applyProjectInfo() {
   if (!name || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(snap) || snap <= 0) return;
   if (tab.journalPending) void flushProjectJournal(tab);
   tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
-  tab.session.history.push(tab.session.project.serialize());
+  tab.session.history.push(compactProjectHistorySnapshot(tab.session.project, tab.session.referenceImageSources));
   if (tab.session.history.length > 60) tab.session.history.shift();
   tab.session.future.length = 0;
   tab.session.project.name = name;
@@ -584,13 +660,45 @@ function selected() {
   return state.project.getNode(state.selectedUid);
 }
 
+function projectReferenceImageRecords(project) {
+  return Object.values(project.referenceImages || {}).flatMap(value => Array.isArray(value) ? value : value ? [value] : [])
+    .filter(record => record && typeof record === 'object');
+}
+
+function compactProjectHistorySnapshot(project, sources) {
+  const data = JSON.parse(project.serialize());
+  for (const record of projectReferenceImageRecords(data)) {
+    if (typeof record.source !== 'string') continue;
+    let reference = [...sources].find(([, source]) => source === record.source)?.[0];
+    if (!reference) {
+      reference = crypto.randomUUID();
+      sources.set(reference, record.source);
+    }
+    record.sourceRef = reference;
+    delete record.source;
+  }
+  return JSON.stringify(data);
+}
+
+function expandProjectHistorySnapshot(serialized, sources) {
+  const data = JSON.parse(serialized);
+  for (const record of projectReferenceImageRecords(data)) {
+    if (!record.sourceRef || typeof record.source === 'string') continue;
+    const source = sources.get(record.sourceRef);
+    if (typeof source !== 'string') throw new Error(`參考圖快照缺失：${record.sourceRef}`);
+    record.source = source;
+    delete record.sourceRef;
+  }
+  return data;
+}
+
 function snapshot(operationId = 'core.element.property') {
   requireOperation(operationId);
   const tab = projectTabById(activeProjectTabId);
   if (tab) tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
   if (tab?.journalPending) void flushProjectJournal(tab);
   if (tab) tab.journalPending = operationId;
-  state.history.push(state.project.serialize());
+  state.history.push(compactProjectHistorySnapshot(state.project, state.referenceImageSources));
   if (state.history.length > 60) state.history.shift();
   state.future.length = 0;
 }
@@ -628,7 +736,7 @@ function restoredProjectSession(session, data, restoreTextures = false) {
 }
 
 function restore(serialized) {
-  const restored = restoredProjectSession(captureProjectSession(), JSON.parse(serialized));
+  const restored = restoredProjectSession(captureProjectSession(), expandProjectHistorySnapshot(serialized, state.referenceImageSources));
   subdivisionSession = null;
   for (const key of PROJECT_SESSION_KEYS) state[key] = restored[key];
   markDirty(true, { constrain: false });
@@ -725,7 +833,7 @@ async function undo() {
     return;
   }
   if (!state.history.length) return toast('沒有可撤銷的操作');
-  state.future.push(state.project.serialize());
+  state.future.push(compactProjectHistorySnapshot(state.project, state.referenceImageSources));
   restore(state.history.pop());
 }
 
@@ -736,7 +844,7 @@ async function redo() {
     return;
   }
   if (!state.future.length) return toast('沒有可重做的操作');
-  state.history.push(state.project.serialize());
+  state.history.push(compactProjectHistorySnapshot(state.project, state.referenceImageSources));
   restore(state.future.pop());
 }
 
@@ -1496,7 +1604,7 @@ function bindPaintColorPicker(root = inspector) {
     state.paintColorPickerHue = point.hue;
     state.paintColorPickerSaturation = point.saturation;
     state.paintColorPickerValue = point.value;
-    setPaintColor(rgbToHex(hsvToRgb(point.hue, point.saturation, point.value)), false, true);
+    setPaintColor(rgbToHex(hsvToRgb(point.hue, point.saturation, point.value)), false, true, false);
   };
   const useHue = event => {
     const rect = hueRail.getBoundingClientRect();
@@ -1505,10 +1613,10 @@ function bindPaintColorPicker(root = inspector) {
     const value = state.paintColorPickerValue;
     if (state.paintColorPickerMode === 'circle') {
       state.paintColorPickerValue = 1 - position;
-      setPaintColor(rgbToHex(hsvToRgb(state.paintColorPickerHue, saturation, state.paintColorPickerValue)), false, true);
+      setPaintColor(rgbToHex(hsvToRgb(state.paintColorPickerHue, saturation, state.paintColorPickerValue)), false, true, false);
     } else {
       state.paintColorPickerHue = position >= 1 ? 0 : position;
-      setPaintColor(rgbToHex(hsvToRgb(state.paintColorPickerHue, saturation, value)), false, true);
+      setPaintColor(rgbToHex(hsvToRgb(state.paintColorPickerHue, saturation, value)), false, true, false);
     }
   };
   const bindPointer = (node, handler) => {
@@ -1518,6 +1626,7 @@ function bindPaintColorPicker(root = inspector) {
       handler(event);
     });
     node.addEventListener('pointermove', event => { if (node.hasPointerCapture(event.pointerId)) handler(event); });
+    node.addEventListener('pointerup', () => { if (!colorPickerPopupRoot) recordPaintColorHistory(state.paintColor); });
   };
   surface.addEventListener('pointerdown', event => {
     event.preventDefault();
@@ -1532,6 +1641,7 @@ function bindPaintColorPicker(root = inspector) {
   const releaseSurface = event => {
     if (surface.hasPointerCapture?.(event.pointerId)) surface.releasePointerCapture(event.pointerId);
     surfaceZone = null;
+    if (event.type === 'pointerup' && !colorPickerPopupRoot) recordPaintColorHistory(state.paintColor);
   };
   surface.addEventListener('pointerup', releaseSurface);
   surface.addEventListener('pointercancel', releaseSurface);
@@ -1547,6 +1657,10 @@ function bindPaintColorPicker(root = inspector) {
     setPaintColor(rgbToHex(rgb));
   }));
   $('[data-paint-hex]', root)?.addEventListener('change', event => setPaintColor(event.target.value));
+  $('[data-paint-color-history]', root)?.addEventListener('click', event => {
+    const swatch = event.target.closest('[data-history-color]');
+    if (swatch) setPaintColor(swatch.dataset.historyColor);
+  });
   $('[data-action="paintEyedropper"]', root)?.addEventListener('click', () => setTool('eyedropper'));
   $('[data-action="addPaintSwatch"]', root)?.addEventListener('click', () => {
     addPaintSwatchToSelection();
@@ -1576,8 +1690,10 @@ function renderPaintColorPicker(root = inspector) {
       <i class="color-picker-current"></i><input type="text" maxlength="7" data-paint-hex value="${state.paintColor}">
       ${root === inspector ? '<button type="button" data-action="addPaintSwatch" title="加入色卡">＋</button><button type="button" data-action="paintEyedropper" title="取色器">⌖</button>' : ''}
     </div>
+    <div class="color-picker-history"><span>歷史色</span><div class="color-picker-history-swatches" data-paint-color-history></div></div>
   </div>`;
   bindPaintColorPicker(root);
+  renderPaintColorHistory();
 }
 
 function openColorPickerPopup(color, apply) {
@@ -1597,7 +1713,7 @@ function openColorPickerPopup(color, apply) {
     colorPickerPopupRoot = null; colorPickerPopupApply = null;
     Object.assign(state, saved); $('#paintColor').value = state.paintColor;
     dialog.remove();
-    if (dialog.returnValue === 'apply') callback(value);
+    if (dialog.returnValue === 'apply') { recordPaintColorHistory(value); callback(value); }
     if (state.mode === 'paint') renderInspector();
   }, { once: true });
   dialog.showModal();
@@ -3256,6 +3372,96 @@ function renderScene() {
   refreshUvPreview(false);
 }
 
+async function captureModel(mode) {
+  try {
+    const rect = sceneCanvas.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    if (!state.project.elements.length) return toast('場景中沒有可截屏的模型');
+    if (!modelCaptureRenderer) modelCaptureRenderer = new WebGLSceneRenderer(modelCaptureCanvas);
+    const { gl } = modelCaptureRenderer;
+    const mippedScale = state.renderMode === 'textured' && getMinecraftRenderType(state.project.renderType).smooth ? 1.5 : 1;
+    const gpuLimit = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+    const scale = mode === 'offscreen' ? 2 : Math.min(window.devicePixelRatio || 1, 2);
+    const maxDimension = Math.min(mode === 'offscreen' ? 3072 : 4096, Math.floor(gpuLimit / mippedScale));
+    const actualScale = Math.min(scale, maxDimension / Math.max(width, height));
+    const pixelWidth = Math.max(1, Math.round(width * actualScale));
+    const pixelHeight = Math.max(1, Math.round(height * actualScale));
+    if (textureAtlasEntries.length) modelCaptureRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
+    else modelCaptureRenderer.setTexture(textureCanvas);
+    const projection = currentProjection();
+    const camera = {
+      ...state, projection, selectedUids: new Set(), selectedUvFaces: new Set(),
+      captureModelOnly: true, captureWidth: width, captureHeight: height,
+      capturePixelWidth: pixelWidth, capturePixelHeight: pixelHeight,
+      grid: false, wire: false, playerReference: false,
+      modifierResultGhost: false, subdivisionEditOwnerUid: null,
+      lockedDefaultAlpha: 100, lockedHoverFade: false, editorOverlayLines: []
+    };
+    if (mode === 'offscreen') {
+      const fitted = sceneRenderer.fitCameraToVisibleModel(state.project, camera, width / height);
+      if (!fitted) return toast('場景中沒有可見模型');
+      Object.assign(camera, fitted);
+    }
+    toast(mode === 'offscreen' ? '正在離屏渲染模型…' : '正在截取屏幕內模型…');
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    modelCaptureRenderer.render(state.project, null, camera);
+    modelCaptureImageCanvas = modelCaptureRenderer.captureImageCanvas();
+    modelCaptureDataUrl = modelCaptureImageCanvas.toDataURL('image/png');
+    $('#modelCaptureImage').src = modelCaptureDataUrl;
+    $('#modelCaptureInfo').textContent = `${mode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${pixelWidth} × ${pixelHeight} PNG · 透明背景`;
+    $('#modelCaptureDialog').showModal();
+  } catch (error) {
+    toast(`截屏失敗：${error.message}`);
+  }
+}
+
+function modelCaptureBlob() {
+  return new Promise((resolve, reject) => {
+    if (!modelCaptureImageCanvas) return reject(new Error('尚未生成模型截圖'));
+    modelCaptureImageCanvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('無法生成 PNG')), 'image/png');
+  });
+}
+
+async function saveModelCapture() {
+  if (!modelCaptureDataUrl) return;
+  const name = `${state.project.name || 'model'}-capture.png`;
+  try {
+    if (window.cubeBricksDesktop?.saveCaptureImage) {
+      const saved = await window.cubeBricksDesktop.saveCaptureImage({ name, dataUrl: modelCaptureDataUrl });
+      if (saved) toast('模型截圖已保存');
+    } else if (window.showSaveFilePicker) {
+      const handle = await window.showSaveFilePicker({ suggestedName: name,
+        types: [{ description: 'PNG 圖片', accept: { 'image/png': ['.png'] } }] });
+      const writable = await handle.createWritable();
+      await writable.write(await modelCaptureBlob());
+      await writable.close();
+      toast('模型截圖已保存');
+    } else {
+      const blob = await modelCaptureBlob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = name; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('已下載模型截圖');
+    }
+  } catch (error) {
+    if (error.name !== 'AbortError') toast(`保存截圖失敗：${error.message}`);
+  }
+}
+
+async function copyModelCapture() {
+  if (!modelCaptureDataUrl) return;
+  try {
+    if (window.cubeBricksDesktop?.copyCaptureImage)
+      await window.cubeBricksDesktop.copyCaptureImage(modelCaptureDataUrl);
+    else await navigator.clipboard.write([new ClipboardItem({ 'image/png': await modelCaptureBlob() })]);
+    toast('模型截圖已複製到剪切板');
+  } catch (error) {
+    toast(`複製截圖失敗：${error.message}`);
+  }
+}
+
 function selectedMirrorGuideGroup() {
   const owner = selected();
   const entries = [...(owner?.modifiers || []), ...(owner?.operators || [])];
@@ -4830,6 +5036,31 @@ function renderVertexSnapGizmo(gizmo, width, height) {
       points.push({ uid: item.uid, point: pivotPoint, pointType: 'pivot', projected });
     }
   }
+  if (state.vertexSnapIntersections) {
+    const cacheValid = vertexSnapIntersectionCache?.project === state.project
+      && vertexSnapIntersectionCache.uid === item.uid
+      && vertexSnapIntersectionCache.staticCache === sceneRenderer.staticCache
+      && vertexSnapIntersectionCache.selectedCache === sceneRenderer.selectedCache
+      && vertexSnapIntersectionCache.mirrorCache === sceneRenderer.mirrorCache
+      && vertexSnapIntersectionCache.modifierResultGhost === state.modifierResultGhost
+      && vertexSnapIntersectionCache.geometryRevision === sceneRenderer.geometryRevision
+      && vertexSnapIntersectionCache.selectionRevision === sceneRenderer.selectionRevision;
+    if (!cacheValid) {
+      const geometry = sceneRenderer.getVertexSnapIntersectionGeometry(state.project, item.uid);
+      vertexSnapIntersectionCache = {
+        project: state.project, uid: item.uid,
+        staticCache: sceneRenderer.staticCache, selectedCache: sceneRenderer.selectedCache,
+        mirrorCache: sceneRenderer.mirrorCache, modifierResultGhost: state.modifierResultGhost,
+        geometryRevision: sceneRenderer.geometryRevision, selectionRevision: sceneRenderer.selectionRevision,
+        points: findVertexSnapIntersections(geometry.sourceCubes, geometry.targetCubes, geometry.targetQuads)
+      };
+    }
+    for (const point of vertexSnapIntersectionCache.points) {
+      const projected = projectViewportPoint(point);
+      if (projected.behind || projected.x < -12 || projected.y < -12 || projected.x > width + 12 || projected.y > height + 12) continue;
+      points.push({ uid: item.uid, point, pointType: 'intersection', targetOnly: true, projected });
+    }
+  }
   points.sort((left, right) => right.projected.depth - left.projected.depth);
   state.vertexSnapPoints = points;
   gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -4838,7 +5069,12 @@ function renderVertexSnapGizmo(gizmo, width, height) {
       && state.vertexSnapSource.pointType === entry.pointType
       && state.vertexSnapSource.nodeIndex === entry.nodeIndex
       && state.vertexSnapSource.point.every((value, axis) => Math.abs(value - entry.point[axis]) < 1e-5);
-    const classes = ['gizmo-control', 'vertex-snap-control', 'source-candidate', entry.generated ? 'generated-reference' : '', sourceActive ? 'source-active' : ''].filter(Boolean).join(' ');
+    const classes = ['gizmo-control', 'vertex-snap-control', entry.targetOnly ? 'target-only' : 'source-candidate', entry.generated ? 'generated-reference' : '', sourceActive ? 'source-active' : ''].filter(Boolean).join(' ');
+    if (entry.pointType === 'intersection') return `<g class="${classes}" data-kind="vertex" data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected])}>
+      <title>線線／線面交點 · 僅可作目標點</title>
+      <circle class="gizmo-hit-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="13"/>
+      <path class="gizmo-visible vertex-snap-intersection" d="M${entry.projected.x},${entry.projected.y - 6} L${entry.projected.x + 6},${entry.projected.y} L${entry.projected.x},${entry.projected.y + 6} L${entry.projected.x - 6},${entry.projected.y} Z"/>
+    </g>`;
     if (entry.pointType === 'pivot') return `<g class="${classes} vertex-snap-pivot-control pivot-marker" data-kind="vertex" data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected], 'front')}>
       <circle class="gizmo-hit-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="17"/>
       <path class="gizmo-visible pivot-marker-ring" d="M${entry.projected.x},${entry.projected.y - 11} L${entry.projected.x + 11},${entry.projected.y} L${entry.projected.x},${entry.projected.y + 11} L${entry.projected.x - 11},${entry.projected.y} Z"/>
@@ -5430,9 +5666,13 @@ function activeTextureAsset() {
   return state.textureAssets.find(asset => asset._uid === state.activeTextureUid) || null;
 }
 
-function setPaintColor(color, notify = false, preservePickerHue = false) {
+function setPaintColor(color, notify = false, preservePickerHue = false, recordHistory = true) {
   if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
   state.paintColor = String(color).toLowerCase();
+  if (!colorPickerPopupRoot) {
+    syncPaletteSelectionToPaintColor();
+    if (recordHistory) recordPaintColorHistory(state.paintColor);
+  }
   if (!colorPickerPopupRoot && state.tool === 'gradient' && !state.paintGradientPalette) {
     if (state.paintGradientStop === 'end') state.paintGradientEnd = state.paintColor;
     else state.paintGradientStart = state.paintColor;
@@ -7646,12 +7886,58 @@ const paletteRows = [
   { id: crypto.randomUUID(), name: '暖岩', gradient: false, marker: .5, colors: ['#22191b','#402329','#663233','#8b443b','#b65e48','#d9805a','#eca875','#f6d09b','#f4e4c2','#8b705b','#66503e','#48382f','#2f2926','#1c1d19'] }
 ];
 let selectedPaletteRowId = paletteRows[0].id;
-let selectedPaletteColorIndex = null;
+let selectedPaletteColorIndex = paletteRows[0].colors.indexOf(state.paintColor);
 let draggedPaletteColor = null;
+const PAINT_COLOR_HISTORY_KEY = 'cubebricks.paint-color-history';
+const PAINT_COLOR_HISTORY_LIMIT = 12;
+let paintColorHistory = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PAINT_COLOR_HISTORY_KEY) || '[]');
+    return Array.isArray(saved) ? [...new Set(saved.filter(color => /^#[0-9a-f]{6}$/i.test(color)).map(color => color.toLowerCase()))].slice(0, PAINT_COLOR_HISTORY_LIMIT) : [];
+  } catch { return []; }
+})();
+
+function renderPaintColorHistory() {
+  $$('[data-paint-color-history]').forEach(row => {
+    row.innerHTML = paintColorHistory.map(color => `<button type="button" class="color-picker-history-swatch" data-history-color="${color}" style="background:${color}" title="${color}" aria-label="使用歷史顏色 ${color}" aria-pressed="${color === state.paintColor}"></button>`).join('')
+      || '<span class="color-picker-history-empty">尚無歷史顏色</span>';
+  });
+}
+
+function recordPaintColorHistory(color) {
+  if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
+  const normalized = color.toLowerCase();
+  paintColorHistory = [normalized, ...paintColorHistory.filter(entry => entry !== normalized)].slice(0, PAINT_COLOR_HISTORY_LIMIT);
+  try { localStorage.setItem(PAINT_COLOR_HISTORY_KEY, JSON.stringify(paintColorHistory)); } catch { /* history remains available for this session */ }
+  renderPaintColorHistory();
+}
+
+function syncPaletteSelectionToPaintColor() {
+  const color = state.paintColor.toLowerCase();
+  const previousRowId = selectedPaletteRowId;
+  const previousColorIndex = selectedPaletteColorIndex;
+  const preferred = paletteRows.find(row => row.id === selectedPaletteRowId);
+  const candidates = preferred ? [preferred, ...paletteRows.filter(row => row !== preferred)] : paletteRows;
+  const match = candidates.find(row => !row.gradient && row.colors.some(entry => entry.toLowerCase() === color));
+  if (match) {
+    selectedPaletteRowId = match.id;
+    selectedPaletteColorIndex = match.colors.findIndex(entry => entry.toLowerCase() === color);
+  } else {
+    selectedPaletteColorIndex = null;
+    const gradient = candidates.find(row => row.gradient && row.colors.some(entry => entry.toLowerCase() === color));
+    if (gradient) selectedPaletteRowId = gradient.id;
+  }
+  if (previousRowId !== selectedPaletteRowId || previousColorIndex !== selectedPaletteColorIndex) {
+    $$('.palette-row-card').forEach(card => card.classList.toggle('selected', card.dataset.paletteId === selectedPaletteRowId));
+    $$('.swatch-item').forEach(item => item.classList.toggle('selected', item.dataset.paletteRowId === selectedPaletteRowId && Number(item.dataset.paletteColorIndex) === selectedPaletteColorIndex));
+  }
+}
 
 function renderPalette() {
+  const rows = $('#paletteRows');
+  const restoreFocus = rows === document.activeElement || rows.contains(document.activeElement);
   $('#paletteSummary').textContent = `${paletteRows.length} 行 · 每行獨立設定`;
-  $('#paletteRows').innerHTML = paletteRows.map((row, index) => `
+  rows.innerHTML = paletteRows.map((row, index) => `
     <div class="palette-row-card ${selectedPaletteRowId === row.id ? 'selected' : ''}" data-palette-id="${row.id}">
       <div class="palette-row-controls">
         <span class="palette-row-name" title="${escapeAttribute(row.name)}">${escapeHtml(row.name)}</span>
@@ -7663,14 +7949,18 @@ function renderPalette() {
       ${row.gradient
         ? row.colors.length ? `<div class="gradient-picker" data-gradient-picker="${index}" style="background:linear-gradient(90deg, ${row.colors.join(', ')})"><i class="gradient-marker" style="left:${insetControlPosition(row.marker)}"></i></div>`
           : `<div class="palette-empty">空色卡 · 先從選色器加入顏色</div>`
-        : `<div class="palette-row" data-palette-row="${row.id}">${row.colors.length ? row.colors.map((color, colorIndex) => `<span class="swatch-item ${selectedPaletteRowId === row.id && selectedPaletteColorIndex === colorIndex ? 'selected' : ''}" draggable="true" data-palette-row-id="${row.id}" data-palette-color-index="${colorIndex}"><button class="swatch" data-color="${color}" style="background:${color}" title="${color}"></button><button class="swatch-delete" title="刪除顏色">×</button></span>`).join('') : `<span class="palette-empty">空色卡 · 從選色器加入顏色</span>`}</div>`}
+        : `<div class="palette-row" data-palette-row="${row.id}">${row.colors.length ? row.colors.map((color, colorIndex) => `<span class="swatch-item ${selectedPaletteRowId === row.id && selectedPaletteColorIndex === colorIndex ? 'selected' : ''}" draggable="true" data-palette-row-id="${row.id}" data-palette-color-index="${colorIndex}"><button class="swatch" data-color="${color}" style="background:${color}" title="${color}"></button></span>`).join('') : `<span class="palette-empty">空色卡 · 從選色器加入顏色</span>`}</div>`}
     </div>`).join('');
 
   $$('.palette-row-card').forEach(card => card.addEventListener('pointerdown', () => {
     selectedPaletteRowId = card.dataset.paletteId;
-    selectedPaletteColorIndex = null;
+    const row = paletteRows.find(entry => entry.id === selectedPaletteRowId);
+    const matchingIndex = state.mode === 'paint' && !row?.gradient
+      ? row.colors.findIndex(color => color.toLowerCase() === state.paintColor)
+      : -1;
+    selectedPaletteColorIndex = matchingIndex < 0 ? null : matchingIndex;
     $$('.palette-row-card').forEach(entry => entry.classList.toggle('selected', entry === card));
-    $$('.swatch-item').forEach(entry => entry.classList.remove('selected'));
+    $$('.swatch-item').forEach(entry => entry.classList.toggle('selected', entry.dataset.paletteRowId === row?.id && Number(entry.dataset.paletteColorIndex) === selectedPaletteColorIndex));
   }));
   $$('.swatch').forEach(swatch => swatch.addEventListener('click', event => {
     const item = event.currentTarget.closest('.swatch-item');
@@ -7678,16 +7968,6 @@ function renderPalette() {
     selectedPaletteColorIndex = Number(item.dataset.paletteColorIndex);
     if (state.mode !== 'paint') snapshot('core.texture.palette');
     applyPaletteColor(swatch.dataset.color);
-    renderPalette();
-  }));
-  $$('.swatch-delete').forEach(button => button.addEventListener('click', event => {
-    event.stopPropagation();
-    const item = button.closest('.swatch-item');
-    const row = paletteRows.find(entry => entry.id === item.dataset.paletteRowId);
-    if (!row) return;
-    row.colors.splice(Number(item.dataset.paletteColorIndex), 1);
-    selectedPaletteRowId = row.id;
-    selectedPaletteColorIndex = row.colors.length ? Math.min(Number(item.dataset.paletteColorIndex), row.colors.length - 1) : null;
     renderPalette();
   }));
   $$('.swatch-item').forEach(item => {
@@ -7711,6 +7991,7 @@ function renderPalette() {
       selectedPaletteRowId = target.id;
       selectedPaletteColorIndex = targetIndex;
       draggedPaletteColor = null;
+      if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
       renderPalette();
     });
     item.addEventListener('dragend', () => { draggedPaletteColor = null; });
@@ -7725,7 +8006,9 @@ function renderPalette() {
       const [color] = source.colors.splice(draggedPaletteColor.index, 1);
       target.colors.push(color);
       selectedPaletteRowId = target.id; selectedPaletteColorIndex = target.colors.length - 1;
-      draggedPaletteColor = null; renderPalette();
+      draggedPaletteColor = null;
+      if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
+      renderPalette();
     });
   });
   $$('[data-gradient-row]').forEach(toggle => toggle.addEventListener('change', () => {
@@ -7746,7 +8029,9 @@ function renderPalette() {
       pickGradientColor(picker, event);
     });
     picker.addEventListener('pointermove', event => { if (picker.hasPointerCapture(event.pointerId)) pickGradientColor(picker, event); });
+    picker.addEventListener('pointerup', () => { if (state.mode === 'paint') recordPaintColorHistory(state.paintColor); });
   });
+  if (restoreFocus) rows.focus({ preventScroll: true });
   if (state.tool === 'gradient' && state.paintGradientPalette) renderPaintGradientPreview();
 }
 
@@ -7768,7 +8053,7 @@ function pickGradientColor(picker, event) {
   const ratio = insetControlRatio(event.clientX, rect.left, rect.width);
   paletteRows[index].marker = ratio;
   picker.querySelector('.gradient-marker').style.left = insetControlPosition(ratio);
-  applyPaletteColor(sampleGradient(paletteRows[index].colors, ratio), false);
+  applyPaletteColor(sampleGradient(paletteRows[index].colors, ratio), false, false);
 }
 
 function sampleGradient(colors, ratio) {
@@ -7793,9 +8078,19 @@ function addPaintSwatchToSelection() {
   toast(`已加入「${row.name}」 ${state.paintColor}`);
 }
 
-function applyPaletteColor(color, notify = true) {
+function deleteSelectedPaletteColor(rowId = selectedPaletteRowId, colorIndex = selectedPaletteColorIndex) {
+  const row = paletteRows.find(entry => entry.id === rowId);
+  if (!row || row.gradient || colorIndex === null || !row.colors[colorIndex]) return;
+  row.colors.splice(colorIndex, 1);
+  selectedPaletteRowId = row.id;
+  selectedPaletteColorIndex = null;
+  if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
+  renderPalette();
+}
+
+function applyPaletteColor(color, notify = true, recordHistory = true) {
   if (state.mode === 'paint') {
-    setPaintColor(color, notify);
+    setPaintColor(color, notify, false, recordHistory);
     return;
   }
   const item = selected();
@@ -8705,8 +9000,15 @@ function setTool(tool, { temporary = false } = {}) {
 }
 
 function beginTemporaryEyedropper() {
-  if (temporaryPaintTool || state.mode !== 'paint' || state.tool === 'eyedropper'
-    || state.dragging || texturePaintDrag || textureUvDrag) return false;
+  if (temporaryPaintTool || state.mode !== 'paint' || state.tool === 'eyedropper') return false;
+  // Finish a held stroke before changing tools; the stroke keeps its original
+  // brush settings and Alt can immediately act as a temporary eyedropper.
+  if (state.dragging?.type === 'texture-paint-3d') {
+    const drag = state.dragging;
+    endPointerDrag({ pointerId: drag.pointerId, currentTarget: sceneCanvas,
+      clientX: drag.latestClient?.[0], clientY: drag.latestClient?.[1] });
+  }
+  if (texturePaintDrag) endTexturePaintPointer({ pointerId: texturePaintDrag.pointerId });
   temporaryPaintTool = state.tool;
   setTool('eyedropper', { temporary: true });
   return true;
@@ -8733,9 +9035,12 @@ function updateToolOptions() {
   $('#multiTransformModeControl').hidden = selectedTopLevelNodes().length < 2 || !['move', 'rotate'].includes(state.tool);
   $('#scaleHandleModeControl').hidden = state.tool !== 'resize';
   $('#vertexSnapModeControl').hidden = state.tool !== 'vertexSnap';
+  $('#vertexSnapIntersectionControl').hidden = state.tool !== 'vertexSnap';
   $('#vertexSnapRotationControl').hidden = state.tool !== 'vertexSnap' || state.vertexSnapMode !== 'rotate';
   $('#vertexSnapStatus').hidden = state.tool !== 'vertexSnap';
-  $('#vertexSnapStatus').textContent = state.vertexSnapSource ? '再選目標頂點' : '先選來源頂點';
+  $('#vertexSnapStatus').textContent = state.vertexSnapSource
+    ? state.vertexSnapIntersections ? '再選目標頂點或交點' : '再選目標頂點'
+    : '先選來源頂點';
   $('#knifeStatus').hidden = state.tool !== 'knife';
   $('#paintToolOptions').hidden = !paintTool;
   $('#paintEraseControl').hidden = !PAINT_ERASE_TOOLS.includes(state.tool);
@@ -8789,6 +9094,8 @@ function updateToolOptions() {
   updateScaleHandleModeButtons();
   updateMultiTransformModeButtons();
   $$('[data-vertex-snap-mode]').forEach(button => button.classList.toggle('active', button.dataset.vertexSnapMode === state.vertexSnapMode));
+  $('#vertexSnapIntersectionToggle').classList.toggle('active', state.vertexSnapIntersections);
+  $('#vertexSnapIntersectionToggle').setAttribute('aria-pressed', String(state.vertexSnapIntersections));
   $$('[data-vertex-rotation-mode]').forEach(button => button.classList.toggle('active', button.dataset.vertexRotationMode === state.vertexSnapRotationMode));
 }
 
@@ -8820,7 +9127,10 @@ async function openProject() {
     if (window.cubeBricksDesktop) {
       const result = await window.cubeBricksDesktop.openProject();
       if (!result) return;
-      loadProjectContent(result.content, result.filePath, result.textureAssets || [], result.journalId || null);
+      const existing = projectTabs.find(tab => tab.journalId && tab.journalId === result.journalId);
+      if (existing) { activateProjectTab(existing.id); return; }
+      loadProjectContent(result.content, result.filePath, result.textureAssets || [], result.journalId || null,
+        result.dirty === undefined ? {} : { dirty: result.dirty });
     } else fileInput.click();
   } catch (error) { toast(`打開失敗：${error.message}`); }
 }
@@ -8911,6 +9221,7 @@ async function offerProjectRecovery() {
       if (!initial.session.project.elements.length && !initial.session.project.groups.length
         && !initial.session.dirty && !initial.session.filePath) {
         projectTabs.shift();
+        void discardProjectTabJournal(initial).catch(error => toast(`空白工作目錄清理失敗：${error.message}`));
         renderProjectTabs();
       }
       const preferred = retained.find(tab => tab.active && restored.has(tab.journalId));
@@ -9254,9 +9565,9 @@ function showContextMenu(event, { title = '', source = null, items = [] } = {}) 
   contextMenuSource = source;
   source?.classList.add('context-active');
   menu.innerHTML = `${title ? `<div class="context-menu-title">${escapeHtml(title)}</div>` : ''}`;
-  items.forEach(item => {
+  const appendItem = (item, target) => {
     if (item.separator) {
-      menu.insertAdjacentHTML('beforeend', '<div class="context-menu-separator" role="separator"></div>');
+      target.insertAdjacentHTML('beforeend', '<div class="context-menu-separator" role="separator"></div>');
       return;
     }
     const button = document.createElement('button');
@@ -9264,12 +9575,31 @@ function showContextMenu(event, { title = '', source = null, items = [] } = {}) 
     button.role = 'menuitem';
     if (item.danger) button.classList.add('danger');
     button.innerHTML = `${item.icon ? `<span>${item.icon}</span>` : ''}<span>${escapeHtml(item.label)}</span>`;
+    if (item.children?.length) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'context-menu-submenu';
+      const panel = document.createElement('div');
+      panel.className = 'context-menu-submenu-panel';
+      panel.hidden = true;
+      item.children.forEach(child => appendItem(child, panel));
+      const open = () => {
+        panel.hidden = false;
+        panel.classList.toggle('is-left', wrapper.getBoundingClientRect().right + 160 > window.innerWidth);
+      };
+      wrapper.addEventListener('pointerenter', open);
+      wrapper.addEventListener('pointerleave', () => { panel.hidden = true; });
+      button.addEventListener('click', event => { event.stopPropagation(); panel.hidden ? open() : panel.hidden = true; });
+      wrapper.append(button, panel);
+      target.append(wrapper);
+      return;
+    }
     button.addEventListener('click', () => {
       closeContextMenu();
       item.action?.();
     });
-    menu.append(button);
-  });
+    target.append(button);
+  };
+  items.forEach(item => appendItem(item, menu));
   menu.hidden = false;
   const rect = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(8, Math.min(window.innerWidth - rect.width - 8, event.clientX))}px`;
@@ -9354,6 +9684,10 @@ function showElementContextMenu(event, uidValue, source = null) {
 }
 
 function bindContextMenus() {
+  const captureItem = () => ({ icon: '▣', label: '截屏模型', children: [
+    { icon: '▢', label: '屏幕截圖', action: () => captureModel('screen') },
+    { icon: '▣', label: '離屏渲染', action: () => captureModel('offscreen') }
+  ] });
   $('#viewport').addEventListener('contextmenu', event => {
     if (state.tool === 'knife' && state.knifeSelection) {
       event.preventDefault();
@@ -9388,7 +9722,8 @@ function bindContextMenus() {
     if (state.mode === 'paint') {
       showContextMenu(event, { title: state.project.name, items: [
         { icon: '⌖', label: '聚焦選中物件', action: focusSelected },
-        { icon: '◎', label: '回到場景中心', action: focusSceneOrigin }
+        { icon: '◎', label: '回到場景中心', action: focusSceneOrigin },
+        { separator: true }, captureItem()
       ] });
       return;
     }
@@ -9407,6 +9742,7 @@ function bindContextMenus() {
         { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
         ...(selectedNodeUids().length ? [{ icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) }] : []),
         { separator: true },
+        captureItem(),
         { icon: '#', label: state.grid ? '隱藏網格' : '顯示網格', action: () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-context-menu' }) },
         { icon: '▧', label: state.wire ? '隱藏邊界線框' : '顯示邊界線框', action: () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-context-menu' }) }
       ]
@@ -9532,17 +9868,23 @@ function bindContextMenus() {
     const index = paletteRows.findIndex(row => row.id === rowNode.dataset.paletteId);
     const row = paletteRows[index];
     const swatch = event.target.closest('.swatch-item');
+    if (swatch) {
+      selectedPaletteRowId = row.id;
+      selectedPaletteColorIndex = Number(swatch.dataset.paletteColorIndex);
+    }
     showContextMenu(event, { title: row.name, source: rowNode, items: [
       ...(swatch ? [{ icon: '×', label: '刪除顏色', action: () => {
-        row.colors.splice(Number(swatch.dataset.paletteColorIndex), 1);
-        selectedPaletteRowId = row.id;
-        selectedPaletteColorIndex = null;
-        renderPalette();
+        deleteSelectedPaletteColor(row.id, Number(swatch.dataset.paletteColorIndex));
       } }] : []),
       { icon: '◫', label: row.gradient ? '改用離散色卡' : '啟用連續漸變', action: () => { row.gradient = !row.gradient; renderPalette(); } },
       { icon: '＋', label: '新增色卡行', action: addPaletteRow }
     ] });
   });
+  $('#paletteRows').addEventListener('pointerdown', () => $('#paletteRows').focus({ preventScroll: true }), true);
+  document.addEventListener('pointerdown', event => {
+    const rows = $('#paletteRows');
+    if (!event.target.closest('#bottomDock') && document.activeElement === rows) rows.blur();
+  }, true);
   inspector.addEventListener('contextmenu', event => {
     if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
     const item = selected();
@@ -9561,6 +9903,13 @@ function bindContextMenus() {
   });
   document.addEventListener('pointerdown', event => { if (!event.target.closest('#contextMenu')) closeContextMenu(); });
   window.addEventListener('blur', closeContextMenu);
+  $('#modelCaptureSave').addEventListener('click', saveModelCapture);
+  $('#modelCaptureCopy').addEventListener('click', copyModelCapture);
+  $('#modelCaptureDialog').addEventListener('close', () => {
+    $('#modelCaptureImage').removeAttribute('src');
+    modelCaptureImageCanvas = null;
+    modelCaptureDataUrl = null;
+  });
 }
 
 function addCurveNodeAtViewportPoint(curve, event, rect = sceneCanvas.getBoundingClientRect()) {
@@ -9601,6 +9950,56 @@ function getCurveWorldPlane(curve, planePoint = null) {
 }
 
 function bindEvents() {
+  const textureList = $('#textureList');
+  const outlinerDragScroll = createListDragAutoScroll(outliner, () => Boolean(state.outlinerDragUids?.length), pointer => {
+    renderOutlinerWindow();
+    if (pointer) updateOutlinerDropTarget(pointer.y, document.elementFromPoint(pointer.x, pointer.y));
+  });
+  const textureDragScroll = createListDragAutoScroll(textureList, () => Boolean(state.textureDrag), pointer => {
+    if (pointer) updateTextureDropTarget(pointer.y, document.elementFromPoint(pointer.x, pointer.y));
+  });
+  const paletteDragScroll = createListDragAutoScroll($('#paletteRows'), () => Boolean(draggedPaletteColor));
+  function updateOutlinerDropTarget(clientY, target) {
+    clearOutlinerDropState({ keepDragging: true });
+    const item = target?.closest('.outliner-item');
+    if (!item || !outliner.contains(item) || item.dataset.curveNodeIndex !== undefined) return;
+    const node = state.project.getNode(item.dataset.uid);
+    const rect = item.getBoundingClientRect();
+    const ratio = (clientY - rect.top) / rect.height;
+    const zone = node?.type === 'group' && ratio > .27 && ratio < .73 ? 'inside' : ratio < .5 ? 'before' : 'after';
+    item.classList.add(`drop-${zone}`);
+    item.dataset.dropZone = zone;
+  }
+  function updateTextureDropTarget(clientY, target) {
+    textureList.querySelectorAll('.drop-before,.drop-after,.drop-inside').forEach(node => node.classList.remove('drop-before', 'drop-after', 'drop-inside'));
+    const item = target?.closest('.texture-item');
+    const group = !item && target?.closest('.texture-group');
+    if (item && textureList.contains(item) && state.textureDrag?.type === 'asset') {
+      const zone = clientY < item.getBoundingClientRect().top + item.offsetHeight / 2 ? 'before' : 'after';
+      item.classList.add(`drop-${zone}`); item.dataset.dropZone = zone;
+    } else if (group && textureList.contains(group)) group.classList.add('drop-inside');
+  }
+  document.addEventListener('drop', () => {
+    outlinerDragScroll.stop(); textureDragScroll.stop(); paletteDragScroll.stop();
+    queueMicrotask(() => {
+      if (state.outlinerDragUids?.length) {
+        clearOutlinerDropState(); removeOutlinerDragGhost(); state.outlinerDragUids = null;
+      }
+      if (state.textureDrag) { state.textureDrag = null; clearTextureFaceDropTarget(); renderTextureList(); }
+      draggedPaletteColor = null;
+    });
+  }, true);
+  document.addEventListener('dragend', () => {
+    outlinerDragScroll.stop(); textureDragScroll.stop(); paletteDragScroll.stop();
+    clearOutlinerDropState(); removeOutlinerDragGhost(); state.outlinerDragUids = null;
+    if (state.textureDrag) {
+      state.textureDrag = null;
+      clearTextureFaceDropTarget();
+      textureList.querySelectorAll('.is-dragging,.drop-before,.drop-after,.drop-inside').forEach(node =>
+        node.classList.remove('is-dragging', 'drop-before', 'drop-after', 'drop-inside'));
+    }
+    draggedPaletteColor = null;
+  }, true);
   document.addEventListener('click', event => {
     const input = event.target.closest('input[type="color"]');
     if (!input || input.disabled) return;
@@ -9863,6 +10262,7 @@ function bindEvents() {
     setDockHotspotFocus(panel.dataset.panel);
   }));
   const texturePreview = $('#texturePreview');
+  texturePreview.addEventListener('pointerdown', () => texturePreview.focus({ preventScroll: true }), true);
   texturePreview.addEventListener('pointerdown', startTexturePointer);
   texturePreview.addEventListener('pointermove', onTexturePointerMove);
   texturePreview.addEventListener('pointerup', endTexturePointer);
@@ -9998,6 +10398,11 @@ function bindEvents() {
     updateToolOptions();
     renderScene();
   }));
+  $('#vertexSnapIntersectionToggle').addEventListener('click', () => {
+    state.vertexSnapIntersections = !state.vertexSnapIntersections;
+    updateToolOptions();
+    renderScene();
+  });
   $$('[data-vertex-rotation-mode]').forEach(button => button.addEventListener('click', () => {
     state.vertexSnapRotationMode = button.dataset.vertexRotationMode;
     state.vertexSnapSource = null;
@@ -10108,6 +10513,10 @@ function bindEvents() {
   $('[data-action="playTimeline"]')?.addEventListener('click', playTimeline);
   $('[data-action="stopTimeline"]')?.addEventListener('click', stopTimeline);
   $('[data-action="addPaletteRow"]').addEventListener('click', addPaletteRow);
+  $('#paletteRows').addEventListener('dragstart', () => {
+    if (draggedPaletteColor) paletteDragScroll.start();
+  });
+  $('#paletteRows').addEventListener('dragend', () => paletteDragScroll.stop());
   $('#outlinerSearch').addEventListener('input', renderOutliner);
   $('#outlinerDetailsToggle').addEventListener('change', event => {
     state.outlinerDetailed = event.target.checked;
@@ -10187,21 +10596,13 @@ function bindEvents() {
     event.dataTransfer.setData('text/x-cubebricks-outliner', state.outlinerDragUids.join(','));
     const ghost = createOutlinerDragGhost(state.outlinerDragUids);
     event.dataTransfer.setDragImage(ghost, 24, 17);
+    outlinerDragScroll.start();
   });
   outliner.addEventListener('dragover', event => {
     if (!state.outlinerDragUids?.length) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    clearOutlinerDropState({ keepDragging: true });
-    const item = event.target.closest('.outliner-item');
-    if (!item) return;
-    if (item.dataset.curveNodeIndex !== undefined) return;
-    const node = state.project.getNode(item.dataset.uid);
-    const rect = item.getBoundingClientRect();
-    const ratio = (event.clientY - rect.top) / rect.height;
-    const zone = node?.type === 'group' && ratio > .27 && ratio < .73 ? 'inside' : ratio < .5 ? 'before' : 'after';
-    item.classList.add(`drop-${zone}`);
-    item.dataset.dropZone = zone;
+    updateOutlinerDropTarget(event.clientY, event.target);
   });
   outliner.addEventListener('drop', event => {
     if (state.mode === 'paint') { event.preventDefault(); clearOutlinerDropState(); return; }
@@ -10221,6 +10622,7 @@ function bindEvents() {
     state.outlinerDragUids = null;
   });
   outliner.addEventListener('dragend', () => {
+    outlinerDragScroll.stop();
     clearOutlinerDropState();
     removeOutlinerDragGhost();
     state.outlinerDragUids = null;
@@ -10255,7 +10657,7 @@ function bindEvents() {
     const item = event.target.closest('.texture-item'); if (!item) return;
     setActiveTextureItem(item);
   });
-  $('#textureList').addEventListener('dragstart', event => {
+  textureList.addEventListener('dragstart', event => {
     const item = event.target.closest('.texture-item');
     const group = !item && event.target.closest('.texture-group');
     if (!item && !group) return;
@@ -10272,19 +10674,14 @@ function bindEvents() {
     }
     event.dataTransfer.effectAllowed = item ? 'copyMove' : 'move';
     event.dataTransfer.setData('text/x-cubebricks-texture', `${state.textureDrag.type}:${state.textureDrag.id}`);
+    textureDragScroll.start();
   });
-  $('#textureList').addEventListener('dragover', event => {
+  textureList.addEventListener('dragover', event => {
     if (!state.textureDrag) return;
     event.preventDefault();
-    $('#textureList').querySelectorAll('.drop-before,.drop-after,.drop-inside').forEach(node => node.classList.remove('drop-before', 'drop-after', 'drop-inside'));
-    const item = event.target.closest('.texture-item');
-    const group = !item && event.target.closest('.texture-group');
-    if (item && state.textureDrag.type === 'asset') {
-      const zone = event.clientY < item.getBoundingClientRect().top + item.offsetHeight / 2 ? 'before' : 'after';
-      item.classList.add(`drop-${zone}`); item.dataset.dropZone = zone;
-    } else if (group) group.classList.add('drop-inside');
+    updateTextureDropTarget(event.clientY, event.target);
   });
-  $('#textureList').addEventListener('drop', event => {
+  textureList.addEventListener('drop', event => {
     if (!state.textureDrag) return;
     event.preventDefault();
     noteJournalOperation(state.textureDrag.type === 'asset' ? 'core.texture.reorder' : 'core.texture.group');
@@ -10313,7 +10710,8 @@ function bindEvents() {
     rebuildTextureAtlas();
     markDirty();
   });
-  $('#textureList').addEventListener('dragend', () => {
+  textureList.addEventListener('dragend', () => {
+    textureDragScroll.stop();
     state.textureDrag = null;
     clearTextureFaceDropTarget();
     renderTextureList();
@@ -10406,6 +10804,7 @@ function bindEvents() {
   });
   $('#transformGizmo').addEventListener('pointerup', endPointerDrag);
   $('#transformGizmo').addEventListener('pointercancel', endPointerDrag);
+  sceneCanvas.addEventListener('pointerdown', () => sceneCanvas.focus({ preventScroll: true }), true);
   sceneCanvas.addEventListener('pointerdown', onPointerDown);
   sceneCanvas.addEventListener('pointermove', onScenePointerMove);
   viewport.addEventListener('pointermove', scheduleLockedHover);
@@ -10427,11 +10826,22 @@ function bindEvents() {
   window.addEventListener('resize', renderScene);
   document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
-    if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
+    const key = event.key.toLowerCase();
     if (event.key === 'Alt' && !event.repeat && beginTemporaryEyedropper()) {
       event.preventDefault();
       return;
     }
+    if ((event.ctrlKey || event.metaKey) && key === 'z') {
+      event.preventDefault();
+      event.shiftKey ? redo() : undo();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && key === 's') {
+      event.preventDefault();
+      saveProject(event.shiftKey);
+      return;
+    }
+    if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
     if (event.key === 'Escape') {
       setRenderModeMenu(false);
       setReferenceImageMenu(false);
@@ -10440,13 +10850,19 @@ function bindEvents() {
       if (subdivisionSession) exitSubdivisionEdit();
       clearPaintGradientSelection();
     }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(event.shiftKey); }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelected(); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'x') { event.preventDefault(); cutSelected(); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteElements(); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); pasteElements({ inPlace: true }); }
-    if (event.key === 'Delete') deleteSelected();
+    if (event.key === 'Delete') {
+      const palette = $('#paletteRows');
+      if (document.activeElement === palette || palette.contains(document.activeElement)) {
+        event.preventDefault();
+        if (!event.repeat) deleteSelectedPaletteColor();
+        return;
+      }
+      deleteSelected();
+    }
     if (event.key.toLowerCase() === 'f') { cancelCameraFocus(); state.zoom = 1.12; state.panX = 0; state.panY = 0; renderScene(); }
     if (event.key.toLowerCase() === 'r') {
       event.preventDefault();
@@ -10778,6 +11194,7 @@ function useVertexSnapPoint(pointEntry) {
   const currentItem = selected();
   if (!currentItem || !pointEntry) return;
   if (!state.vertexSnapSource) {
+    if (pointEntry.targetOnly) return toast('交點只能作為目標點，請先選普通頂點或樞軸點');
     if (pointEntry.generated) return toast('修改器結果只能作為目標捕捉點');
     state.vertexSnapSource = { rootUid: currentItem.uid, uid: pointEntry.uid, pointType: pointEntry.pointType,
       nodeIndex: pointEntry.nodeIndex, point: [...pointEntry.point] };

@@ -123,6 +123,9 @@
           <button type="button" data-vertex-snap-mode="scale" title="縮放捕捉">縮放</button>
           <button type="button" data-vertex-snap-mode="rotate" title="旋轉捕捉">旋轉</button>
         </div>
+        <div class="toolbar-segment" id="vertexSnapIntersectionControl" role="group" aria-label="交點顯示" hidden>
+          <button type="button" id="vertexSnapIntersectionToggle" title="顯示選中元素邊線與周圍元素的三維交點（僅作目標）" aria-pressed="false">◇ 交點顯示</button>
+        </div>
         <div class="toolbar-segment" id="vertexSnapRotationControl" role="group" aria-label="頂點旋轉模式" hidden>
           <button type="button" data-vertex-rotation-mode="x" title="繞 X 軸">X</button>
           <button type="button" data-vertex-rotation-mode="y" title="繞 Y 軸">Y</button>
@@ -265,7 +268,7 @@
           <div class="reference-image-layer" id="referenceImageLayer" hidden>
             <span id="referenceImageHint">拖動平移 · 滾輪縮放</span>
           </div>
-          <canvas id="sceneCanvas"></canvas>
+          <canvas id="sceneCanvas" tabindex="0"></canvas>
           <div class="selection-marquee" id="selectionMarquee" aria-hidden="true" hidden></div>
           <svg class="paint-gradient-overlay" id="paintGradientOverlay" aria-label="漸變預覽" aria-hidden="true" hidden></svg>
           <svg class="locator-overlay" id="locatorOverlay" aria-label="Locator 標記" hidden></svg>
@@ -326,7 +329,7 @@
             <button class="add-palette-row" data-action="addPaletteRow">＋ 新增一行</button>
           </div>
           <div class="dock-content palette-view active" data-dock-view="palette">
-            <div class="palette-rows" id="paletteRows"></div>
+            <div class="palette-rows" id="paletteRows" tabindex="0" aria-label="色卡，選中色塊後可按 Delete 刪除"></div>
           </div>
         </section>
         </aside>
@@ -376,7 +379,7 @@
       <label class="toolbar-check" title="只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件"><input type="checkbox" id="geometryOnlyToggle" /><span>◇</span> 僅幾何</label>
       <label class="toolbar-check paint-only-option" title="繪畫時鎖定透明度"><input type="checkbox" id="alphaLockToggle" /><span>◩</span> 鎖透明</label>
       <label class="toolbar-check paint-only-option" title="繪畫時略過原本完全透明的像素"><input type="checkbox" id="paintIgnoreTransparentToggle" /><span>◌</span> 忽視全透明</label>
-      <label class="toolbar-check" title="生成物以 75% 透明度顯示，並禁止選取及頂點捕捉"><input type="checkbox" id="modifierResultGhostToggle" /><span>◈</span> 修改器結果虛化</label>
+      <label class="toolbar-check" title="生成物以 75% 可見度的獨立圖層顯示，後方模型與網格可透出；同時禁止選取及頂點捕捉"><input type="checkbox" id="modifierResultGhostToggle" /><span>◈</span> 修改器結果虛化</label>
     </div>
   </div>
 
@@ -517,6 +520,15 @@
       <strong id="textureGenerationStatus">正在準備 UV…</strong>
       <progress id="textureGenerationProgress" max="1" value="0"></progress>
       <small>進度按照需要處理的面數計算</small>
+    </form>
+  </dialog>
+
+  <dialog id="modelCaptureDialog" class="theme-dialog model-capture-dialog" aria-labelledby="modelCaptureTitle">
+    <form method="dialog">
+      <div class="dialog-heading"><div><span class="eyebrow">MODEL CAPTURE</span><h2 id="modelCaptureTitle">截屏模型</h2></div><button value="cancel" class="close-button" aria-label="關閉">×</button></div>
+      <div class="model-capture-preview"><img id="modelCaptureImage" alt="透明背景模型截圖預覽" /></div>
+      <div class="model-capture-info" id="modelCaptureInfo"></div>
+      <div class="dialog-actions"><button value="cancel">關閉</button><div class="model-capture-actions"><button type="button" id="modelCaptureCopy">複製到剪切板</button><button type="button" class="primary-button" id="modelCaptureSave">另存為 PNG</button></div></div>
     </form>
   </dialog>
 

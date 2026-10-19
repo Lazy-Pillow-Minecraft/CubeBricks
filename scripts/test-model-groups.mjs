@@ -4,6 +4,7 @@ import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
 import { ModelFormatRegistry } from '../src/core/model-format-registry.js';
 import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/config/model-formats.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from '../src/assets/player-reference.js';
+import { constrainCube, formatRules } from '../src/core/format-constraints.js';
 
 assert.equal(modelFormatRegistry.list().length, 8, 'built-in model formats are registered');
 assert.deepEqual(modelFormatRegistry.list().filter(format => format.status === 'placeholder').map(format => format.id),
@@ -324,8 +325,9 @@ assert.equal(buildModifierRenderInstances(nestedStackProject).length, 3,
 const nestedStackExport = exportBlockbench(nestedStackProject);
 assert.equal(nestedStackExport.outliner.length, 2,
   'an unwrapped group modifier keeps one group for each of its own final branches');
-assert.ok(nestedStackExport.outliner.every(group => group.children.length === 2),
-  'each group branch contains both results produced by the child modifier');
+assert.ok(nestedStackExport.outliner.every(group => group.children.length === 1
+  && group.children[0].children.length === 2),
+  'each group branch retains the child modifier group with both generated results');
 assert.equal(nestedStackExport.elements.length, 4,
   'group export expands child and group modifier results instead of reading the raw child only');
 
@@ -620,7 +622,9 @@ for (const shapeType of ['polygon_prism', 'dodecahedron', 'truncated_icosahedron
   const project = new CubeBricksProject({ elements: [source, sibling], groups: [parent], outliner: [parent.uid] });
   const original = project.getNode(source.uid);
   addModifier(original, 'symmetry', { enabled: false });
-  const expected = original.toCubes()[0];
+  // Baking must preserve the geometry shown by the active format. Java's
+  // legacy rotation limits are already applied to generated cubes in preview.
+  const expected = constrainCube(original.toCubes()[0], formatRules(project));
   const result = bakeProceduralShape(project, source.uid);
   assert.ok(result?.cubes.length > 0, `${shapeType} can be baked`);
   assert.deepEqual(project.getNode(parent.uid).children, [sibling.uid, result.group.uid], 'baked group keeps the original sibling position');
@@ -643,5 +647,110 @@ for (const shapeType of ['polygon_prism', 'dodecahedron', 'truncated_icosahedron
   assert.equal(result.group.modifiers.length, original.modifiers.length, 'owner modifiers move to the baked group');
   assert.equal(project.getNode(source.uid), null, 'the procedural source is replaced');
 }
+
+const nestedBakeCube = new Cube({ uid: 'nested-bake-cube', name: 'part',
+  position: [3, 2, 1], size: [2, 3, 4], pivot: [1, 0, 0], rotation: [0, 0, 15], inflate: .25 });
+const nestedBakeInner = new Group({ uid: 'nested-bake-inner', name: 'finger', pivot: [2, 1, 0],
+  rotation: [25, 0, 0], inflate: .5, children: [nestedBakeCube.uid] });
+const nestedBakeOuter = new Group({ uid: 'nested-bake-outer', name: 'hand', pivot: [1, 0, 2],
+  rotation: [0, 20, 0], inflate: .75, children: [nestedBakeInner.uid] });
+const nestedBakeOwner = new Group({ uid: 'nested-bake-owner', name: 'arm',
+  inflate: 1, children: [nestedBakeOuter.uid] });
+const nestedBakeModifier = addModifier(nestedBakeOwner, 'symmetry', {
+  enabled: true, mode: 'axes', axes: { x: true, y: false, z: false },
+  anchor: { position: [0, 0, 0] }, wrapParent: false
+});
+const nestedBakeProject = new CubeBricksProject({
+  elements: [nestedBakeCube], groups: [nestedBakeOwner, nestedBakeOuter, nestedBakeInner],
+  outliner: [nestedBakeOwner.uid]
+});
+const nestedBakeExport = exportBlockbench(nestedBakeProject);
+assert.deepEqual(nestedBakeExport.outliner.map(group => group.name), ['right_arm', 'left_arm'],
+  'direct bbmodel export uses the same baking branches without changing the open project');
+for (const branch of nestedBakeExport.outliner) {
+  const side = branch.name.split('_')[0];
+  assert.equal(branch.children[0]?.name, `${side}_hand`, 'bbmodel export retains the named child group');
+  assert.equal(branch.children[0]?.children[0]?.name, `${side}_finger`,
+    'bbmodel export retains the named grandchild group');
+  assert.equal(typeof branch.children[0]?.children[0]?.children[0], 'string',
+    'bbmodel geometry stays inside the original subgroup tree');
+}
+assert.deepEqual(nestedBakeOwner.children, [nestedBakeOuter.uid], 'export does not mutate the source hierarchy');
+const sourceCenter = nestedBakeCube.position.map((value, axis) => value + nestedBakeCube.size[axis] / 2);
+const sourceWorldCenter = applyGroupTransforms(
+  rotatePoint(sourceCenter, nestedBakeCube.pivot, nestedBakeCube.rotation),
+  [nestedBakeOwner, nestedBakeOuter, nestedBakeInner]
+);
+const worldCorners = (cube, groups) => {
+  const corners = [];
+  for (const x of [cube.position[0], cube.position[0] + cube.size[0]])
+    for (const y of [cube.position[1], cube.position[1] + cube.size[1]])
+      for (const z of [cube.position[2], cube.position[2] + cube.size[2]])
+        corners.push(applyGroupTransforms(rotatePoint([x, y, z], cube.pivot, cube.rotation), groups));
+  return corners;
+};
+const sourceCorners = worldCorners(nestedBakeCube, [nestedBakeOwner, nestedBakeOuter, nestedBakeInner]);
+for (const branch of nestedBakeExport.outliner) {
+  const hand = branch.children[0];
+  const finger = hand.children[0];
+  const exported = nestedBakeExport.elements.find(element => element.uuid === finger.children[0]);
+  assert.equal(exported.inflate, 2.5, 'exported cubes retain the combined inflation of all preserved groups');
+  const exportedCube = new Cube({
+    position: exported.from,
+    size: exported.to.map((value, axis) => value - exported.from[axis]),
+    pivot: exported.origin,
+    rotation: exported.rotation
+  });
+  const exportedCorners = worldCorners(exportedCube, [branch, hand, finger].map(group => ({
+    pivot: group.origin, rotation: group.rotation
+  })));
+  const expected = sourceCorners.map(point => branch.name === 'left_arm'
+    ? [-point[0], point[1], point[2]] : point);
+  assert.ok(expected.every(point => exportedCorners.some(corner =>
+    corner.every((value, axis) => Math.abs(value - point[axis]) < 1e-4))),
+  'direct bbmodel export preserves nested rotated cube geometry on both sides');
+}
+const nestedBakeResult = bakeModifier(nestedBakeProject, nestedBakeOwner, nestedBakeModifier.uid);
+assert.equal(nestedBakeResult.groupUids.length, 7, 'baking retains two copies of both nested group levels');
+const bakedArm = nestedBakeProject.getNode(nestedBakeResult.rootUid);
+assert.deepEqual(bakedArm.children.map(uid => nestedBakeProject.getNode(uid).name), ['right_arm', 'left_arm']);
+for (const [branchName, expectedCenter] of [
+  ['right_arm', sourceWorldCenter], ['left_arm', [-sourceWorldCenter[0], sourceWorldCenter[1], sourceWorldCenter[2]]]
+]) {
+  const branch = nestedBakeProject.getNode(bakedArm.children.find(uid => nestedBakeProject.getNode(uid).name === branchName));
+  const side = branchName.split('_')[0];
+  const hand = nestedBakeProject.getNode(branch.children[0]);
+  const finger = nestedBakeProject.getNode(hand.children[0]);
+  const cube = nestedBakeProject.getNode(finger.children[0]);
+  assert.equal(hand.name, `${side}_hand`, 'baked child groups use the mirrored side prefix');
+  assert.equal(finger.name, `${side}_finger`, 'baked grandchild groups keep their level and prefix');
+  assert.equal(cube.type, 'cube', 'baked geometry remains inside the original nested group path');
+  const center = cube.position.map((value, axis) => value + cube.size[axis] / 2);
+  const worldCenter = applyGroupTransforms(rotatePoint(center, cube.pivot, cube.rotation),
+    nestedBakeProject.getGroupChain(cube.uid));
+  assert.ok(worldCenter.every((value, axis) => Math.abs(value - expectedCenter[axis]) < 1e-4),
+    'baking keeps nested rotated geometry in place on both sides');
+  const expectedCorners = sourceCorners.map(point => branchName === 'left_arm' ? [-point[0], point[1], point[2]] : point);
+  const actualCorners = worldCorners(cube, nestedBakeProject.getGroupChain(cube.uid));
+  assert.ok(expectedCorners.every(expected => actualCorners.some(actual =>
+    actual.every((value, axis) => Math.abs(value - expected[axis]) < 1e-4))),
+  'baking retains all nested cube corners after reflection, not just their centre');
+}
+const radialBakeCube = new Cube({ uid: 'radial-bake-cube' });
+const radialBakeChild = new Group({ uid: 'radial-bake-child', name: 'coil', children: [radialBakeCube.uid] });
+const radialBakeOwner = new Group({ uid: 'radial-bake-owner', name: 'wheel', children: [radialBakeChild.uid] });
+const radialBakeModifier = addModifier(radialBakeOwner, 'symmetry', {
+  enabled: true, mode: 'radial', copies: 3
+});
+const radialBakeProject = new CubeBricksProject({
+  elements: [radialBakeCube], groups: [radialBakeOwner, radialBakeChild], outliner: [radialBakeOwner.uid]
+});
+const radialBakeResult = bakeModifier(radialBakeProject, radialBakeOwner, radialBakeModifier.uid);
+const radialBakedRoot = radialBakeProject.getNode(radialBakeResult.rootUid);
+assert.deepEqual(radialBakedRoot.children.map(uid => radialBakeProject.getNode(uid).name),
+  ['wheel_1', 'wheel_2', 'wheel_3']);
+assert.deepEqual(radialBakedRoot.children.map(uid =>
+  radialBakeProject.getNode(radialBakeProject.getNode(uid).children[0]).name),
+['coil_1', 'coil_2', 'coil_3'], 'radial baking applies the numbered suffix to retained child groups');
 
 console.log('Model group import tests passed.');

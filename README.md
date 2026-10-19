@@ -16,7 +16,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 支援組、Locator、節點、多邊形柱體、正十二面體、足球形截角二十面體、二維 Bezier 與三維 Bezier；程序化 Shape 同樣具有可編輯樞軸點。
 - 程序化 Shape 可進入非破壞式細分編輯；對生成 Cube 的調整以覆寫資料保存，不會破壞原 Shape 參數。
 - 曲線像組一樣可在場景層級展開，內部節點作為子項顯示和選取，不再把整列節點塞入物件屬性。
-- 場景層級支援多選、範圍選擇、拖動排序、拖入組、原位分組、搜索與快速定位。
+- 場景層級支援多選、範圍選擇、拖動排序、拖入組、原位分組、搜索與快速定位；拖動列表項時可用滾輪或靠近上下邊緣自動捲動。
 - 可見、鎖定、自動 UV、UV 歸一化與轉換導出標記可在詳細列表中直接管理。
 
 ### 修改器
@@ -44,7 +44,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 移動與旋轉支援全局、父級和自身參考；自身旋轉可選姿態或歐拉角模式。
 - 組縮放與多選縮放共用批量操作；每個元素從自己的初始參數計算尺寸和位置補償。縮放手柄使用參與元素的平均軸方向。
 - 樞軸移動會補償幾何位置，只改變旋轉中心而不改變模型外觀。
-- 頂點捕捉支援移動、縮放、旋轉及樞軸點操作。
+- 頂點捕捉支援移動、縮放、旋轉及樞軸點操作；可選的「交點顯示」會標出選中元素邊線與周圍幾何的線線／線面交點，交點只能作為目標點。
 - 刀具按視線選取最前方 Cube 面，依工程吸附切割幾何並同步切開 UV。
 - 主視圖支援單點、框選、Shift 追加與 Ctrl 取消選擇，以及獨立的面選擇模式。
 
@@ -59,6 +59,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 鎖定物件可使用獨立淡化層和螢幕空間漸變區域，不會改寫材質本身的透明度。
 - 一般視圖與 X／Y／Z 軸向視圖可分別導入多張參考圖；軸向視圖固定使用正交投影，同軸再次點擊可切換正負方向，中鍵專用於平移。
 - 可啟用獨立的玩家尺寸與姿態參考，使用內置皮膚或在設定中替換自定義紋理；參考不參與選取、工程保存與模型導出。
+- 在主視圖空白處右鍵可截屏模型：屏幕截圖只保留目前視窗內的模型，離屏渲染會自動框住可見模型；兩者均使用透明背景，並可預覽、複製或另存為 PNG。
 
 ### UV 與貼圖
 
@@ -74,7 +75,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 繪畫時可按住 Alt 臨時切換至取色器，鬆開後立即返回原本工具；臨時切換不會清除尚未完成的漸變選點。
 - 畫筆支援方形／圓形筆尖、抗鋸齒、透明度與三維跨面連續筆畫。筆刷深度會沿 Cube 的實際鄰面及 UV 朝向延伸，疊加繪製只同步處理最前方完全重合的面，不會穿透模型。
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
-- 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算。
+- 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算；常用的近期顏色顯示在選色器下方。
 - 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。
 - 繪畫模式不顯示編輯選中高亮。場景層級只保留索引、選取、展開與聚焦，禁止新建、刪除、拖動重排及幾何操作，也不允許進入 Shape 細分編輯；桌面版會在項目操作記錄中保存繪畫變更。
 - 全部剔除的 Cube 會被移除；單面剔除會同時取消該面的主視圖拾取，但仍可在 UV 預覽中處理。
@@ -130,6 +131,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 選中組或多個元素後，使用縮放工具批量調整；手柄按參與元素的平均方向顯示，位置補償對各元素獨立計算。
 - 吸附精度由工程格式與設定共同決定。`Shift`、`Ctrl` 及兩者同時按下可套用各自的微調倍率。
 - 樞軸工具和樞軸頂點捕捉只改變旋轉中心，會補償物件參數以保持幾何外觀不動。
+- 使用頂點捕捉時可開啟「交點顯示」；直角菱形代表選中元素的邊線與周圍物件的三維交點，可選作第二個目標點，不能作為起始點。
 - `Ctrl+Z` 撤銷，`Ctrl+Shift+Z` 重做；複製、剪切、貼上與原位複製分別使用 `Ctrl+C`、`Ctrl+X`、`Ctrl+V`、`Ctrl+D`。
 
 ### UV 與貼圖
@@ -176,13 +178,19 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 同一停靠邊的面板共享寬度，拖動任一面板邊界會調整整欄；浮動面板可從邊或角調整大小。
 - 點擊面板外側的三角形可折疊或展開整個停靠邊。帶熱點聚焦的面板在交互後會顯示淡色焦點框。
 - 在輸入框、選單或文字編輯區內，字母和數字快捷鍵不會觸發工具切換。
+- 拖動場景元素、貼圖或色卡時，可使用滾輪或把指標移到列表上下邊緣繼續捲動。
 
 ## 文件格式
 
-- `.cbmodel`：CubeBricks 工程格式，以 ZIP 保存可編輯的 Shape、曲線、修改器、操作器、層級、貼圖和工程設定。桌面版在可配置的工作目錄記錄項目內的全局操作序列與各元素局部歷史；貼圖變更保存可雙向套用的像素差異，以便撤銷、重做和異常關閉後恢復。
+- `.cbmodel`：CubeBricks 工程格式，以 ZIP 保存可編輯的 Shape、曲線、修改器、操作器、層級、貼圖和工程設定。每個工程使用固定 UUID 識別；桌面版在可配置的工作目錄記錄項目內的全局操作序列與各元素局部歷史。參考圖按內容保存一份並由歷史記錄引用；貼圖變更保存可雙向套用的像素差異，以便撤銷、重做和異常關閉後恢復。
 - 工作記錄會保存貼圖分組、拖貼圖到模型面的批量指派，以及撤銷後實際走過的重做分支。多開桌面程式時，同一工作項目只允許一個視窗寫入；遇到缺失或損壞的操作快照時會停止跨越該記錄，保留目前模型狀態。
+- 打開已保存的工程時，會比對同路徑工作記錄的 UUID 與歷史：一致時沿用，文件或工作副本較新時按歷史關係處理；歷史分歧時由用戶選擇另開或取代工作副本，不會直接改寫原始文件。
 - `.bbmodel`：支援 Blockbench 模型匯入與導出；程序化物件和修改器會在導出時展開為兼容的 Cube／組資料。
 - 內置工程類型包含通用模型、圖像以及多種 Minecraft Java、Bedrock、模組實體、皮膚與 GeckoLib 類型；尚未完成的編輯器類型會明確標記為佔位。
+
+### 工作記錄恢復
+
+如果出現「項目狀態文件損壞，且找不到上一個完成狀態」，表示工作目錄中的 `current_state` 和 `current_state.previous` 都無法提供有效的恢復狀態；這不代表已保存的 `.cbmodel` 或 `.bbmodel` 一定損壞。先保留並備份整個工作目錄，不要手動刪除其中的交易、元素或貼圖文件；可先嘗試正常打開已保存的工程。未保存的內容需要檢查該工作目錄，不能只靠重新按「恢復」保證找回。
 
 ## 啟動
 
@@ -219,6 +227,7 @@ npm run check
 npm run test:config
 npm run test:model
 npm run test:render
+npm run test:operations
 npm run test:journal
 ```
 
@@ -269,7 +278,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Groups, locators, nodes, polygon columns, dodecahedrons, truncated-icosahedron footballs, and 2D/3D Bezier curves are supported. Procedural shapes have editable pivots as well.
 - Procedural shapes support non-destructive subdivision editing. Changes to generated cubes are stored as overrides without destroying the original shape parameters.
 - Curves can be expanded in the scene hierarchy like groups, with their nodes displayed and selected as children instead of being placed in a long property list.
-- The hierarchy supports multi-selection, range selection, drag reordering, group nesting, in-place grouping, search, and animated navigation.
+- The hierarchy supports multi-selection, range selection, drag reordering, group nesting, in-place grouping, search, and animated navigation. While dragging list items, use the wheel or move near the top or bottom edge to scroll.
 - Visibility, locking, automatic UV, UV normalization, and conversion-export flags can be managed directly from the detailed hierarchy view.
 
 ### Modifiers
@@ -297,7 +306,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Move and rotate support global, parent, and local reference spaces. Local rotation offers pose and Euler modes.
 - Groups and multi-selected elements share batch scaling. Each element calculates its size and position compensation from its own starting parameters, and scale gizmos use the participating elements' average axis directions.
 - Moving a pivot compensates the geometry position, changing only the rotation center without changing the visible model.
-- Vertex snapping supports move, scale, rotate, and pivot operations.
+- Vertex snapping supports move, scale, rotate, and pivot operations. Optional intersection markers show where selected edges meet nearby edges or faces; these points can only be snap targets.
 - The knife selects the frontmost cube face along the view ray, cuts at the project snapping step, and splits UVs with the geometry.
 - The viewport supports click selection, marquee selection, Shift-add, Ctrl-remove, and a dedicated face-selection mode.
 
@@ -312,6 +321,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Locked objects can use a separate fade layer and a screen-space pointer gradient without modifying material transparency.
 - General, X, Y, and Z views can each contain multiple reference images. Axis views are always orthographic; clicking the same axis again reverses direction, and middle-drag always pans.
 - An independent player scale and pose reference can use the bundled skin or a custom texture from Settings. It is excluded from selection, project files, and model exports.
+- Right-click empty viewport space to capture the model. Screen capture keeps only model pixels inside the current view; offscreen rendering frames the visible model. Both have transparent backgrounds and can be previewed, copied, or saved as PNG.
 
 ### UV and texturing
 
@@ -328,7 +338,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Holding Alt temporarily activates the eyedropper and releasing it restores the previous tool. Temporary switching preserves an unfinished gradient selection.
 - Brushes support square and round tips, antialiasing, opacity, and continuous 3D strokes across faces. Brush depth follows actual shared cube edges and each neighboring face's UV orientation. Coincident painting affects exactly overlapping surfaces at the first eligible depth. With "ignore fully transparent" enabled, 3D paint can reach colored pixels behind transparent faces; a stroke keeps its original alpha hit map so erasing the front face cannot tunnel into the next layer.
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
-- The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion.
+- The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion. Recent colors appear below the picker.
 - Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient.
 - Paint mode hides edit-selection highlighting. The hierarchy provides indexing, selection, expansion, and focus, while creation, deletion, reordering, geometry operations, and shape subdivision editing are disabled. The desktop app records painting changes in the project operation journal.
 - Culling every face removes the cube. A culled individual face is no longer pickable in the main viewport but remains available in UV Preview.
@@ -384,6 +394,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Select a group or multiple elements and use Scale for batch resizing. Gizmos follow the participating elements' average directions, and position compensation is calculated independently for each element.
 - Snapping is defined by both the project format and user settings. `Shift`, `Ctrl`, and both together apply their configured fine-adjustment multipliers.
 - Pivot movement and pivot vertex snapping change only the rotation center and compensate object parameters so the visible geometry stays fixed.
+- Enable **Show Intersections** in Vertex Snap to mark 3D edge/edge and edge/face intersections with square diamonds. They can be picked as the second, target point, but not as a source point.
 - `Ctrl+Z` undoes and `Ctrl+Shift+Z` redoes. Copy, cut, paste, and duplicate in place use `Ctrl+C`, `Ctrl+X`, `Ctrl+V`, and `Ctrl+D`.
 
 ### UV and textures
@@ -428,13 +439,19 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Panels on one dock edge share a width. Resizing any panel edge changes the column; floating panels resize from edges and corners.
 - Use the outward-facing triangle to collapse or expand a dock edge. Panels with hotspot focus show a subtle focus outline after interaction.
 - Letter and number shortcuts do not switch tools while an input, select menu, or editable text field has focus.
+- While dragging a scene element, texture, or palette color, use the wheel or move the pointer near a list edge to continue scrolling.
 
 ## File formats
 
-- `.cbmodel`: a ZIP-based CubeBricks project preserving editable shapes, curves, modifiers, operators, hierarchy, textures, and settings. The desktop app keeps a configurable working directory with a project-scoped operation sequence and per-element history; texture edits use reversible pixel deltas for undo, redo, and crash recovery.
+- `.cbmodel`: a ZIP-based CubeBricks project preserving editable shapes, curves, modifiers, operators, hierarchy, textures, and settings. Each project has a stable UUID. The desktop app keeps a configurable working directory with a project-scoped operation sequence and per-element history. Reference images are stored once by content and referenced by history entries; texture edits use reversible pixel deltas for undo, redo, and crash recovery.
 - The operation journal also preserves texture folders, bulk face assignment by dragging textures onto a model, and the redo branch actually traversed by the user. Only one app window may write a given working project at a time. If an operation snapshot is missing or damaged, navigation stops at that boundary and preserves the current model.
+- Opening a saved project compares its UUID and history with same-path working copies. Matching histories reuse the appropriate working state; diverged histories prompt the user to open separately or replace the working copy without silently overwriting the source file.
 - `.bbmodel`: Blockbench import and export. Procedural objects and modifiers are expanded into compatible cube/group data during export.
 - Built-in project types cover generic models, images, and several Minecraft Java, Bedrock, modded-entity, skin, and GeckoLib workflows. Editors that are not implemented yet are clearly marked as placeholders.
+
+### Recovering a working journal
+
+If recovery reports that the project state file is damaged and no previous completed state exists, neither `current_state` nor `current_state.previous` provides a valid recovery point. This does not necessarily mean a saved `.cbmodel` or `.bbmodel` is damaged. Keep a backup of the complete working directory rather than deleting its transaction, element, or texture files, and try opening the saved project normally. Recovering unsaved work requires examining that directory; retrying **Recover** alone cannot guarantee it.
 
 ## Running
 
@@ -471,6 +488,7 @@ npm run check
 npm run test:config
 npm run test:model
 npm run test:render
+npm run test:operations
 npm run test:journal
 ```
 

@@ -414,6 +414,44 @@ export class WebGLSceneRenderer {
     return true;
   }
 
+  drawModifierGhostOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
+    viewProjection, targetFramebuffer, width, height) {
+    if (!camera.modifierResultGhost || !this.mirrorCache?.instances.length) return;
+    const { gl } = this;
+    this.ensureLockedLayerTarget(width, height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.lockedFramebuffer);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clearDepth(1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    // Resolve all generated surfaces into one opaque, depth-tested layer.
+    // Existing geometry and the ground grid only populate depth, so they can
+    // occlude the result while remaining visible through its final 75% fade.
+    gl.colorMask(false, false, false, false);
+    this.drawGrid(camera, viewProjection);
+    this.drawPlayerReference(camera, viewProjection);
+    this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids,
+      viewProjection, this.lastCameraState);
+    if (lockedUids.size) this.drawLockedGeometry(project, camera, minecraftRenderType,
+      dynamicUids, lockedUids, viewProjection, true);
+    gl.colorMask(true, true, true, true);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    const wireframe = camera.renderMode === 'wireframe';
+    const pipeline = camera.renderMode === 'textured'
+      ? minecraftRenderType : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+    const primitive = wireframe ? gl.LINES : gl.TRIANGLES;
+    const options = wireframe
+      ? { depthWrite: true, cull: false, renderMode: 0, blend: false }
+      : { depthWrite: true, cull: project.cullFaces, renderMode: getSurfaceRenderMode(camera.renderMode),
+          alphaMode: pipeline.alphaMode, blend: false };
+    this.drawMirrorInstances(dynamicUids, lockedUids, primitive, viewProjection, options, { ghostOnly: true });
+    if (lockedUids.size) this.drawMirrorInstances(dynamicUids, lockedUids, primitive,
+      viewProjection, options, { ghostOnly: true, lockedOnly: true });
+    this.compositeLockedLayer({ lockedDefaultAlpha: 75, lockedHoverFade: false },
+      targetFramebuffer, width, height);
+  }
+
   presentAntialiased(outputWidth, outputHeight, sourceWidth, sourceHeight) {
     const { gl } = this;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -572,6 +610,7 @@ export class WebGLSceneRenderer {
     for (const uid of dynamicUids) {
       if (geometry.ownerPoints.has(uid)) this.staticCache.ownerPoints.set(uid, geometry.ownerPoints.get(uid));
       else this.staticCache.ownerPoints.delete(uid);
+      this.staticCache.cubePoints.set(uid, geometry.cubePoints.get(uid) || []);
     }
     this.selectedGeometryDirty = false;
     return true;
@@ -702,7 +741,8 @@ export class WebGLSceneRenderer {
   }
 
   drawMirrorInstances(dynamicUids, lockedUids, primitive, viewProjection, options = {},
-    { lockedOnly = false, selectedOnly = false } = {}) {
+    { lockedOnly = false, selectedOnly = false, ghostOnly = false } = {}) {
+    if (Boolean(this.lastCameraInput?.modifierResultGhost) !== ghostOnly) return;
     const lines = primitive === this.gl.LINES;
     const rangeKey = lines ? 'edgeRanges' : 'triangleRanges';
     const cubeRangeKey = lines ? 'cubeEdgeRanges' : 'cubeTriangleRanges';
@@ -743,8 +783,6 @@ export class WebGLSceneRenderer {
           : instance.transform;
         for (const range of ranges) this.drawBuffer(buffer, range.count, primitive, viewProjection, {
             ...options,
-            ...(this.lastCameraInput?.modifierResultGhost
-              ? { opacity: .75, blend: true, depthWrite: false } : {}),
             first: range.start,
             modelTransform,
             flipWinding: instance.reflected
@@ -966,17 +1004,18 @@ export class WebGLSceneRenderer {
 
   render(project, selectedUid, camera) {
     const { gl, canvas } = this;
+    this.captureModelOnly = camera.captureModelOnly === true;
     this.previewShade = camera.previewShade !== false;
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const width = Math.max(1, Math.floor(rect.width));
-    const height = Math.max(1, Math.floor(rect.height));
-    const pixelWidth = camera.layoutResizing && canvas.width
+    const width = Math.max(1, Math.floor(camera.captureWidth || rect.width));
+    const height = Math.max(1, Math.floor(camera.captureHeight || rect.height));
+    const pixelWidth = camera.capturePixelWidth || (camera.layoutResizing && canvas.width
       ? canvas.width
-      : Math.max(1, Math.floor(width * dpr));
-    const pixelHeight = camera.layoutResizing && canvas.height
+      : Math.max(1, Math.floor(width * dpr)));
+    const pixelHeight = camera.capturePixelHeight || (camera.layoutResizing && canvas.height
       ? canvas.height
-      : Math.max(1, Math.floor(height * dpr));
+      : Math.max(1, Math.floor(height * dpr)));
     if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
       canvas.width = pixelWidth;
       canvas.height = pixelHeight;
@@ -1061,8 +1100,8 @@ export class WebGLSceneRenderer {
     const ownerPoints = mergeOwnerPoints(this.staticCache.ownerPoints, this.selectedCache.ownerPoints);
     this.lastOwnerPoints = ownerPoints;
     const lockedState = this.getLockedState(project);
-    const lockedUids = new Set(lockedState.uids);
-    if (camera.subdivisionEditOwnerUid) {
+    const lockedUids = camera.captureModelOnly ? new Set() : new Set(lockedState.uids);
+    if (!camera.captureModelOnly && camera.subdivisionEditOwnerUid) {
       for (const element of project.elements) {
         if (element.uid !== camera.subdivisionEditOwnerUid
           && element.subdivisionOwnerUid !== camera.subdivisionEditOwnerUid) lockedUids.add(element.uid);
@@ -1075,6 +1114,25 @@ export class WebGLSceneRenderer {
       ['locator', 'node'].includes(this.lastNodeByUid.get(uid)?.type));
 
     this.applyTextureSampling();
+
+    if (camera.captureModelOnly) {
+      this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
+      if (camera.renderMode === 'wireframe') {
+        const batches = this.ensureVisibleStaticBatches(dynamicUids, lockedUids);
+        const options = { depthWrite: true, cull: false, renderMode: 0 };
+        this.drawBuffer(this.visibleStaticWireBuffer, batches.edgeCount, gl.LINES, viewProjection, options);
+        this.drawMirrorInstances(dynamicUids, lockedUids, gl.LINES, viewProjection, options);
+        this.drawBuffer(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
+          gl.LINES, viewProjection, options);
+      }
+      if (useMippedAntialias) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, pixelWidth, pixelHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        this.presentAntialiased(pixelWidth, pixelHeight, renderWidth, renderHeight);
+      }
+      return;
+    }
 
     if (useMippedAntialias) {
       // Only model surfaces are supersampled. Rebuild their depth in the
@@ -1093,6 +1151,8 @@ export class WebGLSceneRenderer {
       gl.colorMask(true, true, true, true);
       this.presentAntialiased(pixelWidth, pixelHeight, renderWidth, renderHeight);
       this.drawGrid(camera, viewProjection);
+      this.drawModifierGhostOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
+        viewProjection, null, pixelWidth, pixelHeight);
       this.drawLockedOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
         ownerPoints, viewProjection, null, pixelWidth, pixelHeight, renderWidth, renderHeight);
       this.drawFaceLabel(camera, viewProjection);
@@ -1101,12 +1161,79 @@ export class WebGLSceneRenderer {
       this.drawGrid(camera, viewProjection);
       this.drawPlayerReference(camera, viewProjection);
       this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
+      this.drawModifierGhostOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
+        viewProjection, null, pixelWidth, pixelHeight);
       this.drawLockedOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
         ownerPoints, viewProjection, null, pixelWidth, pixelHeight, pixelWidth, pixelHeight);
       this.drawFaceLabel(camera, viewProjection);
       this.drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection);
     }
 
+  }
+
+  captureImageCanvas() {
+    const { gl, canvas } = this;
+    const width = canvas.width, height = canvas.height;
+    const pixels = new Uint8Array(width * height * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    if (gl.getError() !== gl.NO_ERROR) throw new Error('無法讀取模型渲染結果');
+    const image = document.createElement('canvas');
+    image.width = width;
+    image.height = height;
+    const context = image.getContext('2d');
+    const upright = new Uint8ClampedArray(pixels.length);
+    const stride = width * 4;
+    for (let row = 0; row < height; row++)
+      upright.set(pixels.subarray((height - row - 1) * stride, (height - row) * stride), row * stride);
+    context.putImageData(new ImageData(upright, width, height), 0, 0);
+    return image;
+  }
+
+  fitCameraToVisibleModel(project, camera, aspect, padding = 1.12) {
+    const visible = new Set(project.elements.filter(element => element.visible !== false
+      && element.type !== 'locator' && element.type !== 'node').map(element => element.uid));
+    const instances = buildModifierRenderInstances(project);
+    const visitPoints = visit => {
+      for (const uid of visible) for (const point of this.lastOwnerPoints.get(uid) || []) visit(point);
+      for (const instance of instances) for (const uid of instance.sourceUids) {
+        if (!visible.has(uid)) continue;
+        const cache = this.selectedCache?.cubePoints?.has(uid) ? this.selectedCache : this.staticCache;
+        const cubes = cache?.cubePoints?.get(uid) || [];
+        for (const index of instance.cubeIndices?.[uid] || cubes.map((_, cubeIndex) => cubeIndex))
+          for (const point of cubes[index] || []) visit(modifierInstancePoint(instance, point));
+      }
+    };
+    const minimum = [Infinity, Infinity, Infinity], maximum = [-Infinity, -Infinity, -Infinity];
+    let count = 0;
+    visitPoints(point => {
+      count++;
+      for (let axis = 0; axis < 3; axis++) {
+        minimum[axis] = Math.min(minimum[axis], point[axis]);
+        maximum[axis] = Math.max(maximum[axis], point[axis]);
+      }
+    });
+    if (!count) return null;
+    const center = minimum.map((value, axis) => (value + maximum[axis]) / 2);
+    const frame = buildCameraState({ ...camera, target: center, panX: 0, panY: 0 }, aspect, aspect, 1);
+    let horizontal = 0, vertical = 0, distance = 0, nearestDepth = Infinity;
+    const tangent = Math.tan(45 * DEG / 2);
+    visitPoints(point => {
+      const offset = subtract(point, center);
+      const x = Math.abs(dot(offset, frame.right));
+      const y = Math.abs(dot(offset, frame.up));
+      const depth = dot(offset, frame.forward);
+      horizontal = Math.max(horizontal, x);
+      vertical = Math.max(vertical, y);
+      nearestDepth = Math.min(nearestDepth, depth);
+      distance = Math.max(distance, padding * x / (tangent * aspect) - depth,
+        padding * y / tangent - depth);
+    });
+    const zoom = camera.projection === 'perspective'
+      ? 42 / Math.max(.1, distance, -nearestDepth + .1)
+      : Math.min(18 * aspect / Math.max(.01, padding * horizontal),
+        18 / Math.max(.01, padding * vertical));
+    return { ...camera, target: center, panX: 0, panY: 0, zoom: Math.max(1e-6, Math.min(1000, zoom)) };
   }
 
   getHitAreas(project, geometryOnly = false) {
@@ -1374,6 +1501,58 @@ export class WebGLSceneRenderer {
     return vertices;
   }
 
+  getVertexSnapIntersectionGeometry(project, selectedUid) {
+    const selectedNode = project.getNode(selectedUid);
+    if (!selectedNode) return { sourceCubes: [], targetCubes: [], targetQuads: [] };
+    const sourceUids = new Set(selectedNode.type === 'group'
+      ? project.getDescendantElementUids(selectedUid) : [selectedUid]);
+    const dynamicUids = new Set(this.selectedCache?.cubePoints?.keys() || []);
+    const visible = new Map();
+    const isVisible = uid => {
+      if (visible.has(uid)) return visible.get(uid);
+      const node = project.getNode(uid);
+      const result = Boolean(node && node.visible !== false
+        && project.getGroupChain(uid).every(group => group.visible !== false));
+      visible.set(uid, result);
+      return result;
+    };
+    const sourceCubes = [], targetCubes = [], targetQuads = [];
+    const facesByUid = new Map();
+    for (const [cache, skipDynamic] of [[this.staticCache, true], [this.selectedCache, false]]) {
+      if (!cache) continue;
+      for (const [uid, cubes] of cache.cubePoints) {
+        if ((skipDynamic && dynamicUids.has(uid)) || !isVisible(uid)) continue;
+        (sourceUids.has(uid) ? sourceCubes : targetCubes).push(...cubes);
+      }
+      for (const face of cache.faces) {
+        if ((skipDynamic && dynamicUids.has(face.uid)) || !isVisible(face.uid)) continue;
+        if (!facesByUid.has(face.uid)) facesByUid.set(face.uid, []);
+        facesByUid.get(face.uid).push(face);
+        if (!sourceUids.has(face.uid)) targetQuads.push(face.quad);
+      }
+    }
+    if (!this.lastCameraInput?.modifierResultGhost) {
+      for (const instance of this.mirrorCache?.instances || []) {
+        for (const uid of instance.sourceUids) {
+          if (!isVisible(uid)) continue;
+          const cache = dynamicUids.has(uid) ? this.selectedCache : this.staticCache;
+          const cubes = cache?.cubePoints?.get(uid) || [];
+          const indices = instance.cubeIndices?.[uid] || cubes.map((_, index) => index);
+          const allowed = new Set(indices);
+          for (const index of indices) if (cubes[index]) {
+            targetCubes.push(cubes[index].map(point => modifierInstancePoint(instance, point)));
+          }
+          for (const face of facesByUid.get(uid) || []) {
+            if (allowed.has(face.cubeIndex ?? 0)) {
+              targetQuads.push(face.quad.map(point => modifierInstancePoint(instance, point)));
+            }
+          }
+        }
+      }
+    }
+    return { sourceCubes, targetCubes, targetQuads };
+  }
+
   getCurveNodeWorldPoints(project, uid) {
     const curve = project.getNode(uid);
     if (!curve || !['bezier2d', 'bezier3d'].includes(curve.type)) return [];
@@ -1622,7 +1801,9 @@ export class WebGLSceneRenderer {
     if (blend) {
       gl.enable(gl.BLEND);
       gl.blendEquation(gl.FUNC_ADD);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      if (this.captureModelOnly)
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      else gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     } else gl.disable(gl.BLEND);
     gl.drawArrays(primitive, first, vertexCount);
     gl.frontFace(gl.CCW);
@@ -2464,11 +2645,13 @@ const SSAA_RESOLVE_FRAGMENT_SHADER = `
   uniform vec2 uResolution;
   void main() {
     vec2 offset = 0.35 / uResolution;
-    gl_FragColor = 0.25 * (
-      texture2D(uScreenTexture, vScreenUv + vec2(-offset.x, -offset.y)) +
-      texture2D(uScreenTexture, vScreenUv + vec2( offset.x, -offset.y)) +
-      texture2D(uScreenTexture, vScreenUv + vec2(-offset.x,  offset.y)) +
-      texture2D(uScreenTexture, vScreenUv + vec2( offset.x,  offset.y)));
+    vec4 a = texture2D(uScreenTexture, vScreenUv + vec2(-offset.x, -offset.y));
+    vec4 b = texture2D(uScreenTexture, vScreenUv + vec2( offset.x, -offset.y));
+    vec4 c = texture2D(uScreenTexture, vScreenUv + vec2(-offset.x,  offset.y));
+    vec4 d = texture2D(uScreenTexture, vScreenUv + vec2( offset.x,  offset.y));
+    float alpha = (a.a + b.a + c.a + d.a) * 0.25;
+    vec3 color = (a.rgb * a.a + b.rgb * b.a + c.rgb * c.a + d.rgb * d.a) * 0.25;
+    gl_FragColor = vec4(alpha > 0.0001 ? color / alpha : vec3(0.0), alpha);
   }
 `;
 

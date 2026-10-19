@@ -1122,6 +1122,8 @@ export function chooseKnifeCutAxis(firstPoint, secondPoint, faceName, cube = nul
 
 export class CubeBricksProject {
   constructor(data = {}) {
+    this.projectUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.projectUuid || '')
+      ? data.projectUuid.toLowerCase() : crypto.randomUUID();
     this.formatVersion = Math.max(3, data.formatVersion || 0);
     this.formatId = resolveModelFormatId(data.formatId || data.modelType || ModelFormatId.JAVA_BLOCK_ITEM);
     const format = modelFormatRegistry.get(this.formatId);
@@ -1558,11 +1560,6 @@ function applyGroupChainPoint(point, chain) {
 function groupChainMatrix(chain) {
   return chain.reduce((matrix, group) => matrixMultiply(matrix, rotationMatrix(group.rotation)), matrixIdentity());
 }
-function relativeMirrorChain(project, uidValue, mirrorGroupUid) {
-  const chain = project.getGroupChain(uidValue);
-  const index = chain.findIndex(group => group.uid === mirrorGroupUid);
-  return index < 0 ? chain : chain.slice(index);
-}
 function symmetryExportAngles(modifier) {
   const count = Math.max(1, Math.min(256, Math.round(Number(modifier.copies) || 1)));
   if (modifier.distribution !== 'range') return Array.from({ length: count }, (_, index) => index * 360 / count);
@@ -1872,23 +1869,68 @@ export function bakeModifier(project, owner, modifierUid) {
     ? originalCubeKeys(project, null, new Set(sourceUids)) : null;
   const selectedVariants = evaluateModifierStack(project, [{ ...owner, modifiers: [modifier] }]);
   const generatedElements = [];
+  const generatedGroups = [];
+  const frame = symmetryWorldFrame(project, owner, modifier);
+  const reflectedLocalAxis = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
   const instanceGroups = selectedVariants.map((selectedVariant, instanceIndex) => {
-    const children = [];
-    for (const sourceUid of sourceUids) {
+    const affine = selectedVariant.affine;
+    const branchName = selectedVariant.names.at(-1) || `${owner.name}_${instanceIndex + 1}`;
+    const descendantName = name => {
+      const ownerSuffix = `_${owner.name}`;
+      if (modifier.mode === 'axes' && branchName.endsWith(ownerSuffix))
+        return `${branchName.slice(0, -ownerSuffix.length)}_${name}`;
+      const ownerPrefix = `${owner.name}_`;
+      if (branchName.startsWith(ownerPrefix)) return `${name}_${branchName.slice(ownerPrefix.length)}`;
+      return name;
+    };
+    const instanceGroup = new Group({
+      name: branchName,
+      pivot: inverseGroupChainPoint(frame.center, parentChain),
+      children: [],
+      visible: owner.visible,
+      locked: owner.locked,
+      exported: owner.exported,
+      shade: owner.shade,
+      autoUv: owner.autoUv,
+      uvMode: owner.uvMode,
+      uvNormalized: owner.uvNormalized
+    });
+    const visit = (sourceUid, destination, destinationChain) => {
       const element = project.getNode(sourceUid);
-      if (!element) continue;
+      if (!element) return;
+      if (element.type === 'group') {
+        const originalChain = project.getGroupChain(element.uid);
+        const worldPivot = applyGroupChainPoint(element.pivot, originalChain);
+        const mirrored = matrixDeterminant(affine.matrix) < 0;
+        const handednessFix = mirrored ? reflectedLocalAxis : matrixIdentity();
+        const originalOrientation = groupChainMatrix([...originalChain, element]);
+        const localOrientation = matrixMultiply(matrixTranspose(groupChainMatrix(destinationChain)),
+          matrixMultiply(matrixMultiply(affine.matrix, originalOrientation), handednessFix));
+        const group = new Group({
+          ...cloneData(element), uid: undefined, unnamed: false,
+          name: descendantName(element.name),
+          pivot: inverseGroupChainPoint(affinePoint(affine, worldPivot), destinationChain),
+          rotation: matrixEuler(localOrientation),
+          children: [], modifiers: []
+        });
+        if (element._bakedSymmetryBranch) Object.defineProperty(group, '_bakedSymmetryBranch', { value: true });
+        generatedGroups.push(group);
+        destination.children.push(group.uid);
+        element.children.forEach(childUid => visit(childUid, group, [...destinationChain, group]));
+        return;
+      }
       const innerVariants = evaluateModifierStack(project, modifierEvaluationOwners(project, element, owner, false));
       const chain = project.getGroupChain(element.uid);
       if (element.type === 'locator' || element.type === 'node') {
         for (const inner of innerVariants) {
-          const affine = affineCompose(selectedVariant.affine, inner.affine);
+          const combined = affineCompose(affine, inner.affine);
           const basePosition = applyGroupChainPoint(element.position, chain);
           const worldOrientation = matrixMultiply(groupChainMatrix(chain), rotationMatrix(element.rotation));
-          const mirrored = matrixDeterminant(affine.matrix) < 0;
-          const handednessFix = mirrored ? [[-1, 0, 0], [0, 1, 0], [0, 0, 1]] : matrixIdentity();
-          const localPosition = inverseGroupChainPoint(affinePoint(affine, basePosition), parentChain);
-          const localOrientation = matrixMultiply(matrixTranspose(groupChainMatrix(parentChain)),
-            matrixMultiply(matrixMultiply(affine.matrix, worldOrientation), handednessFix));
+          const mirrored = matrixDeterminant(combined.matrix) < 0;
+          const handednessFix = mirrored ? reflectedLocalAxis : matrixIdentity();
+          const localPosition = inverseGroupChainPoint(affinePoint(combined, basePosition), destinationChain);
+          const localOrientation = matrixMultiply(matrixTranspose(groupChainMatrix(destinationChain)),
+            matrixMultiply(matrixMultiply(combined.matrix, worldOrientation), handednessFix));
           const locator = new Locator({
             name: element.name,
             position: localPosition,
@@ -1898,9 +1940,9 @@ export function bakeModifier(project, owner, modifierUid) {
             visible: element.visible
           });
           generatedElements.push(locator);
-          children.push(locator.uid);
+          destination.children.push(locator.uid);
         }
-        continue;
+        return;
       }
       const sources = typeof element.toCubes === 'function'
         ? element.toCubes().map(cube => ({
@@ -1914,36 +1956,28 @@ export function bakeModifier(project, owner, modifierUid) {
           ? [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, chain }]
           : [];
       for (const inner of innerVariants) {
-        const affine = affineCompose(selectedVariant.affine, inner.affine);
+        const combined = affineCompose(affine, inner.affine);
         for (const source of sources) {
-          const vertexKey = occupied ? cubeVertexKey(source, affine) : null;
+          const vertexKey = occupied ? cubeVertexKey(source, combined) : null;
           if (occupied && (modifier.ignoreDuplicateCubes
             || variantIgnoresDuplicates(modifierEvaluationOwners(project, element, owner, false), inner))
-            && !affineIsIdentity(affine) && occupied.has(vertexKey)) continue;
+            && !affineIsIdentity(combined) && occupied.has(vertexKey)) continue;
           if (occupied) occupied.add(vertexKey);
-          const cube = bakedCubeFromWorld(source, affine, parentChain);
+          const cube = bakedCubeFromWorld(source, combined, destinationChain);
           generatedElements.push(cube);
-          children.push(cube.uid);
+          destination.children.push(cube.uid);
         }
       }
-    }
-    return new Group({
-      name: selectedVariant.names.at(-1) || `${owner.name}_${instanceIndex + 1}`,
-      pivot: inverseGroupChainPoint(symmetryWorldFrame(project, owner, modifier).center, parentChain),
-      children,
-      visible: owner.visible,
-      locked: owner.locked,
-      exported: owner.exported,
-      shade: owner.shade,
-      autoUv: owner.autoUv,
-      uvMode: owner.uvMode,
-      uvNormalized: owner.uvNormalized
-    });
+    };
+    const sourceChildren = owner.type === 'group' ? owner.children : [owner.uid];
+    sourceChildren.forEach(childUid => visit(childUid, instanceGroup, [...parentChain, instanceGroup]));
+    Object.defineProperty(instanceGroup, '_bakedSymmetryBranch', { value: true });
+    return instanceGroup;
   });
   const remainingModifiers = (owner.modifiers || []).filter(entry => entry.uid !== modifierUid).map(cloneData);
   const bakedRoot = new Group({
     name: owner.name,
-    pivot: inverseGroupChainPoint(symmetryWorldFrame(project, owner, modifier).center, parentChain),
+    pivot: inverseGroupChainPoint(frame.center, parentChain),
     children: instanceGroups.map(group => group.uid),
     visible: owner.visible,
     locked: owner.locked,
@@ -1952,136 +1986,85 @@ export function bakeModifier(project, owner, modifierUid) {
     autoUv: owner.autoUv,
     uvMode: owner.uvMode,
     uvNormalized: owner.uvNormalized,
+    inflate: owner.type === 'group' ? owner.inflate : 0,
     modifiers: remainingModifiers
   });
   project.removeNode(owner.uid);
   project.elements.push(...generatedElements);
-  project.groups.push(bakedRoot, ...instanceGroups);
+  project.groups.push(bakedRoot, ...instanceGroups, ...generatedGroups);
   const targetContainer = parent ? parent.children : project.outliner;
   targetContainer.splice(Math.min(insertionIndex, targetContainer.length), 0, bakedRoot.uid);
   project.invalidateHierarchyIndex();
   return {
     rootUid: bakedRoot.uid,
     elementUids: generatedElements.map(element => element.uid),
-    groupUids: [bakedRoot.uid, ...instanceGroups.map(group => group.uid)]
+    groupUids: [bakedRoot.uid, ...instanceGroups.map(group => group.uid), ...generatedGroups.map(group => group.uid)]
   };
 }
 
 // Compatibility alias for extensions built against early CubeBricks previews.
 export const buildGroupMirrorRenderInstances = buildModifierRenderInstances;
 
-function exportSymmetryOwner(project, owner, pushElement) {
-  const modifiers = (owner.modifiers || []).filter(modifier => modifier?.enabled && modifier.type === 'symmetry');
-  if (!modifiers.length) return null;
-  const finalFrame = symmetryWorldFrame(project, owner, modifiers.at(-1));
-  const center = finalFrame.center;
-  const instances = evaluateModifierStack(project, [owner]);
-  const sourceUids = symmetrySourceUids(project, owner);
-  const occupied = modifiers.some(modifier => modifier.ignoreDuplicateCubes) || sourceUids.some(uidValue =>
-    project.getNode(uidValue)?.modifiers?.some(entry => entry.enabled && entry.ignoreDuplicateCubes))
-    ? originalCubeKeys(project, null, new Set(sourceUids)) : null;
-  const reflectedLocalAxis = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
-  const instanceGroups = instances.map((instance, instanceIndex) => {
-    const children = [];
-    let generatedIndex = 0;
-    for (const uidValue of sourceUids) {
-      const element = project.getNode(uidValue);
-      if (!element) continue;
-      const innerVariants = evaluateModifierStack(project,
-        modifierEvaluationOwners(project, element, owner, false));
-      const chain = owner.type === 'group'
-        ? relativeMirrorChain(project, element.uid, owner.uid)
-        : project.getGroupChain(element.uid);
-      const chainMatrix = groupChainMatrix(chain);
-      for (const inner of innerVariants) {
-        const affine = affineCompose(instance.affine, inner.affine);
-        if (element.type === 'locator' || element.type === 'node') {
-          const basePosition = applyGroupChainPoint(element.position, chain);
-          const orientation = matrixMultiply(chainMatrix, rotationMatrix(element.rotation));
-          const handednessFix = matrixDeterminant(affine.matrix) < 0 ? reflectedLocalAxis : matrixIdentity();
-          const transformed = new Locator({
-            uid: `${element.uid}_mirror_${instanceIndex + 1}_${++generatedIndex}`,
-            name: element.name,
-            position: affinePoint(affine, basePosition),
-            rotation: matrixEuler(matrixMultiply(matrixMultiply(affine.matrix, orientation), handednessFix)),
-            visible: element.visible,
-            locked: element.locked,
-            exported: element.exported
-          });
-          pushElement(blockbenchLocator(transformed));
-          children.push(transformed.uid);
-          continue;
-        }
-        const cubes = typeof element.toCubes === 'function'
-          ? element.toCubes().map(cube => ({ cube, offset: element.origin || [0, 0, 0], ownerRotation: element.rotation || [0, 0, 0], ownerOrigin: element.pivot || element.origin || [0, 0, 0] }))
-          : element.type === 'cube' ? [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot }] : [];
-        for (const source of cubes) {
-          const vertexKey = occupied ? cubeVertexKey({ ...source, chain: project.getGroupChain(element.uid) }, affine) : null;
-          if (occupied && (modifiers.some(modifier => modifier.ignoreDuplicateCubes)
-            || variantIgnoresDuplicates(modifierEvaluationOwners(project, element, owner, false), inner))
-            && !affineIsIdentity(affine) && occupied.has(vertexKey)) continue;
-          if (occupied) occupied.add(vertexKey);
-          const baseFrom = source.cube.position.map((value, axis) => value + source.offset[axis]);
-          const baseTo = baseFrom.map((value, axis) => value + source.cube.size[axis]);
-          const basePivot = source.cube.pivot.map((value, axis) => value + source.offset[axis]);
-          const ownerMatrix = rotationMatrix(source.ownerRotation);
-          const ownerPivot = source.ownerOrigin;
-          const ownedPivot = transformAround(basePivot, ownerPivot, ownerMatrix);
-          const worldPivot = applyGroupChainPoint(ownedPivot, chain);
-          const worldOrientation = matrixMultiply(matrixMultiply(chainMatrix, ownerMatrix), rotationMatrix(source.cube.rotation));
-          const mirrored = matrixDeterminant(affine.matrix) < 0;
-          const handednessFix = mirrored ? reflectedLocalAxis : matrixIdentity();
-          const nextPivot = affinePoint(affine, worldPivot);
-          const nextFromOffset = matrixVector(handednessFix, baseFrom.map((value, axis) => value - basePivot[axis]));
-          const nextToOffset = matrixVector(handednessFix, baseTo.map((value, axis) => value - basePivot[axis]));
-          const exported = blockbenchCube(source.cube, source.offset);
-          exported.uuid = `${element.uid}_mirror_${instanceIndex + 1}_${++generatedIndex}`;
-          const transformedFrom = nextFromOffset.map((value, axis) => value + nextPivot[axis]);
-          const transformedTo = nextToOffset.map((value, axis) => value + nextPivot[axis]);
-          exported.from = transformedFrom.map((value, axis) => Math.min(value, transformedTo[axis]));
-          exported.to = transformedFrom.map((value, axis) => Math.max(value, transformedTo[axis]));
-          exported.origin = nextPivot;
-          exported.rotation = matrixEuler(matrixMultiply(matrixMultiply(affine.matrix, worldOrientation), handednessFix));
-          if (mirrored) {
-            exported.faces = mirrorCubeFacesAcrossLocalX(exported.faces, exported.box_uv === false);
-            if (exported.box_uv) exported.mirror_uv = !Boolean(exported.mirror_uv);
-          }
-          exported.inflate = (Number(source.cube.inflate) || 0) + chain.reduce((total, parent) => total + (Number(parent.inflate) || 0), 0);
-          exported.shade = source.cube.shade !== false && element.shade !== false && chain.every(parent => parent.shade !== false);
-          exported.visibility = source.cube.visible !== false && element.visible !== false && chain.every(parent => parent.visible !== false);
-          pushElement(exported);
-          children.push(exported.uuid);
-        }
-      }
+function bakeSymmetryForExport(sourceProject) {
+  if (![...sourceProject.elements, ...sourceProject.groups].some(owner =>
+    owner.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry'))) return sourceProject;
+  // Export uses the same baking path as the editor, but only on a detached
+  // project. No generated group or cube is written back to the open document.
+  const project = new CubeBricksProject(structuredClone({ ...sourceProject, referenceImages: {} }));
+  while (true) {
+    const owner = [...project.elements, ...project.groups]
+      .filter(node => node.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry'))
+      .sort((left, right) => project.getGroupChain(right.uid).length - project.getGroupChain(left.uid).length)[0];
+    if (!owner) break;
+    const modifier = owner.modifiers.find(entry => entry?.enabled && entry.type === 'symmetry');
+    const hasSymmetryAncestor = project.getGroupChain(owner.uid).some(group =>
+      group.modifiers?.some(entry => entry?.enabled && entry.type === 'symmetry'));
+    const result = bakeModifier(project, owner, modifier.uid);
+    if (!result) break;
+    const root = project.getNode(result.rootUid);
+    if (hasSymmetryAncestor || modifier.wrapParent !== false ||
+      root.modifiers.some(entry => entry?.enabled && entry.type === 'symmetry')) continue;
+    // A zero-rotation baking container is useful in the editor, but an
+    // unwrapped bbmodel should expose its named symmetry branches directly.
+    const parent = project.getParentGroup(root.uid);
+    const container = parent ? parent.children : project.outliner;
+    const index = container.indexOf(root.uid);
+    if (index < 0) continue;
+    for (const childUid of root.children) {
+      const child = project.getNode(childUid);
+      if (child?.type === 'group') child.inflate += root.inflate;
     }
-    const suffix = `_${owner.name}`;
-    const prefix = `${owner.name}_`;
-    const labels = instance.names.map(name => name.endsWith(suffix) ? name.slice(0, -suffix.length)
-      : name.startsWith(prefix) ? name.slice(prefix.length) : name);
-    const instanceName = instance.names.length === 1 ? instance.names[0] : `${labels.join('_')}_${owner.name}`;
-    return {
-      name: instanceName,
-      origin: [...center], rotation: [0, 0, 0], color: 0,
-      uuid: `${owner.uid}_symmetry_instance_${instanceIndex + 1}`,
-      export: owner.exported !== false, locked: owner.locked === true,
-      visibility: owner.visible !== false, autouv: owner.autoUv ? 1 : 0,
-      shade: owner.shade !== false, box_uv: owner.uvMode !== 'face',
-      uv_normalized: owner.uvNormalized !== false, isOpen: true, children
-    };
-  }).filter(group => group.children.length > 0);
-  if (!modifiers.at(-1).wrapParent) return instanceGroups;
-  return {
-    name: owner.name,
-    origin: [...center], rotation: [0, 0, 0], color: 0,
-    uuid: `${owner.uid}_symmetry_parent`, export: owner.exported !== false,
-    locked: owner.locked === true, visibility: owner.visible !== false,
-    autouv: owner.autoUv ? 1 : 0, shade: owner.shade !== false,
-    box_uv: owner.uvMode !== 'face', uv_normalized: owner.uvNormalized !== false,
-    isOpen: true, children: instanceGroups
+    container.splice(index, 1, ...root.children);
+    project.groups = project.groups.filter(group => group.uid !== root.uid);
+    project.invalidateHierarchyIndex();
+  }
+  // Repeated symmetry produces a Cartesian product. The intermediate branch
+  // containers have no rotation, so promote their already-transformed child
+  // branches instead of exporting an extra level for each modifier.
+  const redundantBranches = new Set();
+  const collapseBranches = children => {
+    for (let index = 0; index < children.length; index++) {
+      const group = project.getNode(children[index]);
+      if (group?.type !== 'group') continue;
+      collapseBranches(group.children);
+      if (!group._bakedSymmetryBranch || !group.children.length ||
+        group.rotation.some(value => Math.abs(value) > 1e-6) || Math.abs(group.inflate) > 1e-9 ||
+        !group.children.every(uidValue => project.getNode(uidValue)?._bakedSymmetryBranch)) continue;
+      redundantBranches.add(group.uid);
+      children.splice(index, 1, ...group.children);
+      index += group.children.length - 1;
+    }
   };
+  collapseBranches(project.outliner);
+  if (redundantBranches.size) {
+    project.groups = project.groups.filter(group => !redundantBranches.has(group.uid));
+    project.invalidateHierarchyIndex();
+  }
+  return project;
 }
 
 export function exportBlockbench(project, textureAssets = []) {
+  project = bakeSymmetryForExport(project);
   const elements = [];
   const exportedElementIds = new Set();
   const pushElement = element => {
@@ -2091,9 +2074,14 @@ export function exportBlockbench(project, textureAssets = []) {
   };
   const proceduralGroup = element => {
     const generated = element.toCubes().map(cube => constrainCube(cube, formatRules(project)));
+    const ancestors = project.getGroupChain(element.uid);
     const children = generated.map((cube, index) => {
       cube.uid = `${element.uid}_cube_${index + 1}`;
-      pushElement(blockbenchCube(cube, element.origin || [0, 0, 0]));
+      const exported = blockbenchCube(cube, element.origin || [0, 0, 0]);
+      exported.inflate += ancestors.reduce((total, group) => total + (Number(group.inflate) || 0), 0);
+      exported.shade = exported.shade && ancestors.every(group => group.shade !== false);
+      exported.visibility = exported.visibility && ancestors.every(group => group.visible !== false);
+      pushElement(exported);
       return cube.uid;
     });
     return {
@@ -2116,11 +2104,6 @@ export function exportBlockbench(project, textureAssets = []) {
   const visit = uidValue => {
     const node = project.getNode(uidValue);
     if (!node) return null;
-    const hasSymmetry = node.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry');
-    if (hasSymmetry) {
-      const mirrored = exportSymmetryOwner(project, node, pushElement);
-      if (mirrored) return mirrored;
-    }
     if (node.type === 'group') return {
       name: node.name,
       origin: [...node.pivot],
@@ -2141,7 +2124,12 @@ export function exportBlockbench(project, textureAssets = []) {
       })
     };
     if (node.type === 'cube') {
-      pushElement(blockbenchCube(node));
+      const exported = blockbenchCube(node);
+      const ancestors = project.getGroupChain(node.uid);
+      exported.inflate += ancestors.reduce((total, group) => total + (Number(group.inflate) || 0), 0);
+      exported.shade = exported.shade && ancestors.every(group => group.shade !== false);
+      exported.visibility = exported.visibility && ancestors.every(group => group.visible !== false);
+      pushElement(exported);
       return node.uid;
     }
     if (node.type === 'locator' || node.type === 'node') {

@@ -14,10 +14,10 @@
     "check": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check electron/project-journal.cjs && node --check electron/zip-store.cjs && node --check electron/texture-delta.cjs && node --check src/app.js && node --check src/model.js && node --check src/render/webgl-renderer.js && node --check src/ui/dock-manager.js && node --check src/core/operation-registry.js && node --check src/core/config-registry.js && node --check src/core/model-format-registry.js && node --check src/core/modifier-registry.js && node --check src/config/app-config.js && node --check src/config/model-formats.js && node --check src/config/modifiers.js",
     "test:config": "node scripts/test-config-registry.mjs",
     "test:model": "node scripts/test-model-groups.mjs",
-    "test:render": "node scripts/test-render-uv.mjs",
+    "test:render": "node scripts/test-render-uv.mjs && node scripts/test-vertex-intersections.mjs",
     "test:journal": "node --test scripts/test-project-journal.cjs scripts/test-texture-delta.cjs scripts/test-journal-ownership.cjs scripts/test-renderer-journal.cjs scripts/test-journal-ipc.cjs",
     "test:operations": "node --test scripts/test-operation-registry.mjs",
-    "dist:portable": "electron-builder --win portable --x64"
+    "dist:portable": "node scripts/build-portable.cjs"
   },
   "devDependencies": {
     "electron": "^38.2.0",

@@ -13,7 +13,8 @@ import {
   isCubeFaceCulled,
   MinecraftRenderType,
   RenderPass,
-  screenPolygonIntersectsRect
+  screenPolygonIntersectsRect,
+  WebGLSceneRenderer
 } from '../src/render/webgl-renderer.js';
 
 assert.equal(hasAssignedFaceTexture(undefined), false, 'a cube face without a texture stays untextured');
@@ -111,5 +112,57 @@ assert.deepEqual(getMinecraftRenderType('cutout_smooth'), {
 assert.deepEqual(getMinecraftRenderType('translucent'), {
   pass: RenderPass.TRANSLUCENT, smooth: false, alphaMode: 2, blend: true, cull: false, depthWrite: true
 });
+
+{
+  const renderer = { lastOwnerPoints: new Map([
+    ['visible', [[-2, -1, -3], [2, -1, -3], [-2, 3, 3], [2, 3, 3]]],
+    ['hidden', [[1000, 1000, 1000]]]
+  ]) };
+  const project = {
+    elements: [{ uid: 'visible', visible: true }, { uid: 'hidden', visible: false }],
+    groups: []
+  };
+  const camera = { yaw: 0, pitch: 0, zoom: 1, projection: 'orthographic', target: [100, 100, 100], panX: 80, panY: -20 };
+  const fitted = WebGLSceneRenderer.prototype.fitCameraToVisibleModel.call(renderer, project, camera, 1);
+  assert.deepEqual(fitted.target, [0, 1, 0], 'offscreen framing recenters on visible model geometry');
+  assert.equal(fitted.panX, 0, 'offscreen framing clears viewport panning');
+  assert.equal(fitted.panY, 0, 'offscreen framing clears viewport panning');
+  assert.ok(fitted.zoom > 0 && fitted.zoom < 10, 'offscreen framing computes a usable zoom');
+}
+
+{
+  const calls = [];
+  const gl = {
+    FRAMEBUFFER: 1, COLOR_BUFFER_BIT: 2, DEPTH_BUFFER_BIT: 4, TRIANGLES: 6,
+    bindFramebuffer: () => calls.push('target'), viewport: () => {}, clearColor: () => {},
+    clearDepth: () => {}, clear: () => {}, colorMask: () => {}
+  };
+  const renderer = {
+    gl, mirrorCache: { instances: [{}] }, lockedFramebuffer: {}, lastCameraState: {},
+    ensureLockedLayerTarget: () => calls.push('layer'),
+    drawGrid: () => calls.push('grid'),
+    drawPlayerReference: () => calls.push('player'),
+    drawSurfaceGeometry: () => calls.push('base'),
+    drawMirrorInstances: (...args) => {
+      assert.equal(args[2], gl.TRIANGLES);
+      assert.equal(args[4].opacity, undefined, 'modifier faces are not individually faded');
+      assert.equal(args[4].blend, false, 'overlapping modifier faces resolve in one layer');
+      assert.equal(args[5].ghostOnly, true);
+      calls.push('generated');
+    },
+    compositeLockedLayer: camera => {
+      assert.equal(camera.lockedDefaultAlpha, 75);
+      assert.equal(camera.lockedHoverFade, false);
+      calls.push('composite');
+    }
+  };
+  WebGLSceneRenderer.prototype.drawModifierGhostOverlay.call(renderer,
+    { cullFaces: true }, { modifierResultGhost: true, renderMode: 'textured', grid: true },
+    getMinecraftRenderType('cutout'), new Set(), new Set(), [], null, 100, 100);
+  assert.deepEqual(calls, ['layer', 'target', 'grid', 'player', 'base', 'generated', 'composite']);
+  assert.doesNotThrow(() => WebGLSceneRenderer.prototype.drawMirrorInstances.call(
+    { lastCameraInput: { modifierResultGhost: true } }, new Set(), new Set(), gl.TRIANGLES, []),
+    'ordinary passes skip generated instances while the isolated layer owns them');
+}
 
 console.log('Render UV rewrite tests passed.');

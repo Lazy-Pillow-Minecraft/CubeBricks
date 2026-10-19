@@ -39,6 +39,10 @@ call npm run test:render
 if errorlevel 1 goto :failed
 call npm run test:config
 if errorlevel 1 goto :failed
+call npm run test:operations
+if errorlevel 1 goto :failed
+call npm run test:journal
+if errorlevel 1 goto :failed
 
 echo [4/4] Building the portable executable...
 call npm run dist:portable

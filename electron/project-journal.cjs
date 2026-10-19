@@ -11,6 +11,20 @@ const comparable = value => JSON.stringify(value);
 const digest = value => crypto.createHash('sha256').update(comparable(value)).digest('hex');
 const canonical = value => Array.isArray(value) ? value.map(canonical)
   : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+const validProjectUuid = value => typeof value === 'string'
+  && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+function historySignature(manifest) {
+  if (!manifest?.format || !Number.isInteger(manifest.sequence)) return null;
+  const record = structuredClone(manifest);
+  delete record.timestamp;
+  // The UUID is the project's identity, not an edit in its transaction tree.
+  if (record.information) {
+    delete record.information.projectUuid;
+    if (record.information.meta) delete record.information.meta.modifiedAt;
+    detachReferenceImages(record.information);
+  }
+  return digest(canonical(record));
+}
 function textureDigest(asset) {
   if (!asset) return null;
   return digest(canonical({ ...asset, source: textureSourceFingerprint(asset.source),
@@ -48,6 +62,23 @@ function nodeFolder(node) {
   const category = ({ cube: 'cubes', locator: 'locators' })[node.type] || 'shapes';
   return `elements/geometric/${category}/${safeId(node.uid)}`;
 }
+function referenceImageRecords(information) {
+  const views = information.referenceImages;
+  if (!views || typeof views !== 'object') return [];
+  return Object.values(views).flatMap(value => Array.isArray(value) ? value : value ? [value] : [])
+    .filter(record => record && typeof record === 'object');
+}
+function detachReferenceImages(information) {
+  const sources = new Map();
+  for (const record of referenceImageRecords(information)) {
+    if (typeof record.source !== 'string') continue;
+    const reference = crypto.createHash('sha256').update(record.source).digest('hex');
+    sources.set(reference, record.source);
+    record.sourceRef = reference;
+    delete record.source;
+  }
+  return sources;
+}
 function separate(content) {
   const document = typeof content === 'string' ? JSON.parse(content) : structuredClone(content);
   const elements = document.elements || [], groups = document.groups || [], textures = document.textures || [];
@@ -60,7 +91,8 @@ function separate(content) {
   const textureIds = textures.map(textureId);
   if (new Set(textureIds).size !== textureIds.length) throw new Error('貼圖識別器重複，不能安全寫入操作記錄');
   delete document.elements; delete document.groups; delete document.textures;
-  return { information: document, elements, groups, textures };
+  return { information: document, elements, groups, textures,
+    referenceImageSources: detachReferenceImages(document) };
 }
 function textureId(texture, index) { return safeId(texture.uuid || texture._uid || `texture_${index + 1}`); }
 function placementsFor(data) {
@@ -102,6 +134,7 @@ function textureChangeRecord(id, before, after) {
 class ProjectJournal {
   constructor(directory) {
     this.directory = directory;
+    this.projectUuid = null;
     this.state = null;
     this.activeManifest = null;
     this.operationIndexHash = null;
@@ -120,8 +153,13 @@ class ProjectJournal {
     if (existingFiles.includes('current_state') || existingFiles.includes('current_state.previous')) return this.load();
     if (existingFiles.length) throw new Error('工作目錄已有未完成的記錄，不能覆寫初始化；請保留原目錄以便恢復');
     const data = separate(content);
+    this.projectUuid = validProjectUuid(data.information.projectUuid)
+      ? data.information.projectUuid.toLowerCase() : crypto.randomUUID();
+    data.information.projectUuid = this.projectUuid;
     const placements = placementsFor(data);
     await fs.mkdir(this.directory, { recursive: true });
+    await writeJson(this.file('project_uuid'), this.projectUuid);
+    await this.writeReferenceImages(data.referenceImageSources);
     const pointers = {};
     const nodeHashes = {};
     for (const node of [...data.groups, ...data.elements]) {
@@ -175,6 +213,11 @@ class ProjectJournal {
     delete this.state.targetHead;
     delete this.state.operationId;
     this.activeManifest = await this.manifest(this.state.activeHead);
+    const storedUuid = await readJson(this.file('project_uuid'));
+    this.projectUuid = validProjectUuid(storedUuid) ? storedUuid.toLowerCase()
+      : validProjectUuid(this.activeManifest.information.projectUuid)
+        ? this.activeManifest.information.projectUuid.toLowerCase() : crypto.randomUUID();
+    if (storedUuid !== this.projectUuid) await writeJson(this.file('project_uuid'), this.projectUuid);
     this.operationIndexHash = digest(await readJson(this.file('operation_index.json'), []));
     await this.recoverPendingTextures();
     await this.content();
@@ -280,6 +323,40 @@ class ProjectJournal {
     }
     return { elements, groups };
   }
+  async writeReferenceImages(sources) {
+    for (const [reference, source] of sources) {
+      const filename = this.file(`reference_images/${reference}.txt`);
+      try { await fs.access(filename); }
+      catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        await atomicWrite(filename, source);
+      }
+    }
+  }
+  async hydrateReferenceImages(information) {
+    const restored = structuredClone(information);
+    const sources = new Map();
+    for (const record of referenceImageRecords(restored)) {
+      if (!record.sourceRef || typeof record.source === 'string') continue;
+      const reference = String(record.sourceRef);
+      if (!/^[a-f0-9]{64}$/.test(reference)) throw new Error('參考圖索引損壞');
+      if (!sources.has(reference)) {
+        let source;
+        try { source = await fs.readFile(this.file(`reference_images/${reference}.txt`), 'utf8'); }
+        catch (error) {
+          if (error.code === 'ENOENT') throw new Error(`參考圖文件缺失：${reference}`);
+          throw error;
+        }
+        if (crypto.createHash('sha256').update(source).digest('hex') !== reference) {
+          throw new Error(`參考圖文件校驗失敗：${reference}`);
+        }
+        sources.set(reference, source);
+      }
+      record.source = sources.get(reference);
+      delete record.sourceRef;
+    }
+    return restored;
+  }
   async content() {
     const manifest = this.activeManifest;
     const { elements, groups } = await this.readNodes(manifest);
@@ -290,7 +367,7 @@ class ProjectJournal {
       if (manifest.textureHashVersion === 2 && textureDigest(texture) !== manifest.textureHashes[id]) throw new Error(`貼圖狀態校驗失敗：${id}`);
       textures.push(texture);
     }
-    return pretty({ ...manifest.information, elements, groups, textures });
+    return pretty({ ...await this.hydrateReferenceImages(manifest.information), projectUuid: this.projectUuid, elements, groups, textures });
   }
   async commit(content, operationId, operationLabel = operationId, operationIndex = []) {
     await this.ensureReady();
@@ -300,7 +377,11 @@ class ProjectJournal {
   async commitTransaction(content, operationId, operationLabel, operationIndex) {
     if (!/^[a-z][a-z0-9_.-]*$/.test(operationId)) throw new Error('操作 ID 不合法');
     const data = separate(content);
+    data.information.projectUuid = this.projectUuid;
     const placements = placementsFor(data);
+    // Assets are immutable and content-addressed. Persist new ones before the
+    // transaction becomes pending; a crash can leave only harmless orphans.
+    await this.writeReferenceImages(data.referenceImageSources);
     const old = this.activeManifest;
     const nextNodes = [...data.groups, ...data.elements];
     const nextUids = new Set(nextNodes.map(node => node.uid));
@@ -529,11 +610,61 @@ class ProjectJournal {
       }
     };
     await visit(this.directory);
-    await atomicWrite(filePath, packZip(files));
-    await writeJson(this.file('saved_state'), { sequence: this.activeManifest.sequence, filePath, savedAt: new Date().toISOString() });
+    // Older working journals may still contain inline copies in historical
+    // manifests. Compact them in the archive without rewriting live history.
+    const archivedNames = new Set(files.map(([name]) => name));
+    const archivedSources = new Map();
+    for (const entry of files) {
+      const [name, bytes] = entry;
+      if (!/^transactions\/\d+\.json$/.test(name) && name !== 'project_information.json') continue;
+      const data = JSON.parse(bytes.toString('utf8'));
+      const information = name === 'project_information.json' ? data : data.information;
+      if (!information) continue;
+      const sources = detachReferenceImages(information);
+      if (!sources.size) continue;
+      for (const [reference, source] of sources) archivedSources.set(reference, source);
+      entry[1] = Buffer.from(pretty(data));
+    }
+    for (const [reference, source] of archivedSources) {
+      const name = `reference_images/${reference}.txt`;
+      if (!archivedNames.has(name)) files.push([name, Buffer.from(source)]);
+    }
+    const archive = packZip(files);
+    await atomicWrite(filePath, archive);
+    await writeJson(this.file('saved_state'), { sequence: this.activeManifest.sequence, filePath,
+      projectUuid: this.projectUuid, fileHash: crypto.createHash('sha256').update(archive).digest('hex'),
+      savedAt: new Date().toISOString() });
   }
-  static async fromArchive(bytes, directory) {
+  static inspectArchive(bytes) {
     const entries = unpackZip(bytes);
+    const state = JSON.parse(entries.get('current_state')?.toString('utf8') || 'null');
+    if (state?.format !== FORMAT || !Number.isInteger(state.activeHead)) throw new Error('不是展開式 CubeBricks 項目');
+    const storedUuid = JSON.parse(entries.get('project_uuid')?.toString('utf8') || 'null');
+    const information = JSON.parse(entries.get('project_information.json')?.toString('utf8') || 'null');
+    const projectUuid = validProjectUuid(storedUuid) ? storedUuid.toLowerCase()
+      : validProjectUuid(information?.projectUuid) ? information.projectUuid.toLowerCase() : null;
+    return {
+      entries, projectUuid, activeHead: state.activeHead,
+      signature(sequence) {
+        const bytes = entries.get(`transactions/${sequence}.json`);
+        return bytes ? historySignature(JSON.parse(bytes.toString('utf8'))) : null;
+      },
+      hasAncestor(sequence) {
+        let current = state.activeHead;
+        const visited = new Set();
+        while (Number.isInteger(current) && !visited.has(current)) {
+          if (current === sequence) return true;
+          visited.add(current);
+          const bytes = entries.get(`transactions/${current}.json`);
+          current = bytes ? JSON.parse(bytes.toString('utf8')).parent : null;
+        }
+        return false;
+      }
+    };
+  }
+  static historySignature(manifest) { return historySignature(manifest); }
+  static async fromArchive(bytes, directory, entries = null) {
+    entries ||= unpackZip(bytes);
     if (!entries.has('current_state')) throw new Error('不是展開式 CubeBricks 項目');
     for (const [name, value] of entries) {
       if (name.startsWith('/') || name.split('/').includes('..')) throw new Error('不安全的項目路徑');
