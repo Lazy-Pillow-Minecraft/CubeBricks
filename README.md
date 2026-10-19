@@ -77,7 +77,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
 - 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算；常用的近期顏色顯示在選色器下方。
 - 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。
-- 繪畫模式不顯示編輯選中高亮。場景層級只保留索引、選取、展開與聚焦，禁止新建、刪除、拖動重排及幾何操作，也不允許進入 Shape 細分編輯；桌面版會在項目操作記錄中保存繪畫變更。
+- 繪畫模式不顯示編輯選中高亮。場景層級保留索引、選取、展開、聚焦及可見／鎖定切換，禁止新建、刪除、拖動重排及幾何操作，也不允許進入 Shape 細分編輯；桌面版會在項目操作記錄中保存繪畫變更。
 - 全部剔除的 Cube 會被移除；單面剔除會同時取消該面的主視圖拾取，但仍可在 UV 預覽中處理。
 
 ### 工作區與配置
@@ -155,14 +155,14 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 | `I` | 取色器 |
 | 按住 `Alt` | 臨時取色；鬆開恢復原工具 |
 
-- 畫筆可直接在二維貼圖或三維模型表面起筆。跨面筆畫會維持同一次筆畫的透明度與連續性。
+- 畫筆可直接在二維貼圖、三維模型面或三維視圖的空白處起筆；從空白處拖入已分配貼圖的面時才開始落色，離開模型後再進入仍屬同一筆。跨面筆畫維持同一次筆畫的透明度與連續性；全程只經過空白處不會改動貼圖。
 - 未分配貼圖的面不會在繪畫時自動綁定目前貼圖；三維視圖會提示先指定貼圖並保持模型資料不變。
 - 「筆刷深度」控制筆跡碰到 Cube 邊緣時向相鄰面的延伸像素數；「疊加繪製」只同步處理最前方完全重合的面。
 - 開啟「忽視全透明」時，三維繪畫會穿過完全透明的貼圖像素，選擇射線上第一個可繪畫的有色像素；單筆擦除以起筆時的透明度判定命中，避免擦開前層後繼續擦穿後層。
 - 面漸變要求兩點位於同一面；體漸變要求兩點位於同一 Cube。兩點只定義方向，漸變會覆蓋完整目標。
 - 雙色漸變先點擊第一色或第二色色槽，再在右側選色器調色；兩端 Alpha 可獨立設定。啟用「使用色卡」後會改用目前選中色卡的全部顏色。
 - 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。
-- 繪畫模式中的場景層級用於查找、選取與聚焦內容；修改模型幾何需回到編輯模式。桌面版的 `Ctrl+Z`／`Ctrl+Shift+Z` 依當前項目的操作記錄撤銷／重做，包含繪畫與貼圖指派。
+- 繪畫模式中的場景層級可查找、選取、聚焦及切換元素可見性／鎖定；修改模型幾何需回到編輯模式。畫筆等非漸變工具直接使用右側選色器的當前顏色。桌面版的 `Ctrl+Z`／`Ctrl+Shift+Z` 依當前項目的操作記錄撤銷／重做，包含繪畫與貼圖指派。
 
 ### 使用繪畫對稱
 
@@ -340,7 +340,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
 - The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion. Recent colors appear below the picker.
 - Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient.
-- Paint mode hides edit-selection highlighting. The hierarchy provides indexing, selection, expansion, and focus, while creation, deletion, reordering, geometry operations, and shape subdivision editing are disabled. The desktop app records painting changes in the project operation journal.
+- Paint mode hides edit-selection highlighting. The hierarchy provides indexing, selection, expansion, focus, and visibility/lock toggles, while creation, deletion, reordering, geometry operations, and shape subdivision editing are disabled. The desktop app records painting changes in the project operation journal.
 - Culling every face removes the cube. A culled individual face is no longer pickable in the main viewport but remains available in UV Preview.
 
 ### Workspace and configuration
@@ -418,12 +418,12 @@ The project is currently an evolving prototype focused on an extensible editor a
 | `I` | Eyedropper |
 | Hold `Alt` | Temporary eyedropper; release to restore the previous tool |
 
-- Painting can begin directly in the 2D texture or on the 3D model. A stroke crossing faces keeps one continuous opacity and stroke history.
+- A brush stroke can begin on the 2D texture, a 3D model face, or empty viewport space. Dragging from empty space onto a textured face begins painting there; leaving and re-entering the model remains the same stroke. Cross-face strokes keep continuous opacity and history, while a stroke that never touches a face changes nothing.
 - Brush Depth controls how many pixels continue onto neighboring faces when a stroke reaches a cube edge. Coincident Painting affects only exactly overlapping frontmost faces.
 - A face gradient requires both points on one face; a volume gradient requires both points on one cube. The points define direction only, and the gradient covers the complete target.
 - In two-color mode, click the first or second stop button and edit that stop in the right-side picker. Each stop has independent alpha. Enabling **Use Palette** switches to every color in the selected palette row.
 - Palette rows independently support discrete or gradient display and allow color selection, insertion, deletion, and drag reordering.
-- The hierarchy in Paint mode is for finding, selecting, and focusing content. Return to Edit mode to change model geometry. In the desktop app, `Ctrl+Z` and `Ctrl+Shift+Z` follow the active project's operation journal, including painting and texture assignment.
+- The hierarchy in Paint mode can find, select, and focus content or toggle an element's visibility and lock state. Return to Edit mode to change model geometry. Non-gradient paint tools use the current color from the right-side picker. In the desktop app, `Ctrl+Z` and `Ctrl+Shift+Z` follow the active project's operation journal, including painting and texture assignment.
 
 ### Using Paint Symmetry
 

@@ -579,8 +579,9 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .outliner.is-drag-scrolling { scroll-behavior: auto; }
 .outliner-virtual-spacer { width: 1px; pointer-events: none; }
 .outliner-virtual-window { position: absolute; top: 0; left: 7px; right: 7px; will-change: transform; }
-.outliner-item { position: relative; width: 100%; height: 31px; display: grid; grid-template-columns: 18px 23px minmax(0, 1fr) 18px; align-items: center; border-radius: 5px; padding: 0 5px; text-align: left; color: var(--muted); font-size: .7rem; cursor: grab; transition: background-color .1s ease, box-shadow .1s ease, opacity .1s ease; }
-.outliner-item.has-details { grid-template-columns: 18px 23px minmax(0, 1fr) repeat(5, 18px); }
+.outliner-item { position: relative; width: 100%; height: 31px; display: grid; grid-template-columns: 22px 23px minmax(0, 1fr) 18px; align-items: center; border-radius: 5px; padding: 0 5px; text-align: left; color: var(--muted); font-size: .7rem; cursor: grab; transition: background-color .1s ease, box-shadow .1s ease, opacity .1s ease; }
+.outliner-item.has-details { grid-template-columns: 22px 23px minmax(0, 1fr) repeat(5, 18px); }
+.outliner-item.paint-flags { grid-template-columns: 22px 23px minmax(0, 1fr) repeat(2, 18px); }
 .outliner-item:hover { background: var(--line); color: var(--text); }
 .outliner-item.active { background: rgba(var(--accent-rgb), .12); color: var(--text); }
 .outliner-item.is-dragging { opacity: .25; }
@@ -592,7 +593,10 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .outliner-item .kind { color: var(--subtle); font-size: .77rem; }.outliner-item.active .kind { color: var(--accent); }
 .outliner-kind-icon { display: block; width: 14px; height: 14px; margin: auto; fill: currentColor; }
 .outliner-curve-kind { display: grid; width: 18px; place-items: center; color: inherit; font: 700 .62rem/1 var(--ui-font); }
-.outliner-disclosure { justify-self: center; }
+.outliner-disclosure-hit,.outliner-disclosure-spacer { width: 22px; height: 27px; display: grid; place-items: center; }
+.outliner-disclosure-hit { border-radius: 4px; cursor: pointer; touch-action: manipulation; }
+.outliner-disclosure-hit:hover { color: var(--accent); background: rgba(var(--accent-rgb), .13); }
+.outliner-disclosure-hit .open-icon { pointer-events: none; }
 .outliner-item .item-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outliner-flag { width: 18px; height: 26px; display: grid; place-items: center; color: var(--subtle); cursor: pointer; border-radius: 3px; }
 .outliner-flag:hover { color: var(--accent); background: rgba(var(--accent-rgb), .1); }

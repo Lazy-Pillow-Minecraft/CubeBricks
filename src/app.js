@@ -245,9 +245,11 @@ function createListDragAutoScroll(container, isDragging, onScroll = () => {}) {
     start() {
       container.classList.add('is-drag-scrolling');
       document.addEventListener('dragover', updatePointer, true);
+      document.addEventListener('pointermove', updatePointer, true);
     },
     stop() {
       document.removeEventListener('dragover', updatePointer, true);
+      document.removeEventListener('pointermove', updatePointer, true);
       container.classList.remove('is-drag-scrolling');
       if (frame !== null) cancelAnimationFrame(frame);
       frame = null; lastTime = 0; pointer = null;
@@ -1078,10 +1080,10 @@ function renderOutlinerWindow() {
         <span></span><span class="kind curve-node-kind">◆</span><span class="item-name">節點 ${nodeIndex + 1}</span><span></span>
       </button>`;
     }
-    return `<button class="outliner-item ${state.outlinerDetailed && state.mode !== 'paint' ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''}" data-uid="${node.uid}" draggable="${state.mode !== 'paint'}" style="padding-left:${5 + depth * 13}px">
-      ${container ? openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure', `data-disclosure="${node.uid}"`) : '<span></span>'}
+    return `<button class="outliner-item ${state.mode === 'paint' ? 'paint-flags' : state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''} ${state.outlinerDragUids?.includes(node.uid) ? 'is-dragging' : ''}" data-uid="${node.uid}" draggable="false" style="padding-left:${5 + depth * 13}px">
+      ${container ? `<span class="outliner-disclosure-hit" data-disclosure="${node.uid}" title="${collapsed ? '展開' : '折疊'}" draggable="false">${openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure')}</span>` : '<span class="outliner-disclosure-spacer"></span>'}
       <span class="kind">${outlinerKindMarkup(node)}</span>
-      <span class="item-name">${escapeHtml(node.name)}</span>${state.mode === 'paint' ? '<span></span>' : outlinerStateMarkup(node)}
+      <span class="item-name">${escapeHtml(node.name)}</span>${outlinerStateMarkup(node)}
     </button>`;
   }).join('');
 }
@@ -1122,6 +1124,8 @@ function outlinerFlag(node, key, enabled, onIcon, offIcon, onTitle, offTitle, av
 
 function outlinerStateMarkup(node) {
   const visible = outlinerFlag(node, 'visible', node.visible !== false, 'icon-show', 'icon-unshow', '可見', '隱藏');
+  if (state.mode === 'paint') return outlinerFlag(node, 'locked', node.locked === true,
+    'icon-locked', 'icon-unlocked', '鎖定', '解鎖') + visible;
   if (!state.outlinerDetailed) return visible;
   const autoUvAvailable = isUvCapable(node) && node.uvMode !== 'box';
   return [
@@ -1711,7 +1715,7 @@ function openColorPickerPopup(color, apply) {
   dialog.addEventListener('close', () => {
     const value = state.paintColor, callback = colorPickerPopupApply;
     colorPickerPopupRoot = null; colorPickerPopupApply = null;
-    Object.assign(state, saved); $('#paintColor').value = state.paintColor;
+    Object.assign(state, saved);
     dialog.remove();
     if (dialog.returnValue === 'apply') { recordPaintColorHistory(value); callback(value); }
     if (state.mode === 'paint') renderInspector();
@@ -5683,7 +5687,6 @@ function setPaintColor(color, notify = false, preservePickerHue = false, recordH
     state.paintColorPickerSaturation = saturation;
     state.paintColorPickerValue = value;
   }
-  $('#paintColor').value = state.paintColor;
   const startButton = $('#paintGradientStartControl'), endButton = $('#paintGradientEndControl');
   startButton?.style.setProperty('--gradient-color', state.paintGradientStart);
   endButton?.style.setProperty('--gradient-color', state.paintGradientEnd);
@@ -6901,7 +6904,13 @@ function ensureScenePaintAssetSurface(drag, asset) {
 
 async function sceneBrushSurfaceForHit(drag, hit) {
   const target = facePaintTarget(hit);
-  if (!target) return null;
+  if (!target) {
+    if (!drag.warnedUntextured) {
+      drag.warnedUntextured = true;
+      toast('這個面尚未分配貼圖，無法繪製');
+    }
+    return null;
+  }
   const base = await ensureScenePaintAssetSurface(drag, target.asset);
   if (!base) return null;
   const clip = paintUvBounds(target.cube, target.faceName, base.canvas);
@@ -7217,7 +7226,7 @@ function sceneBrushHitKey(hit) {
 
 function sceneBrushBoundary(from, to, drag) {
   const fromKey = sceneBrushHitKey(from.hit), toKey = sceneBrushHitKey(to.hit);
-  if (!fromKey || !toKey || fromKey === toKey) return null;
+  if (fromKey === toKey) return null;
   let left = from, right = to;
   for (let iteration = 0; iteration < 11; iteration++) {
     const x = (left.x + right.x) / 2, y = (left.y + right.y) / 2;
@@ -7252,7 +7261,7 @@ function queueSceneBrushPointer(drag, clientX, clientY) {
       if (boundary) {
         queueSceneBrushHit(drag, boundary.before);
         queueSceneBrushHit(drag, boundary.after);
-      } else queueSceneBrushHit(drag, sample.hit);
+      } else if (index !== sampleCount) queueSceneBrushHit(drag, sample.hit);
     }
     if (index === sampleCount) queueSceneBrushHit(drag, sample.hit);
     prior = sample;
@@ -7270,6 +7279,7 @@ function finishScenePaintDrag(drag) {
     }
     drag.queue.then(() => {
       if (drag.canceled) return;
+      if (!drag.touchedSurfaces.size) return;
       syncPaintedTextureNow();
       for (const surface of drag.touchedSurfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
       const lastSurface = [...drag.touchedSurfaces].at(-1);
@@ -7387,6 +7397,28 @@ function startScenePaintPointer(event, x, y) {
     useScenePaintGradient(hit);
     return true;
   }
+  if (state.tool === 'brush') {
+    if (hit?.faceName && !facePaintTarget(hit)) {
+      toast('這個面尚未分配貼圖，無法繪製');
+      return true;
+    }
+    event.preventDefault();
+    sceneCanvas.setPointerCapture(event.pointerId);
+    const drag = {
+      type: 'texture-paint-3d', multiSurface: true, pointerId: event.pointerId, tool: state.tool,
+      latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
+      assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(), touchedSurfaces: new Set(),
+      paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
+      historyGroup: crypto.randomUUID(), last: null, lastFaceKey: null,
+      lastByFace: new Map(),
+      paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
+      holisticStroke: true, lastPointerSample: { x: event.clientX, y: event.clientY, hit },
+      ready: true, ended: false, canceled: false, finished: false
+    };
+    state.dragging = drag;
+    if (hit) queueSceneBrushHit(drag, hit);
+    return true;
+  }
   const target = facePaintTarget(hit);
   if (!target) {
     toast(hit?.faceName ? '這個面尚未分配貼圖，無法繪製' : '請指向一個 Cube 面');
@@ -7423,22 +7455,6 @@ function startScenePaintPointer(event, x, y) {
     return true;
   }
   sceneCanvas.setPointerCapture(event.pointerId);
-  if (state.tool === 'brush') {
-    const drag = {
-      type: 'texture-paint-3d', multiSurface: true, pointerId: event.pointerId, tool: state.tool,
-      latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
-      assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(), touchedSurfaces: new Set(),
-      paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
-      historyGroup: crypto.randomUUID(), last: null, lastFaceKey: null,
-      lastByFace: new Map(),
-      paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
-      holisticStroke: true, lastPointerSample: { x: event.clientX, y: event.clientY, hit },
-      ready: true, ended: false, canceled: false, finished: false
-    };
-    state.dragging = drag;
-    queueSceneBrushHit(drag, hit);
-    return true;
-  }
   const drag = {
     type: 'texture-paint-3d', pointerId: event.pointerId, uid: hit.uid,
     cubeUid: hit.cubeUid || hit.uid, faceName: hit.faceName,
@@ -9070,7 +9086,6 @@ function updateToolOptions() {
   const knifePreview = getKnifePreviewLabel();
   $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
   if (!lane.hidden) $('#toolContext').textContent = labels[state.tool];
-  if (document.activeElement !== $('#paintColor')) $('#paintColor').value = state.paintColor;
   if (document.activeElement !== $('#paintBrushSize')) $('#paintBrushSize').value = String(paintSetting().size);
   if (document.activeElement !== $('#paintBrushShape')) $('#paintBrushShape').value = state.paintBrushShape;
   $('#paintBrushAa').checked = state.paintBrushAa;
@@ -9618,8 +9633,21 @@ function showElementContextMenu(event, uidValue, source = null) {
   if (!state.selectedUids.has(uidValue)) selectItem(uidValue);
   const node = state.project.getNode(uidValue);
   if (state.mode === 'paint') {
-    showContextMenu(event, { title: node.name, source, items: [
-      { icon: '⌖', label: '聚焦此物件', action: focusSelected }
+    const selectedNodes = selectedNodeUids().map(id => state.project.getNode(id)).filter(Boolean);
+    const visible = node.visible !== false;
+    const locked = node.locked === true;
+    showContextMenu(event, { title: selectedNodes.length > 1 ? `已選 ${selectedNodes.length} 項` : node.name, source, items: [
+      { icon: '⌖', label: '聚焦此物件', action: focusSelected },
+      { icon: visible ? '○' : '◉', label: visible ? '隱藏選中項' : '顯示選中項', action: () => {
+        snapshot('core.element.field.visible');
+        selectedNodes.forEach(entry => setNodeFlag(entry, 'visible', !visible));
+        markDirty(); renderAll();
+      } },
+      { icon: locked ? '◇' : '◆', label: locked ? '解鎖選中項' : '鎖定選中項', action: () => {
+        snapshot('core.element.field.locked');
+        selectedNodes.forEach(entry => setNodeFlag(entry, 'locked', !locked));
+        sceneRenderer.invalidateLockState(); markDirty(); renderAll();
+      } }
     ] });
     return;
   }
@@ -10292,7 +10320,6 @@ function bindEvents() {
   $$('[data-uv-coordinate]').forEach(input => input.addEventListener('change', () => {
     setUvCoordinate(Number(input.dataset.uvCoordinate), Number(input.value));
   }));
-  $('#paintColor').addEventListener('input', event => setPaintColor(event.target.value));
   $('#paintBrushSize').addEventListener('input', event => {
     const size = clamp(Math.round(Number(event.target.value)) || 1, 1, 64);
     if (state.tool === 'brush') state.paintBrushSize = size;
@@ -10545,6 +10572,7 @@ function bindEvents() {
       event.stopPropagation();
       const node = state.project.getNode(flag.dataset.nodeUid);
       const key = flag.dataset.nodeToggle;
+      if (state.mode === 'paint' && key !== 'visible' && key !== 'locked') return;
       const current = key === 'autoUv' ? nodeAutoUvEnabled(node)
         : key === 'uvNormalized' ? nodeUvNormalizedEnabled(node)
         : key === 'locked' ? node.locked === true
@@ -10566,6 +10594,7 @@ function bindEvents() {
     }
     const disclosure = event.target.closest('[data-disclosure]');
     if (disclosure?.dataset.disclosure) {
+      event.preventDefault();
       const uidValue = disclosure.dataset.disclosure;
       state.collapsedGroups.has(uidValue) ? state.collapsedGroups.delete(uidValue) : state.collapsedGroups.add(uidValue);
       renderOutliner(); return;
@@ -10573,60 +10602,76 @@ function bindEvents() {
     state.selectedCurveNodeIndex = null;
     selectItem(button.dataset.uid, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey });
   });
-  outliner.addEventListener('dragstart', event => {
-    if (state.mode === 'paint') { event.preventDefault(); return; }
-    if (event.target.closest('[data-node-toggle]')) { event.preventDefault(); return; }
-    const item = event.target.closest('.outliner-item');
-    if (!item) return;
-    if (item.dataset.curveNodeIndex !== undefined) { event.preventDefault(); return; }
-    if (!state.selectedUids.has(item.dataset.uid)) {
-      sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
-      state.selectedUid = item.dataset.uid;
-      state.selectedUids = new Set([item.dataset.uid]);
-      state.selectionAnchorUid = item.dataset.uid;
-      outliner.querySelectorAll('.outliner-item.active').forEach(row => row.classList.remove('active'));
-      item.classList.add('active');
-      invalidateSelectionRenderGeometry(false);
-      renderInspector(); renderScene(); updateSelectionLabels();
-    }
-    state.outlinerDragUids = topLevelSelectedUids();
-    state.outlinerDragUids.forEach(uidValue =>
-      outliner.querySelector(`.outliner-item[data-uid="${CSS.escape(uidValue)}"]`)?.classList.add('is-dragging'));
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/x-cubebricks-outliner', state.outlinerDragUids.join(','));
-    const ghost = createOutlinerDragGhost(state.outlinerDragUids);
-    event.dataTransfer.setDragImage(ghost, 24, 17);
-    outlinerDragScroll.start();
-  });
-  outliner.addEventListener('dragover', event => {
-    if (!state.outlinerDragUids?.length) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    updateOutlinerDropTarget(event.clientY, event.target);
-  });
-  outliner.addEventListener('drop', event => {
-    if (state.mode === 'paint') { event.preventDefault(); clearOutlinerDropState(); return; }
-    if (!state.outlinerDragUids?.length) return;
-    event.preventDefault();
-    const item = event.target.closest('.outliner-item');
-    if (item?.dataset.curveNodeIndex !== undefined) {
-      clearOutlinerDropState();
-      removeOutlinerDragGhost();
-      return;
-    }
-    const targetUid = item?.dataset.uid || null;
+  // Native HTML drag suppresses wheel input on Windows. Keep hierarchy drags
+  // pointer-driven so the list can still scroll beneath a held item.
+  let outlinerPointerDrag = null;
+  let suppressOutlinerClick = false;
+  const finishOutlinerPointerDrag = (event, commit = false) => {
+    const drag = outlinerPointerDrag;
+    if (!drag || (event?.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
+    outlinerPointerDrag = null;
+    if (!drag.active) return;
+    const target = commit ? document.elementFromPoint(event.clientX, event.clientY) : null;
+    const inside = target && outliner.contains(target);
+    const item = inside ? target.closest('.outliner-item') : null;
+    const targetUid = item?.dataset.curveNodeIndex === undefined ? item?.dataset.uid || null : null;
     const zone = item?.dataset.dropZone || 'after';
-    clearOutlinerDropState();
-    removeOutlinerDragGhost();
-    moveSelectedNodes(targetUid, zone);
-    state.outlinerDragUids = null;
-  });
-  outliner.addEventListener('dragend', () => {
     outlinerDragScroll.stop();
     clearOutlinerDropState();
     removeOutlinerDragGhost();
     state.outlinerDragUids = null;
+    suppressOutlinerClick = true;
+    setTimeout(() => { suppressOutlinerClick = false; }, 0);
+    if (commit && inside && item?.dataset.curveNodeIndex === undefined) moveSelectedNodes(targetUid, zone);
+  };
+  outliner.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || state.mode === 'paint'
+      || event.target.closest('[data-disclosure], [data-node-toggle]')) return;
+    const item = event.target.closest('.outliner-item');
+    if (!item || item.dataset.curveNodeIndex !== undefined) return;
+    outlinerPointerDrag = { pointerId: event.pointerId, uid: item.dataset.uid,
+      startX: event.clientX, startY: event.clientY, active: false };
   });
+  document.addEventListener('pointermove', event => {
+    const drag = outlinerPointerDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.active) {
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) return;
+      const item = outliner.querySelector(`.outliner-item[data-uid="${CSS.escape(drag.uid)}"]`);
+      if (!item) return finishOutlinerPointerDrag(event);
+      drag.active = true;
+      if (!state.selectedUids.has(drag.uid)) {
+        sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
+        state.selectedUid = drag.uid;
+        state.selectedUids = new Set([drag.uid]);
+        state.selectionAnchorUid = drag.uid;
+        outliner.querySelectorAll('.outliner-item.active').forEach(row => row.classList.remove('active'));
+        item.classList.add('active');
+        invalidateSelectionRenderGeometry(false);
+        renderInspector(); renderScene(); updateSelectionLabels();
+      }
+      state.outlinerDragUids = topLevelSelectedUids();
+      state.outlinerDragUids.forEach(uidValue =>
+        outliner.querySelector(`.outliner-item[data-uid="${CSS.escape(uidValue)}"]`)?.classList.add('is-dragging'));
+      createOutlinerDragGhost(state.outlinerDragUids);
+      outlinerDragScroll.start();
+    }
+    event.preventDefault();
+    outlinerDragGhost.style.left = `${event.clientX + 14}px`;
+    outlinerDragGhost.style.top = `${event.clientY + 12}px`;
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    if (target && outliner.contains(target)) updateOutlinerDropTarget(event.clientY, target);
+    else clearOutlinerDropState({ keepDragging: true });
+  });
+  document.addEventListener('pointerup', event => finishOutlinerPointerDrag(event, true));
+  document.addEventListener('pointercancel', event => finishOutlinerPointerDrag(event));
+  window.addEventListener('blur', () => finishOutlinerPointerDrag(null));
+  document.addEventListener('click', event => {
+    if (!suppressOutlinerClick) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    suppressOutlinerClick = false;
+  }, true);
   $$('[data-theme-var]').forEach(input => input.addEventListener('input', () => setThemeVar(input.dataset.themeVar, `${input.value}${input.dataset.unit || ''}`)));
   $$('[data-preset]').forEach(button => button.addEventListener('click', () => applyPreset(button.dataset.preset)));
   $('[data-action="resetTheme"]').addEventListener('click', () => {
@@ -10832,6 +10877,8 @@ function bindEvents() {
       return;
     }
     if ((event.ctrlKey || event.metaKey) && key === 'z') {
+      if (event.target instanceof Element
+        && (event.target.closest('input, textarea, [contenteditable]') || event.target.isContentEditable)) return;
       event.preventDefault();
       event.shiftKey ? redo() : undo();
       return;
