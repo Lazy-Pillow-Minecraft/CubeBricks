@@ -1,12 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { operationIndex, requireOperation } from '../src/core/operation-registry.js';
-import { modifierRegistry } from '../src/config/modifiers.js';
-import { operatorRegistry } from '../src/config/operators.js';
+import { operationIndex, requireOperation } from '../src/common/core/operation-registry.js';
+import { modifierRegistry } from '../src/common/config/modifiers.js';
+import { operatorRegistry } from '../src/common/config/operators.js';
 
 test('every direct snapshot has an operation ID and every literal ID is indexed', async () => {
-  const source = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
+  const source = (await Promise.all([
+    '../src/app.js',
+    '../src/project/journal-controller.js',
+    '../src/screen/inspector-controller.js',
+    '../src/screen/gizmo-controller.js',
+    '../src/screen/uv-preview-controller.js',
+    '../src/screen/palette/controller.js',
+    '../src/screen/color-picker/controller.js'
+  ]
+    .map(path => readFile(new URL(path, import.meta.url), 'utf8')))).join('\n');
   assert.doesNotMatch(source, /\bsnapshot\(\s*\)/, 'A snapshot call has no operation ID');
   const literalIds = [...source.matchAll(/\bsnapshot\('([^']+)'\)/g)].map(match => match[1]);
   for (const id of literalIds) assert.equal(requireOperation(id), id);

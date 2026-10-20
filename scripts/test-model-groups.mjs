@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, addModifier, bakeModifier, bakeProceduralShape, buildModifierRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
 import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
-import { ModelFormatRegistry } from '../src/core/model-format-registry.js';
-import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/config/model-formats.js';
+import { ModelFormatRegistry } from '../src/common/core/model-format-registry.js';
+import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/common/config/model-formats.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from '../src/assets/player-reference.js';
-import { constrainCube, formatRules } from '../src/core/format-constraints.js';
+import { constrainCube, formatRules } from '../src/common/core/format-constraints.js';
 
 assert.equal(modelFormatRegistry.list().length, 8, 'built-in model formats are registered');
 assert.deepEqual(modelFormatRegistry.list().filter(format => format.status === 'placeholder').map(format => format.id),

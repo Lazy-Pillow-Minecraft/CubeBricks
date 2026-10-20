@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { findVertexSnapIntersections } from '../src/core/vertex-intersections.js';
+import { findVertexSnapIntersections } from '../src/common/core/vertex-intersections.js';
 import { WebGLSceneRenderer } from '../src/render/webgl-renderer.js';
 
 const cube = (from, to) => [

@@ -1,13 +1,13 @@
 import { registerEntityOperations } from './operation-registry.js';
-import { shapeRegistry } from '../shapes/registry.js';
+import { shapeRegistry } from '../../shapes/registry.js';
 
-export class OperatorRegistry {
+export class ModifierRegistry {
   constructor() {
     this.definitions = new Map();
   }
 
   register(definition) {
-    if (!definition?.id) throw new Error('Operator definition requires an id');
+    if (!definition?.id) throw new Error('Modifier definition requires an id');
     const normalized = {
       label: definition.id,
       targets: [],
@@ -17,11 +17,13 @@ export class OperatorRegistry {
       targets: [...(definition.targets || [])]
     };
     this.definitions.set(normalized.id, normalized);
-    registerEntityOperations('operator', normalized.id, normalized.label);
+    registerEntityOperations('modifier', normalized.id, normalized.label);
     return normalized;
   }
 
-  get(id) { return this.definitions.get(id) || null; }
+  get(id) {
+    return this.definitions.get(id) || null;
+  }
 
   supports(id, targetType) {
     const definition = this.get(id);
@@ -37,7 +39,7 @@ export class OperatorRegistry {
     const definition = this.get(id);
     if (!definition || !this.supports(id, targetType)) return null;
     return {
-      uid: data.uid || `operator_${crypto.randomUUID().slice(0, 8)}`,
+      uid: data.uid || `modifier_${crypto.randomUUID().slice(0, 8)}`,
       type: id,
       enabled: data.enabled !== false,
       ...structuredClone(definition.createDefault()),
@@ -46,3 +48,4 @@ export class OperatorRegistry {
     };
   }
 }
+

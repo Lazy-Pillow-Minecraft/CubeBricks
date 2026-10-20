@@ -1,177 +1,56 @@
-import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, addOperator, bakeModifier, bakeProceduralShape, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from './model.js';
-import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './config/app-config.js';
-import { createModelProjectData, modelFormatRegistry } from './config/model-formats.js';
-import { modifierRegistry } from './config/modifiers.js';
-import { operatorRegistry } from './config/operators.js';
+import { BezierElement, Cube, CurveNode, Group, Locator, NodeElement, Shape, CubeBricksProject, addModifier, addOperator, bakeModifier, bakeProceduralShape, exportBlockbench, getModifier, importBlockbench, setPivotPreservingGeometry } from './model.js';
+import { ConfigKey, applyLanguage, configRegistry, getLanguageLabel } from './common/config/app-config.js';
+import { createModelProjectData, modelFormatRegistry } from './common/config/model-formats.js';
+import { modifierRegistry } from './common/config/modifiers.js';
+import { operatorRegistry } from './common/config/operators.js';
 import { allocateGroupName, refreshAutomaticNodeName, setNodeName, setNodeUnnamed } from './model.js';
-import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerRasterCache, loadRaster, prepareLayers, tiledFaceRaster, tiledFaceReference, tiledFaceRegions, faceTileSize } from './core/texture-features.js';
-import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getEffectiveInflate, getMinecraftRenderType, isCubeFaceCulled } from './render/webgl-renderer.js';
-import { DockManager } from './ui/dock-manager.js';
+import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerRasterCache, loadRaster, prepareLayers, tiledFaceRaster, tiledFaceReference, tiledFaceRegions, faceTileSize } from './common/core/texture-features.js';
+import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getMinecraftRenderType, isCubeFaceCulled } from './render/webgl-renderer.js';
+import { DockManager } from './screen/dock-manager.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from './assets/player-reference.js';
-import { operationDefinition, operationIndex, requireOperation } from './core/operation-registry.js';
-import { JavaBlockVersion, formatRules, constrainNode, constrainProject } from './core/format-constraints.js';
-import { findVertexSnapIntersections } from './core/vertex-intersections.js';
-import { ColorSpaceCurveViewport, changeColorSpaceMode, colorAtPosition, colorSpaceArcLengthPositions, colorSpaceGradientCss, constrainColorPosition, createColorSpaceCurve, equalGradientPositions, gradientRatioToUniform, positionForColor, sampleColorSpaceGradient, sampleColorSpacePosition } from './ui/color-space-gradient.js';
+import { operationDefinition, operationIndex, requireOperation } from './common/core/operation-registry.js';
+import { JavaBlockVersion, formatRules, constrainNode, constrainProject } from './common/core/format-constraints.js';
+import { findVertexSnapIntersections } from './common/core/vertex-intersections.js';
 import { shapeRegistry } from './shapes/builtins.js';
+import { state } from './editor/state.js';
+import { TOOL_REGISTRY, PAINT_TOOLS, PAINT_STROKE_TOOLS, PAINT_SHAPE_TOOLS, PAINT_ERASE_TOOLS } from './editor/tool-registry.js';
+import { DOCK_PANEL_DEFINITIONS } from './screen/dock-definitions.js';
+import { createListDragAutoScroll } from './screen/list-drag-scroll.js';
+import { rgbToHsv, hsvToRgb, rgbToHex, insetControlRatio, insetControlPosition, trianglePickerGeometry, barycentric2d, closestPointOnTriangle2d, TRIANGLE_RING_WIDTH } from './screen/color-picker/math.js';
+import { createTextureTemplateController } from './texture/template-controller.js';
+import { dot3, cross3, normalize3 } from './utils/math/vector3.js';
+import { rotateVector, inverseRotateVector, quaternionMultiply, quaternionFromEuler, quaternionFromAxisAngle, eulerFromQuaternion } from './utils/math/rotation.js';
+import { createColorPickerController } from './screen/color-picker/controller.js';
+import { pickerSession } from './screen/color-picker/session.js';
+import { createPaletteController } from './screen/palette/controller.js';
+import { createPaintSymmetryController, paintSymmetryRelationCache } from './paint/symmetry-relations.js';
+import { createModelCaptureController } from './render/model-capture.js';
+import { createReferenceImageController } from './screen/reference-images.js';
+import { createKnifeController } from './editor/knife-controller.js';
+import { createMirrorGuideController } from './screen/mirror-guides.js';
+import { createCameraController } from './screen/camera-controller.js';
+import { PROJECT_SESSION_KEYS, createProjectTabsController } from './project/tabs-controller.js';
+import { createProjectJournalController } from './project/journal-controller.js';
+import { createInspectorController } from './screen/inspector-controller.js';
+import { createGizmoController } from './screen/gizmo-controller.js';
+import { createUvPreviewController } from './screen/uv-preview-controller.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const LOCATOR_ICON_SHAPES = '<path d="M98.74,144.52c-38.86,0-72.06-19.5-85.3-46.99-1.11,4.43-1.7,9-1.7,13.69,0,38.28,38.95,69.32,87,69.32s87-31.03,87-69.32c0-4.69-.59-9.26-1.7-13.69-13.24,27.49-46.44,46.99-85.3,46.99Z"/><rect x="81.01" y="56.54" width="35.47" height="96.98"/><rect x="59.53" y="77.83" width="78.43" height="25.75" rx="7.93" ry="7.93"/><path d="M98.74,0c-18.89,0-34.21,15.31-34.21,34.21s15.31,34.21,34.21,34.21,34.21-15.31,34.21-34.21S117.63,0,98.74,0ZM98.74,49.2c-8.28,0-14.99-6.71-14.99-14.99s6.71-14.99,14.99-14.99,14.99,6.71,14.99,14.99-6.71,14.99-14.99,14.99Z"/><path d="M26.73,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66H5.18c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M179.83,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66h-34.03c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M97.08,188.46l-18.84-16.15c-1.8-1.55-.71-4.5,1.67-4.5h37.68c2.38,0,3.47,2.96,1.67,4.5l-18.84,16.15c-.96.82-2.37.82-3.33,0Z"/>';
-const TOOL_REGISTRY = Object.freeze({
-  move: { modes: ['edit', 'animate'] },
-  resize: { modes: ['edit', 'animate'] },
-  rotate: { modes: ['edit', 'animate'] },
-  pivot: { modes: ['edit'] },
-  vertexSnap: { modes: ['edit'] },
-  knife: { modes: ['edit'] },
-  faceSelect: { modes: ['edit', 'uv'] },
-  brush: { modes: ['paint'] },
-  line: { modes: ['paint'] },
-  rectangle: { modes: ['paint'] },
-  ellipse: { modes: ['paint'] },
-  fill: { modes: ['paint'] },
-  gradient: { modes: ['paint'] },
-  eyedropper: { modes: ['paint'] }
-});
-const PAINT_TOOLS = Object.freeze(['brush', 'line', 'rectangle', 'ellipse', 'fill', 'gradient', 'eyedropper']);
-const PAINT_STROKE_TOOLS = Object.freeze(['brush', 'line', 'rectangle', 'ellipse']);
-const PAINT_SHAPE_TOOLS = Object.freeze(['line', 'rectangle', 'ellipse']);
-const PAINT_ERASE_TOOLS = Object.freeze(['brush', 'line', 'rectangle', 'ellipse', 'fill']);
-const paintSymmetryRelationCache = new Map();
-const paintSymmetryBuildScheduled = new Set();
+const CUBE_FACE_NAMES = ['north', 'east', 'south', 'west', 'up', 'down'];
+const PAINT_FACE_EDGES = Object.freeze([[0, 1], [1, 3], [2, 3], [0, 2]]);
 const livePaintTextureSources = new Map();
 const blobTextureSourceCache = new Map();
 const animationRasterCache = new Map();
 const paintHitAlphaCache = new Map();
-let colorPickerPopupRoot = null;
-let colorPickerPopupApply = null;
-let colorSpacePickerRoot = null;
-let colorSpacePickerApply = null;
 let recentRotationPress = null;
 let pendingRotationPress = null;
 let preciseRotationInput = null;
 
-const state = {
-  project: new CubeBricksProject({ name: 'untitled' }),
-  selectedUid: null,
-  selectedUids: new Set(),
-  selectedGenerated: null,
-  selectionAnchorUid: null,
-  selectedCurveNodeIndex: null,
-  selectedModifierUid: null,
-  inspectorPage: 'basic',
-  collapsedModifiers: new Set(),
-  collapsedOperators: new Set(),
-  mode: 'edit',
-  separateUvMode: configRegistry.get(ConfigKey.SEPARATE_UV_MODE),
-  tool: 'move',
-  filePath: null,
-  dirty: false,
-  grid: configRegistry.get(ConfigKey.SHOW_GRID),
-  wire: configRegistry.get(ConfigKey.SHOW_WIREFRAME),
-  renderMode: 'textured',
-  transformSpace: 'global',
-  multiTransformMode: 'unified',
-  rotationMode: 'pose',
-  scaleHandleMode: 'fixed',
-  knifeSelection: null,
-  knifeHover: null,
-  knifePointer: null,
-  vertexSnapSource: null,
-  vertexSnapMode: 'move',
-  vertexSnapRotationMode: 'pivot',
-  vertexSnapIntersections: false,
-  projection: configRegistry.get(ConfigKey.PROJECTION),
-  previewShade: configRegistry.get(ConfigKey.PREVIEW_SHADE),
-  playerReference: configRegistry.get(ConfigKey.SHOW_PLAYER_REFERENCE),
-  geometryOnly: configRegistry.get(ConfigKey.SHOW_GEOMETRY_ONLY),
-  modifierResultGhost: configRegistry.get(ConfigKey.MODIFIER_RESULT_GHOST),
-  settingsSnap: configRegistry.get(ConfigKey.SNAP),
-  allowNegativeSize: configRegistry.get(ConfigKey.ALLOW_NEGATIVE_SIZE),
-  modifierSnap: {
-    shift: { mode: configRegistry.get(ConfigKey.SHIFT_SNAP_MODE), value: configRegistry.get(ConfigKey.SHIFT_SNAP_VALUE) },
-    ctrl: { mode: configRegistry.get(ConfigKey.CTRL_SNAP_MODE), value: configRegistry.get(ConfigKey.CTRL_SNAP_VALUE) },
-    shiftCtrl: { mode: configRegistry.get(ConfigKey.SHIFT_CTRL_SNAP_MODE), value: configRegistry.get(ConfigKey.SHIFT_CTRL_SNAP_VALUE) }
-  },
-  alphaLock: configRegistry.get(ConfigKey.ALPHA_LOCK),
-  lockedDefaultAlpha: configRegistry.get(ConfigKey.LOCKED_DEFAULT_ALPHA),
-  lockedHoverFade: configRegistry.get(ConfigKey.LOCKED_HOVER_FADE),
-  lockedHoverAlpha: configRegistry.get(ConfigKey.LOCKED_HOVER_ALPHA),
-  lockedHoverRadius: configRegistry.get(ConfigKey.LOCKED_HOVER_RADIUS),
-  lockedHoverPoint: null,
-  lockedHoverStrength: 0,
-  outlinerDetailed: true,
-  zoom: 1,
-  panX: 0,
-  panY: 0,
-  yaw: -Math.PI * 3 / 4,
-  pitch: Math.PI / 6,
-  target: [0, 0, 0],
-  axisView: null,
-  axisViewSign: 1,
-  axisViewCameras: { x: null, y: null, z: null },
-  generalCamera: null,
-  referenceImageSelection: { general: null, x: null, y: null, z: null },
-  referenceImageSources: new Map(),
-  history: [],
-  future: [],
-  hitAreas: [],
-  dragging: null,
-  outlinerCollapsed: false,
-  collapsedGroups: new Set(),
-  textureAssets: [],
-  textureGroups: [],
-  activeTextureUid: null,
-  paintColor: '#91ad52',
-  paintBrushSize: 1,
-  paintBrushShape: 'square',
-  paintBrushAa: false,
-  paintBrushDepth: 0,
-  paintBrushOverlay: false,
-  paintBrushOpacity: 100,
-  paintToolSettings: Object.fromEntries(['line', 'rectangle', 'ellipse', 'fill', 'gradient'].map(tool => [tool, { size: 1, opacity: 100, erase: false }])),
-  paintBrushErase: false,
-  paintIgnoreTransparent: false,
-  paintBucketScope: 'face',
-  paintBucketSingleFace: true,
-  paintGradientMode: 'face',
-  paintGradientPalette: false,
-  paintGradientStop: 'start',
-  paintGradientStart: '#91ad52',
-  paintGradientStartAlpha: 100,
-  paintGradientEnd: '#000000',
-  paintGradientEndAlpha: 0,
-  paintGradientAnchor: null,
-  paintGradientHover: null,
-  paintColorPickerMode: 'square',
-  paintColorPickerHue: .218,
-  paintColorPickerSaturation: .526,
-  paintColorPickerValue: .678,
-  paintHistory: [],
-  paintFuture: [],
-  selectedUvFaces: new Set(),
-  textureView: { zoom: 1, panX: 0, panY: 0 },
-  uvPreviewAutoFocusTexture: true,
-  uvPreviewEnabled: true,
-  uvPreviewAutoRotate: false,
-  uvPreviewFaceColors: true,
-  uvPreviewSelectedFace: null,
-  uvPreviewYaw: -Math.PI / 4,
-  uvPreviewPitch: Math.PI / 7,
-  timelinePlaying: false,
-  timelineFrame: 0,
-  layoutResizing: false
-};
 
 let temporaryPaintTool = null;
 
-const DOCK_PANEL_DEFINITIONS = Object.freeze([
-  { id: 'texture', index: 0, modes: ['edit', 'uv', 'paint'], hotspotFocus: true, defaultDock: 'left', defaultOrder: 0, defaultPosition: { x: 24, y: 104 }, defaultSize: { width: 236, height: 620 }, defaultCollapsed: false },
-  { id: 'uvPreview', index: 1, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'left', defaultOrder: 1, defaultPosition: { x: 24, y: 520 }, defaultSize: { width: 236, height: 260 }, defaultCollapsed: false },
-  { id: 'inspector', index: 2, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 0, defaultPosition: { x: 920, y: 104 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
-  { id: 'outliner', index: 3, modes: ['edit', 'uv', 'paint', 'animate'], defaultDock: 'right', defaultOrder: 1, defaultPosition: { x: 920, y: 460 }, defaultSize: { width: 292, height: 340 }, defaultCollapsed: false },
-  { id: 'bottom', index: 4, modes: ['paint'], defaultDock: 'bottom', defaultOrder: 0, defaultPosition: { x: 280, y: 620 }, defaultSize: { width: 720, height: 176 }, defaultCollapsed: false }
-]);
 
 state.selectedUid = state.project.elements[0]?.uid;
 if (state.selectedUid) state.selectedUids.add(state.selectedUid);
@@ -180,10 +59,6 @@ const sceneCanvas = $('#sceneCanvas');
 const viewport = $('#viewport');
 const selectionMarquee = $('#selectionMarquee');
 const sceneRenderer = new WebGLSceneRenderer(sceneCanvas);
-const modelCaptureCanvas = document.createElement('canvas');
-let modelCaptureRenderer = null;
-let modelCaptureImageCanvas = null;
-let modelCaptureDataUrl = null;
 const uvPreviewCanvas = $('#uvPreviewCanvas');
 const uvPreviewViewport = $('#uvPreviewViewport');
 const uvPreviewRenderer = new WebGLSceneRenderer(uvPreviewCanvas);
@@ -191,6 +66,30 @@ const textureCanvas = $('#textureCanvas');
 const textureCtx = textureCanvas.getContext('2d');
 const outliner = $('#outliner');
 const inspector = $('#inspector');
+const palette = createPaletteController({
+  state, $, $$, clamp, escapeHtml, escapeAttribute, hexToRgb, snapshot,
+  renderPaintGradientPreview, setPaintColor,
+  updatePaintColorPickerVisual: (...args) => updatePaintColorPickerVisual(...args),
+  renderPaintColorPicker: (...args) => renderPaintColorPicker(...args),
+  renderInspector, toast, selected, noteJournalOperation, markDirty, renderAll
+});
+const { paletteRows, renderPalette, renderPaintColorHistory, recordPaintColorHistory,
+  syncPaletteSelectionToPaintColor, samplePaletteGradient, addPaletteRow,
+  openColorSpaceCurveEditor, addPaintSwatchToSelection, deleteSelectedPaletteColor, applyPaletteColor } = palette;
+const { updatePaintColorPickerVisual, renderPaintColorPicker, openColorPickerPopup } = createColorPickerController({
+  state, inspector, hexToRgb, setPaintColor, renderPaintColorHistory, recordPaintColorHistory,
+  renderInspector, setTool, addPaintSwatchToSelection
+});
+const { selectedMirrorGuideGroup, mirrorControllerWorldFrame, symmetryModifierAngles,
+  finiteWorldGuideMarkup, updateMirrorGuideOverlay } = createMirrorGuideController({
+  state, $, sceneCanvas, sceneRenderer, selected, isShapeElement,
+  projectViewportPoint, addScaled3, clamp
+});
+const { paintSymmetryFaceKey, paintSymmetryRelatedHits, scheduleAllPaintSymmetryBuilds,
+  schedulePaintSymmetryBuild, ensurePaintSymmetryCache } = createPaintSymmetryController({
+  state, sceneRenderer, faceUvPixelSlots, symmetryModifierAngles,
+  mirrorControllerWorldFrame, barycentricPoint, renderInspector, PAINT_FACE_EDGES
+});
 const projectState = $('#projectState');
 const projectTabsNode = $('#projectTabs');
 const newProjectDialog = $('#newProjectDialog');
@@ -202,92 +101,74 @@ const textureInput = $('#textureInput');
 const referenceImageInput = $('#referenceImageInput');
 const referenceImageLayer = $('#referenceImageLayer');
 const referenceImageHint = $('#referenceImageHint');
+const referenceImages = createReferenceImageController({
+  state, $, $$, escapeHtml, viewport, sceneRenderer,
+  referenceImageInput, referenceImageLayer, referenceImageHint, snapshot, markDirty, toast
+});
+const { referenceViewKey, updateReferenceImageLayer, setReferenceImageEditing, setReferenceImageMenu,
+  beginReferenceImageImport, resetReferenceImage, removeReferenceImage, loadReferenceImageFiles,
+  beginReferenceImageDrag, moveReferenceImageDrag, endReferenceImageDrag, scaleReferenceImage } = referenceImages;
+const cameraController = createCameraController({
+  state, $, $$, sceneCanvas, sceneRenderer, viewport,
+  renderScene, toast, mapProjectionZoom, setReferenceImageEditing
+});
+const { bakeCameraPan, cancelCameraFocus, focusSelected, focusSceneOrigin, currentProjection,
+  updateProjectionControls, enterAxisView, exitAxisView, updateAxisWidget,
+  beginAxisWidgetDrag, moveAxisWidgetDrag, endAxisWidgetDrag } = cameraController;
+const { captureModel, saveModelCapture, copyModelCapture, clearModelCapture } = createModelCaptureController({
+  state, $, sceneCanvas, sceneRenderer, textureCanvas,
+  getTextureAtlasEntries: () => textureAtlasEntries, getTextureAtlasCanvas: () => textureAtlasCanvas,
+  currentProjection, toast
+});
+const projectTabsController = createProjectTabsController({
+  state, $, escapeHtml, escapeAttribute, projectTabsNode, projectState, projectInfoDialog,
+  textureUid, restoreProjectTextureView, renderAll,
+  getSubdivisionSession: () => inspectorController.subdivisionSession, exitSubdivisionEdit, referenceImages,
+  cancelCameraFocus, sceneRenderer, startProjectJournal, flushProjectJournal, toast,
+  compactProjectHistorySnapshot, markDirty, scheduleProjectJournal
+});
+const { projectTabById, projectTabLabel, discardProjectTabJournal,
+  createProjectSession, captureProjectSession, syncActiveProjectTab,
+  renderProjectTabs, updateProjectStateLabel, activateProjectTab, addProjectTab,
+  closeProjectTab, projectTabInsertionIndex, previewProjectTabInsertion,
+  moveProjectTabToIndex, openProjectInfo, applyProjectInfo, initializeProjectTabs,
+  requestProjectClose, confirmProjectClose } = projectTabsController;
+const journalController = createProjectJournalController({
+  state, projectTabsController, textureCanvas, isBezierElement, textureUid,
+  clearSubdivisionSession: () => { inspectorController.subdivisionSession = null; }, renderAll, toast,
+  renderTextureList, activateProjectTexture, rebuildTextureAtlas,
+  invalidateAllRenderGeometry, restoreProjectTextureView,
+  serializableTextureAssets, serializeCbmodel, referenceImages,
+  getTexturePaintDrag: () => texturePaintDrag, getTextureUvDrag: () => textureUvDrag
+});
+const { getKnifePreviewLabel, updateKnifeHover, refreshKnifeFromModifierEvent,
+  cancelKnifeSelection, useKnifePoint, buildEditorOverlayLines } = createKnifeController({
+  state, sceneCanvas, sceneRenderer, worldPointToCubeLocal, cubeLocalPointToWorld,
+  snapValue, clamp, updateToolOptions, renderScene, renderAll,
+  freezeCubeUvs, snapshot, markDirty, toast, isBezierElement, selected, selectItem, hexToRgb
+});
+const { createTextureTemplate } = createTextureTemplateController({
+  state, $, CUBE_FACE_NAMES, getSelectionExpansion, isProceduralShape,
+  getSubdivisionSession: () => inspectorController.subdivisionSession, subdivisionPatch, syncSubdivisionEdits,
+  invalidateUvPreviewTextureState, renderTextureList, activateProjectTexture,
+  markDirty, snapshot, toast, setCubeFaceCulled, invalidateAllRenderGeometry,
+  renderAll, activeSnapSubdivisions, textureAssetForReference, loadTextureAssetImage
+});
 const playerReferenceTextureInput = $('#playerReferenceTextureInput');
 const playerReferenceProject = createPlayerReferenceProject();
 let toastTimer;
 let outlinerFrame = null;
 let outlinerDragGhost = null;
-function createListDragAutoScroll(container, isDragging, onScroll = () => {}) {
-  let frame = null;
-  let lastTime = 0;
-  let pointer = null;
-  const updatePointer = event => { pointer = { x: event.clientX, y: event.clientY }; schedule(); };
-  const speedAtPointer = () => {
-    if (!pointer) return 0;
-    const rect = container.getBoundingClientRect();
-    if (pointer.x < rect.left - 24 || pointer.x > rect.right + 24
-      || pointer.y < rect.top - 64 || pointer.y > rect.bottom + 64) return 0;
-    const edge = Math.min(68, Math.max(24, rect.height * .22));
-    const top = Math.max(0, Math.min(1.5, (edge - (pointer.y - rect.top)) / edge));
-    const bottom = Math.max(0, Math.min(1.5, (edge - (rect.bottom - pointer.y)) / edge));
-    const amount = bottom - top;
-    return amount ? Math.sign(amount) * (2 + 20 * amount * amount) : 0;
-  };
-  const tick = now => {
-    frame = null;
-    if (!isDragging()) return;
-    const speed = speedAtPointer();
-    if (speed) {
-      const before = container.scrollTop;
-      container.scrollTop += speed * Math.min(2, (now - (lastTime || now)) / 16.67 || 1);
-      if (container.scrollTop !== before) onScroll(pointer);
-    }
-    lastTime = now;
-    if (speed) schedule();
-  };
-  function schedule() { if (frame === null && isDragging()) frame = requestAnimationFrame(tick); }
-  const onWheel = event => {
-    if (!isDragging()) return;
-    event.preventDefault();
-    pointer = { x: event.clientX, y: event.clientY };
-    const before = container.scrollTop;
-    container.scrollTop += event.deltaY * (event.deltaMode === 1 ? 31 : event.deltaMode === 2 ? container.clientHeight : 1);
-    if (container.scrollTop !== before) onScroll(pointer);
-  };
-  container.addEventListener('wheel', onWheel, { passive: false });
-  return {
-    start() {
-      container.classList.add('is-drag-scrolling');
-      document.addEventListener('dragover', updatePointer, true);
-      document.addEventListener('pointermove', updatePointer, true);
-    },
-    stop() {
-      document.removeEventListener('dragover', updatePointer, true);
-      document.removeEventListener('pointermove', updatePointer, true);
-      container.classList.remove('is-drag-scrolling');
-      if (frame !== null) cancelAnimationFrame(frame);
-      frame = null; lastTime = 0; pointer = null;
-    }
-  };
-}
 let dockManager = null;
-let cameraFocusFrame = null;
 let lockedHoverFrame = null;
 let lockedHoverPickFrame = null;
 let lockedHoverPointer = null;
 let sceneRenderFrame = null;
 let transformUpdateFrame = null;
-let uvPreviewAnimationFrame = null;
-let uvPreviewResizeFrame = null;
-let uvPreviewLastFrame = 0;
-let uvPreviewProjectCache = null;
-let uvPreviewDrag = null;
-let uvPreviewTextureDirty = true;
-let uvPreviewRenderDirty = true;
-let uvPreviewPanelMetrics = null;
-const uvPreviewFaceLabelCanvas = document.createElement('canvas');
-let uvPreviewFaceLabelCacheKey = null;
-let uvPreviewFaceLabelFontRevision = 0;
 let texturePreviewSize = [1, 1];
-let projectTabs = [];
 let shapePacksReady = Promise.resolve();
-let activeProjectTabId = null;
-let editingProjectTabId = null;
-let draggingProjectTabId = null;
-let draggingProjectTabInsertIndex = null;
 let selectionExpansionCache = null;
 let selectionTransformContextCache = null;
-let vertexSnapIntersectionCache = null;
 let focusedDockHotspot = null;
 let textureUvDrag = null;
 let texturePaintDrag = null;
@@ -307,124 +188,8 @@ let textureAtlasRebuildFrame = null;
 let textureViewLayout = null;
 let textureFocusFrame = null;
 let textureUvEntryCache = null;
-let mirrorGuideGroupUid = null;
-let mirrorGuideEntryUid = null;
-let mirrorGuideHoldTimer = null;
-let mirrorGuideHideTimer = null;
-let subdivisionSession = null;
-let referenceImageEditing = false;
-let referenceImageDrag = null;
-let referenceControlsProject = null;
-let referenceControlsKey = '';
-let referenceImportViewKey = 'general';
-let axisWidgetDrag = null;
-let suppressAxisWidgetClick = false;
 let playerReferenceTextureRevision = 0;
-const journalTimers = new Map();
-let suppressJournalRecording = false;
-let closingProjects = false;
 
-const PROJECT_SESSION_KEYS = Object.freeze([
-  'project', 'selectedUid', 'selectedUids', 'selectedGenerated', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
-  'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
-  'target', 'axisView', 'axisViewSign', 'axisViewCameras', 'generalCamera', 'referenceImageSelection', 'referenceImageSources', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
-  'selectedUvFaces', 'textureView'
-]);
-
-function projectTabById(tabId) {
-  return projectTabs.find(tab => tab.id === tabId) || null;
-}
-
-function createProjectSession(project, options = {}) {
-  const selectedUid = options.selectedUid ?? project.elements[0]?.uid ?? null;
-  const textureAssets = (options.textureAssets || []).map(asset => ({
-    ...asset,
-    _uid: textureUid(asset),
-    groupId: asset.groupId || null
-  }));
-  const preferredTexture = textureAssets.find(asset => asset.useAsDefault) || textureAssets[0] || null;
-  return {
-    project,
-    selectedUid,
-    selectedUids: new Set(selectedUid ? [selectedUid] : []),
-    selectedGenerated: null,
-    selectionAnchorUid: selectedUid,
-    selectedCurveNodeIndex: null,
-    selectedModifierUid: null,
-    filePath: options.filePath || null,
-    dirty: options.dirty ?? false,
-    history: [],
-    future: [],
-    knifeSelection: null,
-    knifeHover: null,
-    knifePointer: null,
-    vertexSnapSource: null,
-    zoom: 1,
-    panX: 0,
-    panY: 0,
-    yaw: -Math.PI * 3 / 4,
-    pitch: Math.PI / 6,
-    target: [0, 0, 0],
-    axisView: null,
-    axisViewSign: 1,
-    axisViewCameras: { x: null, y: null, z: null },
-    generalCamera: null,
-    referenceImageSelection: { general: null, x: null, y: null, z: null },
-    referenceImageSources: new Map(),
-    collapsedGroups: new Set(),
-    textureAssets,
-    textureGroups: structuredClone(options.textureGroups || []),
-    activeTextureUid: preferredTexture?._uid || null,
-    paintHistory: [],
-    paintFuture: [],
-    selectedUvFaces: new Set(),
-    textureView: { zoom: 1, panX: 0, panY: 0 },
-    timelineFrame: 0
-  };
-}
-
-function captureProjectSession() {
-  return Object.fromEntries(PROJECT_SESSION_KEYS.map(key => [key, state[key]]));
-}
-
-function syncActiveProjectTab() {
-  const tab = projectTabById(activeProjectTabId);
-  if (tab) tab.session = captureProjectSession();
-  return tab;
-}
-
-function projectTabLabel(tab) {
-  if (tab.displayName) return tab.displayName;
-  const filePath = tab.session.filePath;
-  return filePath ? filePath.split(/[\\/]/).pop() : tab.session.project.name || 'untitled';
-}
-
-function renderProjectTabs() {
-  if (!projectTabsNode) return;
-  projectTabsNode.innerHTML = projectTabs.map(tab => {
-    const active = tab.id === activeProjectTabId;
-    const label = projectTabLabel(tab);
-    const format = modelFormatRegistry.get(tab.session.project.formatId);
-    const title = [label, format?.name, tab.session.filePath].filter(Boolean).join(' · ');
-    return `<div class="project-tab ${active ? 'active' : ''} ${tab.session.dirty ? 'dirty' : ''}" role="tab"
-        aria-selected="${active}" tabindex="${active ? '0' : '-1'}" draggable="true" data-project-tab="${tab.id}" title="${escapeAttribute(title)}">
-      <span class="project-tab-status" aria-hidden="true"></span>
-      <span class="project-tab-name">${escapeHtml(label)}</span>
-      <button class="project-tab-close" type="button" data-close-project-tab="${tab.id}" title="關閉項目" aria-label="關閉 ${escapeAttribute(label)}">×</button>
-    </div>`;
-  }).join('');
-  projectTabsNode.querySelector('.project-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-}
-
-function updateProjectStateLabel() {
-  const fileName = state.filePath ? state.filePath.split(/[\\/]/).pop() : `${state.project.name}.cbmodel`;
-  const label = `${state.dirty ? '● ' : ''}${fileName}`;
-  const title = `${state.dirty ? '● ' : ''}${projectTabLabel(projectTabById(activeProjectTabId) || { session: captureProjectSession() })} — CubeBricks`;
-  if (projectState.textContent !== label) projectState.textContent = label;
-  const color = state.dirty ? 'var(--accent)' : '';
-  if (projectState.style.color !== color) projectState.style.color = color;
-  if (document.title !== title) document.title = title;
-}
 
 function restoreProjectTextureView() {
   // Texture previews and the scene atlas are separate consumers. Rebuild the
@@ -447,506 +212,21 @@ function restoreProjectTextureView() {
   rebuildTextureAtlas();
 }
 
-function activateProjectTab(tabId, { render = true } = {}) {
-  const tab = projectTabById(tabId);
-  if (!tab) return false;
-  if (tabId !== activeProjectTabId && subdivisionSession) exitSubdivisionEdit(false);
-  if (tabId !== activeProjectTabId) {
-    const previous = syncActiveProjectTab();
-    if (previous?.journalPending) void flushProjectJournal(previous);
-  }
-  activeProjectTabId = tabId;
-  for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
-  state.dragging = null;
-  referenceImageEditing = false;
-  referenceImageDrag = null;
-  state.hitAreas = [];
-  state.lockedHoverPoint = null;
-  state.lockedHoverStrength = 0;
-  if (cameraFocusFrame) cancelAnimationFrame(cameraFocusFrame);
-  cameraFocusFrame = null;
-  sceneRenderer.invalidateLockState();
-  restoreProjectTextureView();
-  updateProjectStateLabel();
-  renderProjectTabs();
-  if (render) renderAll();
-  return true;
-}
+function compactProjectHistorySnapshot(...args) { return journalController.compactProjectHistorySnapshot(...args); }
+function snapshot(...args) { return journalController.snapshot(...args); }
+function undo(...args) { return journalController.undo(...args); }
+function redo(...args) { return journalController.redo(...args); }
+function markDirty(...args) { return journalController.markDirty(...args); }
+function startProjectJournal(...args) { return journalController.startProjectJournal(...args); }
+function scheduleProjectJournal(...args) { return journalController.scheduleProjectJournal(...args); }
+function noteJournalOperation(...args) { return journalController.noteJournalOperation(...args); }
+function flushProjectJournal(...args) { return journalController.flushProjectJournal(...args); }
 
-function addProjectTab(project, options = {}) {
-  syncActiveProjectTab();
-  const tab = {
-    id: `project_${crypto.randomUUID()}`,
-    displayName: options.displayName || null,
-    session: createProjectSession(project, options)
-  };
-  projectTabs.push(tab);
-  startProjectJournal(tab, options.journalId ? null : options.imported ? 'core.project.import' : 'core.project.create', options.journalId);
-  activateProjectTab(tab.id, { render: options.render !== false });
-  return tab;
-}
-
-function disposeProjectTab(tab) {
-  tab.session.referenceImageSources?.clear();
-  for (const asset of tab.session.textureAssets || []) {
-    if (typeof asset.source === 'string' && asset.source.startsWith('blob:')) URL.revokeObjectURL(asset.source);
-  }
-}
-
-async function discardProjectTabJournal(tab) {
-  if (!tab?.journalId || !window.cubeBricksDesktop?.discardProjectJournal) return;
-  await flushProjectJournal(tab);
-  if (tab.journalPending) throw new Error('尚有未寫入的操作，工作目錄已保留');
-  await tab.journalReady;
-  await tab.journalWrites;
-  await window.cubeBricksDesktop.discardProjectJournal({ journalId: tab.journalId });
-}
-
-function closeProjectTab(tabId) {
-  syncActiveProjectTab();
-  const index = projectTabs.findIndex(tab => tab.id === tabId);
-  if (index < 0) return;
-  const tab = projectTabs[index];
-  if (tab.session.dirty && !window.confirm(`「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？`)) return;
-  const discard = tab.session.dirty || !tab.session.filePath;
-  const pending = discard ? discardProjectTabJournal(tab) : (async () => {
-    await flushProjectJournal(tab);
-    await tab.journalReady;
-    await tab.journalWrites;
-  })();
-  pending.catch(error => toast(`關閉工作項目失敗：${error.message}`));
-  // Blob-backed textures must remain readable until the captured final write
-  // has converted them into durable image data.
-  pending.catch(() => {}).then(() => disposeProjectTab(tab));
-  projectTabs.splice(index, 1);
-  if (!projectTabs.length) {
-    const project = new CubeBricksProject({ name: 'untitled', ...createModelProjectData('java_block_item', { name: 'untitled' }) });
-    const replacement = { id: `project_${crypto.randomUUID()}`, displayName: null, session: createProjectSession(project) };
-    projectTabs.push(replacement);
-    startProjectJournal(replacement, 'core.project.create');
-    activeProjectTabId = null;
-    activateProjectTab(replacement.id);
-    return;
-  }
-  if (tabId === activeProjectTabId) {
-    activeProjectTabId = null;
-    activateProjectTab(projectTabs[Math.min(index, projectTabs.length - 1)].id);
-  } else renderProjectTabs();
-}
-
-function projectTabInsertionIndex(clientX, sourceId = draggingProjectTabId) {
-  const candidates = [...projectTabsNode.querySelectorAll('[data-project-tab]')]
-    .filter(node => node.dataset.projectTab !== sourceId);
-  const index = candidates.findIndex(node => clientX < node.getBoundingClientRect().left + node.offsetWidth / 2);
-  return index < 0 ? candidates.length : index;
-}
-
-function previewProjectTabInsertion(index, sourceId = draggingProjectTabId) {
-  const candidates = [...projectTabsNode.querySelectorAll('[data-project-tab]')]
-    .filter(node => node.dataset.projectTab !== sourceId);
-  projectTabsNode.querySelectorAll('.drop-before,.drop-after').forEach(node => node.classList.remove('drop-before', 'drop-after'));
-  if (!candidates.length) return;
-  if (index >= candidates.length) candidates.at(-1).classList.add('drop-after');
-  else candidates[Math.max(0, index)].classList.add('drop-before');
-}
-
-function moveProjectTabToIndex(sourceId, insertionIndex) {
-  if (!sourceId || insertionIndex === null) return;
-  const sourceIndex = projectTabs.findIndex(tab => tab.id === sourceId);
-  if (sourceIndex < 0) return;
-  const [source] = projectTabs.splice(sourceIndex, 1);
-  projectTabs.splice(Math.max(0, Math.min(projectTabs.length, insertionIndex)), 0, source);
-  renderProjectTabs();
-}
-
-function openProjectInfo(tabId) {
-  syncActiveProjectTab();
-  const tab = projectTabById(tabId);
-  if (!tab) return;
-  editingProjectTabId = tabId;
-  const project = tab.session.project;
-  $('#projectInfoName').value = project.name || '';
-  $('#projectInfoFormat').textContent = modelFormatRegistry.get(project.formatId)?.name || project.formatId;
-  $('#projectInfoJavaVersionRow').hidden = project.formatId !== 'java_block_item';
-  $('#projectInfoJavaVersion').value = project.formatData?.javaBlockVersion || JavaBlockVersion.LEGACY;
-  $('#projectInfoTextureWidth').value = project.textureSize?.[0] || 16;
-  $('#projectInfoTextureHeight').value = project.textureSize?.[1] || 16;
-  $('#projectInfoSnap').value = project.snap?.subdivisions || state.settingsSnap;
-  $('#projectInfoDescription').value = project.formatData?.projectDescription || '';
-  projectInfoDialog.showModal();
-  requestAnimationFrame(() => $('#projectInfoName').focus());
-}
-
-function applyProjectInfo() {
-  const tab = projectTabById(editingProjectTabId);
-  if (!tab) return;
-  const name = $('#projectInfoName').value.trim();
-  const width = Math.max(1, Math.round(Number($('#projectInfoTextureWidth').value)));
-  const height = Math.max(1, Math.round(Number($('#projectInfoTextureHeight').value)));
-  const snap = Number($('#projectInfoSnap').value);
-  if (!name || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(snap) || snap <= 0) return;
-  if (tab.journalPending) void flushProjectJournal(tab);
-  tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
-  tab.session.history.push(compactProjectHistorySnapshot(tab.session.project, tab.session.referenceImageSources));
-  if (tab.session.history.length > 60) tab.session.history.shift();
-  tab.session.future.length = 0;
-  tab.session.project.name = name;
-  tab.session.project.textureSize = [width, height];
-  tab.session.project.snap = { subdivisions: snap };
-  tab.session.project.formatData = {
-    ...(tab.session.project.formatData || {}),
-    projectDescription: $('#projectInfoDescription').value.trim(),
-    ...($('#projectInfoJavaVersionRow').hidden ? {} : { javaBlockVersion: $('#projectInfoJavaVersion').value })
-  };
-  constrainProject(tab.session.project);
-  tab.displayName = null;
-  tab.session.dirty = true;
-  tab.journalPending = 'core.project.information';
-  scheduleProjectJournal(tab);
-  projectInfoDialog.close();
-  editingProjectTabId = null;
-  if (tab.id === activeProjectTabId) {
-    for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
-    markDirty(true);
-    renderAll();
-  } else renderProjectTabs();
-  toast('項目信息已更新');
-}
-
-function initializeProjectTabs() {
-  const tab = { id: `project_${crypto.randomUUID()}`, displayName: null, session: captureProjectSession() };
-  projectTabs = [tab];
-  activeProjectTabId = tab.id;
-  startProjectJournal(tab, 'core.project.create');
-  renderProjectTabs();
-  updateProjectStateLabel();
-}
-
-function requestProjectClose() {
-  if (closingProjects) return;
-  syncActiveProjectTab();
-  const dialog = $('#closeProjectsDialog');
-  if (dialog.open) return;
-  $('#closeProjectsList').innerHTML = projectTabs.map(tab => `<label class="close-project-row">
-    <input type="checkbox" data-retain-tab="${escapeAttribute(tab.id)}" checked />
-    <span title="${escapeAttribute(tab.session.filePath || projectTabLabel(tab))}">${escapeHtml(projectTabLabel(tab))}</span>
-    <small>${tab.session.dirty ? '未保存' : '已保存'}</small>
-  </label>`).join('');
-  dialog.showModal();
-}
-
-async function confirmProjectClose() {
-  if (closingProjects) return;
-  closingProjects = true;
-  const submit = $('#closeProjectsForm button[type="submit"]');
-  submit.disabled = true;
-  try {
-    syncActiveProjectTab();
-    await Promise.all(projectTabs.map(async tab => {
-      await flushProjectJournal(tab);
-      await tab.journalReady;
-      await tab.journalWrites;
-    }));
-    const retained = [], discarded = [];
-    for (const tab of projectTabs) {
-      if (!tab.journalId) continue;
-      const keep = $(`[data-retain-tab="${tab.id}"]`, $('#closeProjectsList'))?.checked;
-      if (keep) retained.push({ journalId: tab.journalId, filePath: tab.session.filePath, dirty: tab.session.dirty,
-        active: tab.id === activeProjectTabId });
-      else discarded.push(tab.journalId);
-    }
-    await window.cubeBricksDesktop.confirmProjectClose({ retained, discarded });
-  } catch (error) {
-    closingProjects = false;
-    submit.disabled = false;
-    toast(`關閉失敗：${error.message}`);
-  }
-}
 
 function selected() {
   return state.project.getNode(state.selectedUid);
 }
 
-function projectReferenceImageRecords(project) {
-  return Object.values(project.referenceImages || {}).flatMap(value => Array.isArray(value) ? value : value ? [value] : [])
-    .filter(record => record && typeof record === 'object');
-}
-
-function compactProjectHistorySnapshot(project, sources) {
-  const data = JSON.parse(project.serialize());
-  for (const record of projectReferenceImageRecords(data)) {
-    if (typeof record.source !== 'string') continue;
-    let reference = [...sources].find(([, source]) => source === record.source)?.[0];
-    if (!reference) {
-      reference = crypto.randomUUID();
-      sources.set(reference, record.source);
-    }
-    record.sourceRef = reference;
-    delete record.source;
-  }
-  return JSON.stringify(data);
-}
-
-function expandProjectHistorySnapshot(serialized, sources) {
-  const data = JSON.parse(serialized);
-  for (const record of projectReferenceImageRecords(data)) {
-    if (!record.sourceRef || typeof record.source === 'string') continue;
-    const source = sources.get(record.sourceRef);
-    if (typeof source !== 'string') throw new Error(`參考圖快照缺失：${record.sourceRef}`);
-    record.source = source;
-    delete record.sourceRef;
-  }
-  return data;
-}
-
-function snapshot(operationId = 'core.element.property') {
-  requireOperation(operationId);
-  const tab = projectTabById(activeProjectTabId);
-  if (tab) tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
-  if (tab?.journalPending) void flushProjectJournal(tab);
-  if (tab) tab.journalPending = operationId;
-  state.history.push(compactProjectHistorySnapshot(state.project, state.referenceImageSources));
-  if (state.history.length > 60) state.history.shift();
-  state.future.length = 0;
-}
-
-function restoredProjectSession(session, data, restoreTextures = false) {
-  const previousSelectedUids = new Set(session.selectedUids);
-  const previousSelectedUid = session.selectedUid;
-  const previousSelectionAnchorUid = session.selectionAnchorUid;
-  const restored = { ...session, project: new CubeBricksProject(data), selectedGenerated: null, dirty: true };
-  restored.selectedUids = new Set([...previousSelectedUids].filter(uidValue => restored.project.getNode(uidValue)));
-  restored.selectedUid = previousSelectedUid && restored.selectedUids.has(previousSelectedUid)
-    ? previousSelectedUid
-    : [...restored.selectedUids].at(-1) || null;
-  restored.selectionAnchorUid = previousSelectionAnchorUid && restored.project.getNode(previousSelectionAnchorUid)
-    ? previousSelectionAnchorUid
-    : restored.selectedUid;
-  const restoredSelection = restored.project.getNode(restored.selectedUid);
-  if (!isBezierElement(restoredSelection) || restored.selectedCurveNodeIndex >= restoredSelection.nodes.length) restored.selectedCurveNodeIndex = null;
-  if (![...(restoredSelection?.modifiers || []), ...(restoredSelection?.operators || [])].some(modifier => modifier.uid === restored.selectedModifierUid)) restored.selectedModifierUid = null;
-  if (restored.vertexSnapSource && !restored.project.getNode(restored.vertexSnapSource.rootUid)) restored.vertexSnapSource = null;
-  if (restored.knifeSelection && !restored.project.getNode(restored.knifeSelection.uid)) restored.knifeSelection = null;
-  if (restoreTextures) {
-    restored.textureAssets = (data.textures || []).map(asset => ({
-      ...asset, _uid: textureUid(asset), uvWidth: asset.uv_width,
-      uvHeight: asset.uv_height, useAsDefault: asset.use_as_default === true,
-      groupId: asset.group_id || null, activeLayerUid: asset.active_layer_uid || null
-    }));
-    restored.textureGroups = structuredClone(data.textureGroups || []);
-    if (!restored.textureAssets.some(asset => asset._uid === restored.activeTextureUid)) {
-      restored.activeTextureUid = restored.textureAssets.find(asset => asset.useAsDefault)?._uid
-        || restored.textureAssets[0]?._uid || null;
-    }
-  }
-  return restored;
-}
-
-function restore(serialized) {
-  const restored = restoredProjectSession(captureProjectSession(), expandProjectHistorySnapshot(serialized, state.referenceImageSources));
-  subdivisionSession = null;
-  for (const key of PROJECT_SESSION_KEYS) state[key] = restored[key];
-  markDirty(true, { constrain: false });
-  renderAll();
-}
-
-function restoreTexturePaintHistory(sourceStack, targetStack) {
-  while (sourceStack.length) {
-    const first = sourceStack.pop();
-    const entries = [first];
-    if (first.group) while (sourceStack.at(-1)?.group === first.group) entries.push(sourceStack.pop());
-    let activeAsset = null;
-    for (const entry of entries) {
-      const asset = state.textureAssets.find(texture => texture._uid === entry.uid);
-      if (!asset) continue;
-      targetStack.push({
-        uid: asset._uid, source: asset.source,
-        layers: asset.layers ? structuredClone(asset.layers) : null, activeLayerUid: asset.activeLayerUid || null,
-        width: asset.uvWidth || textureCanvas.width,
-        height: asset.uvHeight || textureCanvas.height,
-        group: entry.group || null
-      });
-      asset.source = entry.source;
-      asset.layers = entry.layers ? structuredClone(entry.layers) : null;
-      asset.activeLayerUid = entry.activeLayerUid || null;
-      asset.uvWidth = entry.width;
-      asset.uvHeight = entry.height;
-      activeAsset ||= asset;
-    }
-    while (targetStack.length > 60) targetStack.shift();
-    if (!activeAsset) continue;
-    state.activeTextureUid = activeAsset._uid;
-    renderTextureList();
-    activateProjectTexture(state.textureAssets.indexOf(activeAsset));
-    // A grouped stroke may touch several independent texture assets. Rebuild
-    // the atlas as a unit so undo/redo cannot leave non-active faces showing
-    // the previous GPU copy.
-    rebuildTextureAtlas();
-    invalidateAllRenderGeometry();
-    markDirty();
-    return true;
-  }
-  return false;
-}
-
-async function navigateProjectJournal(direction) {
-  const tab = projectTabById(activeProjectTabId);
-  if (!tab?.journalId || !window.cubeBricksDesktop?.checkoutProjectJournal) return false;
-  // Reserve a place in the same queue as commits before yielding. Rapid undo /
-  // redo and writes from a subsequent edit must never overtake one another.
-  void flushProjectJournal(tab);
-  const requestedRevision = tab.journalEditRevision || 0;
-  const previousWrite = tab.journalWrites || Promise.resolve();
-  const navigate = async () => {
-    await tab.journalReady;
-    if ((tab.journalEditRevision || 0) !== requestedRevision) return;
-    if (tab.journalPending) throw new Error('目前變更尚未寫入工作記錄');
-    const result = await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId, direction });
-    if (!result) { toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作'); return; }
-    tab.journalHead = result.sequence;
-    if ((tab.journalEditRevision || 0) !== requestedRevision) {
-      // An edit made during IPC already owns a later slot in journalWrites (or
-      // is pending). Keep that newer visible state; never overwrite it with an
-      // older asynchronous checkout result.
-      tab.journalPending ||= 'core.element.property';
-      scheduleProjectJournal(tab);
-      return;
-    }
-    if (!projectTabs.includes(tab)) return;
-    if (tab.id === activeProjectTabId) syncActiveProjectTab();
-    tab.session = restoredProjectSession(tab.session, JSON.parse(result.content), true);
-    if (tab.id !== activeProjectTabId) { renderProjectTabs(); return; }
-    suppressJournalRecording = true;
-    try {
-      subdivisionSession = null;
-      for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
-      markDirty(true, { constrain: false });
-      restoreProjectTextureView();
-      renderAll();
-    } finally { suppressJournalRecording = false; }
-  };
-  const navigation = previousWrite.catch(() => {}).then(navigate);
-  tab.journalWrites = navigation;
-  try {
-    await navigation;
-  } catch (error) { toast(`操作記錄切換失敗：${error.message}`); }
-  return true;
-}
-
-async function undo() {
-  if (await navigateProjectJournal('undo')) return;
-  if (state.mode === 'paint') {
-    if (!restoreTexturePaintHistory(state.paintHistory, state.paintFuture)) toast('沒有可撤銷的繪畫操作');
-    return;
-  }
-  if (!state.history.length) return toast('沒有可撤銷的操作');
-  state.future.push(compactProjectHistorySnapshot(state.project, state.referenceImageSources));
-  restore(state.history.pop());
-}
-
-async function redo() {
-  if (await navigateProjectJournal('redo')) return;
-  if (state.mode === 'paint') {
-    if (!restoreTexturePaintHistory(state.paintFuture, state.paintHistory)) toast('沒有可重做的繪畫操作');
-    return;
-  }
-  if (!state.future.length) return toast('沒有可重做的操作');
-  state.history.push(compactProjectHistorySnapshot(state.project, state.referenceImageSources));
-  restore(state.future.pop());
-}
-
-function markDirty(value = true, { constrain = true } = {}) {
-  if (value && constrain && !suppressJournalRecording && state.mode === 'edit') {
-    const rules = formatRules(state.project);
-    if (rules.javaBlock || rules.moddedEntity) {
-      for (const uidValue of state.selectedUids) constrainNode(state.project.getNode(uidValue), rules);
-    }
-  }
-  const activeTab = projectTabById(activeProjectTabId);
-  const previousDirty = activeTab?.session.dirty;
-  const previousLabel = activeTab ? projectTabLabel(activeTab) : '';
-  state.dirty = value;
-  const tab = syncActiveProjectTab();
-  if (tab) tab.session.dirty = value;
-  if (value && tab && !suppressJournalRecording) {
-    tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
-    tab.journalPending ||= 'core.element.property';
-    scheduleProjectJournal(tab);
-  }
-  updateProjectStateLabel();
-  if (!tab || previousDirty !== value || previousLabel !== projectTabLabel(tab)) renderProjectTabs();
-}
-
-function startProjectJournal(tab, operationId = 'core.project.create', existingId = null) {
-  if (!window.cubeBricksDesktop?.initProjectJournal) return;
-  tab.journalId = existingId || tab.id;
-  if (existingId) {
-    tab.journalReady = Promise.resolve();
-    return;
-  }
-  const projectContent = tab.session.project.serialize();
-  const textureGroups = structuredClone(tab.session.textureGroups);
-  tab.journalReady = serializableTextureAssets(structuredClone(tab.session.textureAssets))
-    .then(textures => window.cubeBricksDesktop.initProjectJournal({
-      journalId: tab.journalId,
-      operationId,
-      operationIndex: operationIndex(),
-      content: serializeCbmodel(textures, JSON.parse(projectContent), textureGroups)
-    }));
-  tab.journalReady.catch(error => toast(`工作目錄建立失敗：${error.message}`));
-}
-
-function scheduleProjectJournal(tab) {
-  if (!window.cubeBricksDesktop?.commitProjectJournal) return;
-  clearTimeout(journalTimers.get(tab.id));
-  journalTimers.set(tab.id, setTimeout(() => {
-    journalTimers.delete(tab.id);
-    if (tab.id === activeProjectTabId && (state.dragging || texturePaintDrag || textureUvDrag || referenceImageDrag)) {
-      scheduleProjectJournal(tab);
-      return;
-    }
-    void flushProjectJournal(tab);
-  }, 400));
-}
-
-function noteJournalOperation(operationId) {
-  const id = requireOperation(operationId);
-  const tab = projectTabById(activeProjectTabId);
-  if (!tab) return;
-  tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
-  if (tab.journalPending && tab.journalPending !== id) void flushProjectJournal(tab);
-  tab.journalPending = id;
-  scheduleProjectJournal(tab);
-}
-
-async function flushProjectJournal(tab = projectTabById(activeProjectTabId)) {
-  if (!tab?.journalPending || !window.cubeBricksDesktop?.commitProjectJournal) return null;
-  clearTimeout(journalTimers.get(tab.id));
-  journalTimers.delete(tab.id);
-  if (tab.id === activeProjectTabId) syncActiveProjectTab();
-  const operationId = requireOperation(tab.journalPending);
-  tab.journalPending = null;
-  const session = tab.session;
-  const projectContent = session.project.serialize();
-  const textureGroups = structuredClone(session.textureGroups);
-  const assets = structuredClone(session.textureAssets);
-  const textureSnapshot = serializableTextureAssets(assets);
-  const write = async () => {
-    await tab.journalReady;
-    const textures = await textureSnapshot;
-    const content = serializeCbmodel(textures, JSON.parse(projectContent), textureGroups);
-    const result = await window.cubeBricksDesktop.commitProjectJournal({
-      journalId: tab.journalId, content, operationId,
-      operationLabel: operationDefinition(operationId).label,
-      operationIndex: operationIndex()
-    });
-    if (result?.sequence) tab.journalHead = result.sequence;
-    return result;
-  };
-  tab.journalWrites = (tab.journalWrites || Promise.resolve()).catch(() => {}).then(write);
-  try { return await tab.journalWrites; }
-  catch (error) { tab.journalPending ||= operationId; toast(`操作記錄失敗：${error.message}`); return null; }
-}
 
 function toast(message) {
   const node = $('#toast');
@@ -974,10 +254,10 @@ function renderAll(geometryScope = 'all') {
 function invalidateAllRenderGeometry() {
   sceneRenderer.invalidateGeometry();
   uvPreviewRenderer.invalidateGeometry();
-  uvPreviewRenderDirty = true;
+  uvPreviewController.uvPreviewRenderDirty = true;
   textureUvEntryCache = null;
   selectionTransformContextCache = null;
-  if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
+  if (uvPreviewController.uvPreviewProjectCache) uvPreviewController.uvPreviewProjectCache.fit = null;
   if (textureAtlasEntries.some(entry => entry.tileSourceUid)) rebuildTextureAtlas();
   scheduleAllPaintSymmetryBuilds();
 }
@@ -1001,13 +281,13 @@ function selectionAffectsMirrorPreview() {
 function invalidateSelectionRenderGeometry(geometryChanged = true) {
   if (geometryChanged) syncSubdivisionEdits();
   sceneRenderer.invalidateSelectionGeometry(geometryChanged);
-  uvPreviewRenderDirty = true;
+  uvPreviewController.uvPreviewRenderDirty = true;
   selectionTransformContextCache = null;
   if (geometryChanged) {
     if (selectionAffectsMirrorPreview()) sceneRenderer.invalidateMirrorGeometry();
     uvPreviewRenderer.invalidateGeometry();
     textureUvEntryCache = null;
-    if (uvPreviewProjectCache) uvPreviewProjectCache.fit = null;
+    if (uvPreviewController.uvPreviewProjectCache) uvPreviewController.uvPreviewProjectCache.fit = null;
     if (textureAtlasEntries.some(entry => entry.tileSourceUid)) rebuildTextureAtlas();
   }
 }
@@ -1167,1191 +447,30 @@ function scheduleOutlinerWindow() {
   });
 }
 
-function inspectorBatchNodes() {
-  const nodes = topLevelSelectedUids().map(uidValue => state.project.getNode(uidValue)).filter(Boolean);
-  return nodes.length ? nodes : [selected()].filter(Boolean);
-}
-
-function sharedVectorValues(nodes, field, fallback) {
-  if (nodes.length <= 1) return [...fallback];
-  return [0, 1, 2].map(axis => {
-    const first = nodes[0]?.[field]?.[axis];
-    if (!Number.isFinite(first) || !nodes.every(node => Number.isFinite(node?.[field]?.[axis]) && Math.abs(node[field][axis] - first) < 1e-9)) return null;
-    return first;
-  });
-}
-
-function sharedNumberValue(nodes, field, fallback) {
-  if (nodes.length <= 1) return Number(fallback) || 0;
-  const first = nodes[0]?.[field];
-  if (!Number.isFinite(first) || !nodes.every(node => Number.isFinite(node?.[field]) && Math.abs(node[field] - first) < 1e-9)) return null;
-  return first;
-}
-
-function numberInputAttributes(value) {
-  return value === null
-    ? 'value="" placeholder="-" data-mixed="true"'
-    : `value="${round(value)}"`;
-}
-
-function isBezierElement(item) {
-  return item?.type === 'bezier2d' || item?.type === 'bezier3d';
-}
-
-function isShapeElement(item) {
-  return item instanceof Shape;
-}
-
-function isProceduralShape(item) {
-  return Boolean(item && item.type !== 'cube' && typeof item.toCubes === 'function' && typeof item.toBaseCubes === 'function');
-}
-
-function subdivisionOwner(item) {
-  return item?.subdivisionOwnerUid ? state.project.getNode(item.subdivisionOwnerUid) : null;
-}
-
-function subdivisionPatch(owner, cube, index) {
-  const base = owner.toBaseCubes?.()[index];
-  if (!base) return null;
-  const patch = {};
-  for (const field of ['position', 'size', 'pivot', 'rotation']) {
-    const delta = cube[field].map((value, axis) => Number(value) - Number(base[field][axis]));
-    if (delta.some(value => Math.abs(value) > 1e-8)) patch[`${field}Delta`] = delta;
-  }
-  const inflateDelta = Number(cube.inflate || 0) - Number(base.inflate || 0);
-  if (Math.abs(inflateDelta) > 1e-8) patch.inflateDelta = inflateDelta;
-  for (const field of ['name', 'unnamed', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
-    if (JSON.stringify(cube[field]) !== JSON.stringify(base[field])) patch[field] = structuredClone(cube[field]);
-  }
-  return Object.keys(patch).length ? patch : null;
-}
-
-function syncSubdivisionEdits() {
-  if (!subdivisionSession) return;
-  const owner = state.project.getNode(subdivisionSession.ownerUid);
-  if (!owner?.toBaseCubes) return;
-  const edits = {};
-  subdivisionSession.cubes.forEach((cube, index) => {
-    const patch = subdivisionPatch(owner, cube, index);
-    if (patch) edits[index] = patch;
-  });
-  owner.subdivisionEdits = edits;
-}
-
-function enterSubdivisionEdit(owner) {
-  if (!isProceduralShape(owner)) return;
-  if (state.mode === 'paint') return toast('繪畫模式可直接在 Shape 上繪畫，不使用細分編輯');
-  if (subdivisionSession?.ownerUid === owner.uid) return;
-  if (subdivisionSession) exitSubdivisionEdit(false);
-  const cubes = owner.toCubes().map((cube, index) => {
-    cube.uid = `${owner.uid}::subdivision::${index}`;
-    cube.subdivisionOwnerUid = owner.uid;
-    cube.subdivisionIndex = index;
-    return cube;
-  });
-  if (!cubes.length) return toast('這個 Shape 目前沒有可編輯的 Cube');
-  subdivisionSession = { ownerUid: owner.uid, cubes };
-  if (state.tool === 'knife') setTool('move');
-  state.project.elements.push(...cubes);
-  state.project.invalidateHierarchyIndex();
-  sceneRenderer.invalidateLockState();
-  state.selectedUid = cubes[0].uid;
-  state.selectedUids = new Set([cubes[0].uid]);
-  state.selectionAnchorUid = cubes[0].uid;
-  state.selectedUvFaces = new Set();
-  invalidateAllRenderGeometry();
-  renderAll('all');
-  updateToolVisibility();
-  toast('已進入細分編輯；其他物件已虛化');
-}
-
-function exitSubdivisionEdit(render = true) {
-  if (!subdivisionSession) return;
-  syncSubdivisionEdits();
-  const ownerUid = subdivisionSession.ownerUid;
-  const transientUids = new Set(subdivisionSession.cubes.map(cube => cube.uid));
-  state.project.elements = state.project.elements.filter(element => !transientUids.has(element.uid));
-  state.project.invalidateHierarchyIndex();
-  sceneRenderer.invalidateLockState();
-  subdivisionSession = null;
-  state.selectedUid = state.project.getNode(ownerUid) ? ownerUid : null;
-  state.selectedUids = new Set(state.selectedUid ? [state.selectedUid] : []);
-  state.selectionAnchorUid = state.selectedUid;
-  state.selectedUvFaces = new Set();
-  invalidateAllRenderGeometry();
-  updateToolVisibility();
-  if (render) renderAll('all');
-}
-
-function discardSubdivisionEdits(target) {
-  if (!isProceduralShape(target) || target.preserveSubdivisionEdits) return;
-  target.subdivisionEdits = {};
-}
-
-function curveNodeInspectorMarkup(item, index) {
-  const node = item.nodes[index];
-  if (!node) return '';
-  const displayedRotation = node.autoTangent ? item.resolvedNodeState(index).rotation : node.rotation;
-  return `<div class="field-section curve-node-card active" data-curve-node-card="${index}">
-    <div class="field-title"><span>節點 ${index + 1}</span><span>${item.dimension === 2 ? '2D' : '3D'}</span></div>
-    ${vectorField('位置', `curve-node:${index}:position`, node.position)}
-    ${vectorField('旋轉', `curve-node:${index}:rotation`, displayedRotation)}
-    <div class="option-row"><span>自動切線</span><label class="switch"><input type="checkbox" data-curve-node-auto="${index}" ${node.autoTangent ? 'checked' : ''}/><i></i></label></div>
-    ${item.dimension === 3 ? `<div class="option-row"><span>滾動角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-curve-node-roll="${index}" value="${round(node.roll || 0)}" /></div></div>` : ''}
-    <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-curve-node-toggle="${index}" ${node.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
-    ${node.handlesEnabled ? `<div class="option-row"><span>對稱手柄</span><label class="switch"><input type="checkbox" data-curve-node-symmetric="${index}" ${node.symmetricHandles ? 'checked' : ''}/><i></i></label></div>` : ''}
-    ${node.handlesEnabled ? `${vectorField('前手柄', `curve-node:${index}:handleIn`, node.handleIn)}${vectorField('後手柄', `curve-node:${index}:handleOut`, node.handleOut)}` : ''}
-    <button type="button" class="curve-node-remove" data-remove-curve-node="${index}" ${item.nodes.length <= 2 ? 'disabled' : ''}>刪除節點</button>
-  </div>`;
-}
-
-function modifierVectorField(label, modifier, property, values) {
-  return `<div class="vector-field modifier-vector-field"><span>${label}</span><div class="axis-inputs">${['X', 'Y', 'Z'].map((axis, index) =>
-    `<label><b>${axis}</b><input type="number" step="0.1" data-modifier-vector="${property}" data-modifier-uid="${modifier.uid}" data-axis="${index}" value="${round(values[index])}" /></label>`).join('')}</div></div>`;
-}
-
-function symmetryModifierMarkup(owner, modifier) {
-  const radial = modifier.mode === 'radial' || modifier.mode === 'mandala';
-  const editingAnchor = state.selectedModifierUid === modifier.uid;
-  return `<div class="modifier-settings">
-    <div class="option-row"><span>鏡像模式</span><select data-modifier-field="mode" data-modifier-uid="${modifier.uid}">
-      <option value="axes" ${modifier.mode === 'axes' ? 'selected' : ''}>XYZ 鏡像</option>
-      <option value="radial" ${modifier.mode === 'radial' ? 'selected' : ''}>徑向旋轉</option>
-      <option value="mandala" ${modifier.mode === 'mandala' ? 'selected' : ''}>曼陀羅</option>
-    </select></div>
-    ${modifier.mode === 'axes' ? `<div class="option-row group-mirror-axes"><span>啟用軸</span>
-      ${['x', 'y', 'z'].map(axis => `<label class="axis-${axis}"><input type="checkbox" data-modifier-axis="${axis}" data-modifier-uid="${modifier.uid}" ${modifier.axes[axis] ? 'checked' : ''}/><b>${axis.toUpperCase()}</b></label>`).join('')}
-    </div>` : ''}
-    ${radial ? `
-      <div class="option-row"><span>${modifier.mode === 'mandala' ? '對稱軸數量' : '複製數量'}</span><div class="number-wrap" style="width:68px"><input type="number" min="1" max="256" step="1" data-modifier-field="copies" data-modifier-uid="${modifier.uid}" value="${modifier.copies}" /></div></div>
-      <div class="option-row"><span>角度分布</span><select data-modifier-field="distribution" data-modifier-uid="${modifier.uid}"><option value="full" ${modifier.distribution === 'full' ? 'selected' : ''}>360° 均分</option><option value="range" ${modifier.distribution === 'range' ? 'selected' : ''}>限制範圍</option></select></div>
-      ${modifier.distribution === 'range' ? `
-        <div class="option-row"><span>起始角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-modifier-field="rangeStart" data-modifier-uid="${modifier.uid}" value="${round(modifier.rangeStart)}" /></div></div>
-        <div class="option-row"><span>結束角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-modifier-field="rangeEnd" data-modifier-uid="${modifier.uid}" value="${round(modifier.rangeEnd)}" /></div></div>` : ''}` : ''}
-    <div class="option-row"><span>導出時建立父組</span><label class="switch"><input type="checkbox" data-modifier-field="wrapParent" data-modifier-uid="${modifier.uid}" ${modifier.wrapParent ? 'checked' : ''}/><i></i></label></div>
-    <div class="option-row"><span>忽視重複 Cube</span><label class="switch"><input type="checkbox" data-modifier-field="ignoreDuplicateCubes" data-modifier-uid="${modifier.uid}" ${modifier.ignoreDuplicateCubes ? 'checked' : ''}/><i></i></label></div>
-    <div class="field-title"><span>內嵌軸點</span><button type="button" class="modifier-anchor-edit ${editingAnchor ? 'active' : ''}" data-edit-modifier-anchor="${modifier.uid}">${editingAnchor ? '結束軸點編輯' : '在主視圖編輯'}</button></div>
-    <p class="modifier-anchor-note">不進入場景層級；可在主視圖點擊標記後移動或旋轉。</p>
-    ${modifierVectorField('位置', modifier, 'anchor.position', modifier.anchor.position)}
-    ${modifierVectorField('旋轉', modifier, 'anchor.rotation', modifier.anchor.rotation)}
-  </div>`;
-}
-
-function modifierPanelMarkup(owner) {
-  const modifiers = owner.modifiers || [];
-  const available = modifierRegistry.listFor(owner.type).filter(definition =>
-    definition.allowMultiple !== false || !modifiers.some(modifier => modifier.type === definition.id));
-  const cards = modifiers.map((modifier, index) => {
-    const definition = modifierRegistry.get(modifier.type);
-    const collapsed = state.collapsedModifiers.has(modifier.uid);
-    return `<section class="modifier-card ${modifier.enabled ? '' : 'disabled'}" data-modifier-card="${modifier.uid}">
-      <div class="modifier-card-heading">
-        <button type="button" class="modifier-collapse" data-modifier-collapse="${modifier.uid}" title="展開或折疊">${openIconMarkup(collapsed ? 'right' : 'down')}</button>
-        <label class="switch" title="啟用修改器"><input type="checkbox" data-modifier-enabled="${modifier.uid}" ${modifier.enabled ? 'checked' : ''}/><i></i></label>
-        <strong>${escapeHtml(definition?.label || modifier.type)}</strong>
-        <button type="button" data-modifier-bake="${modifier.uid}" title="只烘焙這個修改器" ${modifier.enabled ? '' : 'disabled'}>烘焙</button>
-        <button type="button" data-modifier-move="up" data-modifier-uid="${modifier.uid}" ${index === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" data-modifier-move="down" data-modifier-uid="${modifier.uid}" ${index === modifiers.length - 1 ? 'disabled' : ''}>↓</button>
-        <button type="button" class="danger" data-modifier-remove="${modifier.uid}">×</button>
-      </div>
-      ${collapsed ? '' : modifier.type === 'symmetry' ? symmetryModifierMarkup(owner, modifier) : ''}
-    </section>`;
-  }).join('');
-  return `<div class="field-section modifier-page">
-    <div class="modifier-add-row"><select data-modifier-add-type>${available.map(definition => `<option value="${definition.id}">${escapeHtml(definition.label)}</option>`).join('')}</select><button type="button" data-action="addModifier" ${available.length ? '' : 'disabled'}>＋ 新增修改器</button></div>
-    ${cards || '<p class="modifier-empty">這個物件目前沒有修改器。</p>'}
-  </div>`;
-}
-
-function operatorVectorField(label, operator, property, values) {
-  return `<div class="vector-field modifier-vector-field"><span>${label}</span><div class="axis-inputs">${['X', 'Y', 'Z'].map((axis, index) =>
-    `<label><b>${axis}</b><input type="number" step="0.1" data-operator-vector="${property}" data-operator-uid="${operator.uid}" data-axis="${index}" value="${round(values[index])}" /></label>`).join('')}</div></div>`;
-}
-
-function paintSymmetryOperatorMarkup(operator) {
-  const radial = operator.mode === 'radial' || operator.mode === 'mandala';
-  const cache = paintSymmetryRelationCache.get(operator.uid);
-  const status = cache?.building ? '正在建立面關聯…' : cache ? `已建立 ${cache.relationCount || 0} 組關聯` : '等待首次繪製時建立';
-  return `<div class="modifier-settings">
-    <div class="option-row"><span>對稱模式</span><select data-operator-field="mode" data-operator-uid="${operator.uid}">
-      <option value="axes" ${operator.mode === 'axes' ? 'selected' : ''}>XYZ 鏡像</option>
-      <option value="radial" ${operator.mode === 'radial' ? 'selected' : ''}>徑向旋轉</option>
-      <option value="mandala" ${operator.mode === 'mandala' ? 'selected' : ''}>曼陀羅</option>
-    </select></div>
-    ${operator.mode === 'axes' ? `<div class="option-row group-mirror-axes"><span>啟用軸</span>${['x', 'y', 'z'].map(axis => `<label class="axis-${axis}"><input type="checkbox" data-operator-axis="${axis}" data-operator-uid="${operator.uid}" ${operator.axes?.[axis] ? 'checked' : ''}/><b>${axis.toUpperCase()}</b></label>`).join('')}</div>` : ''}
-    ${radial ? `<div class="option-row"><span>${operator.mode === 'mandala' ? '對稱軸數量' : '複製數量'}</span><div class="number-wrap" style="width:68px"><input type="number" min="1" max="256" step="1" data-operator-field="copies" data-operator-uid="${operator.uid}" value="${operator.copies}" /></div></div>
-      <div class="option-row"><span>角度分布</span><select data-operator-field="distribution" data-operator-uid="${operator.uid}"><option value="full" ${operator.distribution === 'full' ? 'selected' : ''}>360° 均分</option><option value="range" ${operator.distribution === 'range' ? 'selected' : ''}>限制範圍</option></select></div>
-      ${operator.distribution === 'range' ? `<div class="option-row"><span>起始角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-operator-field="rangeStart" data-operator-uid="${operator.uid}" value="${round(operator.rangeStart)}" /></div></div><div class="option-row"><span>結束角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-operator-field="rangeEnd" data-operator-uid="${operator.uid}" value="${round(operator.rangeEnd)}" /></div></div>` : ''}` : ''}
-    <div class="field-title"><span>作用軸點</span><button type="button" class="modifier-anchor-edit ${state.selectedModifierUid === operator.uid ? 'active' : ''}" data-edit-operator-anchor="${operator.uid}">${state.selectedModifierUid === operator.uid ? '結束軸點編輯' : '在主視圖編輯'}</button></div>
-    <p class="modifier-anchor-note">${status}</p>
-    ${operatorVectorField('位置', operator, 'anchor.position', operator.anchor.position)}
-    ${operatorVectorField('旋轉', operator, 'anchor.rotation', operator.anchor.rotation)}
-    <p class="modifier-anchor-note">操作器只處理即時繪畫輸入，不生成物件，也沒有烘焙。</p>
-  </div>`;
-}
-
-function operatorPanelMarkup(owner) {
-  const operators = owner.operators || [];
-  const available = operatorRegistry.listFor(owner.type).filter(definition =>
-    definition.allowMultiple !== false || !operators.some(operator => operator.type === definition.id));
-  const cards = operators.map((operator, index) => {
-    if (operator.enabled && operator.type === 'paint_symmetry' && !paintSymmetryRelationCache.has(operator.uid)) {
-      schedulePaintSymmetryBuild(owner, operator);
-    }
-    const definition = operatorRegistry.get(operator.type);
-    const collapsed = state.collapsedOperators.has(operator.uid);
-    return `<section class="modifier-card ${operator.enabled ? '' : 'disabled'}" data-operator-card="${operator.uid}">
-      <div class="modifier-card-heading">
-        <button type="button" class="modifier-collapse" data-operator-collapse="${operator.uid}" title="展開或折疊">${openIconMarkup(collapsed ? 'right' : 'down')}</button>
-        <label class="switch" title="啟用操作器"><input type="checkbox" data-operator-enabled="${operator.uid}" ${operator.enabled ? 'checked' : ''}/><i></i></label>
-        <strong>${escapeHtml(definition?.label || operator.type)}</strong>
-        <button type="button" data-operator-move="up" data-operator-uid="${operator.uid}" ${index === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" data-operator-move="down" data-operator-uid="${operator.uid}" ${index === operators.length - 1 ? 'disabled' : ''}>↓</button>
-        <button type="button" class="danger" data-operator-remove="${operator.uid}">×</button>
-      </div>
-      ${collapsed ? '' : operator.type === 'paint_symmetry' ? paintSymmetryOperatorMarkup(operator) : ''}
-    </section>`;
-  }).join('');
-  return `<div class="field-section modifier-page">
-    <div class="modifier-add-row"><select data-operator-add-type>${available.map(definition => `<option value="${definition.id}">${escapeHtml(definition.label)}</option>`).join('')}</select><button type="button" data-action="addOperator" ${available.length ? '' : 'disabled'}>＋ 新增操作器</button></div>
-    ${cards || '<p class="modifier-empty">這個物件目前沒有操作器。</p>'}
-  </div>`;
-}
-
-function rgbToHsv(rgb) {
-  const [red, green, blue] = rgb.map(channel => clamp(Number(channel) || 0, 0, 255) / 255);
-  const maximum = Math.max(red, green, blue), minimum = Math.min(red, green, blue);
-  const range = maximum - minimum;
-  let hue = 0;
-  if (range > 1e-8) {
-    if (maximum === red) hue = ((green - blue) / range) % 6;
-    else if (maximum === green) hue = (blue - red) / range + 2;
-    else hue = (red - green) / range + 4;
-    hue /= 6;
-    if (hue < 0) hue += 1;
-  }
-  return [hue, maximum <= 1e-8 ? 0 : range / maximum, maximum];
-}
-
-function hsvToRgb(hue, saturation, value) {
-  const h = ((Number(hue) % 1) + 1) % 1 * 6;
-  const s = clamp(Number(saturation) || 0, 0, 1), v = clamp(Number(value) || 0, 0, 1);
-  const chroma = v * s, intermediate = chroma * (1 - Math.abs(h % 2 - 1)), offset = v - chroma;
-  const segments = [[chroma, intermediate, 0], [intermediate, chroma, 0], [0, chroma, intermediate],
-    [0, intermediate, chroma], [intermediate, 0, chroma], [chroma, 0, intermediate]];
-  return segments[Math.min(5, Math.floor(h))].map(channel => Math.round((channel + offset) * 255));
-}
-
-function rgbToHex(rgb) {
-  return `#${rgb.map(channel => clamp(Math.round(Number(channel) || 0), 0, 255).toString(16).padStart(2, '0')).join('')}`;
-}
-
-const COLOR_CONTROL_INSET = 2;
-const TRIANGLE_RING_WIDTH = 14;
-const TRIANGLE_FIELD_INSET = 22;
-
-function insetControlRatio(clientCoordinate, start, length) {
-  return clamp((clientCoordinate - start - COLOR_CONTROL_INSET)
-    / Math.max(1, length - COLOR_CONTROL_INSET * 2), 0, 1);
-}
-
-function insetControlPosition(ratio, inset = COLOR_CONTROL_INSET) {
-  const normalized = clamp(ratio, 0, 1);
-  return `calc(${normalized * 100}% + ${inset - normalized * inset * 2}px)`;
-}
-
-function trianglePickerGeometry(rect) {
-  const width = rect.width, height = rect.height;
-  const center = [width / 2, height / 2];
-  const radius = Math.max(2, Math.min(width, height) / 2 - TRIANGLE_FIELD_INSET);
-  return {
-    hue: [center[0], center[1] - radius],
-    white: [center[0] - radius * Math.sqrt(3) / 2, center[1] + radius / 2],
-    black: [center[0] + radius * Math.sqrt(3) / 2, center[1] + radius / 2]
-  };
-}
-
-function barycentric2d(point, a, b, c) {
-  const denominator = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
-  if (Math.abs(denominator) < 1e-8) return null;
-  const first = ((b[1] - c[1]) * (point[0] - c[0]) + (c[0] - b[0]) * (point[1] - c[1])) / denominator;
-  const second = ((c[1] - a[1]) * (point[0] - c[0]) + (a[0] - c[0]) * (point[1] - c[1])) / denominator;
-  return [first, second, 1 - first - second];
-}
-
-function closestPointOnSegment2d(point, start, end) {
-  const direction = [end[0] - start[0], end[1] - start[1]];
-  const lengthSquared = direction[0] ** 2 + direction[1] ** 2;
-  const amount = lengthSquared < 1e-8 ? 0 : clamp(
-    ((point[0] - start[0]) * direction[0] + (point[1] - start[1]) * direction[1]) / lengthSquared, 0, 1);
-  return [start[0] + direction[0] * amount, start[1] + direction[1] * amount];
-}
-
-function closestPointOnTriangle2d(point, geometry) {
-  return [[geometry.hue, geometry.white], [geometry.white, geometry.black], [geometry.black, geometry.hue]]
-    .map(([start, end]) => closestPointOnSegment2d(point, start, end))
-    .sort((first, second) => Math.hypot(first[0] - point[0], first[1] - point[1])
-      - Math.hypot(second[0] - point[0], second[1] - point[1]))[0];
-}
-
-function renderTrianglePickerCanvas(surface) {
-  const canvas = surface?.querySelector('.color-picker-triangle-field');
-  if (!canvas || state.paintColorPickerMode !== 'triangle') return;
-  const rect = surface.getBoundingClientRect();
-  const width = Math.max(1, Math.round(rect.width));
-  const height = Math.max(1, Math.round(rect.height));
-  const renderKey = `${width}:${height}:${state.paintColorPickerHue.toFixed(6)}`;
-  if (canvas.dataset.renderKey === renderKey) return;
-  canvas.dataset.renderKey = renderKey;
-  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
-  const context = canvas.getContext('2d');
-  const image = context.createImageData(width, height);
-  const geometry = trianglePickerGeometry({ width, height });
-  const hueRgb = hsvToRgb(state.paintColorPickerHue, 1, 1);
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const weights = barycentric2d([x + .5, y + .5], geometry.hue, geometry.white, geometry.black);
-    if (!weights || weights.some(weight => weight < -1e-5)) continue;
-    const offset = (y * width + x) * 4;
-    for (let channel = 0; channel < 3; channel++) image.data[offset + channel] = Math.round(
-      hueRgb[channel] * weights[0] + 255 * weights[1]);
-    image.data[offset + 3] = 255;
-  }
-  context.putImageData(image, 0, 0);
-}
-
-function updatePaintColorPickerVisual(root = colorPickerPopupRoot || colorSpacePickerRoot || inspector) {
-  const surface = $('[data-color-picker-surface]', root);
-  if (!surface) return;
-  const rgb = hexToRgb(state.paintColor);
-  // Keep HSV as independent picker coordinates. Reading them back from rounded
-  // 8-bit RGB on every pointermove causes severe jitter near black or grey.
-  const hue = state.paintColorPickerHue;
-  const saturation = state.paintColorPickerSaturation;
-  const value = state.paintColorPickerValue;
-  const hueColor = rgbToHex(hsvToRgb(hue, 1, 1));
-  const brightColor = rgbToHex(hsvToRgb(hue, saturation, 1));
-  surface.style.setProperty('--picker-hue', hueColor);
-  surface.style.setProperty('--picker-darkness', String(1 - value));
-  const marker = surface.querySelector('.color-picker-marker');
-  let markerX = saturation, markerY = 1 - value;
-  if (state.paintColorPickerMode === 'circle') {
-    const angle = hue * Math.PI * 2;
-    markerX = .5 + Math.cos(angle) * saturation * .5;
-    markerY = .5 + Math.sin(angle) * saturation * .5;
-  } else if (state.paintColorPickerMode === 'triangle') {
-    const hueWeight = saturation * value;
-    const whiteWeight = (1 - saturation) * value;
-    const blackWeight = 1 - value;
-    const width = surface.clientWidth || 1, height = surface.clientHeight || 1;
-    const geometry = trianglePickerGeometry({ width, height });
-    markerX = (geometry.hue[0] * hueWeight + geometry.white[0] * whiteWeight + geometry.black[0] * blackWeight) / width;
-    markerY = (geometry.hue[1] * hueWeight + geometry.white[1] * whiteWeight + geometry.black[1] * blackWeight) / height;
-    renderTrianglePickerCanvas(surface);
-  }
-  marker?.style.setProperty('left', state.paintColorPickerMode === 'triangle' ? `${markerX * 100}%` : insetControlPosition(markerX));
-  marker?.style.setProperty('top', state.paintColorPickerMode === 'triangle' ? `${markerY * 100}%` : insetControlPosition(markerY));
-  const hueRail = $('[data-color-hue]', root);
-  hueRail?.style.setProperty('--picker-bright', brightColor);
-  const hueMarker = $('.color-hue-marker', root);
-  if (hueMarker) hueMarker.style.top = insetControlPosition(state.paintColorPickerMode === 'circle' ? 1 - value : hue);
-  const ringMarker = $('.color-picker-ring-marker', root);
-  if (ringMarker && state.paintColorPickerMode === 'triangle') {
-    const angle = hue * Math.PI * 2;
-    const radius = Math.max(1, (surface.clientWidth || 1) / 2 - TRIANGLE_RING_WIDTH / 2 - 2);
-    ringMarker.style.left = `calc(50% + ${Math.sin(angle) * radius}px)`;
-    ringMarker.style.top = `calc(50% - ${Math.cos(angle) * radius}px)`;
-  }
-  const preview = $('.color-picker-current', root);
-  if (preview) preview.style.background = state.paintColor;
-  ['r', 'g', 'b'].forEach((channel, index) => {
-    const input = $(`[data-paint-channel="${channel}"]`, root);
-    if (input && document.activeElement !== input) input.value = String(rgb[index]);
-  });
-  const hex = $('[data-paint-hex]', root);
-  if (hex && document.activeElement !== hex) hex.value = state.paintColor;
-}
-
-function colorPickerPoint(surface, event, lockedZone = null) {
-  const rect = surface.getBoundingClientRect();
-  let x = insetControlRatio(event.clientX, rect.left, rect.width);
-  const y = insetControlRatio(event.clientY, rect.top, rect.height);
-  const currentSaturation = state.paintColorPickerSaturation;
-  const currentValue = state.paintColorPickerValue;
-  if (state.paintColorPickerMode === 'circle') {
-    const dx = x - .5, dy = y - .5, distance = Math.hypot(dx, dy);
-    return {
-      hue: distance > 1e-5 ? ((Math.atan2(dy, dx) / (Math.PI * 2)) + 1) % 1 : state.paintColorPickerHue,
-      saturation: clamp(distance * 2, 0, 1), value: currentValue
-    };
-  }
-  if (state.paintColorPickerMode === 'triangle') {
-    let local = [event.clientX - rect.left, event.clientY - rect.top];
-    const geometry = trianglePickerGeometry(rect);
-    let weights = barycentric2d(local, geometry.hue, geometry.white, geometry.black);
-    const inside = weights && weights.every(weight => weight >= -1e-4);
-    const zone = lockedZone || (inside ? 'triangle' : 'hue');
-    if (zone === 'hue') {
-      const angle = Math.atan2(local[0] - rect.width / 2, rect.height / 2 - local[1]);
-      return { hue: (angle / (Math.PI * 2) + 1) % 1, saturation: currentSaturation, value: currentValue, zone: 'hue' };
-    }
-    if (!inside) {
-      local = closestPointOnTriangle2d(local, geometry);
-      weights = barycentric2d(local, geometry.hue, geometry.white, geometry.black);
-    }
-    const value = clamp(weights[0] + weights[1], 0, 1);
-    return {
-      hue: state.paintColorPickerHue,
-      saturation: value > 1e-8 ? clamp(weights[0] / value, 0, 1) : currentSaturation,
-      value, zone: 'triangle'
-    };
-  }
-  return { hue: state.paintColorPickerHue, saturation: x, value: 1 - y };
-}
-
-function bindPaintColorPicker(root = inspector) {
-  const surface = $('[data-color-picker-surface]', root);
-  const hueRail = $('[data-color-hue]', root);
-  let surfaceZone = null;
-  const useSurface = (event, lockedZone = null) => {
-    const point = colorPickerPoint(surface, event, lockedZone);
-    state.paintColorPickerHue = point.hue;
-    state.paintColorPickerSaturation = point.saturation;
-    state.paintColorPickerValue = point.value;
-    setPaintColor(rgbToHex(hsvToRgb(point.hue, point.saturation, point.value)), false, true, false);
-  };
-  const useHue = event => {
-    const rect = hueRail.getBoundingClientRect();
-    const position = insetControlRatio(event.clientY, rect.top, rect.height);
-    const saturation = state.paintColorPickerSaturation;
-    const value = state.paintColorPickerValue;
-    if (state.paintColorPickerMode === 'circle') {
-      state.paintColorPickerValue = 1 - position;
-      setPaintColor(rgbToHex(hsvToRgb(state.paintColorPickerHue, saturation, state.paintColorPickerValue)), false, true, false);
-    } else {
-      state.paintColorPickerHue = position >= 1 ? 0 : position;
-      setPaintColor(rgbToHex(hsvToRgb(state.paintColorPickerHue, saturation, value)), false, true, false);
-    }
-  };
-  const bindPointer = (node, handler) => {
-    node.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      node.setPointerCapture(event.pointerId);
-      handler(event);
-    });
-    node.addEventListener('pointermove', event => { if (node.hasPointerCapture(event.pointerId)) handler(event); });
-    node.addEventListener('pointerup', () => { if (!colorPickerPopupRoot && !colorSpacePickerRoot) recordPaintColorHistory(state.paintColor); });
-  };
-  surface.addEventListener('pointerdown', event => {
-    event.preventDefault();
-    const point = colorPickerPoint(surface, event);
-    surfaceZone = point.zone || null;
-    surface.setPointerCapture(event.pointerId);
-    useSurface(event, surfaceZone);
-  });
-  surface.addEventListener('pointermove', event => {
-    if (surface.hasPointerCapture(event.pointerId)) useSurface(event, surfaceZone);
-  });
-  const releaseSurface = event => {
-    if (surface.hasPointerCapture?.(event.pointerId)) surface.releasePointerCapture(event.pointerId);
-    surfaceZone = null;
-    if (event.type === 'pointerup' && !colorPickerPopupRoot && !colorSpacePickerRoot) recordPaintColorHistory(state.paintColor);
-  };
-  surface.addEventListener('pointerup', releaseSurface);
-  surface.addEventListener('pointercancel', releaseSurface);
-  surface.addEventListener('lostpointercapture', () => { surfaceZone = null; });
-  if (hueRail) bindPointer(hueRail, useHue);
-  $$('[data-color-picker-mode]', root).forEach(button => button.addEventListener('click', () => {
-    state.paintColorPickerMode = button.dataset.colorPickerMode;
-    if (colorPickerPopupRoot) renderPaintColorPicker(colorPickerPopupRoot);
-    else if (colorSpacePickerRoot) renderPaintColorPicker(colorSpacePickerRoot);
-    else renderInspector();
-  }));
-  $$('[data-paint-channel]', root).forEach(input => input.addEventListener('change', () => {
-    const rgb = ['r', 'g', 'b'].map(channel => Number($(`[data-paint-channel="${channel}"]`, root)?.value) || 0);
-    setPaintColor(rgbToHex(rgb));
-  }));
-  $('[data-paint-hex]', root)?.addEventListener('change', event => setPaintColor(event.target.value));
-  $('[data-paint-color-history]', root)?.addEventListener('click', event => {
-    const swatch = event.target.closest('[data-history-color]');
-    if (swatch) setPaintColor(swatch.dataset.historyColor);
-  });
-  $('[data-action="paintEyedropper"]', root)?.addEventListener('click', () => setTool('eyedropper'));
-  $('[data-action="addPaintSwatch"]', root)?.addEventListener('click', () => {
-    addPaintSwatchToSelection();
-  });
-  updatePaintColorPickerVisual(root);
-}
-
-function renderPaintColorPicker(root = inspector) {
-  if (root === inspector) { $('#inspectorHeading').textContent = '選色器'; $('#inspectorMetaStrip').hidden = true; }
-  const mode = ['square', 'circle', 'triangle'].includes(state.paintColorPickerMode) ? state.paintColorPickerMode : 'square';
-  root.innerHTML = `<div class="paint-color-picker">
-    <nav class="color-picker-modes" aria-label="選色器形態">
-      <button type="button" data-color-picker-mode="square" class="${mode === 'square' ? 'active' : ''}">方形</button>
-      <button type="button" data-color-picker-mode="circle" class="${mode === 'circle' ? 'active' : ''}">圓形</button>
-      <button type="button" data-color-picker-mode="triangle" class="${mode === 'triangle' ? 'active' : ''}">三角形</button>
-    </nav>
-    <div class="color-picker-stage mode-${mode}">
-      <div class="color-picker-surface" data-color-picker-surface><canvas class="color-picker-triangle-field"></canvas><i class="color-picker-marker"></i><i class="color-picker-ring-marker"></i></div>
-      <div class="color-hue-rail" data-color-hue><i class="color-hue-marker"></i></div>
-    </div>
-    <div class="color-picker-values">
-      <label>R<input type="number" min="0" max="255" step="1" data-paint-channel="r"></label>
-      <label>G<input type="number" min="0" max="255" step="1" data-paint-channel="g"></label>
-      <label>B<input type="number" min="0" max="255" step="1" data-paint-channel="b"></label>
-    </div>
-    <div class="color-picker-footer">
-      <i class="color-picker-current"></i><input type="text" maxlength="7" data-paint-hex value="${state.paintColor}">
-      ${root === inspector ? '<button type="button" data-action="addPaintSwatch" title="加入色卡">＋</button><button type="button" data-action="paintEyedropper" title="取色器">⌖</button>' : ''}
-    </div>
-    <div class="color-picker-history"><span>歷史色</span><div class="color-picker-history-swatches" data-paint-color-history></div></div>
-  </div>`;
-  bindPaintColorPicker(root);
-  renderPaintColorHistory();
-}
-
-function openColorPickerPopup(color, apply) {
-  if (colorPickerPopupRoot) return;
-  const saved = Object.fromEntries(['paintColor', 'paintColorPickerHue', 'paintColorPickerSaturation', 'paintColorPickerValue', 'paintColorPickerMode'].map(key => [key, state[key]]));
-  const dialog = document.createElement('dialog');
-  dialog.className = 'theme-dialog color-picker-dialog';
-  dialog.innerHTML = '<form method="dialog"><div class="dialog-heading"><h2>選擇顏色</h2></div><div data-popup-picker></div><div class="dialog-actions"><button value="cancel">取消</button><button value="apply" class="primary">套用</button></div></form>';
-  document.body.append(dialog);
-  colorPickerPopupRoot = $('[data-popup-picker]', dialog);
-  colorPickerPopupApply = apply;
-  const hsv = rgbToHsv(hexToRgb(color));
-  state.paintColor = color;
-  [state.paintColorPickerHue, state.paintColorPickerSaturation, state.paintColorPickerValue] = hsv;
-  dialog.addEventListener('close', () => {
-    const value = state.paintColor, callback = colorPickerPopupApply;
-    colorPickerPopupRoot = null; colorPickerPopupApply = null;
-    Object.assign(state, saved);
-    dialog.remove();
-    if (dialog.returnValue === 'apply') { recordPaintColorHistory(value); callback(value); }
-    if (state.mode === 'paint') renderInspector();
-  }, { once: true });
-  dialog.showModal();
-  renderPaintColorPicker(colorPickerPopupRoot);
-}
-
-function renderInspector() {
-  if (state.mode === 'paint') {
-    renderPaintColorPicker();
-    return;
-  }
-  $('#inspectorHeading').textContent = '物件屬性';
-  $('#inspectorMetaStrip').hidden = false;
-  const item = selected();
-  if (!item) {
-    inspector.innerHTML = state.selectedGenerated
-      ? '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">已選中修改器生成結果；可作頂點捕捉參考，但不能直接編輯。請選擇來源物件或烘焙修改器。</p></div>'
-      : '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。</p></div>';
-    return;
-  }
-  if (isBezierElement(item) && Number.isInteger(state.selectedCurveNodeIndex) && item.nodes[state.selectedCurveNodeIndex]) {
-    inspector.innerHTML = `<nav class="inspector-tabs"><button type="button" class="active">節點</button></nav>${curveNodeInspectorMarkup(item, state.selectedCurveNodeIndex)}`;
-    bindInspector();
-    return;
-  }
-  const items = inspectorBatchNodes();
-  const rotation = item.rotation || [0, 0, 0];
-  const editOwner = subdivisionOwner(item);
-  const typeLabel = editOwner ? 'Shape 細分 Cube' : isShapeElement(item)
-    ? shapeRegistry.get(item.shapeType)?.label || `未安裝的 Shape：${item.shapeType}`
-    : item.type === 'locator' ? 'Locator'
-    : item.type === 'node' ? '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
-      : item.type === 'bezier3d' ? '三維貝塞爾' : item.type === 'group' ? '組' : '立方體';
-  const details = item.type === 'cube' ? `
-      <div class="field-title"><span>幾何</span><button data-action="resetTransform">重置</button></div>
-      ${vectorField('位置', 'position', item.position, items)}
-      ${vectorField('尺寸', 'size', item.size, items)}
-      ${vectorField('樞軸', 'pivot', item.pivot, items)}
-      ${vectorField('旋轉', 'rotation', rotation, items)}
-      ${scalarField('膨脹', 'inflate', item.inflate, items)}`
-    : isShapeElement(item) && !shapeRegistry.get(item.shapeType) ? `
-      <div class="field-title"><span>${escapeHtml(typeLabel)}</span></div>
-      <p class="shape-pack-missing">這個 Shape 所屬的外部包未載入；參數與細分資料仍會保留，安裝對應包後可恢復顯示。</p>`
-    : isShapeElement(item) && shapeRegistry.get(item.shapeType)?.external ? `
-      <div class="field-title"><span>${escapeHtml(typeLabel)}</span><span>${escapeHtml(shapeRegistry.get(item.shapeType).pack || '')}</span></div>
-      ${vectorField('位置', 'origin', item.origin, items)}
-      ${vectorField('樞軸', 'pivot', item.pivot, items)}
-      ${vectorField('旋轉', 'rotation', rotation, items)}
-      ${(shapeRegistry.get(item.shapeType).fields || []).map(field => `<div class="option-row"><span>${escapeHtml(field.label || field.key)}</span><div class="number-wrap" style="width:68px"><input type="number" data-parameter="${escapeAttribute(field.key)}" data-operation-id="shape.${escapeAttribute(item.shapeType)}.parameter.${escapeAttribute(field.key.toLowerCase())}" data-min="${Number.isFinite(field.min) ? field.min : -1000000}" step="${Number(field.step) || .1}" value="${Number(item.parameters[field.key]) || 0}" /></div></div>`).join('')}
-      <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
-    : isShapeElement(item) ? item.shapeType !== 'polygon_prism' ? `
-      <div class="field-title"><span>${item.shapeType === 'truncated_icosahedron' ? '足球（截角二十面體）' : '正十二面體'}</span><span>${item.shapeType === 'truncated_icosahedron' ? 'TRUNCATED ICOSAHEDRON' : 'REGULAR DODECAHEDRON'}</span></div>
-      ${vectorField('位置', 'origin', item.origin, items)}
-      ${vectorField('樞軸', 'pivot', item.pivot, items)}
-      ${vectorField('旋轉', 'rotation', rotation, items)}
-      ${parameterField('半徑', 'radius', item.parameters.radius, .1, items)}
-      <div class="option-row"><span>單邊邊長</span><strong style="color:var(--accent)">${formatNumber(polyhedronEdgeLength(item, item.parameters.radius))} px</strong></div>
-      <div class="option-row"><span>尺寸擬合</span><select data-shape-snap-mode><option value="edge" ${item.parameters.snapMode !== 'radius' ? 'selected' : ''}>擬合單邊邊長</option><option value="radius" ${item.parameters.snapMode === 'radius' ? 'selected' : ''}>擬合整體半徑</option></select></div>
-      <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>` : `
-      <div class="field-title"><span>多邊形柱體</span><span>POLYGON PRISM</span></div>
-      ${vectorField('位置', 'origin', item.origin, items)}
-      ${vectorField('樞軸', 'pivot', item.pivot, items)}
-      ${vectorField('旋轉', 'rotation', rotation, items)}
-      ${parameterField('半徑', 'radius', item.parameters.radius, .1, items)}
-      ${parameterField('高度', 'height', item.parameters.height, .1, items)}
-      ${parameterField('邊數', 'sides', item.parameters.sides, 1, items)}
-      <div class="option-row"><span>啟用內半徑</span><label class="switch"><input type="checkbox" data-shape-inner-radius ${item.parameters.innerRadiusEnabled ? 'checked' : ''}/><i></i></label></div>
-      ${item.parameters.innerRadiusEnabled ? `
-        <div class="option-row"><span>內半徑模式</span><select data-shape-inner-radius-mode><option value="radius" ${item.parameters.innerRadiusMode !== 'depth' ? 'selected' : ''}>實際內半徑</option><option value="depth" ${item.parameters.innerRadiusMode === 'depth' ? 'selected' : ''}>Cube 向內延伸</option></select></div>
-        ${parameterField(item.parameters.innerRadiusMode === 'depth' ? '向內延伸距離' : '實際內半徑', 'innerRadius', item.parameters.innerRadius, .1, items)}` : ''}
-      <div class="option-row"><span>尺寸擬合</span><select data-shape-snap-mode><option value="edge" ${item.parameters.snapMode !== 'radius' ? 'selected' : ''}>擬合多邊形邊長</option><option value="radius" ${item.parameters.snapMode === 'radius' ? 'selected' : ''}>擬合整體半徑</option></select></div>
-      <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
-    : item.type === 'locator' ? `
-      <div class="field-title"><span>Locator 變換</span><button data-action="resetTransform">重置</button></div>
-      ${vectorField('位置', 'position', item.position, items)}
-      ${vectorField('旋轉', 'rotation', rotation, items)}`
-    : item.type === 'node' ? `
-      <div class="field-title"><span>節點</span><span>只可移動／旋轉</span></div>
-      ${vectorField('位置', 'position', item.position, items)}
-      ${vectorField('旋轉', 'rotation', rotation, items)}
-      <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-field="handlesEnabled" ${item.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
-      ${item.handlesEnabled ? `<div class="option-row"><span>對稱手柄</span><label class="switch"><input type="checkbox" data-field="symmetricHandles" ${item.symmetricHandles ? 'checked' : ''}/><i></i></label></div>` : ''}
-      ${item.handlesEnabled ? `${vectorField('前手柄', 'handleIn', item.handleIn, items)}${vectorField('後手柄', 'handleOut', item.handleOut, items)}` : ''}`
-    : isBezierElement(item) ? `
-      <div class="field-title"><span>${item.dimension === 2 ? '二維' : '三維'}貝塞爾</span><span>${item.nodes.length} 節點</span></div>
-      ${vectorField('位置', 'origin', item.origin, items)}
-      ${vectorField('旋轉', 'rotation', rotation, items)}
-      ${parameterField('Cube 柱粗細', 'thickness', item.parameters.thickness, .1, items)}
-      <div class="option-row"><span>分段方式</span><select data-curve-segmentation><option value="distance" ${item.parameters.segmentationMode === 'distance' ? 'selected' : ''}>按距離</option><option value="angle" ${item.parameters.segmentationMode === 'angle' ? 'selected' : ''}>按角度</option></select></div>
-      ${item.parameters.segmentationMode === 'angle'
-        ? parameterField('角度步長', 'angleStep', item.parameters.angleStep, .1, items)
-        : parameterField('距離步長', 'segmentLength', item.parameters.segmentLength, .1, items)}
-      <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
-    : `
-      <div class="field-title"><span>組屬性</span></div>
-      ${vectorField('樞軸', 'pivot', item.pivot, items)}
-      ${scalarField('膨脹', 'inflate', item.inflate, items)}
-      <div class="option-row"><span>直接子項</span><strong style="color:var(--accent)">${item.children.length}</strong></div>`;
-  const appearanceCapable = item.type === 'cube' || isShapeElement(item) || isBezierElement(item) || item.type === 'group';
-  const pages = [
-    { id: 'basic', label: '基礎' },
-    ...(appearanceCapable ? [{ id: 'appearance', label: '外觀' }] : []),
-    ...(isUvCapable(item) ? [{ id: 'uv', label: 'UV' }] : []),
-    ...(modifierRegistry.listFor(item.type).length || item.modifiers?.length ? [{ id: 'modifiers', label: '修改器' }] : []),
-    ...(operatorRegistry.listFor(item.type).length || item.operators?.length ? [{ id: 'operators', label: '操作器' }] : [])
-  ];
-  if (!pages.some(page => page.id === state.inspectorPage)) state.inspectorPage = 'basic';
-  const tabs = `<nav class="inspector-tabs" aria-label="物件屬性分類">${pages.map(page => `<button type="button" data-inspector-page="${page.id}" class="${state.inspectorPage === page.id ? 'active' : ''}">${page.label}</button>`).join('')}</nav>`;
-  const basicPage = `<div class="field-section">
-      <div class="field-title"><span>基本</span><span>${items.length > 1 ? `多選 ${items.length}` : typeLabel}</span></div>
-      <input class="name-field" data-field="name" value="${escapeAttribute(item.name)}" aria-label="名稱" />
-      <div class="option-row"><span>系統命名</span><label class="switch"><input type="checkbox" data-field="unnamed" ${item.unnamed ? 'checked' : ''}/><i></i></label></div>
-      <div class="option-row"><span>可見</span><label class="switch"><input type="checkbox" data-field="visible" ${item.visible ? 'checked' : ''}/><i></i></label></div>
-    </div>
-    <div class="field-section">
-      ${details}
-    </div>
-    ${isProceduralShape(item) ? `<div class="field-section subdivision-controls">
-      <div class="field-title"><span>細分編輯</span><span>${Object.keys(item.subdivisionEdits || {}).length} 個覆寫</span></div>
-      <div class="option-row"><span>操作時保留已有細分編輯</span><label class="switch"><input type="checkbox" data-field="preserveSubdivisionEdits" ${item.preserveSubdivisionEdits ? 'checked' : ''}/><i></i></label></div>
-      <button type="button" data-action="enterSubdivisionEdit">進入細分編輯</button>
-    </div>` : ''}
-    ${editOwner ? `<div class="field-section subdivision-controls active">
-      <div class="field-title"><span>${escapeHtml(editOwner.name)}</span><span>細分 ${item.subdivisionIndex + 1}</span></div>
-      <p>正在非破壞地編輯 Shape 生成的 Cube。</p>
-      <button type="button" data-action="exitSubdivisionEdit">完成細分編輯</button>
-    </div>` : ''}
-    ${editOwner ? '' : `<div class="field-section"><button class="danger-button" data-action="deleteSelected">${items.length > 1 ? '刪除選中項' : `刪除${item.type === 'group' ? '組及其內容' : '物件'}`}</button></div>`}`;
-  const appearancePage = `<div class="field-section">
-      <div class="field-title"><span>外觀</span><span>預覽色</span></div>
-      ${item.color ? `<div class="option-row"><span>顯示色</span><button type="button" data-element-color-popup class="element-color-chip" style="background:${escapeAttribute(item.color)}" title="選擇顏色"></button></div>` : ''}
-      <div class="option-row"><span>面陰影</span><label class="switch"><input type="checkbox" data-field="shade" ${item.shade !== false ? 'checked' : ''}/><i></i></label></div>
-    </div>`;
-  const rules = formatRules(state.project);
-  const uvPage = `<div class="field-section">
-      <div class="field-title"><span>UV</span><span>${item.uvMode === 'face' ? 'PER FACE' : 'BOX'}</span></div>
-      <div class="option-row"><span>UV 模式</span><select data-field="uvMode" ${!rules.allowBoxUv || !rules.allowFaceUv ? 'disabled' : ''}><option value="box" ${item.uvMode !== 'face' ? 'selected' : ''} ${!rules.allowBoxUv ? 'disabled' : ''}>箱型 UV</option><option value="face" ${item.uvMode === 'face' ? 'selected' : ''} ${!rules.allowFaceUv ? 'disabled' : ''}>逐面 UV</option></select></div>
-      <div class="option-row"><span>UV 歸一化</span><label class="switch"><input type="checkbox" data-field="uvNormalized" ${item.uvNormalized !== false ? 'checked' : ''}/><i></i></label></div>
-    </div>`;
-  const content = state.inspectorPage === 'appearance' ? appearancePage
-    : state.inspectorPage === 'uv' ? uvPage
-      : state.inspectorPage === 'modifiers' ? modifierPanelMarkup(item)
-        : state.inspectorPage === 'operators' ? operatorPanelMarkup(item)
-        : basicPage;
-  inspector.innerHTML = `${tabs}${content}`;
-  bindInspector();
-}
-
-function vectorField(label, field, values, nodes = [selected()]) {
-  const displayed = sharedVectorValues(nodes, field, values);
-  const rules = formatRules(state.project);
-  const step = field === 'size' && rules.integerCubeSize ? '1' : field === 'rotation' && rules.rotationStep ? String(rules.rotationStep) : '0.0001';
-  const disabled = field === 'rotation' && rules.moddedEntity && nodes[0]?.type === 'cube' ? 'disabled title="Cube 不能旋轉；請旋轉其所屬的組"' : '';
-  return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="${step}" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} ${disabled} /></label>`).join('')}</div>`;
-}
-
-function scalarField(label, field, value, nodes = [selected()]) {
-  const displayed = sharedNumberValue(nodes, field, value);
-  return `<div class="vector-field scalar-field"><span>${label}</span><label class="number-wrap"><input type="number" step="0.1" data-field="${field}" ${numberInputAttributes(displayed)} /></label></div>`;
-}
-
-function parameterField(label, key, value, step, nodes = [selected()]) {
-  const displayed = nodes.length <= 1 ? value : (() => {
-    const first = nodes[0]?.parameters?.[key];
-    return Number.isFinite(first) && nodes.every(node => Number.isFinite(node?.parameters?.[key]) && Math.abs(node.parameters[key] - first) < 1e-9) ? first : null;
-  })();
-  const minimum = key === 'sides' ? 3 : key === 'innerRadius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1;
-  return `<div class="option-row"><span>${label}</span><div class="number-wrap" style="width:68px"><input type="number" min="${minimum}" step="${step}" data-parameter="${key}" ${numberInputAttributes(displayed)} /></div></div>`;
-}
-
-function setNodeVisibility(node, visible, cascadeGroup = true) {
-  if (!node) return;
-  node.visible = visible;
-  if (node.type !== 'group' || !cascadeGroup) return;
-  for (const childUid of node.children) setNodeVisibility(state.project.getNode(childUid), visible, true);
-}
-
-function setNodeAutoUv(node, enabled) {
-  if (!node) return;
-  if (node.uvMode === 'box') enabled = true;
-  node.autoUv = enabled;
-  if (node.type === 'cube') {
-    if (enabled) {
-      for (const face of Object.values(node.faces || {})) delete face.uv;
-    } else freezeCubeUvs(node);
-    return;
-  }
-  if (node.type === 'group') {
-    for (const uidValue of state.project.getDescendantElementUids(node.uid)) {
-      const child = state.project.getNode(uidValue);
-      if (child?.type === 'cube') setNodeAutoUv(child, enabled);
-      else if (isShapeElement(child) || isBezierElement(child)) child.autoUv = enabled;
-    }
-  }
-}
-
-function setNodeFlag(node, key, value) {
-  if (!node) return;
-  if ((key === 'uvMode' || key === 'uvNormalized') && !isUvCapable(node)) return;
-  const rules = formatRules(state.project);
-  if (key === 'uvMode') {
-    if (value === 'box' && !rules.allowBoxUv || value === 'face' && !rules.allowFaceUv) return;
-    if (value === 'box') node.autoUv = true;
-  }
-  if (key === 'visible') return setNodeVisibility(node, value);
-  if (key === 'autoUv') return setNodeAutoUv(node, value);
-  if (key === 'shade' && node.type === 'locator') return;
-  node[key] = value;
-  if (key === 'uvMode' && node.type === 'cube') constrainNode(node, rules);
-  if (node.type === 'group') {
-    for (const childUid of node.children) setNodeFlag(state.project.getNode(childUid), key, value);
-  }
-}
-
-function bindInspector() {
-  const item = selected();
-  if (!item) return;
-  const items = inspectorBatchNodes();
-  $('[data-element-color-popup]', inspector)?.addEventListener('click', () => openColorPickerPopup(item.color, color => {
-    snapshot('core.element.color'); items.filter(node => typeof node.color === 'string').forEach(node => { node.color = color; });
-    markDirty(); renderAll('selection');
-  }));
-  $$('[data-field]', inspector).forEach(input => {
-    input.addEventListener('change', () => {
-      const key = input.dataset.field;
-      if (input.type === 'number' && input.value === '') return;
-      snapshot(`core.element.field.${key.toLowerCase()}`);
-      const value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
-      const targets = key === 'name' ? [item]
-        : key === 'shade' ? items.filter(node => node.type === 'cube' || isShapeElement(node) || isBezierElement(node) || node.type === 'group')
-        : key === 'inflate' ? items.filter(node => ['cube', 'group'].includes(node.type))
-        : key === 'uvMode' || key === 'uvNormalized' ? items.filter(isUvCapable)
-        : key === 'color' ? items.filter(node => typeof node.color === 'string')
-        : items.filter(node => key in node);
-      for (const target of targets) {
-        if (key === 'name') setNodeName(state.project, target, value);
-        else if (key === 'unnamed') setNodeUnnamed(state.project, target, value);
-        else if (['visible', 'shade', 'autoUv', 'uvMode', 'uvNormalized', 'exported', 'locked'].includes(key)) setNodeFlag(target, key, value);
-        else {
-          target[key] = value;
-          if (key === 'symmetricHandles' && value && target.type === 'node') {
-            setCurveHandle(target, 'handleOut', target.handleOut, false);
-          }
-        }
-      }
-      if (key === 'locked') sceneRenderer.invalidateLockState();
-      markDirty();
-      renderAll('selection');
-    });
-  });
-  $$('[data-vector]', inspector).forEach(input => {
-    let snapshotTaken = false;
-    const apply = () => {
-      const value = Number(input.value);
-      if (!Number.isFinite(value)) return;
-      if (!snapshotTaken) {
-        const vectorName = input.dataset.vector.startsWith('curve-node:')
-          ? input.dataset.vector.split(':')[2] : input.dataset.vector;
-        snapshot(`core.element.vector.${vectorName.toLowerCase()}`);
-        snapshotTaken = true;
-      }
-      delete input.dataset.mixed;
-      const field = input.dataset.vector;
-      const axis = Number(input.dataset.axis);
-      if (field.startsWith('curve-node:') && isBezierElement(item)) {
-        const [, indexText, property] = field.split(':');
-        const node = item.nodes[Number(indexText)];
-        if (!node || !Array.isArray(node[property])) return;
-        discardSubdivisionEdits(item);
-        if (property === 'rotation' && node.autoTangent) bakeCurveNodeTangent(item, Number(indexText));
-        const planarVector = property === 'position' || property === 'handleIn' || property === 'handleOut';
-        const lockedPlanarAxis = item.dimension === 2
-          && ((planarVector && axis === 1) || (property === 'rotation' && axis !== 1));
-        const nextVector = [...node[property]];
-        nextVector[axis] = lockedPlanarAxis ? 0 : value;
-        if (property === 'handleIn' || property === 'handleOut') setCurveHandle(node, property, nextVector, item.dimension === 2);
-        else node[property] = nextVector;
-        if (item.dimension === 2 && planarVector) node[property][1] = 0;
-        if (item.dimension === 2 && property === 'rotation') {
-          node.rotation[0] = 0;
-          node.rotation[2] = 0;
-        }
-        if (property === 'rotation') node.autoTangent = false;
-        if (lockedPlanarAxis) input.value = '0';
-        markDirty(); invalidateSelectionRenderGeometry(); renderScene();
-        return;
-      }
-      for (const target of items.filter(node => Array.isArray(node[field]))) {
-        const rules = formatRules(state.project);
-        const requested = target.type === 'cube' && field === 'size' && rules.integerCubeSize ? Math.round(value) : value;
-        const nextValue = target.type === 'cube' && field === 'size' && !state.allowNegativeSize
-          ? Math.max(0, requested)
-          : requested;
-        if (target.type === 'cube' && field === 'position') {
-          const delta = nextValue - target.position[axis];
-          target.position[axis] = nextValue;
-          target.pivot[axis] += delta;
-          translateModifierAnchors(target, [0, 1, 2].map(index => index === axis ? delta : 0));
-        } else if (field === 'pivot' && (['cube', 'group'].includes(target.type) || isShapeElement(target))) {
-          const nextPivot = [...target.pivot];
-          nextPivot[axis] = nextValue;
-          setPivotPreservingGeometry(state.project, target, nextPivot);
-        } else if ((field === 'handleIn' || field === 'handleOut') && target.type === 'node') {
-          const nextHandle = [...target[field]];
-          nextHandle[axis] = nextValue;
-          setCurveHandle(target, field, nextHandle, false);
-        } else {
-          const delta = nextValue - target[field][axis];
-          target[field][axis] = nextValue;
-          if (field === 'origin' && isShapeElement(target)) target.pivot[axis] += delta;
-          if (field === 'position' || field === 'origin') {
-            translateModifierAnchors(target, [0, 1, 2].map(index => index === axis ? delta : 0));
-          }
-        }
-        if (field === 'rotation' || field === 'size') constrainNode(target, rules);
-      }
-      const displayedValue = item.type === 'cube' && field === 'size' && !state.allowNegativeSize ? Math.max(0, value) : value;
-      if (displayedValue !== value) input.value = String(displayedValue);
-      markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(); renderScene();
-    };
-    input.addEventListener('input', apply);
-    input.addEventListener('change', apply);
-    input.addEventListener('blur', () => { snapshotTaken = false; });
-  });
-  $$('[data-parameter]', inspector).forEach(input => {
-    let snapshotTaken = false;
-    const apply = () => {
-      const value = Number(input.value);
-      if (!Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(input.dataset.operationId || `core.shape.parameter.${input.dataset.parameter.toLowerCase()}`); snapshotTaken = true; }
-      delete input.dataset.mixed;
-      const key = input.dataset.parameter;
-      const nextValue = input.dataset.min !== undefined ? Math.max(Number(input.dataset.min), value)
-        : key === 'sides' ? Math.max(3, Math.round(value))
-          : Math.max(key === 'innerRadius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1, value);
-      for (const target of items.filter(node => node.parameters && key in node.parameters)) {
-        discardSubdivisionEdits(target);
-        target.parameters[key] = nextValue;
-      }
-      markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(); renderScene();
-    };
-    input.addEventListener('input', apply);
-    input.addEventListener('change', apply);
-    input.addEventListener('blur', () => { snapshotTaken = false; });
-  });
-  $$('[data-inspector-page]', inspector).forEach(button => button.addEventListener('click', () => {
-    state.inspectorPage = button.dataset.inspectorPage;
-    renderInspector();
-    renderScene();
-  }));
-  const modifierByUid = uidValue => item.modifiers?.find(modifier => modifier.uid === uidValue);
-  $('[data-action="addModifier"]', inspector)?.addEventListener('click', () => {
-    const type = $('[data-modifier-add-type]', inspector)?.value;
-    if (!type) return;
-    snapshot(`modifier.${type}.add`);
-    const modifier = addModifier(item, type);
-    if (!modifier) return;
-    state.selectedModifierUid = modifier.uid;
-    state.selectedCurveNodeIndex = null;
-    sceneRenderer.invalidateMirrorGeometry();
-    markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
-  });
-  $$('[data-modifier-collapse]', inspector).forEach(button => button.addEventListener('click', () => {
-    const uidValue = button.dataset.modifierCollapse;
-    state.collapsedModifiers.has(uidValue) ? state.collapsedModifiers.delete(uidValue) : state.collapsedModifiers.add(uidValue);
-    renderInspector();
-  }));
-  $$('[data-modifier-enabled]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
-    const modifier = modifierByUid(toggle.dataset.modifierEnabled);
-    if (!modifier) return;
-    snapshot(`modifier.${modifier.type}.toggle`); modifier.enabled = toggle.checked;
-    if (!modifier.enabled && state.selectedModifierUid === modifier.uid) state.selectedModifierUid = null;
-    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
-  }));
-  $$('[data-modifier-remove]', inspector).forEach(button => button.addEventListener('click', () => {
-    snapshot(`modifier.${item.modifiers?.find(modifier => modifier.uid === button.dataset.modifierRemove)?.type || 'symmetry'}.remove`);
-    item.modifiers = (item.modifiers || []).filter(modifier => modifier.uid !== button.dataset.modifierRemove);
-    if (state.selectedModifierUid === button.dataset.modifierRemove) state.selectedModifierUid = null;
-    state.collapsedModifiers.delete(button.dataset.modifierRemove);
-    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
-  }));
-  $$('[data-modifier-bake]', inspector).forEach(button => button.addEventListener('click', () => {
-    const modifierUid = button.dataset.modifierBake;
-    snapshot(`modifier.${item.modifiers?.find(modifier => modifier.uid === modifierUid)?.type || 'symmetry'}.bake`);
-    const result = bakeModifier(state.project, item, modifierUid);
-    if (!result) return toast('這個修改器目前無法烘焙');
-    state.selectedModifierUid = null;
-    state.collapsedModifiers.delete(modifierUid);
-    state.selectedUid = result.rootUid;
-    state.selectedUids = new Set([result.rootUid]);
-    state.selectionAnchorUid = result.rootUid;
-    sceneRenderer.invalidateMirrorGeometry();
-    invalidateAllRenderGeometry();
-    markDirty(); renderAll(); toast('已烘焙選中的修改器');
-  }));
-  $$('[data-edit-modifier-anchor]', inspector).forEach(button => button.addEventListener('click', () => {
-    const modifier = modifierByUid(button.dataset.editModifierAnchor);
-    if (!modifier?.enabled) return;
-    state.selectedModifierUid = state.selectedModifierUid === modifier.uid ? null : modifier.uid;
-    state.selectedCurveNodeIndex = null;
-    if (state.selectedModifierUid && !['move', 'rotate', 'pivot'].includes(state.tool)) {
-      setTool('move');
-      return;
-    }
-    renderInspector(); renderScene(); updateSelectionLabels();
-  }));
-  $$('[data-modifier-move]', inspector).forEach(button => button.addEventListener('click', () => {
-    const index = item.modifiers?.findIndex(modifier => modifier.uid === button.dataset.modifierUid) ?? -1;
-    const target = index + (button.dataset.modifierMove === 'up' ? -1 : 1);
-    if (index < 0 || target < 0 || target >= item.modifiers.length) return;
-    snapshot(`modifier.${item.modifiers[index].type}.move`); [item.modifiers[index], item.modifiers[target]] = [item.modifiers[target], item.modifiers[index]];
-    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene();
-  }));
-  $$('[data-modifier-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
-    const modifier = modifierByUid(toggle.dataset.modifierUid);
-    if (!modifier) return;
-    snapshot(`modifier.${modifier.type}.change`); modifier.axes[toggle.dataset.modifierAxis] = toggle.checked;
-    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
-  }));
-  $$('[data-modifier-field]', inspector).forEach(input => input.addEventListener('change', () => {
-    const modifier = modifierByUid(input.dataset.modifierUid);
-    if (!modifier) return;
-    const key = input.dataset.modifierField;
-    let value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
-    if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
-    if (!Number.isFinite(value) && input.type === 'number') return;
-    snapshot(`modifier.${modifier.type}.change`); modifier[key] = value;
-    sceneRenderer.invalidateMirrorGeometry(); markDirty();
-    if (key === 'mode' || key === 'distribution') renderInspector();
-    renderScene();
-  }));
-  $$('[data-modifier-vector]', inspector).forEach(input => {
-    let snapshotTaken = false;
-    const apply = () => {
-      const modifier = modifierByUid(input.dataset.modifierUid);
-      const value = Number(input.value);
-      if (!modifier || !Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(`modifier.${modifier.type}.transform`); snapshotTaken = true; }
-      const [scope, property] = input.dataset.modifierVector.split('.');
-      modifier[scope][property][Number(input.dataset.axis)] = value;
-      sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
-    };
-    input.addEventListener('input', apply);
-    input.addEventListener('change', apply);
-    input.addEventListener('blur', () => { snapshotTaken = false; });
-  });
-  const operatorByUid = uidValue => item.operators?.find(operator => operator.uid === uidValue);
-  $$('[data-edit-operator-anchor]', inspector).forEach(button => button.addEventListener('click', () => {
-    const operator = operatorByUid(button.dataset.editOperatorAnchor);
-    if (!operator?.enabled) return;
-    state.selectedModifierUid = state.selectedModifierUid === operator.uid ? null : operator.uid;
-    state.selectedCurveNodeIndex = null;
-    if (state.selectedModifierUid) {
-      if (state.mode !== 'edit') setMode('edit');
-      if (!['move', 'rotate', 'pivot'].includes(state.tool)) setTool('move');
-    }
-    renderInspector(); renderScene(); updateSelectionLabels();
-  }));
-  const invalidatePaintOperator = operator => {
-    if (operator) paintSymmetryRelationCache.delete(operator.uid);
-    markDirty();
-    if (operator?.enabled) schedulePaintSymmetryBuild(item, operator);
-  };
-  $('[data-action="addOperator"]', inspector)?.addEventListener('click', () => {
-    const type = $('[data-operator-add-type]', inspector)?.value;
-    if (!type) return;
-    snapshot(`operator.${type}.add`);
-    const operator = addOperator(item, type);
-    if (!operator) return;
-    invalidatePaintOperator(operator);
-    renderInspector(); renderScene(); updateSelectionLabels();
-  });
-  $$('[data-operator-collapse]', inspector).forEach(button => button.addEventListener('click', () => {
-    const uidValue = button.dataset.operatorCollapse;
-    state.collapsedOperators.has(uidValue) ? state.collapsedOperators.delete(uidValue) : state.collapsedOperators.add(uidValue);
-    renderInspector();
-  }));
-  $$('[data-operator-enabled]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
-    const operator = operatorByUid(toggle.dataset.operatorEnabled);
-    if (!operator) return;
-    snapshot(`operator.${operator.type}.toggle`); operator.enabled = toggle.checked;
-    if (!operator.enabled && state.selectedModifierUid === operator.uid) state.selectedModifierUid = null;
-    invalidatePaintOperator(operator); renderInspector(); renderScene();
-  }));
-  $$('[data-operator-remove]', inspector).forEach(button => button.addEventListener('click', () => {
-    const uidValue = button.dataset.operatorRemove;
-    snapshot(`operator.${item.operators?.find(operator => operator.uid === uidValue)?.type || 'paint_symmetry'}.remove`); item.operators = (item.operators || []).filter(operator => operator.uid !== uidValue);
-    if (state.selectedModifierUid === uidValue) state.selectedModifierUid = null;
-    state.collapsedOperators.delete(uidValue); paintSymmetryRelationCache.delete(uidValue);
-    markDirty(); renderInspector(); renderScene();
-  }));
-  $$('[data-operator-move]', inspector).forEach(button => button.addEventListener('click', () => {
-    const index = item.operators?.findIndex(operator => operator.uid === button.dataset.operatorUid) ?? -1;
-    const target = index + (button.dataset.operatorMove === 'up' ? -1 : 1);
-    if (index < 0 || target < 0 || target >= item.operators.length) return;
-    snapshot(`operator.${item.operators[index].type}.move`); [item.operators[index], item.operators[target]] = [item.operators[target], item.operators[index]];
-    invalidatePaintOperator(item.operators[target]); renderInspector();
-  }));
-  $$('[data-operator-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
-    const operator = operatorByUid(toggle.dataset.operatorUid);
-    if (!operator) return;
-    snapshot(`operator.${operator.type}.change`); operator.axes[toggle.dataset.operatorAxis] = toggle.checked;
-    invalidatePaintOperator(operator);
-    renderScene();
-  }));
-  $$('[data-operator-field]', inspector).forEach(input => input.addEventListener('change', () => {
-    const operator = operatorByUid(input.dataset.operatorUid);
-    if (!operator) return;
-    const key = input.dataset.operatorField;
-    let value = input.type === 'number' ? Number(input.value) : input.value;
-    if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
-    if (!Number.isFinite(value) && input.type === 'number') return;
-    snapshot(`operator.${operator.type}.change`); operator[key] = value; invalidatePaintOperator(operator);
-    if (key === 'mode' || key === 'distribution') renderInspector();
-    renderScene();
-  }));
-  $$('[data-operator-vector]', inspector).forEach(input => {
-    let snapshotTaken = false;
-    const apply = () => {
-      const operator = operatorByUid(input.dataset.operatorUid);
-      const value = Number(input.value);
-      if (!operator || !Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(`operator.${operator.type}.transform`); snapshotTaken = true; }
-      const [scope, property] = input.dataset.operatorVector.split('.');
-      operator[scope][property][Number(input.dataset.axis)] = value;
-      invalidatePaintOperator(operator);
-      renderScene();
-    };
-    input.addEventListener('input', apply);
-    input.addEventListener('change', apply);
-    input.addEventListener('blur', () => { snapshotTaken = false; });
-  });
-  $('[data-shape-snap-mode]', inspector)?.addEventListener('change', event => {
-    snapshot('core.shape.snap_mode');
-    for (const target of items.filter(isShapeElement)) target.parameters.snapMode = event.target.value === 'radius' ? 'radius' : 'edge';
-    markDirty(); renderAll('selection');
-  });
-  $('[data-shape-inner-radius]', inspector)?.addEventListener('change', event => {
-    snapshot('core.shape.inner_radius');
-    for (const target of items.filter(isShapeElement)) {
-      discardSubdivisionEdits(target);
-      target.parameters.innerRadiusEnabled = event.target.checked;
-    }
-    markDirty(); renderAll('selection');
-  });
-  $('[data-shape-inner-radius-mode]', inspector)?.addEventListener('change', event => {
-    snapshot('core.shape.inner_radius_mode');
-    for (const target of items.filter(isShapeElement)) {
-      discardSubdivisionEdits(target);
-      target.parameters.innerRadiusMode = event.target.value === 'depth' ? 'depth' : 'radius';
-    }
-    markDirty(); renderAll('selection');
-  });
-  $('[data-curve-segmentation]', inspector)?.addEventListener('change', event => {
-    snapshot('core.curve.segmentation');
-    for (const target of items.filter(isBezierElement)) {
-      discardSubdivisionEdits(target);
-      target.parameters.segmentationMode = event.target.value;
-    }
-    markDirty(); renderAll('selection');
-  });
-  $$('[data-select-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
-    state.selectedModifierUid = null;
-    state.selectedCurveNodeIndex = Number(button.dataset.selectCurveNode);
-    renderInspector(); renderScene(); updateSelectionLabels();
-  }));
-  $$('[data-curve-node-toggle]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
-    const node = item.nodes?.[Number(toggle.dataset.curveNodeToggle)];
-    if (!node) return;
-    snapshot('core.curve.handle'); discardSubdivisionEdits(item); node.handlesEnabled = toggle.checked; markDirty(); renderAll('selection');
-  }));
-  $$('[data-curve-node-symmetric]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
-    const node = item.nodes?.[Number(toggle.dataset.curveNodeSymmetric)];
-    if (!node) return;
-    snapshot('core.curve.handle');
-    discardSubdivisionEdits(item);
-    node.symmetricHandles = toggle.checked;
-    if (toggle.checked) setCurveHandle(node, 'handleOut', node.handleOut, item.dimension === 2);
-    markDirty(); renderAll('selection');
-  }));
-  $$('[data-curve-node-auto]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
-    const index = Number(toggle.dataset.curveNodeAuto);
-    const node = item.nodes?.[index];
-    if (!node) return;
-    snapshot('core.curve.tangent');
-    discardSubdivisionEdits(item);
-    if (!toggle.checked && node.autoTangent) bakeCurveNodeTangent(item, index);
-    else node.autoTangent = toggle.checked;
-    markDirty(); renderAll('selection');
-  }));
-  $$('[data-curve-node-roll]', inspector).forEach(input => {
-    let snapshotTaken = false;
-    const apply = () => {
-      const node = item.nodes?.[Number(input.dataset.curveNodeRoll)];
-      const value = Number(input.value);
-      if (!node || !Number.isFinite(value) || item.dimension !== 3) return;
-      if (!snapshotTaken) { snapshot('core.curve.roll'); snapshotTaken = true; }
-      discardSubdivisionEdits(item);
-      node.roll = value;
-      markDirty(); invalidateSelectionRenderGeometry(); renderScene();
-    };
-    input.addEventListener('input', apply);
-    input.addEventListener('change', apply);
-    input.addEventListener('blur', () => { snapshotTaken = false; });
-  });
-  $$('[data-remove-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
-    if (!isBezierElement(item) || item.nodes.length <= 2) return;
-    snapshot('core.curve.node_remove');
-    discardSubdivisionEdits(item);
-    item.nodes.splice(Number(button.dataset.removeCurveNode), 1);
-    state.selectedCurveNodeIndex = Math.min(item.nodes.length - 1, state.selectedCurveNodeIndex ?? 0);
-    markDirty(); renderAll('selection');
-  }));
-  $('[data-action="deleteSelected"]', inspector)?.addEventListener('click', deleteSelected);
-  $('[data-action="enterSubdivisionEdit"]', inspector)?.addEventListener('click', () => enterSubdivisionEdit(item));
-  $('[data-action="exitSubdivisionEdit"]', inspector)?.addEventListener('click', () => exitSubdivisionEdit());
-  $('[data-action="resetTransform"]', inspector)?.addEventListener('click', () => {
-    snapshot('core.element.reset_rotation');
-    for (const target of items) {
-      if (target.type !== 'group' && Array.isArray(target.rotation)) target.rotation = [0, 0, 0];
-    }
-    markDirty(); renderAll('selection');
-  });
-}
+const inspectorController = createInspectorController({
+  state, $, $$, inspector, sceneRenderer, topLevelSelectedUids, selected, round,
+  setTool, invalidateAllRenderGeometry, renderAll, updateToolVisibility, toast,
+  openIconMarkup, escapeHtml, escapeAttribute, renderPaintColorPicker,
+  polyhedronEdgeLength, formatNumber, freezeCubeUvs, openColorPickerPopup,
+  snapshot, markDirty, invalidateSelectionRenderGeometry, renderScene,
+  syncInspectorValues, translateModifierAnchors, setCurveHandle,
+  bakeCurveNodeTangent, updateSelectionLabels, setMode, schedulePaintSymmetryBuild,
+  deleteSelected, isUvCapable
+});
+function inspectorBatchNodes(...args) { return inspectorController.inspectorBatchNodes(...args); }
+function sharedVectorValues(...args) { return inspectorController.sharedVectorValues(...args); }
+function isBezierElement(...args) { return inspectorController.isBezierElement(...args); }
+function isShapeElement(...args) { return inspectorController.isShapeElement(...args); }
+function isProceduralShape(...args) { return inspectorController.isProceduralShape(...args); }
+function subdivisionOwner(...args) { return inspectorController.subdivisionOwner(...args); }
+function subdivisionPatch(...args) { return inspectorController.subdivisionPatch(...args); }
+function syncSubdivisionEdits(...args) { return inspectorController.syncSubdivisionEdits(...args); }
+function enterSubdivisionEdit(...args) { return inspectorController.enterSubdivisionEdit(...args); }
+function exitSubdivisionEdit(...args) { return inspectorController.exitSubdivisionEdit(...args); }
+function discardSubdivisionEdits(...args) { return inspectorController.discardSubdivisionEdits(...args); }
+function renderInspector(...args) { return inspectorController.renderInspector(...args); }
+function setNodeVisibility(...args) { return inspectorController.setNodeVisibility(...args); }
+function setNodeFlag(...args) { return inspectorController.setNodeFlag(...args); }
 
 function revealOutlinerItem(uid) {
   let hierarchyChanged = false;
@@ -2407,7 +526,7 @@ function clearSelection() {
 function selectItem(uid, { revealInOutliner = false, toggle = false, range = false } = {}) {
   const requestedNode = state.project.getNode(uid);
   if (!requestedNode) return;
-  if (subdivisionSession && requestedNode.subdivisionOwnerUid !== subdivisionSession.ownerUid) {
+  if (inspectorController.subdivisionSession && requestedNode.subdivisionOwnerUid !== inspectorController.subdivisionSession.ownerUid) {
     toast('細分編輯期間只能選擇目前 Shape 內的 Cube');
     return;
   }
@@ -2675,7 +794,7 @@ function deleteSelected(operationId = 'core.element.delete') {
   if (state.mode === 'paint') return;
   const selectedIds = topLevelSelectedUids();
   if (!selectedIds.length) return;
-  if (subdivisionSession && selectedIds.some(uidValue => state.project.getNode(uidValue)?.subdivisionOwnerUid)) {
+  if (inspectorController.subdivisionSession && selectedIds.some(uidValue => state.project.getNode(uidValue)?.subdivisionOwnerUid)) {
     return toast('細分 Cube 由 Shape 管理，不能單獨刪除');
   }
   snapshot(operationId);
@@ -2899,483 +1018,28 @@ function moveSelectedNodes(targetUid = null, zone = 'after') {
   animateOutlinerReorder(previousRowPositions);
 }
 
-function uvPreviewIsActive() {
-  const panel = dockManager?.get('uvPreview');
-  if (document.hidden || !state.uvPreviewEnabled || !panel || panel.element.hidden || panel.state.collapsed || state.layoutResizing) return false;
-  if (panel.state.dock !== 'floating' && dockManager.zoneState?.[panel.state.dock]) return false;
-  const rect = uvPreviewViewport.getBoundingClientRect();
-  return rect.width >= 2 && rect.height >= 2;
-}
-
-function uvPreviewElements() {
-  return selectedElementUids()
-    .map(uidValue => state.project.getNode(uidValue))
-    .filter(element => element && (element.type === 'cube' || isShapeElement(element) || isBezierElement(element)));
-}
-
-function getUvPreviewProject() {
-  const sourceElements = uvPreviewElements();
-  const key = sourceElements.map(element => element.uid).sort().join('|');
-  if (state.uvPreviewSelectedFace && !sourceElements.some(element => element.uid === state.uvPreviewSelectedFace.uid)) {
-    state.uvPreviewSelectedFace = null;
-  }
-  if (uvPreviewProjectCache?.source === state.project
-    && uvPreviewProjectCache.key === key
-    && uvPreviewProjectCache.hierarchyRevision === state.project.hierarchyRevision) return uvPreviewProjectCache;
-
-  // Visibility and locking are editor concerns. This isolated preview always
-  // shows the selected geometry while inheriting its real transform and UVs.
-  const previewTexture = faceTextureReference(activeTextureAsset()) || '__cubebricks_uv_preview__';
-  const elements = sourceElements.map(element => {
-    const preview = Object.assign(Object.create(element), { visible: true, locked: false, modifiers: [] });
-    if (element.type !== 'cube') return preview;
-    const sourceFaces = element.faces || {};
-    preview.faces = Object.fromEntries(CUBE_FACE_NAMES.map(faceName => {
-      const sourceFace = sourceFaces[faceName];
-      if (!isCubeFaceCulled(sourceFace)) return [faceName, sourceFace ? { ...sourceFace } : sourceFace];
-      const storedTexture = effectiveFaceTextureReference(sourceFace);
-      return [faceName, {
-        ...(sourceFace && typeof sourceFace === 'object' ? sourceFace : {}),
-        enabled: true,
-        texture: storedTexture ?? previewTexture,
-        uv: Array.isArray(sourceFace?.uv) ? [...sourceFace.uv] : [...getBlockbenchBoxUv(element, faceName)],
-        rotation: Number(sourceFace?.rotation) || 0
-      }];
-    }));
-    return preview;
-  });
-  const groups = state.project.groups.map(group => Object.assign(Object.create(group), { locked: false, modifiers: [] }));
-  const previewNodes = new Map([...elements, ...groups].map(node => [node.uid, node]));
-  const previewGroups = new Map(groups.map(group => [group.uid, group]));
-  const project = {
-    elements,
-    groups,
-    outliner: elements.map(element => element.uid),
-    textureSize: state.project.textureSize,
-    renderType: state.uvPreviewFaceColors ? 'solid' : state.project.renderType,
-    cullFaces: state.project.cullFaces,
-    getNode: uidValue => previewNodes.get(uidValue) || null,
-    getGroupChain: uidValue => state.project.getGroupChain(uidValue)
-      .map(group => previewGroups.get(group.uid) || group),
-    getDescendantElementUids: uidValue => state.project.getDescendantElementUids(uidValue)
-  };
-  uvPreviewProjectCache = {
-    source: state.project,
-    key,
-    hierarchyRevision: state.project.hierarchyRevision,
-    elements,
-    project,
-    fit: null
-  };
-  uvPreviewRenderer.invalidateGeometry();
-  return uvPreviewProjectCache;
-}
-
-function uvPreviewFit(cache) {
-  if (cache.fit) return cache.fit;
-  const bounds = sceneRenderer.getSelectionBounds(state.project, state.selectedUids);
-  let center = bounds?.center;
-  let span = bounds ? bounds.max.map((value, axis) => Math.abs(value - bounds.min[axis])) : null;
-  if (!center || !span) {
-    const positions = cache.elements.map(element => element.pivot || element.origin || element.position).filter(Boolean);
-    center = positions.length
-      ? [0, 1, 2].map(axis => positions.reduce((sum, point) => sum + Number(point[axis] || 0), 0) / positions.length)
-      : [0, 0, 0];
-    span = [16, 16, 16];
-  }
-  const radius = Math.max(.25, Math.hypot(...span) / 2);
-  cache.fit = {
-    target: [...center],
-    zoom: Math.max(.025, Math.min(20, 42 * Math.tan(Math.PI / 8) / (radius * 1.28)))
-  };
-  return cache.fit;
-}
-
-function syncUvPreviewPanelAspect(textureWidth, textureHeight) {
-  const panel = dockManager?.get('uvPreview');
-  if (!panel || panel.state.collapsed || panel.element.hidden) {
-    uvPreviewPanelMetrics = null;
-    return;
-  }
-  const width = Math.max(1, panel.element.getBoundingClientRect().width || panel.state.width);
-  const ratio = Math.max(.001, textureHeight / textureWidth);
-  const current = { width, ratio };
-  const previous = uvPreviewPanelMetrics;
-  uvPreviewPanelMetrics = current;
-  if (!previous) return;
-
-  const widthChanged = Math.abs(current.width - previous.width) >= .75;
-  const ratioChanged = Math.abs(current.ratio - previous.ratio) >= .0001;
-  if (!widthChanged && !ratioChanged) return;
-
-  // Keep manual vertical resizing intact. Only compensate for the amount by which
-  // a horizontal resize (or texture aspect change) changes the preview itself.
-  const previousPreviewHeight = Math.max(1, (previous.width - 16) * previous.ratio);
-  const currentPreviewHeight = Math.max(1, (current.width - 16) * current.ratio);
-  const heightDelta = currentPreviewHeight - previousPreviewHeight;
-  if (Math.abs(heightDelta) < .5) return;
-  const maximum = panel.state.dock === 'floating'
-    ? Math.max(180, window.innerHeight - panel.state.y)
-    : Math.max(180, window.innerHeight - 120);
-  const desired = Math.min(maximum, Math.max(180, panel.state.height + heightDelta));
-  if (Math.abs(panel.state.height - desired) < .5) return;
-  panel.state.height = desired;
-  dockManager.applyPanelState(panel);
-}
-
-function setUvPreviewPlaceholder(message, visible) {
-  const empty = $('#uvPreviewEmpty');
-  empty.textContent = message;
-  empty.hidden = !visible;
-  uvPreviewCanvas.hidden = visible;
-  if (visible) {
-    $('#uvPreviewSize').textContent = '—';
-    $('#uvPreviewFaceOverlay').innerHTML = '';
-    $('#uvSelectedFaceLabel').textContent = '未選擇面';
-    $$('[data-uv-face-action]').forEach(button => button.disabled = true);
-  }
-  $('[data-panel="uvPreview"]')?.classList.toggle('preview-disabled', !state.uvPreviewEnabled);
-}
-
-const UV_FACE_LABELS = Object.freeze({ north: '北面', south: '南面', east: '東面', west: '西面', up: '上面', down: '下面' });
-const CULLED_FACE_TEXTURE_KEY = '_cubebricksCulledTexture';
-
-function effectiveFaceTextureReference(face) {
-  if (!face || typeof face !== 'object') return undefined;
-  if (face.texture !== null && face.texture !== undefined) return face.texture;
-  if (Object.prototype.hasOwnProperty.call(face, CULLED_FACE_TEXTURE_KEY)) {
-    const stored = face[CULLED_FACE_TEXTURE_KEY];
-    return stored === null ? undefined : stored;
-  }
-  return undefined;
-}
-
-function ensureCubeFaceRecord(cube, faceName) {
-  if (!cube.faces) cube.faces = {};
-  const existing = cube.faces[faceName];
-  if (existing && typeof existing === 'object') {
-    if (!Array.isArray(existing.uv) || existing.uv.length < 4) existing.uv = [...getBlockbenchBoxUv(cube, faceName)];
-    return existing;
-  }
-  const face = {
-    uv: [...getBlockbenchBoxUv(cube, faceName)],
-    rotation: 0
-  };
-  if (existing === null) face.texture = null;
-  cube.faces[faceName] = face;
-  return face;
-}
-
-function setCubeFaceCulled(cube, faceName, culled) {
-  const face = ensureCubeFaceRecord(cube, faceName);
-  if (culled) {
-    if (!Object.prototype.hasOwnProperty.call(face, CULLED_FACE_TEXTURE_KEY) && face.texture !== null) {
-      face[CULLED_FACE_TEXTURE_KEY] = face.texture === undefined ? null : face.texture;
-    }
-    face.texture = null;
-    delete face.enabled;
-    return;
-  }
-  if (!isCubeFaceCulled(face)) return;
-  if (Object.prototype.hasOwnProperty.call(face, CULLED_FACE_TEXTURE_KEY)) {
-    const stored = face[CULLED_FACE_TEXTURE_KEY];
-    if (stored === null || stored === undefined) delete face.texture;
-    else face.texture = stored;
-    delete face[CULLED_FACE_TEXTURE_KEY];
-  } else {
-    const activeReference = faceTextureReference(activeTextureAsset());
-    if (activeReference === undefined || activeReference === null) delete face.texture;
-    else face.texture = activeReference;
-  }
-  delete face.enabled;
-}
-
-function cubeHasOnlyCulledFaces(cube) {
-  return CUBE_FACE_NAMES.every(faceName => isCubeFaceCulled(cube.faces?.[faceName]));
-}
-
-function textureOrderedFacePoints(points, uv, rotation) {
-  const slots = createBlockbenchFaceUvSlots(uv, rotation);
-  const uValues = slots.map(slot => slot[0]), vValues = slots.map(slot => slot[1]);
-  const minU = Math.min(...uValues), maxU = Math.max(...uValues);
-  const minV = Math.min(...vValues), maxV = Math.max(...vValues);
-  const used = new Set();
-  return [[minU, minV], [maxU, minV], [minU, maxV], [maxU, maxV]].map(([u, v]) => {
-    let bestIndex = -1, bestDistance = Infinity;
-    slots.forEach((slot, index) => {
-      if (used.has(index)) return;
-      const distance = (slot[0] - u) ** 2 + (slot[1] - v) ** 2;
-      if (distance < bestDistance) { bestIndex = index; bestDistance = distance; }
-    });
-    if (bestIndex < 0) bestIndex = used.size;
-    used.add(bestIndex);
-    return points[bestIndex];
-  });
-}
-
-function buildUvPreviewFaceLabel() {
-  const selection = state.uvPreviewSelectedFace;
-  const data = selectedUvFaceData(false);
-  const points = selection?.points || [];
-  if (!data || points.length !== 4) return null;
-  const [u1, v1, u2, v2] = data.uv;
-  const rotation = ((Math.round(Number(data.face.rotation) || 0) % 360) + 360) % 360;
-  const info = `↻${rotation}°${u2 < u1 ? ' ↔' : ''}${v2 < v1 ? ' ↕' : ''}`;
-  const cacheKey = `${uvPreviewFaceLabelFontRevision}:${info}`;
-  if (uvPreviewFaceLabelCacheKey !== cacheKey) {
-    const context = uvPreviewFaceLabelCanvas.getContext('2d');
-    const font = '12px "Fusion Pixel Latin", monospace';
-    context.font = font;
-    const metrics = context.measureText(info);
-    const ascent = Math.ceil(metrics.actualBoundingBoxAscent || 10);
-    const descent = Math.ceil(metrics.actualBoundingBoxDescent || 2);
-    uvPreviewFaceLabelCanvas.width = Math.max(1, Math.ceil(metrics.width) + 4);
-    uvPreviewFaceLabelCanvas.height = Math.max(1, ascent + descent + 4);
-    context.clearRect(0, 0, uvPreviewFaceLabelCanvas.width, uvPreviewFaceLabelCanvas.height);
-    context.imageSmoothingEnabled = false;
-    context.font = font;
-    context.textBaseline = 'alphabetic';
-    context.fillStyle = '#080908';
-    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) context.fillText(info, 2 + dx, 2 + ascent + dy);
-    context.fillStyle = '#f5f6f2';
-    context.fillText(info, 2, 2 + ascent);
-    uvPreviewFaceLabelCacheKey = cacheKey;
-  }
-
-  const uVector = points[1].map((value, axis) => value - points[0][axis]);
-  const vVector = points[2].map((value, axis) => value - points[0][axis]);
-  const uLength = Math.hypot(...uVector), vLength = Math.hypot(...vVector);
-  if (uLength < 1e-5 || vLength < 1e-5) return null;
-  const uDirection = normalize3(uVector), vDirection = normalize3(vVector);
-  const textureAspect = uvPreviewFaceLabelCanvas.width / uvPreviewFaceLabelCanvas.height;
-  // Deliberately size from the longest face edge. Thin faces must not crush
-  // the label merely because their other axis is short.
-  const labelHeight = Math.max(uLength, vLength) * .18;
-  const labelWidth = labelHeight * textureAspect;
-  const origin = addScaled3(addScaled3(points[0], uDirection, uLength * .055), vDirection, vLength * .035);
-  const topRight = addScaled3(origin, uDirection, labelWidth);
-  const bottomLeft = addScaled3(origin, vDirection, labelHeight);
-  const bottomRight = addScaled3(topRight, vDirection, labelHeight);
-  return {
-    key: cacheKey,
-    source: uvPreviewFaceLabelCanvas,
-    quad: [origin, topRight, bottomLeft, bottomRight]
-  };
-}
-
-function selectedUvFaceData(create = false) {
-  const selection = state.uvPreviewSelectedFace;
-  const cube = selection && state.project.getNode(selection.uid);
-  if (!cube || cube.type !== 'cube' || !selection.faceName) return null;
-  if (!cube.faces) {
-    if (!create) return { cube, face: {}, uv: getBlockbenchBoxUv(cube, selection.faceName) };
-    cube.faces = {};
-  }
-  if (!Object.prototype.hasOwnProperty.call(cube.faces, selection.faceName)) {
-    if (!create) return { cube, face: {}, uv: getBlockbenchBoxUv(cube, selection.faceName) };
-    cube.faces[selection.faceName] = { uv: getBlockbenchBoxUv(cube, selection.faceName), rotation: 0 };
-  }
-  let face = cube.faces[selection.faceName];
-  if (face === null) {
-    if (create) face = ensureCubeFaceRecord(cube, selection.faceName);
-    else return { cube, face: { texture: null }, uv: getBlockbenchBoxUv(cube, selection.faceName), culled: true };
-  }
-  return { cube, face, uv: face.uv?.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, selection.faceName) };
-}
-
-function updateUvFaceUi() {
-  renderTextureTileControls();
-  const selection = state.uvPreviewSelectedFace;
-  const data = selectedUvFaceData(false);
-  const controls = $$('[data-uv-face-action]');
-  controls.forEach(button => button.disabled = !data || (state.mode === 'paint' && button.dataset.uvFaceAction === 'cull'));
-  const label = $('#uvSelectedFaceLabel');
-  const size = $('#uvPreviewSize');
-  const overlay = $('#uvPreviewFaceOverlay');
-  if (!data || !selection) {
-    label.textContent = '未選擇面';
-    size.textContent = '—';
-    overlay.innerHTML = '';
-    controls.forEach(button => button.classList.remove('active'));
-    return;
-  }
-  const [u1, v1, u2, v2] = data.uv;
-  const rotation = ((Math.round(Number(data.face.rotation) || 0) % 360) + 360) % 360;
-  const mirrorX = u2 < u1, mirrorY = v2 < v1;
-  const culled = isCubeFaceCulled(data.cube.faces?.[selection.faceName]);
-  label.textContent = `${data.cube.name} · ${UV_FACE_LABELS[selection.faceName] || selection.faceName}${culled ? ' · 已剔除' : ''}`;
-  size.textContent = `${formatNumber(Math.abs(u2 - u1))} × ${formatNumber(Math.abs(v2 - v1))} px`;
-  $('[data-uv-face-action="mirror-x"]').classList.toggle('active', mirrorX);
-  $('[data-uv-face-action="mirror-y"]').classList.toggle('active', mirrorY);
-  $('[data-uv-face-action="cull"]').classList.toggle('active', culled);
-  $('[data-uv-face-action="cull"]').title = culled ? '恢復面' : '剔除面';
-  const points = selection.points || [];
-  const projected = points.map(point => uvPreviewRenderer.projectPoint(point));
-  if (projected.length !== 4 || projected.some(point => point.behind || point.depth < -1 || point.depth > 1)) {
-    overlay.innerHTML = ''; return;
-  }
-  const width = uvPreviewViewport.clientWidth, height = uvPreviewViewport.clientHeight;
-  overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  const perimeter = [projected[0], projected[1], projected[3], projected[2]];
-  const texturePoints = textureOrderedFacePoints(points, data.uv, rotation);
-  const textureProjected = texturePoints.map(point => uvPreviewRenderer.projectPoint(point));
-  const [textureTopLeft, textureTopRight] = textureProjected;
-  overlay.innerHTML = `<path class="uv-preview-face-outline" d="M${perimeter.map(point => `${point.x},${point.y}`).join(' L')} Z"/>
-    <path class="uv-preview-face-north" d="M${textureTopLeft.x},${textureTopLeft.y} L${textureTopRight.x},${textureTopRight.y}"/>`;
-}
-
-function editSelectedUvFace(action) {
-  if (action === 'cull') {
-    toggleSelectedUvFacesCull();
-    return;
-  }
-  const data = selectedUvFaceData(true);
-  if (!data) return toast('請先在 UV 預覽中選擇 Cube 的面');
-  if (data.cube.uvMode === 'box' && action !== 'rotate') return toast('箱型 UV 的面不能單獨鏡像');
-  snapshot(action === 'rotate' ? 'core.uv.rotate' : 'core.uv.mirror');
-  if (data.cube.uvMode !== 'box' && (!Array.isArray(data.face.uv) || data.face.uv.length < 4)) data.face.uv = [...data.uv];
-  if (action === 'rotate') data.face.rotation = ((Number(data.face.rotation) || 0) + 90) % 360;
-  if (action === 'mirror-x') [data.face.uv[0], data.face.uv[2]] = [data.face.uv[2], data.face.uv[0]];
-  if (action === 'mirror-y') [data.face.uv[1], data.face.uv[3]] = [data.face.uv[3], data.face.uv[1]];
-  data.cube.autoUv = data.cube.uvMode === 'box';
-  markDirty();
-  uvPreviewProjectCache = null;
-  invalidateSelectionRenderGeometry();
-  renderScene();
-}
-
-function toggleSelectedUvFacesCull() {
-  if (state.mode === 'paint') return;
-  const selection = state.uvPreviewSelectedFace;
-  const current = selectedUvFaceData(false);
-  if (!selection || !current) return toast('請先在 UV 預覽中選擇 Cube 的面');
-  const currentKey = uvFaceKey(selection.uid, selection.faceName);
-  const keys = state.selectedUvFaces.has(currentKey) && state.selectedUvFaces.size
-    ? [...state.selectedUvFaces]
-    : [currentKey];
-  const targets = keys.map(parseUvFaceKey).filter(Boolean).map(entry => ({
-    ...entry,
-    cube: state.project.getNode(entry.uid)
-  })).filter(entry => entry.cube?.type === 'cube' && CUBE_FACE_NAMES.includes(entry.faceName));
-  if (!targets.length) return;
-  const culled = !isCubeFaceCulled(current.cube.faces?.[selection.faceName]);
-  snapshot('core.uv.cull_face');
-  targets.forEach(entry => setCubeFaceCulled(entry.cube, entry.faceName, culled));
-
-  const removed = new Set();
-  for (const cube of new Set(targets.map(entry => entry.cube))) {
-    if (!cubeHasOnlyCulledFaces(cube)) continue;
-    removed.add(cube.uid);
-    state.project.removeNode(cube.uid);
-  }
-  if (removed.size) {
-    state.selectedUids = new Set([...state.selectedUids].filter(uidValue => !removed.has(uidValue)));
-    if (removed.has(state.selectedUid)) state.selectedUid = [...state.selectedUids].at(-1) || null;
-    if (removed.has(state.selectionAnchorUid)) state.selectionAnchorUid = state.selectedUid;
-    state.selectedUvFaces = new Set([...state.selectedUvFaces].filter(key => {
-      const parsed = parseUvFaceKey(key);
-      return parsed && !removed.has(parsed.uid);
-    }));
-    if (removed.has(state.uvPreviewSelectedFace?.uid)) state.uvPreviewSelectedFace = null;
-  }
-  markDirty();
-  uvPreviewProjectCache = null;
-  renderAll();
-  if (removed.size) toast(removed.size > 1 ? `全部面已剔除，已刪除 ${removed.size} 個 Cube` : '全部面已剔除，Cube 已刪除');
-  else toast(culled ? `已剔除 ${targets.length} 個面` : `已恢復 ${targets.length} 個面`);
-}
-
-function renderUvPreview() {
-  if (!state.uvPreviewEnabled) {
-    setUvPreviewPlaceholder('預覽已關閉', true);
-    uvPreviewRenderDirty = false;
-    return false;
-  }
-  if (!uvPreviewIsActive()) {
-    uvPreviewRenderDirty = false;
-    return false;
-  }
-  const cache = getUvPreviewProject();
-  if (!cache.elements.length) {
-    setUvPreviewPlaceholder('選擇 Cube、Shape 或貝塞爾', true);
-    uvPreviewRenderDirty = false;
-    return false;
-  }
-  setUvPreviewPlaceholder('', false);
-  if (uvPreviewTextureDirty) {
-    if (textureAtlasEntries.length) uvPreviewRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
-    else uvPreviewRenderer.setTexture(textureCanvas);
-    uvPreviewTextureDirty = false;
-  }
-  cache.project.textureSize = state.project.textureSize;
-  cache.project.renderType = state.project.renderType;
-  cache.project.cullFaces = state.project.cullFaces;
-  const fit = uvPreviewFit(cache);
-  const textureWidth = Math.max(1, Number(state.project.textureSize?.[0]) || 1);
-  const textureHeight = Math.max(1, Number(state.project.textureSize?.[1]) || 1);
-  uvPreviewViewport.style.setProperty('--uv-preview-aspect', `${textureWidth} / ${textureHeight}`);
-  syncUvPreviewPanelAspect(textureWidth, textureHeight);
-  uvPreviewRenderer.render(cache.project, null, {
-    projection: 'perspective',
-    zoom: fit.zoom,
-    panX: 0,
-    panY: 0,
-    yaw: state.uvPreviewYaw,
-    pitch: state.uvPreviewPitch,
-    target: fit.target,
-    selectedUids: new Set(),
-    renderMode: 'textured',
-    previewShade: true,
-    grid: false,
-    wire: false,
-    geometryOnly: true,
-    snap: state.settingsSnap,
-    faceDistinct: state.uvPreviewFaceColors,
-    faceLabel: buildUvPreviewFaceLabel(),
-    lockedDefaultAlpha: 100,
-    lockedHoverFade: false,
-    editorOverlayLines: []
-  });
-  uvPreviewRenderDirty = false;
-  updateUvFaceUi();
-  return true;
-}
-
-function stopUvPreviewAnimation() {
-  if (uvPreviewAnimationFrame !== null) cancelAnimationFrame(uvPreviewAnimationFrame);
-  uvPreviewAnimationFrame = null;
-  uvPreviewLastFrame = 0;
-}
-
-function scheduleUvPreviewAnimation() {
-  if (!uvPreviewIsActive() || !state.uvPreviewAutoRotate || !uvPreviewElements().length) {
-    stopUvPreviewAnimation();
-    return;
-  }
-  if (uvPreviewAnimationFrame !== null) return;
-  const tick = now => {
-    uvPreviewAnimationFrame = null;
-    if (!uvPreviewIsActive() || !state.uvPreviewAutoRotate) {
-      stopUvPreviewAnimation();
-      return;
-    }
-    if (!uvPreviewLastFrame) uvPreviewLastFrame = now;
-    const elapsed = Math.min(80, now - uvPreviewLastFrame);
-    if (elapsed >= 30) {
-      state.uvPreviewYaw += elapsed * .00018;
-      uvPreviewLastFrame = now;
-      renderUvPreview();
-    }
-    uvPreviewAnimationFrame = requestAnimationFrame(tick);
-  };
-  uvPreviewAnimationFrame = requestAnimationFrame(tick);
-}
-
-function refreshUvPreview(force = true) {
-  if (force) uvPreviewRenderDirty = true;
-  if (uvPreviewRenderDirty) renderUvPreview();
-  scheduleUvPreviewAnimation();
-}
+const uvPreviewController = createUvPreviewController({
+  state, $, $$, uvPreviewCanvas, uvPreviewViewport, uvPreviewRenderer,
+  sceneRenderer, textureCanvas, getTextureAtlasEntries: () => textureAtlasEntries,
+  getTextureAtlasCanvas: () => textureAtlasCanvas, getDockManager: () => dockManager,
+  selectedElementUids, isShapeElement, isBezierElement,
+  faceTextureReference, activeTextureAsset, renderTextureTileControls,
+  formatNumber, addScaled3, uvFaceKey, parseUvFaceKey, snapshot, markDirty,
+  invalidateSelectionRenderGeometry, renderScene, renderAll, toast
+});
+function uvPreviewIsActive(...args) { return uvPreviewController.uvPreviewIsActive(...args); }
+function uvPreviewElements(...args) { return uvPreviewController.uvPreviewElements(...args); }
+function getUvPreviewProject(...args) { return uvPreviewController.getUvPreviewProject(...args); }
+function syncUvPreviewPanelAspect(...args) { return uvPreviewController.syncUvPreviewPanelAspect(...args); }
+function effectiveFaceTextureReference(...args) { return uvPreviewController.effectiveFaceTextureReference(...args); }
+function ensureCubeFaceRecord(...args) { return uvPreviewController.ensureCubeFaceRecord(...args); }
+function setCubeFaceCulled(...args) { return uvPreviewController.setCubeFaceCulled(...args); }
+function selectedUvFaceData(...args) { return uvPreviewController.selectedUvFaceData(...args); }
+function updateUvFaceUi(...args) { return uvPreviewController.updateUvFaceUi(...args); }
+function editSelectedUvFace(...args) { return uvPreviewController.editSelectedUvFace(...args); }
+function renderUvPreview(...args) { return uvPreviewController.renderUvPreview(...args); }
+function stopUvPreviewAnimation(...args) { return uvPreviewController.stopUvPreviewAnimation(...args); }
+function refreshUvPreview(...args) { return uvPreviewController.refreshUvPreview(...args); }
 
 function renderScene() {
   if (sceneRenderFrame !== null) cancelAnimationFrame(sceneRenderFrame);
@@ -3386,9 +1050,9 @@ function renderScene() {
     selectedUids: hidePaintSelection ? new Set() : state.selectedUids,
     selectedUvFaces: hidePaintSelection ? new Set() : state.selectedUvFaces,
     projection: currentProjection(),
-    subdivisionEditOwnerUid: subdivisionSession?.ownerUid || null,
-    lockedDefaultAlpha: subdivisionSession ? 12 : state.lockedDefaultAlpha,
-    lockedHoverFade: subdivisionSession ? false : state.lockedHoverFade,
+    subdivisionEditOwnerUid: inspectorController.subdivisionSession?.ownerUid || null,
+    lockedDefaultAlpha: inspectorController.subdivisionSession ? 12 : state.lockedDefaultAlpha,
+    lockedHoverFade: inspectorController.subdivisionSession ? false : state.lockedHoverFade,
     editorOverlayLines: buildEditorOverlayLines()
   });
   updateLocatorOverlay();
@@ -3399,260 +1063,7 @@ function renderScene() {
   refreshUvPreview(false);
 }
 
-async function captureModel(mode) {
-  try {
-    const rect = sceneCanvas.getBoundingClientRect();
-    const width = Math.max(1, Math.floor(rect.width));
-    const height = Math.max(1, Math.floor(rect.height));
-    if (!state.project.elements.length) return toast('場景中沒有可截屏的模型');
-    if (!modelCaptureRenderer) modelCaptureRenderer = new WebGLSceneRenderer(modelCaptureCanvas);
-    const { gl } = modelCaptureRenderer;
-    const mippedScale = state.renderMode === 'textured' && getMinecraftRenderType(state.project.renderType).smooth ? 1.5 : 1;
-    const gpuLimit = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
-    const scale = mode === 'offscreen' ? 2 : Math.min(window.devicePixelRatio || 1, 2);
-    const maxDimension = Math.min(mode === 'offscreen' ? 3072 : 4096, Math.floor(gpuLimit / mippedScale));
-    const actualScale = Math.min(scale, maxDimension / Math.max(width, height));
-    const pixelWidth = Math.max(1, Math.round(width * actualScale));
-    const pixelHeight = Math.max(1, Math.round(height * actualScale));
-    if (textureAtlasEntries.length) modelCaptureRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
-    else modelCaptureRenderer.setTexture(textureCanvas);
-    const projection = currentProjection();
-    const camera = {
-      ...state, projection, selectedUids: new Set(), selectedUvFaces: new Set(),
-      captureModelOnly: true, captureWidth: width, captureHeight: height,
-      capturePixelWidth: pixelWidth, capturePixelHeight: pixelHeight,
-      grid: false, wire: false, playerReference: false,
-      modifierResultGhost: false, subdivisionEditOwnerUid: null,
-      lockedDefaultAlpha: 100, lockedHoverFade: false, editorOverlayLines: []
-    };
-    if (mode === 'offscreen') {
-      const fitted = sceneRenderer.fitCameraToVisibleModel(state.project, camera, width / height);
-      if (!fitted) return toast('場景中沒有可見模型');
-      Object.assign(camera, fitted);
-    }
-    toast(mode === 'offscreen' ? '正在離屏渲染模型…' : '正在截取屏幕內模型…');
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    modelCaptureRenderer.render(state.project, null, camera);
-    modelCaptureImageCanvas = modelCaptureRenderer.captureImageCanvas();
-    modelCaptureDataUrl = modelCaptureImageCanvas.toDataURL('image/png');
-    $('#modelCaptureImage').src = modelCaptureDataUrl;
-    $('#modelCaptureInfo').textContent = `${mode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${pixelWidth} × ${pixelHeight} PNG · 透明背景`;
-    $('#modelCaptureDialog').showModal();
-  } catch (error) {
-    toast(`截屏失敗：${error.message}`);
-  }
-}
 
-function modelCaptureBlob() {
-  return new Promise((resolve, reject) => {
-    if (!modelCaptureImageCanvas) return reject(new Error('尚未生成模型截圖'));
-    modelCaptureImageCanvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('無法生成 PNG')), 'image/png');
-  });
-}
-
-async function saveModelCapture() {
-  if (!modelCaptureDataUrl) return;
-  const name = `${state.project.name || 'model'}-capture.png`;
-  try {
-    if (window.cubeBricksDesktop?.saveCaptureImage) {
-      const saved = await window.cubeBricksDesktop.saveCaptureImage({ name, dataUrl: modelCaptureDataUrl });
-      if (saved) toast('模型截圖已保存');
-    } else if (window.showSaveFilePicker) {
-      const handle = await window.showSaveFilePicker({ suggestedName: name,
-        types: [{ description: 'PNG 圖片', accept: { 'image/png': ['.png'] } }] });
-      const writable = await handle.createWritable();
-      await writable.write(await modelCaptureBlob());
-      await writable.close();
-      toast('模型截圖已保存');
-    } else {
-      const blob = await modelCaptureBlob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url; link.download = name; link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast('已下載模型截圖');
-    }
-  } catch (error) {
-    if (error.name !== 'AbortError') toast(`保存截圖失敗：${error.message}`);
-  }
-}
-
-async function copyModelCapture() {
-  if (!modelCaptureDataUrl) return;
-  try {
-    if (window.cubeBricksDesktop?.copyCaptureImage)
-      await window.cubeBricksDesktop.copyCaptureImage(modelCaptureDataUrl);
-    else await navigator.clipboard.write([new ClipboardItem({ 'image/png': await modelCaptureBlob() })]);
-    toast('模型截圖已複製到剪切板');
-  } catch (error) {
-    toast(`複製截圖失敗：${error.message}`);
-  }
-}
-
-function selectedMirrorGuideGroup() {
-  const owner = selected();
-  const entries = [...(owner?.modifiers || []), ...(owner?.operators || [])];
-  const isSymmetry = entry => ['symmetry', 'paint_symmetry'].includes(entry.type) && entry.enabled;
-  const modifier = entries.find(entry => entry.uid === state.selectedModifierUid && isSymmetry(entry))
-    || (state.inspectorPage === 'operators' ? owner?.operators?.find(isSymmetry) : null)
-    || owner?.modifiers?.find(isSymmetry);
-  return modifier?.enabled ? { owner, modifier } : null;
-}
-
-function mirrorControllerWorldFrame(owner, modifier) {
-  if (!owner || !modifier?.anchor) return null;
-  const chain = state.project.getGroupChain(owner.uid);
-  const pivot = owner.type === 'group' || owner.type === 'cube' || isShapeElement(owner) ? owner.pivot : owner.origin || owner.position || [0, 0, 0];
-  const ownerRotation = owner.rotation || [0, 0, 0];
-  const offset = modifier.anchor.position.map((value, axis) => value - pivot[axis]);
-  const localOrigin = rotateVector(offset, ownerRotation).map((value, axis) => value + pivot[axis]);
-  const rotateDirection = direction => normalize3(applyGroupTransforms(
-    rotateVector(rotateVector(direction, modifier.anchor.rotation || [0, 0, 0]), ownerRotation),
-    chain.map(parent => ({ pivot: [0, 0, 0], rotation: parent.rotation || [0, 0, 0] }))
-  ));
-  return {
-    origin: applyGroupTransforms(localOrigin, chain),
-    axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(rotateDirection)
-  };
-}
-
-function symmetryModifierAngles(modifier) {
-  const count = Math.max(1, Math.min(256, Math.round(Number(modifier.copies) || 1)));
-  if (modifier.distribution !== 'range') return Array.from({ length: count }, (_, index) => index * 360 / count);
-  const start = Number(modifier.rangeStart) || 0;
-  const end = Number(modifier.rangeEnd) || 0;
-  if (count === 1) return [start];
-  return Array.from({ length: count }, (_, index) => start + (end - start) * index / (count - 1));
-}
-
-function mirrorProjectedSegment(start, end) {
-  const first = projectViewportPoint(start), second = projectViewportPoint(end);
-  if (first.behind || second.behind) return '';
-  return `M${first.x.toFixed(1)},${first.y.toFixed(1)}L${second.x.toFixed(1)},${second.y.toFixed(1)}`;
-}
-
-function mirrorGridPlaneMarkup(origin, firstAxis, secondAxis, className) {
-  const size = 24, step = 4;
-  const minor = [], major = [];
-  for (let offset = -size; offset <= size + .001; offset += step) {
-    const firstStart = addScaled3(addScaled3(origin, firstAxis, -size), secondAxis, offset);
-    const firstEnd = addScaled3(addScaled3(origin, firstAxis, size), secondAxis, offset);
-    const secondStart = addScaled3(addScaled3(origin, secondAxis, -size), firstAxis, offset);
-    const secondEnd = addScaled3(addScaled3(origin, secondAxis, size), firstAxis, offset);
-    const target = Math.abs(offset) < .001 || Math.abs(offset % 8) < .001 ? major : minor;
-    const firstPath = mirrorProjectedSegment(firstStart, firstEnd);
-    const secondPath = mirrorProjectedSegment(secondStart, secondEnd);
-    if (firstPath) target.push(firstPath);
-    if (secondPath) target.push(secondPath);
-  }
-  return `<g class="mirror-guide ${className}">
-    <path class="mirror-grid-minor" d="${minor.join('')}"/>
-    <path class="mirror-grid-major" d="${major.join('')}"/>
-  </g>`;
-}
-
-function mirrorInfiniteLineMarkup(origin, direction, width, height, className, ray = false) {
-  return finiteWorldGuideMarkup(origin, direction, `mirror-guide ${className} ${ray ? 'mirror-ray' : 'mirror-axis-line'}`, ray);
-}
-
-function finiteWorldGuideMarkup(origin, direction, className, ray = false) {
-  if (!origin || !direction) return '';
-  const cameraForward = sceneRenderer.getCameraFrame()?.forward;
-  const viewFade = cameraForward ? clamp(Math.hypot(...cross3(normalize3(direction), cameraForward)) * 20, 0, 1) : 1;
-  const limit = 2048;
-  const positive = [0, ...Array.from({ length: 29 }, (_, index) => .125 * 2 ** (index / 2)), ...Array.from({ length: 13 }, (_, index) => limit * (.7 + index * .025))];
-  const distances = [...new Set(positive.filter(value => value <= limit))].sort((a, b) => a - b);
-  const samples = ray ? distances : [...distances.slice(1).reverse().map(value => -value), ...distances];
-  const projected = samples.map(distance => ({ distance, point: projectViewportPoint(addScaled3(origin, direction, distance)) }));
-  const lines = [];
-  for (let index = 1; index < projected.length; index++) {
-    const first = projected[index - 1], second = projected[index];
-    if (first.point.behind || second.point.behind || first.point.depth < -1 || second.point.depth < -1) continue;
-    if (!Number.isFinite(first.point.x + first.point.y + second.point.x + second.point.y)) continue;
-    if (Math.hypot(second.point.x - first.point.x, second.point.y - first.point.y) < .05) continue;
-    const distance = Math.max(Math.abs(first.distance), Math.abs(second.distance));
-    const opacity = clamp((limit - distance) / (limit * .3), 0, 1) * viewFade;
-    lines.push(`<line class="${className}" style="opacity:${opacity}" x1="${first.point.x}" y1="${first.point.y}" x2="${second.point.x}" y2="${second.point.y}"/>`);
-  }
-  return lines.join('');
-}
-
-function renderMirrorGuide(entry) {
-  const overlay = $('#mirrorGuideOverlay');
-  const { owner, modifier } = entry;
-  const frame = mirrorControllerWorldFrame(owner, modifier);
-  if (!frame) { overlay.innerHTML = ''; return false; }
-  const rect = sceneCanvas.getBoundingClientRect();
-  const width = rect.width, height = rect.height;
-  overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  const [xAxis, yAxis, zAxis] = frame.axes;
-  const markup = [];
-  if (modifier.mode === 'axes') {
-    const definitions = [
-      ['x', xAxis, yAxis, zAxis],
-      ['y', yAxis, zAxis, xAxis],
-      ['z', zAxis, xAxis, yAxis]
-    ];
-    for (const [axisName, normal, first, second] of definitions) {
-      if (!modifier.axes[axisName]) continue;
-      markup.push(mirrorGridPlaneMarkup(frame.origin, first, second, `axis-${axisName}`));
-      markup.push(mirrorInfiniteLineMarkup(frame.origin, normal, width, height, `axis-${axisName}`));
-    }
-  } else {
-    markup.push(mirrorInfiniteLineMarkup(frame.origin, yAxis, width, height, 'radial-axis'));
-    const angles = symmetryModifierAngles(modifier);
-    for (const degrees of angles) {
-      const radians = degrees * Math.PI / 180;
-      const radial = normalize3(xAxis.map((value, axis) => value * Math.cos(radians) + zAxis[axis] * Math.sin(radians)));
-      markup.push(mirrorGridPlaneMarkup(frame.origin, yAxis, radial, 'radial-plane'));
-      markup.push(mirrorInfiniteLineMarkup(frame.origin, radial, width, height, 'radial-ray', true));
-    }
-  }
-  overlay.innerHTML = markup.join('');
-  return Boolean(markup.length);
-}
-
-function updateMirrorGuideOverlay() {
-  const overlay = $('#mirrorGuideOverlay');
-  const activeGroup = selectedMirrorGuideGroup();
-  if (activeGroup) {
-    clearTimeout(mirrorGuideHoldTimer);
-    clearTimeout(mirrorGuideHideTimer);
-    mirrorGuideHoldTimer = null;
-    mirrorGuideHideTimer = null;
-    mirrorGuideGroupUid = activeGroup.owner.uid;
-    mirrorGuideEntryUid = activeGroup.modifier.uid;
-    const visible = renderMirrorGuide(activeGroup);
-    overlay.toggleAttribute('hidden', !visible);
-    if (visible) requestAnimationFrame(() => overlay.classList.add('visible'));
-    return;
-  }
-  const previousOwner = mirrorGuideGroupUid && state.project.getNode(mirrorGuideGroupUid);
-  const previousModifier = [...(previousOwner?.modifiers || []), ...(previousOwner?.operators || [])]
-    .find(entry => entry.uid === mirrorGuideEntryUid);
-  if (!previousModifier?.enabled) {
-    overlay.classList.remove('visible');
-    overlay.setAttribute('hidden', '');
-    overlay.innerHTML = '';
-    mirrorGuideGroupUid = null;
-    mirrorGuideEntryUid = null;
-    return;
-  }
-  renderMirrorGuide({ owner: previousOwner, modifier: previousModifier });
-  if (mirrorGuideHoldTimer || mirrorGuideHideTimer) return;
-  mirrorGuideHoldTimer = setTimeout(() => {
-    mirrorGuideHoldTimer = null;
-    overlay.classList.remove('visible');
-    mirrorGuideHideTimer = setTimeout(() => {
-      mirrorGuideHideTimer = null;
-      if (selectedMirrorGuideGroup()) return;
-      overlay.setAttribute('hidden', '');
-      overlay.innerHTML = '';
-      mirrorGuideGroupUid = null;
-      mirrorGuideEntryUid = null;
-    }, 340);
-  }, 1500);
-}
 
 function updateFaceSelectionOverlay() {
   const overlay = $('#faceSelectionOverlay');
@@ -3664,7 +1075,7 @@ function updateFaceSelectionOverlay() {
     overlay.replaceChildren();
     overlay.setAttribute('hidden', '');
   }
-  uvPreviewRenderDirty = true;
+  uvPreviewController.uvPreviewRenderDirty = true;
   scheduleSceneRender();
 }
 
@@ -3737,9 +1148,9 @@ function isEffectivelyLocked(uidValue) {
 
 function lockedObjectOpacity(uidValue, screenPoint) {
   if (!isEffectivelyLocked(uidValue)) return 1;
-  const base = subdivisionSession ? .12 : state.lockedDefaultAlpha / 100;
+  const base = inspectorController.subdivisionSession ? .12 : state.lockedDefaultAlpha / 100;
   const hover = state.lockedHoverAlpha / 100;
-  if (subdivisionSession || !state.lockedHoverFade || !state.lockedHoverPoint || !screenPoint || state.lockedHoverStrength <= 0) return base;
+  if (inspectorController.subdivisionSession || !state.lockedHoverFade || !state.lockedHoverPoint || !screenPoint || state.lockedHoverStrength <= 0) return base;
   const distance = Math.hypot(screenPoint.x - state.lockedHoverPoint[0], screenPoint.y - state.lockedHoverPoint[1]);
   const ratio = Math.min(1, distance / Math.max(1, state.lockedHoverRadius));
   const smooth = ratio * ratio * (3 - 2 * ratio);
@@ -3809,348 +1220,7 @@ function scheduleLockedHover(event) {
   });
 }
 
-function bakeCameraPan() {
-  const frame = sceneRenderer.getCameraFrame();
-  if (frame?.target) state.target = [...frame.target];
-  state.panX = 0;
-  state.panY = 0;
-}
 
-function cancelCameraFocus() {
-  if (cameraFocusFrame !== null) cancelAnimationFrame(cameraFocusFrame);
-  cameraFocusFrame = null;
-}
-
-function animateCameraFocus(target, duration = 250) {
-  cancelCameraFocus();
-  bakeCameraPan();
-  const from = [...state.target];
-  const to = [...target];
-  const startedAt = performance.now();
-  const tick = now => {
-    const progress = Math.min(1, (now - startedAt) / duration);
-    const eased = progress < .5
-      ? 4 * progress ** 3
-      : 1 - (-2 * progress + 2) ** 3 / 2;
-    state.target = from.map((value, axis) => value + (to[axis] - value) * eased);
-    renderScene();
-    if (progress < 1) cameraFocusFrame = requestAnimationFrame(tick);
-    else cameraFocusFrame = null;
-  };
-  cameraFocusFrame = requestAnimationFrame(tick);
-}
-
-function focusSelected() {
-  const center = state.selectedUid && sceneRenderer.getGeometryCenter(state.project, state.selectedUid);
-  if (!center) return toast('目前沒有可聚焦的物件');
-  animateCameraFocus(center);
-}
-
-function focusSceneOrigin() {
-  animateCameraFocus([0, 0, 0]);
-}
-
-function currentProjection() {
-  return state.axisView ? 'orthographic' : state.projection;
-}
-
-function captureCameraState() {
-  return {
-    zoom: state.zoom,
-    panX: state.panX,
-    panY: state.panY,
-    yaw: state.yaw,
-    pitch: state.pitch,
-    target: [...state.target]
-  };
-}
-
-function applyCameraState(camera) {
-  if (!camera) return;
-  state.zoom = Number(camera.zoom) || 1;
-  state.panX = Number(camera.panX) || 0;
-  state.panY = Number(camera.panY) || 0;
-  state.yaw = Number(camera.yaw) || 0;
-  state.pitch = Number(camera.pitch) || 0;
-  state.target = Array.isArray(camera.target) ? [...camera.target] : [0, 0, 0];
-}
-
-function axisViewOrientation(axis, sign = 1) {
-  if (axis === 'x') return { yaw: sign > 0 ? Math.PI / 2 : -Math.PI / 2, pitch: 0 };
-  if (axis === 'y') return { yaw: 0, pitch: sign > 0 ? Math.PI / 2 - .001 : -Math.PI / 2 + .001 };
-  return { yaw: sign > 0 ? 0 : Math.PI, pitch: 0 };
-}
-
-function updateProjectionControls() {
-  const projection = currentProjection();
-  $$('[data-projection]').forEach(button => {
-    button.classList.toggle('active', button.dataset.projection === projection);
-    button.disabled = Boolean(state.axisView);
-    button.title = state.axisView ? '三軸視圖固定使用正交投影' : '';
-  });
-}
-
-function enterAxisView(axis, sign = 1) {
-  if (!['x', 'y', 'z'].includes(axis)) return;
-  cancelCameraFocus();
-  bakeCameraPan();
-  const previousAxis = state.axisView;
-  if (!previousAxis) state.generalCamera = captureCameraState();
-  else state.axisViewCameras[previousAxis] = captureCameraState();
-  if (previousAxis === axis) {
-    state.axisViewSign *= -1;
-  } else {
-    const general = state.generalCamera || captureCameraState();
-    const saved = state.axisViewCameras[axis];
-    applyCameraState(saved || {
-      ...general,
-      zoom: mapProjectionZoom(general.zoom, state.projection, 'orthographic'),
-      panX: 0,
-      panY: 0,
-      target: [...general.target]
-    });
-    state.axisView = axis;
-    state.axisViewSign = sign < 0 ? -1 : 1;
-  }
-  const orientation = axisViewOrientation(axis, state.axisViewSign);
-  state.yaw = orientation.yaw;
-  state.pitch = orientation.pitch;
-  updateProjectionControls();
-  setReferenceImageEditing(false);
-  renderScene();
-}
-
-function exitAxisView({ render = true } = {}) {
-  if (!state.axisView) return false;
-  state.axisViewCameras[state.axisView] = captureCameraState();
-  applyCameraState(state.generalCamera || captureCameraState());
-  state.axisView = null;
-  state.axisViewSign = 1;
-  state.generalCamera = null;
-  updateProjectionControls();
-  setReferenceImageEditing(false);
-  if (render) renderScene();
-  return true;
-}
-
-function referenceViewKey() {
-  return state.axisView || 'general';
-}
-
-function referenceImageStore() {
-  state.project.referenceImages ||= { general: [], x: [], y: [], z: [] };
-  for (const key of ['general', 'x', 'y', 'z']) {
-    const stored = state.project.referenceImages[key];
-    const records = Array.isArray(stored) ? stored : stored ? [stored] : [];
-    for (const record of records) record.uid ||= `reference_${crypto.randomUUID().slice(0, 8)}`;
-    state.project.referenceImages[key] = records;
-  }
-  return state.project.referenceImages;
-}
-
-function referenceImagesForView(key = referenceViewKey()) {
-  return referenceImageStore()[key];
-}
-
-function currentReferenceImage(key = referenceViewKey()) {
-  const records = referenceImagesForView(key);
-  if (!records.length) {
-    state.referenceImageSelection[key] = null;
-    return null;
-  }
-  let record = records.find(entry => entry.uid === state.referenceImageSelection[key]);
-  if (!record) {
-    record = records.at(-1);
-    state.referenceImageSelection[key] = record.uid;
-  }
-  return record;
-}
-
-function axisReferenceBasis(axis) {
-  if (axis === 'x') return { horizontal: [0, 0, -1], vertical: [0, 1, 0] };
-  if (axis === 'y') return { horizontal: [1, 0, 0], vertical: [0, 0, -1] };
-  return { horizontal: [1, 0, 0], vertical: [0, 1, 0] };
-}
-
-function referenceDefaultScale(record, key = referenceViewKey()) {
-  if (key !== 'general') return 16 / Math.max(1, record.naturalWidth, record.naturalHeight);
-  const width = Math.max(1, viewport.clientWidth * .68);
-  const height = Math.max(1, viewport.clientHeight * .68);
-  return Math.min(width / record.naturalWidth, height / record.naturalHeight);
-}
-
-function updateReferenceImageControls() {
-  const key = referenceViewKey();
-  const records = referenceImagesForView(key);
-  const record = currentReferenceImage(key);
-  const renderKey = JSON.stringify([key, record?.uid, referenceImageEditing,
-    records.map(entry => [entry.uid, entry.name])]);
-  if (referenceControlsProject === state.project && referenceControlsKey === renderKey) return;
-  referenceControlsProject = state.project;
-  referenceControlsKey = renderKey;
-  const labels = { general: '一般視圖參考圖', x: 'X 軸視圖參考圖', y: 'Y 軸視圖參考圖', z: 'Z 軸視圖參考圖' };
-  $('#referenceImageViewLabel').textContent = labels[key];
-  $('#referenceImageName').textContent = record ? `${record.name} · ${records.indexOf(record) + 1}/${records.length}` : '尚未導入';
-  $('#referenceImageList').innerHTML = records.length
-    ? records.map((entry, index) => `<button type="button" class="reference-image-entry ${entry === record ? 'active' : ''}" data-reference-select="${escapeHtml(entry.uid)}" title="${escapeHtml(entry.name)}"><span>${index + 1}</span><b>${escapeHtml(entry.name)}</b></button>`).join('')
-    : '<small class="reference-image-empty">這個視圖還沒有參考圖</small>';
-  const control = $('[data-action="referenceImage"]');
-  control.classList.toggle('active', records.length > 0);
-  control.classList.toggle('editing', referenceImageEditing && Boolean(record));
-  $$('[data-reference-action="edit"], [data-reference-action="reset"], [data-reference-action="remove"]')
-    .forEach(button => { button.disabled = !record; });
-  const editButton = $('[data-reference-action="edit"]');
-  if (editButton) editButton.textContent = referenceImageEditing ? '結束調整' : '調整位置與尺寸';
-}
-
-function applyReferenceImageTransform(element, record, key) {
-  if (key === 'general') {
-    const scale = record.scale;
-    const x = viewport.clientWidth / 2 + record.offset[0] - record.naturalWidth * scale / 2;
-    const y = viewport.clientHeight / 2 + record.offset[1] - record.naturalHeight * scale / 2;
-    element.style.transform = `matrix(${scale},0,0,${scale},${x},${y})`;
-    return;
-  }
-  const basis = axisReferenceBasis(key);
-  const origin = [0, 0, 0];
-  const centerWorld = origin.map((value, index) => value
-    + basis.horizontal[index] * record.offset[0]
-    + basis.vertical[index] * record.offset[1]);
-  const center = sceneRenderer.projectPoint(centerWorld);
-  const horizontal = sceneRenderer.projectPoint(basis.horizontal);
-  const vertical = sceneRenderer.projectPoint(basis.vertical);
-  const base = sceneRenderer.projectPoint(origin);
-  const a = (horizontal.x - base.x) * record.scale;
-  const b = (horizontal.y - base.y) * record.scale;
-  const c = -(vertical.x - base.x) * record.scale;
-  const d = -(vertical.y - base.y) * record.scale;
-  const x = center.x - a * record.naturalWidth / 2 - c * record.naturalHeight / 2;
-  const y = center.y - b * record.naturalWidth / 2 - d * record.naturalHeight / 2;
-  element.style.transform = `matrix(${a},${b},${c},${d},${x},${y})`;
-}
-
-function updateReferenceImageLayer() {
-  const key = referenceViewKey();
-  const records = referenceImagesForView(key);
-  const selected = currentReferenceImage(key);
-  if (!records.length) {
-    if (!referenceImageLayer.hidden) {
-      referenceImageLayer.hidden = true;
-      referenceImageLayer.querySelectorAll('img').forEach(image => image.remove());
-    }
-    updateReferenceImageControls();
-    return;
-  }
-  referenceImageLayer.hidden = false;
-  referenceImageLayer.classList.toggle('editing', referenceImageEditing && Boolean(selected));
-  const existing = new Map([...referenceImageLayer.querySelectorAll('img')].map(image => [image.dataset.referenceUid, image]));
-  for (const record of records) {
-    let image = existing.get(record.uid);
-    if (!image) {
-      image = document.createElement('img');
-      image.dataset.referenceUid = record.uid;
-      image.alt = record.name;
-      image.draggable = false;
-      referenceImageLayer.insertBefore(image, referenceImageHint);
-    }
-    existing.delete(record.uid);
-    if (image.getAttribute('src') !== record.source) image.src = record.source;
-    image.width = record.naturalWidth;
-    image.height = record.naturalHeight;
-    image.classList.toggle('selected', record === selected);
-    applyReferenceImageTransform(image, record, key);
-  }
-  existing.forEach(image => image.remove());
-  updateReferenceImageControls();
-}
-
-function setReferenceImageEditing(value) {
-  referenceImageEditing = Boolean(value && currentReferenceImage());
-  referenceImageDrag = null;
-  referenceImageLayer.classList.remove('dragging');
-  updateReferenceImageLayer();
-}
-
-function setReferenceImageMenu(open) {
-  $('#referenceImageMenu').hidden = !open;
-  $('[data-action="referenceImage"]').setAttribute('aria-expanded', String(open));
-  if (open) updateReferenceImageControls();
-}
-
-function beginReferenceImageImport() {
-  referenceImportViewKey = referenceViewKey();
-  referenceImageInput.value = '';
-  referenceImageInput.click();
-  setReferenceImageMenu(false);
-}
-
-function resetReferenceImage() {
-  const record = currentReferenceImage();
-  if (!record) return;
-  snapshot('core.reference.reset');
-  record.offset = [0, 0];
-  record.scale = referenceDefaultScale(record);
-  markDirty();
-  updateReferenceImageLayer();
-}
-
-function removeReferenceImage() {
-  const key = referenceViewKey();
-  const records = referenceImagesForView(key);
-  const record = currentReferenceImage(key);
-  if (!record) return;
-  snapshot('core.reference.remove');
-  const index = records.indexOf(record);
-  records.splice(index, 1);
-  const next = records[Math.min(index, records.length - 1)] || null;
-  state.referenceImageSelection[key] = next?.uid || null;
-  if (!next) referenceImageEditing = false;
-  markDirty();
-  updateReferenceImageLayer();
-}
-
-function readReferenceImageFile(file, key) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = reject;
-      image.onload = () => {
-        const record = {
-          uid: `reference_${crypto.randomUUID().slice(0, 8)}`,
-          name: file.name || 'reference.png',
-          source: String(reader.result),
-          naturalWidth: Math.max(1, image.naturalWidth || image.width),
-          naturalHeight: Math.max(1, image.naturalHeight || image.height),
-          offset: [0, 0],
-          scale: 1
-        };
-        record.scale = referenceDefaultScale(record, key);
-        resolve(record);
-      };
-      image.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-async function loadReferenceImageFiles(files, key) {
-  if (!['general', 'x', 'y', 'z'].includes(key)) return;
-  const candidates = [...(files || [])];
-  if (!candidates.length) return;
-  const settled = await Promise.allSettled(candidates.map(file => readReferenceImageFile(file, key)));
-  const records = settled.filter(result => result.status === 'fulfilled').map(result => result.value);
-  if (!records.length) return toast('無法讀取這些參考圖');
-  snapshot('core.reference.add');
-  referenceImagesForView(key).push(...records);
-  state.referenceImageSelection[key] = records.at(-1).uid;
-  referenceImageEditing = key === referenceViewKey();
-  markDirty();
-  updateReferenceImageLayer();
-  if (settled.some(result => result.status === 'rejected')) toast(`已導入 ${records.length} 張參考圖，部分檔案無法讀取`);
-  else toast(`已導入${key === 'general' ? '一般視圖' : key.toUpperCase() + ' 軸視圖'}參考圖 · ${records.length} 張`);
-}
 
 function updatePlayerReferenceTexture(setting = configRegistry.get(ConfigKey.PLAYER_REFERENCE_TEXTURE)) {
   const customSource = typeof setting?.source === 'string' ? setting.source : '';
@@ -4199,179 +1269,8 @@ function importPlayerReferenceTexture(file) {
   reader.readAsDataURL(file);
 }
 
-function referenceDragBasis() {
-  if (!state.axisView) return null;
-  const basis = axisReferenceBasis(state.axisView);
-  const origin = sceneRenderer.projectPoint([0, 0, 0]);
-  const horizontal = sceneRenderer.projectPoint(basis.horizontal);
-  const vertical = sceneRenderer.projectPoint(basis.vertical);
-  return {
-    horizontal: [horizontal.x - origin.x, horizontal.y - origin.y],
-    vertical: [vertical.x - origin.x, vertical.y - origin.y]
-  };
-}
 
-function beginReferenceImageDrag(event) {
-  if (!referenceImageEditing || !currentReferenceImage() || ![0, 1].includes(event.button)) return;
-  event.preventDefault();
-  event.stopPropagation();
-  referenceImageLayer.setPointerCapture(event.pointerId);
-  const record = currentReferenceImage();
-  referenceImageDrag = {
-    pointerId: event.pointerId,
-    x: event.clientX,
-    y: event.clientY,
-    offset: [...record.offset],
-    uid: record.uid,
-    key: referenceViewKey(),
-    basis: referenceDragBasis(),
-    snapshotTaken: false
-  };
-  referenceImageLayer.classList.add('dragging');
-}
 
-function moveReferenceImageDrag(event) {
-  const drag = referenceImageDrag;
-  if (!drag || drag.pointerId !== event.pointerId || drag.key !== referenceViewKey()) return;
-  const dx = event.clientX - drag.x;
-  const dy = event.clientY - drag.y;
-  if (!drag.snapshotTaken && Math.hypot(dx, dy) < .5) return;
-  if (!drag.snapshotTaken) {
-    snapshot('core.reference.move');
-    drag.snapshotTaken = true;
-  }
-  const record = currentReferenceImage();
-  if (!record || record.uid !== drag.uid) return;
-  if (!drag.basis) {
-    record.offset = [drag.offset[0] + dx, drag.offset[1] + dy];
-  } else {
-    const [hx, hy] = drag.basis.horizontal;
-    const [vx, vy] = drag.basis.vertical;
-    const determinant = hx * vy - hy * vx;
-    if (Math.abs(determinant) < .000001) return;
-    const horizontalDelta = (dx * vy - dy * vx) / determinant;
-    const verticalDelta = (hx * dy - hy * dx) / determinant;
-    record.offset = [drag.offset[0] + horizontalDelta, drag.offset[1] + verticalDelta];
-  }
-  markDirty();
-  updateReferenceImageLayer();
-}
-
-function endReferenceImageDrag(event) {
-  if (!referenceImageDrag || referenceImageDrag.pointerId !== event.pointerId) return;
-  if (referenceImageLayer.hasPointerCapture?.(event.pointerId)) referenceImageLayer.releasePointerCapture(event.pointerId);
-  referenceImageDrag = null;
-  referenceImageLayer.classList.remove('dragging');
-}
-
-function scaleReferenceImage(event) {
-  if (!referenceImageEditing) return;
-  const record = currentReferenceImage();
-  if (!record) return;
-  event.preventDefault();
-  snapshot('core.reference.scale');
-  const factor = event.deltaY > 0 ? .9 : 1.1;
-  record.scale = Math.max(.00001, Math.min(100, record.scale * factor));
-  markDirty();
-  updateReferenceImageLayer();
-}
-
-function updateAxisWidget() {
-  const frame = sceneRenderer.getCameraFrame();
-  if (!frame) return;
-  const { forward, right, up } = frame;
-  const axes = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
-  const widget = $('.axis-widget');
-  const endpoints = $$('[data-view-axis]', widget).map(button => {
-    const name = button.dataset.viewAxis;
-    const sign = Number(button.dataset.axisSign) < 0 ? -1 : 1;
-    const axis = axes[name].map(value => value * sign);
-    const x = 33 + dot3(axis, right) * 22;
-    const y = 33 - dot3(axis, up) * 22;
-    const depth = dot3(axis, forward);
-    return { button, name, sign, x, y, depth };
-  }).sort((first, second) => second.depth - first.depth);
-  // Camera-forward depth increases away from the viewer. Draw the far end
-  // first, including pointer hit testing when the projected circles overlap.
-  for (let index = 0; index < endpoints.length; index++) {
-    const { button, name, sign, x, y, depth } = endpoints[index];
-    const line = $(`[data-axis-line="${name}"][data-axis-sign="${sign}"]`, widget);
-    line.setAttribute('x2', x); line.setAttribute('y2', y);
-    line.style.opacity = String(.65 - depth * .25);
-    line.parentNode.appendChild(line);
-    button.style.left = `${x}px`; button.style.top = `${y}px`;
-    button.style.zIndex = String(index + 1);
-    button.style.setProperty('--axis-tone', `color-mix(in srgb, var(--axis-color) ${Math.round(75 - depth * 25)}%, var(--panel))`);
-    const active = state.axisView === name && state.axisViewSign === sign;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-pressed', String(active));
-  }
-  $('#viewHint').innerHTML = state.axisView
-    ? '<kbd>中鍵</kbd> 平移 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>拖動輪盤</kbd> 一般視圖'
-    : '<kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心';
-  updateProjectionControls();
-}
-
-function beginAxisWidgetDrag(event) {
-  if (event.button !== 0) return;
-  event.preventDefault();
-  cancelCameraFocus();
-  const widget = event.currentTarget;
-  widget.setPointerCapture(event.pointerId);
-  axisWidgetDrag = {
-    pointerId: event.pointerId,
-    x: event.clientX,
-    y: event.clientY,
-    moved: false,
-    sourceAxis: event.target.closest('[data-view-axis]')?.dataset.viewAxis || null,
-    sourceSign: Number(event.target.closest('[data-view-axis]')?.dataset.axisSign) < 0 ? -1 : 1,
-    yaw: state.yaw,
-    pitch: state.pitch
-  };
-}
-
-function moveAxisWidgetDrag(event) {
-  const drag = axisWidgetDrag;
-  if (!drag || drag.pointerId !== event.pointerId) return;
-  const dx = event.clientX - drag.x;
-  const dy = event.clientY - drag.y;
-  if (!drag.moved && Math.hypot(dx, dy) < 3) return;
-  if (!drag.moved) {
-    drag.moved = true;
-    if (state.axisView) {
-      exitAxisView({ render: false });
-      drag.yaw = state.yaw;
-      drag.pitch = state.pitch;
-    }
-    $('.axis-widget').classList.add('dragging');
-    sceneCanvas.classList.add('is-orbiting');
-  }
-  const fullTurn = Math.PI * 2;
-  state.yaw = ((drag.yaw - dx * .01) % fullTurn + fullTurn) % fullTurn;
-  state.pitch = Math.max(-Math.PI / 2 + .001, Math.min(Math.PI / 2 - .001, drag.pitch + dy * .01));
-  renderScene();
-}
-
-function endAxisWidgetDrag(event) {
-  if (!axisWidgetDrag || axisWidgetDrag.pointerId !== event.pointerId) return;
-  const moved = axisWidgetDrag.moved;
-  const sourceAxis = axisWidgetDrag.sourceAxis;
-  const sourceSign = axisWidgetDrag.sourceSign;
-  const widget = event.currentTarget;
-  if (widget.hasPointerCapture?.(event.pointerId)) widget.releasePointerCapture(event.pointerId);
-  axisWidgetDrag = null;
-  widget.classList.remove('dragging');
-  sceneCanvas.classList.remove('is-orbiting');
-  if (moved || sourceAxis) {
-    suppressAxisWidgetClick = true;
-    setTimeout(() => { suppressAxisWidgetClick = false; }, 0);
-  }
-  if (event.type !== 'pointercancel' && !moved && sourceAxis) enterAxisView(sourceAxis, sourceSign);
-}
-
-function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
-function cross3(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
-function normalize3(vector) { const length = Math.hypot(...vector) || 1; return vector.map(value => value / length); }
 
 function updateTransformSpaceButtons() {
   $$('[data-transform-space]').forEach(button => {
@@ -4405,47 +1304,6 @@ function updateMultiTransformModeButtons() {
   });
 }
 
-function rotateVector(vector, rotation) {
-  let [x, y, z] = vector;
-  const [rx, ry, rz] = rotation.map(value => value * Math.PI / 180);
-  let c = Math.cos(rx), s = Math.sin(rx); [y, z] = [y * c - z * s, y * s + z * c];
-  c = Math.cos(ry); s = Math.sin(ry); [x, z] = [x * c + z * s, -x * s + z * c];
-  c = Math.cos(rz); s = Math.sin(rz); [x, y] = [x * c - y * s, x * s + y * c];
-  return [x, y, z];
-}
-
-function inverseRotateVector(vector, rotation) {
-  return rotateVector(rotateVector(rotateVector(vector, [0, 0, -rotation[2]]), [0, -rotation[1], 0]), [-rotation[0], 0, 0]);
-}
-
-function quaternionMultiply(a, b) {
-  return [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
-    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
-    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
-    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
-}
-
-function quaternionFromEuler(rotation) {
-  const half = rotation.map(value => value * Math.PI / 360);
-  const qx = [Math.sin(half[0]), 0, 0, Math.cos(half[0])];
-  const qy = [0, Math.sin(half[1]), 0, Math.cos(half[1])];
-  const qz = [0, 0, Math.sin(half[2]), Math.cos(half[2])];
-  return quaternionMultiply(quaternionMultiply(qz, qy), qx);
-}
-
-function quaternionFromAxisAngle(axis, degrees) {
-  const half = degrees * Math.PI / 360, direction = normalize3(axis);
-  return [...direction.map(value => value * Math.sin(half)), Math.cos(half)];
-}
-
-function eulerFromQuaternion(q) {
-  const [x, y, z, w] = q;
-  const sinY = 2 * (w * y - z * x);
-  const rx = Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y));
-  const ry = Math.asin(Math.max(-1, Math.min(1, sinY)));
-  const rz = Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
-  return [rx, ry, rz].map(value => value * 180 / Math.PI);
-}
 
 function getTransformPivot(item) {
   const owner = subdivisionOwner(item);
@@ -4630,658 +1488,20 @@ function getModifierAnchorTransformAxes(context) {
   return units.map(unit => transformDirection(rotateVector(unit, context.modifier.anchor.rotation || [0, 0, 0])));
 }
 
-function addScaled3(point, direction, amount) {
-  return point.map((value, axis) => value + direction[axis] * amount);
-}
-
-function intersectRayPlane(ray, planePoint, planeNormal) {
-  if (!ray) return null;
-  const denominator = dot3(ray.direction, planeNormal);
-  if (Math.abs(denominator) < 1e-6) return null;
-  const distance = dot3(planePoint.map((value, axis) => value - ray.origin[axis]), planeNormal) / denominator;
-  return addScaled3(ray.origin, ray.direction, distance);
-}
-
-function projectViewportPoint(point) {
-  const projected = sceneRenderer.projectPoint(point);
-  return { ...projected, worldPerPixel: sceneRenderer.getCameraFrame()?.worldPerPixel || .08 };
-}
-
-function axisBasis(axis) {
-  const reference = Math.abs(axis[1]) < .82 ? [0, 1, 0] : [1, 0, 0];
-  const u = normalize3(cross3(axis, reference));
-  return [u, normalize3(cross3(axis, u))];
-}
-
-function pointsPath(points, close = false) {
-  if (!points.length) return '';
-  return `${points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')}${close ? ' Z' : ''}`;
-}
-
-function gizmoDepthAttributes(shape, pointGroups, priority = '') {
-  const groups = (Array.isArray(pointGroups[0]) ? pointGroups : [pointGroups]).filter(group => group.length);
-  const points = groups.flat();
-  const averageDepth = points.reduce((sum, point) => sum + point.depth, 0) / Math.max(1, points.length);
-  const encoded = groups.map(group => group.map(point =>
-    `${point.x.toFixed(3)},${point.y.toFixed(3)},${point.depth.toFixed(6)}`).join(';')).join('|');
-  return `data-hit-shape="${shape}" data-hit-depth="${averageDepth.toFixed(6)}" data-hit-points="${encoded}"${priority ? ` data-hit-priority="${priority}"` : ''}`;
-}
-
-function gizmoControlLayer(control) {
-  if (control.dataset.hitPriority === 'center') return 2;
-  return control.dataset.kind?.startsWith('plane') ? 1 : 0;
-}
-
-function sortGizmoControlsByDepth(gizmo) {
-  const controls = [...gizmo.children].filter(element => element.classList.contains('gizmo-control'));
-  const anchor = [...gizmo.children].find(element => !element.classList.contains('gizmo-control')) || null;
-  controls.sort((left, right) => {
-    const leftLayer = gizmoControlLayer(left);
-    const rightLayer = gizmoControlLayer(right);
-    if (leftLayer !== rightLayer) return leftLayer - rightLayer;
-    // OpenGL NDC depth grows away from the camera, so farther controls are
-    // painted first and the nearer control remains visible on top.
-    return Number(right.dataset.hitDepth || 1) - Number(left.dataset.hitDepth || 1);
-  });
-  controls.forEach(control => gizmo.insertBefore(control, anchor));
-}
-
-function parseGizmoDepthGroups(control) {
-  return (control.dataset.hitPoints || '').split('|').map(group => group.split(';').map(point => {
-    const values = point.split(',').map(Number);
-    return values.length === 3 && values.every(Number.isFinite) ? values : null;
-  }).filter(Boolean)).filter(group => group.length);
-}
-
-function triangleDepthAtPoint(point, first, second, third) {
-  const denominator = (second[1] - third[1]) * (first[0] - third[0])
-    + (third[0] - second[0]) * (first[1] - third[1]);
-  if (Math.abs(denominator) < 1e-6) return null;
-  const a = ((second[1] - third[1]) * (point[0] - third[0])
-    + (third[0] - second[0]) * (point[1] - third[1])) / denominator;
-  const b = ((third[1] - first[1]) * (point[0] - third[0])
-    + (first[0] - third[0]) * (point[1] - third[1])) / denominator;
-  const c = 1 - a - b;
-  if (a < -.001 || b < -.001 || c < -.001) return null;
-  return a * first[2] + b * second[2] + c * third[2];
-}
-
-function gizmoControlDepthAtPoint(control, x, y) {
-  const groups = parseGizmoDepthGroups(control);
-  const fallback = Number(control.dataset.hitDepth || 1);
-  if (!groups.length) return fallback;
-  if (control.dataset.hitShape === 'polygon' && groups[0].length >= 3) {
-    const polygon = groups[0];
-    for (let index = 1; index < polygon.length - 1; index++) {
-      const depth = triangleDepthAtPoint([x, y], polygon[0], polygon[index], polygon[index + 1]);
-      if (depth !== null) return depth;
-    }
-    return fallback;
-  }
-  let closest = { distance: Infinity, depth: fallback };
-  for (const group of groups) {
-    if (group.length === 1) continue;
-    for (let index = 0; index < group.length - 1; index++) {
-      const first = group[index], second = group[index + 1];
-      const dx = second[0] - first[0], dy = second[1] - first[1];
-      const lengthSquared = dx * dx + dy * dy;
-      const amount = lengthSquared > 1e-6
-        ? Math.max(0, Math.min(1, ((x - first[0]) * dx + (y - first[1]) * dy) / lengthSquared))
-        : 0;
-      const nearestX = first[0] + dx * amount, nearestY = first[1] + dy * amount;
-      const distance = (x - nearestX) ** 2 + (y - nearestY) ** 2;
-      if (distance < closest.distance) closest = {
-        distance,
-        depth: first[2] + (second[2] - first[2]) * amount
-      };
-    }
-  }
-  return closest.depth;
-}
-
-function resolveGizmoHandle(event) {
-  const gizmo = $('#transformGizmo');
-  const controls = [];
-  const seen = new Set();
-  for (const element of document.elementsFromPoint(event.clientX, event.clientY)) {
-    const control = element.closest?.('.gizmo-control');
-    if (!control || !gizmo.contains(control) || seen.has(control)) continue;
-    seen.add(control); controls.push(control);
-  }
-  const fallback = event.target.closest?.('.gizmo-control');
-  if (fallback && gizmo.contains(fallback) && !seen.has(fallback)) controls.push(fallback);
-  if (!controls.length) return null;
-  const frontLayer = Math.max(...controls.map(gizmoControlLayer));
-  const frontControls = controls.filter(control => gizmoControlLayer(control) === frontLayer);
-  const rect = gizmo.getBoundingClientRect();
-  const x = event.clientX - rect.left, y = event.clientY - rect.top;
-  return frontControls.reduce((nearest, control) => {
-    const depth = gizmoControlDepthAtPoint(control, x, y);
-    if (!nearest || depth < nearest.depth - 1e-6) return { control, depth };
-    if (Math.abs(depth - nearest.depth) <= 1e-6
-      && control.dataset.kind === 'axis' && nearest.control.dataset.kind !== 'axis') return { control, depth };
-    return nearest;
-  }, null)?.control || fallback;
-}
-
-function updateGizmoDepthHover(event) {
-  if (state.dragging?.type === 'transform') return;
-  const gizmo = $('#transformGizmo');
-  const handle = resolveGizmoHandle(event);
-  gizmo.querySelectorAll('.depth-hover').forEach(control => control.classList.toggle('depth-hover', control === handle));
-  handle?.classList.add('depth-hover');
-}
-
-const GIZMO_AXIS_PIXELS = 93;
-const GIZMO_HEAD_GAP_PIXELS = 25;
-// Rz * Ry * Rx is presented as the Z -> Y -> X Euler hierarchy. Keep that
-// application order legible by nesting the corresponding rings outside-in.
-const EULER_RING_RADIUS_SCALES = Object.freeze([.775, .87, .965]);
-
-function coneMarkup(handle, origin, axisClass, pixelWorld) {
-  const baseWorld = addScaled3(origin, handle.vector, handle.positiveDistance);
-  const tipWorld = addScaled3(baseWorld, handle.vector, pixelWorld * 19.5);
-  const u = handle.basisU, v = handle.basisV;
-  const base = Array.from({ length: 12 }, (_, index) => {
-    const angle = index / 12 * Math.PI * 2;
-    let point = addScaled3(baseWorld, u, Math.cos(angle) * pixelWorld * 8.25);
-    point = addScaled3(point, v, Math.sin(angle) * pixelWorld * 8.25);
-    return projectViewportPoint(point);
-  });
-  const tip = projectViewportPoint(tipWorld);
-  const baseCenter = projectViewportPoint(baseWorld);
-  const center = projectViewportPoint(origin);
-  const faces = base.map((point, index) => `<path class="gizmo-visible gizmo-head cone-face" d="${pointsPath([tip, point, base[(index + 1) % base.length]], true)}"/>`).join('');
-  return `<g class="gizmo-control ${axisClass}" data-axis="${handle.axis}" data-kind="axis" ${gizmoDepthAttributes('segment', [center, tip])}>
-    <line class="gizmo-hit" x1="${handle.centerX}" y1="${handle.centerY}" x2="${tip.x}" y2="${tip.y}"/>
-    <line class="gizmo-visible axis-stem" x1="${handle.centerX}" y1="${handle.centerY}" x2="${baseCenter.x}" y2="${baseCenter.y}"/>
-    ${faces}<circle class="gizmo-hit-point" cx="${tip.x}" cy="${tip.y}" r="18"/>
-  </g>`;
-}
-
-function prismMarkup(handle, origin, axisClass, pixelWorld, sign) {
-  const direction = handle.vector.map(value => value * sign);
-  const distance = sign > 0 ? handle.positiveDistance : handle.negativeDistance;
-  const endpointWorld = addScaled3(origin, direction, distance);
-  const side = pixelWorld * 13.5;
-  const halfSide = side / 2;
-  const halfThickness = side / 4;
-  const corners = [];
-  for (const along of [-halfThickness, halfThickness]) for (const acrossU of [-halfSide, halfSide]) for (const acrossV of [-halfSide, halfSide]) {
-    let point = addScaled3(endpointWorld, direction, along);
-    point = addScaled3(point, handle.basisU, acrossU);
-    point = addScaled3(point, handle.basisV, acrossV);
-    corners.push(projectViewportPoint(point));
-  }
-  const faces = [[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]]
-    .map(indices => ({ points: indices.map(index => corners[index]), depth: indices.reduce((sum, index) => sum + corners[index].depth, 0) / 4 }))
-    .sort((a, b) => b.depth - a.depth)
-    .map(face => `<path class="gizmo-visible gizmo-head prism-face" d="${pointsPath(face.points, true)}"/>`).join('');
-  const endpoint = projectViewportPoint(endpointWorld);
-  const center = projectViewportPoint(origin);
-  return `<g class="gizmo-control ${axisClass}" data-axis="${handle.axis}" data-kind="axis" data-sign="${sign}" ${gizmoDepthAttributes('segment', [center, endpoint])}>
-    <line class="gizmo-hit" x1="${handle.centerX}" y1="${handle.centerY}" x2="${endpoint.x}" y2="${endpoint.y}"/>
-    <line class="gizmo-visible axis-stem" x1="${handle.centerX}" y1="${handle.centerY}" x2="${endpoint.x}" y2="${endpoint.y}"/>
-    ${faces}<circle class="gizmo-hit-point" cx="${endpoint.x}" cy="${endpoint.y}" r="18"/>
-  </g>`;
-}
-
-const GIZMO_PLANES = Object.freeze([
-  { axes: [0, 1], key: 'xy' },
-  { axes: [1, 2], key: 'yz' },
-  { axes: [2, 0], key: 'zx' }
-]);
-
-function planeMarkup(handles, origin, plane, pixelWorld, signs = [1, 1]) {
-  const [firstIndex, secondIndex] = plane.axes;
-  const first = handles[firstIndex].vector.map(value => value * signs[0]);
-  const second = handles[secondIndex].vector.map(value => value * signs[1]);
-  const near = pixelWorld * 18;
-  const far = pixelWorld * 39;
-  const point = (firstDistance, secondDistance) => {
-    let world = addScaled3(origin, first, firstDistance);
-    world = addScaled3(world, second, secondDistance);
-    return projectViewportPoint(world);
-  };
-  const corners = [point(near, near), point(far, near), point(far, far), point(near, far)];
-  const path = pointsPath(corners, true);
-  const axisKey = `plane-${firstIndex}${secondIndex}`;
-  return `<g class="gizmo-control plane-${plane.key}" data-axis="${axisKey}" data-kind="plane" ${gizmoDepthAttributes('polygon', corners)}
-      data-axes="${firstIndex},${secondIndex}" data-signs="${signs.join(',')}">
-    <path class="gizmo-plane-hit" d="${path}"/>
-    <path class="gizmo-visible plane-handle" d="${path}"/>
-  </g>`;
-}
-
-function planeScaleCornerMarkup(handles, origin, plane, pixelWorld, signs) {
-  const [firstIndex, secondIndex] = plane.axes;
-  const first = handles[firstIndex].vector.map(value => value * signs[0]);
-  const second = handles[secondIndex].vector.map(value => value * signs[1]);
-  const inner = pixelWorld * 22;
-  const outer = pixelWorld * 52;
-  const point = (firstDistance, secondDistance) => {
-    let world = addScaled3(origin, first, firstDistance);
-    world = addScaled3(world, second, secondDistance);
-    return projectViewportPoint(world);
-  };
-  const points = [point(outer, inner), point(outer, outer), point(inner, outer)];
-  const path = pointsPath(points);
-  const axisKey = `plane-uniform-${firstIndex}${secondIndex}`;
-  return `<g class="gizmo-control plane-${plane.key}" data-axis="${axisKey}" data-kind="plane-uniform" ${gizmoDepthAttributes('polyline', points)}
-      data-axes="${firstIndex},${secondIndex}" data-signs="${signs.join(',')}">
-    <path class="gizmo-plane-corner-hit" d="${path}"/>
-    <path class="gizmo-visible plane-scale-corner" d="${path}"/>
-  </g>`;
-}
-
-function centerCubeMarkup(origin, axes, pixelWorld, { axisKey = 'uniform', kind = 'uniform', className = 'uniform-scale-control' } = {}) {
-  const half = pixelWorld * 7.5;
-  const corners = [];
-  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
-    let point = addScaled3(origin, axes[0], x * half);
-    point = addScaled3(point, axes[1], y * half);
-    point = addScaled3(point, axes[2], z * half);
-    corners.push(projectViewportPoint(point));
-  }
-  const faces = [[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]]
-    .map(indices => ({ points: indices.map(index => corners[index]), depth: indices.reduce((sum, index) => sum + corners[index].depth, 0) / 4 }))
-    .sort((left, right) => right.depth - left.depth)
-    .map(face => `<path class="gizmo-visible center-cube-face" d="${pointsPath(face.points, true)}"/>`).join('');
-  const center = projectViewportPoint(origin);
-  return `<g class="gizmo-control ${className}" data-axis="${axisKey}" data-kind="${kind}" ${gizmoDepthAttributes('polygon', [center], 'center')}>
-    <circle class="gizmo-hit-point" cx="${center.x}" cy="${center.y}" r="16"/>
-    ${faces}
-  </g>`;
-}
-
-function pivotMarkerMarkup(origin) {
-  const center = projectViewportPoint(origin);
-  const x = center.x, y = center.y, radius = 11;
-  return `<g class="pivot-marker" aria-label="選中項樞軸點">
-    <path class="pivot-marker-ring" d="M${x},${y - radius} L${x + radius},${y} L${x},${y + radius} L${x - radius},${y} Z"/>
-    <path class="pivot-marker-cross" d="M${x - 15},${y} H${x + 15} M${x},${y - 15} V${y + 15}"/>
-    <circle class="pivot-marker-core" cx="${x}" cy="${y}" r="3.5"/>
-  </g>`;
-}
-
-function modifierAnchorMarkerMarkup(entry, active = false) {
-  const frame = mirrorControllerWorldFrame(entry.owner, entry.modifier);
-  if (!frame) return '';
-  const point = projectViewportPoint(frame.origin);
-  if (point.behind || point.depth < -1 || point.depth > 1) return '';
-  const radius = active ? 11 : 9;
-  return `<g class="${active ? '' : 'gizmo-control '}modifier-anchor-marker ${active ? 'active' : ''}" ${active ? '' : `data-kind="modifier-anchor" data-modifier-uid="${entry.modifier.uid}" ${gizmoDepthAttributes('point', [point], 'center')}`}>
-    ${active ? '' : `<circle class="gizmo-hit-point" cx="${point.x}" cy="${point.y}" r="18"/>`}
-    <path class="gizmo-visible modifier-anchor-ring" d="M${point.x},${point.y - radius} L${point.x + radius},${point.y} L${point.x},${point.y + radius} L${point.x - radius},${point.y} Z"/>
-    <path class="gizmo-visible modifier-anchor-axis" d="M${point.x - 14},${point.y} H${point.x + 14} M${point.x},${point.y - 14} V${point.y + 14}"/>
-    <circle class="gizmo-visible modifier-anchor-core" cx="${point.x}" cy="${point.y}" r="3.4"/>
-  </g>`;
-}
-
-function curveEditorOverlayMarkup(curve) {
-  if (!isBezierElement(curve)) return '';
-  const nodes = sceneRenderer.getCurveNodeWorldPoints(state.project, curve.uid);
-  const handles = sceneRenderer.getCurveHandleWorldPoints(state.project, curve.uid, null);
-  const nodeMarkup = nodes.map(entry => {
-    const point = projectViewportPoint(entry.point);
-    if (point.behind || point.depth < -1 || point.depth > 1) return '';
-    const active = entry.index === state.selectedCurveNodeIndex ? ' active' : '';
-    return `<g class="curve-node-marker${active}" aria-label="曲線節點">
-      <path class="curve-node-marker-cross" d="M${point.x - 12},${point.y} H${point.x + 12} M${point.x},${point.y - 12} V${point.y + 12}"/>
-      <path class="curve-node-marker-ring" d="M${point.x},${point.y - 8} L${point.x + 8},${point.y} L${point.x},${point.y + 8} L${point.x - 8},${point.y} Z"/>
-      <circle class="curve-node-marker-core" cx="${point.x}" cy="${point.y}" r="2.8"/>
-    </g>`;
-  }).join('');
-  const handleMarkup = handles.map(entry => {
-    const point = projectViewportPoint(entry.point);
-    if (point.behind || point.depth < -1 || point.depth > 1) return '';
-    const radius = 5.5;
-    return `<path class="curve-handle-head" aria-label="貝塞爾手柄" d="M${point.x},${point.y - radius} L${point.x + radius},${point.y} L${point.x},${point.y + radius} L${point.x - radius},${point.y} Z"/>`;
-  }).join('');
-  return `<g class="curve-editor-overlay">${nodeMarkup}${handleMarkup}</g>`;
-}
-
-function frontRingGeometry(origin, axis, radius, cameraFrame) {
-  const [u, v] = axisBasis(axis);
-  let path = '', drawing = false, group = [], groups = [];
-  for (let step = 0; step <= 144; step++) {
-    const angle = step / 144 * Math.PI * 2;
-    let offset = u.map(value => value * Math.cos(angle) * radius);
-    offset = offset.map((value, component) => value + v[component] * Math.sin(angle) * radius);
-    const world = origin.map((value, component) => value + offset[component]);
-    const toCamera = cameraFrame.projection === 'perspective'
-      ? normalize3(cameraFrame.eye.map((value, component) => value - world[component]))
-      : cameraFrame.forward.map(value => -value);
-    if (dot3(offset, toCamera) < -.0001) {
-      if (group.length) groups.push(group);
-      group = []; drawing = false; continue;
-    }
-    const point = projectViewportPoint(world);
-    path += `${drawing ? 'L' : 'M'}${point.x.toFixed(1)},${point.y.toFixed(1)} `;
-    group.push(point);
-    drawing = true;
-  }
-  if (group.length) groups.push(group);
-  if (groups.length > 1) {
-    const first = groups[0];
-    const last = groups[groups.length - 1];
-    const firstPoint = first[0], lastPoint = last[last.length - 1];
-    if (Math.hypot(firstPoint.x - lastPoint.x, firstPoint.y - lastPoint.y) < 1) {
-      groups = [[...last.slice(0, -1), ...first], ...groups.slice(1, -1)];
-    }
-  }
-  path = groups.map(pointsPath).join(' ');
-  const mainArc = [...groups].sort((left, right) => right.length - left.length)[0] || [];
-  const handleIndex = Math.floor(mainArc.length / 2);
-  const handlePoint = mainArc[handleIndex] || null;
-  let handle = null;
-  if (handlePoint) {
-    const previous = mainArc[Math.max(0, handleIndex - 1)] || handlePoint;
-    const next = mainArc[Math.min(mainArc.length - 1, handleIndex + 1)] || handlePoint;
-    const tangentX = next.x - previous.x;
-    const tangentY = next.y - previous.y;
-    const tangentLength = Math.max(.0001, Math.hypot(tangentX, tangentY));
-    handle = {
-      ...handlePoint,
-      tangentX: tangentX / tangentLength,
-      tangentY: tangentY / tangentLength
-    };
-  }
-  return { path: path.trim(), groups, handle };
-}
-
-function taperedRingPath(points) {
-  if (points.length < 2) return '';
-  const sides = points.map((point, index) => {
-    const previous = points[Math.max(0, index - 1)];
-    const next = points[Math.min(points.length - 1, index + 1)];
-    const dx = next.x - previous.x, dy = next.y - previous.y;
-    const length = Math.max(.0001, Math.hypot(dx, dy));
-    const progress = index / Math.max(1, points.length - 1);
-    const width = .8 + 3.2 * Math.pow(Math.sin(progress * Math.PI), .7);
-    const normalX = -dy / length * width / 2;
-    const normalY = dx / length * width / 2;
-    return {
-      left: { x: point.x + normalX, y: point.y + normalY },
-      right: { x: point.x - normalX, y: point.y - normalY }
-    };
-  });
-  return pointsPath([...sides.map(entry => entry.left), ...sides.map(entry => entry.right).reverse()], true);
-}
-
-function taperedRingMarkup(ring) {
-  const arcs = ring.groups.map(group => `<path class="gizmo-visible rotate-ring" d="${taperedRingPath(group)}"/>`).join('');
-  if (!ring.handle) return arcs;
-  const tangent = [ring.handle.tangentX, ring.handle.tangentY];
-  const normal = [-tangent[1], tangent[0]];
-  const diamond = [
-    { x: ring.handle.x - tangent[0] * 15, y: ring.handle.y - tangent[1] * 15 },
-    { x: ring.handle.x + normal[0] * 5, y: ring.handle.y + normal[1] * 5 },
-    { x: ring.handle.x + tangent[0] * 15, y: ring.handle.y + tangent[1] * 15 },
-    { x: ring.handle.x - normal[0] * 5, y: ring.handle.y - normal[1] * 5 }
-  ];
-  return `${arcs}<path class="gizmo-visible rotate-handle" d="${pointsPath(diamond, true)}"/>
-    <circle class="gizmo-hit-point rotate-handle-hit" cx="${ring.handle.x}" cy="${ring.handle.y}" r="18"/>`;
-}
-
-function cameraRingGeometry(origin, radius, cameraFrame) {
-  const points = Array.from({ length: 97 }, (_, step) => {
-    const angle = step / 96 * Math.PI * 2;
-    let point = addScaled3(origin, cameraFrame.right, Math.cos(angle) * radius);
-    point = addScaled3(point, cameraFrame.up, Math.sin(angle) * radius);
-    return projectViewportPoint(point);
-  });
-  return { path: pointsPath(points, true), points };
-}
-
-function infiniteGuideMarkup(handle, width, height, axisClass) {
-  return finiteWorldGuideMarkup(state.gizmoOrigin, handle.vector, `drag-infinite-line ${axisClass}`);
-}
-
-function renderVertexSnapGizmo(gizmo, width, height) {
-  const item = selected();
-  const points = [];
-  const generatedSourceUids = item.type === 'group'
-    ? state.project.getDescendantElementUids(item.uid) : [item.uid];
-  for (const vertex of [...sceneRenderer.getWorldVertices(state.project, item.uid),
-    ...generatedSourceUids.flatMap(uidValue => sceneRenderer.getGeneratedWorldVertices(uidValue))]) {
-    const projected = projectViewportPoint(vertex.point);
-    if (projected.behind || projected.x < -12 || projected.y < -12 || projected.x > width + 12 || projected.y > height + 12) continue;
-    points.push({ ...vertex, pointType: 'vertex', projected });
-  }
-  if (isBezierElement(item)) {
-    for (const entry of sceneRenderer.getCurveNodeWorldPoints(state.project, item.uid)) {
-      const projected = projectViewportPoint(entry.point);
-      if (projected.behind || projected.x < -12 || projected.y < -12 || projected.x > width + 12 || projected.y > height + 12) continue;
-      points.push({ uid: item.uid, nodeIndex: entry.index, point: entry.point, pointType: 'curveNode', projected });
-    }
-  }
-  if (state.vertexSnapMode === 'move' && (['cube', 'group'].includes(item.type) || isShapeElement(item))) {
-    const pivotPoint = getTransformPivot(item);
-    const projected = projectViewportPoint(pivotPoint);
-    if (!projected.behind && projected.x >= -14 && projected.y >= -14 && projected.x <= width + 14 && projected.y <= height + 14) {
-      points.push({ uid: item.uid, point: pivotPoint, pointType: 'pivot', projected });
-    }
-  }
-  if (state.vertexSnapIntersections) {
-    const cacheValid = vertexSnapIntersectionCache?.project === state.project
-      && vertexSnapIntersectionCache.uid === item.uid
-      && vertexSnapIntersectionCache.staticCache === sceneRenderer.staticCache
-      && vertexSnapIntersectionCache.selectedCache === sceneRenderer.selectedCache
-      && vertexSnapIntersectionCache.mirrorCache === sceneRenderer.mirrorCache
-      && vertexSnapIntersectionCache.modifierResultGhost === state.modifierResultGhost
-      && vertexSnapIntersectionCache.geometryRevision === sceneRenderer.geometryRevision
-      && vertexSnapIntersectionCache.selectionRevision === sceneRenderer.selectionRevision;
-    if (!cacheValid) {
-      const geometry = sceneRenderer.getVertexSnapIntersectionGeometry(state.project, item.uid);
-      vertexSnapIntersectionCache = {
-        project: state.project, uid: item.uid,
-        staticCache: sceneRenderer.staticCache, selectedCache: sceneRenderer.selectedCache,
-        mirrorCache: sceneRenderer.mirrorCache, modifierResultGhost: state.modifierResultGhost,
-        geometryRevision: sceneRenderer.geometryRevision, selectionRevision: sceneRenderer.selectionRevision,
-        points: findVertexSnapIntersections(geometry.sourceCubes, geometry.targetCubes, geometry.targetQuads)
-      };
-    }
-    for (const point of vertexSnapIntersectionCache.points) {
-      const projected = projectViewportPoint(point);
-      if (projected.behind || projected.x < -12 || projected.y < -12 || projected.x > width + 12 || projected.y > height + 12) continue;
-      points.push({ uid: item.uid, point, pointType: 'intersection', targetOnly: true, projected });
-    }
-  }
-  points.sort((left, right) => right.projected.depth - left.projected.depth);
-  state.vertexSnapPoints = points;
-  gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  const pointMarkup = points.map((entry, index) => {
-    const sourceActive = state.vertexSnapSource?.uid === entry.uid
-      && state.vertexSnapSource.pointType === entry.pointType
-      && state.vertexSnapSource.nodeIndex === entry.nodeIndex
-      && state.vertexSnapSource.point.every((value, axis) => Math.abs(value - entry.point[axis]) < 1e-5);
-    const classes = ['gizmo-control', 'vertex-snap-control', entry.targetOnly ? 'target-only' : 'source-candidate', entry.generated ? 'generated-reference' : '', sourceActive ? 'source-active' : ''].filter(Boolean).join(' ');
-    if (entry.pointType === 'intersection') return `<g class="${classes}" data-kind="vertex" data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected])}>
-      <title>線線／線面交點 · 僅可作目標點</title>
-      <circle class="gizmo-hit-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="13"/>
-      <path class="gizmo-visible vertex-snap-intersection" d="M${entry.projected.x},${entry.projected.y - 6} L${entry.projected.x + 6},${entry.projected.y} L${entry.projected.x},${entry.projected.y + 6} L${entry.projected.x - 6},${entry.projected.y} Z"/>
-    </g>`;
-    if (entry.pointType === 'pivot') return `<g class="${classes} vertex-snap-pivot-control pivot-marker" data-kind="vertex" data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected], 'front')}>
-      <circle class="gizmo-hit-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="17"/>
-      <path class="gizmo-visible pivot-marker-ring" d="M${entry.projected.x},${entry.projected.y - 11} L${entry.projected.x + 11},${entry.projected.y} L${entry.projected.x},${entry.projected.y + 11} L${entry.projected.x - 11},${entry.projected.y} Z"/>
-      <path class="gizmo-visible pivot-marker-cross" d="M${entry.projected.x - 15},${entry.projected.y} H${entry.projected.x + 15} M${entry.projected.x},${entry.projected.y - 15} V${entry.projected.y + 15}"/>
-      <circle class="gizmo-visible pivot-marker-core" cx="${entry.projected.x}" cy="${entry.projected.y}" r="3.5"/>
-    </g>`;
-    return `<g class="${classes}" data-kind="vertex" data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected])}>
-      <circle class="gizmo-hit-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="13"/>
-      <circle class="gizmo-visible vertex-snap-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="5"/>
-    </g>`;
-  }).join('');
-  let sourceMarkup = '';
-  if (state.vertexSnapSource && state.vertexSnapSource.rootUid !== item.uid) {
-    const source = projectViewportPoint(state.vertexSnapSource.point);
-    if (!source.behind && state.vertexSnapSource.pointType === 'pivot') sourceMarkup = `<g class="pivot-marker vertex-snap-source-pivot">
-      <path class="pivot-marker-ring" d="M${source.x},${source.y - 11} L${source.x + 11},${source.y} L${source.x},${source.y + 11} L${source.x - 11},${source.y} Z"/>
-      <path class="pivot-marker-cross" d="M${source.x - 15},${source.y} H${source.x + 15} M${source.x},${source.y - 15} V${source.y + 15}"/>
-      <circle class="pivot-marker-core" cx="${source.x}" cy="${source.y}" r="3.5"/>
-    </g>`;
-    else if (!source.behind) sourceMarkup = `<path class="vertex-snap-source-marker" d="M${source.x},${source.y - 9} L${source.x + 9},${source.y} L${source.x},${source.y + 9} L${source.x - 9},${source.y} Z"/>`;
-  }
-  gizmo.innerHTML = pointMarkup + sourceMarkup;
-  sortGizmoControlsByDepth(gizmo);
-  gizmo.removeAttribute('hidden');
-}
-
-function updateTransformGizmo() {
-  const gizmo = $('#transformGizmo');
-  if (state.mode === 'paint') {
-    state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
-    gizmo.setAttribute('hidden', '');
-    gizmo.innerHTML = '';
-    return;
-  }
-  const item = selected();
-  const rect = sceneCanvas.getBoundingClientRect();
-  const width = rect.width, height = rect.height;
-  const curveOverlay = curveEditorOverlayMarkup(item);
-  const symmetryEntry = selectedMirrorGuideGroup();
-  const modifierAnchorContext = activeModifierAnchorContext();
-  const modifierAnchorMarker = symmetryEntry
-    ? modifierAnchorMarkerMarkup(symmetryEntry, modifierAnchorContext?.modifier.uid === symmetryEntry.modifier.uid)
-    : '';
-  const editorOverlay = curveOverlay + modifierAnchorMarker;
-  if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)) {
-    state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
-    if (editorOverlay && item && !isEffectivelyLocked(item.uid)) {
-      gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-      gizmo.innerHTML = editorOverlay;
-      gizmo.removeAttribute('hidden');
-    } else { gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; }
-    return;
-  }
-  const curveNodeContext = activeCurveNodeContext();
-  const selectionContext = getSelectionTransformContext();
-  if (state.tool === 'resize' && (modifierAnchorContext || curveNodeContext || (!selectionContext.multiple && !['cube', 'group'].includes(item.type) && !isShapeElement(item)))) {
-    state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
-    if (editorOverlay) {
-      gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-      gizmo.innerHTML = editorOverlay;
-      gizmo.removeAttribute('hidden');
-    } else { gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; }
-    return;
-  }
-  if (state.tool === 'vertexSnap') {
-    renderVertexSnapGizmo(gizmo, width, height);
-    gizmo.insertAdjacentHTML('beforeend', editorOverlay);
-    return;
-  }
-  if (state.tool === 'pivot' && selectionContext.multiple && !selectionContext.commonGroup) {
-    gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
-  }
-  const transformItem = state.tool === 'pivot' && selectionContext.multiple ? selectionContext.commonGroup : item;
-  if (state.tool === 'pivot' && !modifierAnchorContext && !curveNodeContext
-    && !['cube', 'group', 'node'].includes(transformItem?.type) && !isShapeElement(transformItem)) {
-    gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
-  }
-  const modifierFrame = modifierAnchorContext
-    ? mirrorControllerWorldFrame(modifierAnchorContext.owner, modifierAnchorContext.modifier)
-    : null;
-  const pivot = modifierFrame?.origin || (curveNodeContext
-    ? sceneRenderer.getCurveNodeWorldPoints(state.project, item.uid)[curveNodeContext.index]?.point
-    : selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item));
-  const geometryCenter = modifierAnchorContext || curveNodeContext ? pivot : selectionContext.multiple
-    ? selectionContext.center || pivot
-    : sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center
-      || sceneRenderer.getGeometryCenter(state.project, item.uid)
-      || pivot;
-  const gizmoOrigin = modifierAnchorContext || curveNodeContext || item.type === 'node' || ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
-  const center = projectViewportPoint(gizmoOrigin);
-  state.gizmoCenter = { x: center.x, y: center.y };
-  state.gizmoOrigin = [...gizmoOrigin];
-  const axes = modifierAnchorContext ? getModifierAnchorTransformAxes(modifierAnchorContext)
-    : curveNodeContext ? getCurveNodeTransformAxes(curveNodeContext)
-      : getSelectionTransformAxes(selectionContext, item);
-  const classes = ['x', 'y', 'z'];
-  const cameraFrame = sceneRenderer.getCameraFrame();
-  const pixelSample = projectViewportPoint(addScaled3(gizmoOrigin, cameraFrame.right, 1));
-  const pixelWorld = 1 / Math.max(.0001, Math.hypot(pixelSample.x - center.x, pixelSample.y - center.y));
-  const relativeAxisLength = pixelWorld * GIZMO_AXIS_PIXELS;
-  const handles = axes.map((axis, index) => {
-    const unitPoint = projectViewportPoint(addScaled3(gizmoOrigin, axis, 1));
-    const pixelsPerUnit = Math.hypot(unitPoint.x - center.x, unitPoint.y - center.y);
-    const screenDelta = [unitPoint.x - center.x, -(unitPoint.y - center.y), 0];
-    const screen = Math.hypot(screenDelta[0], screenDelta[1]) > 1
-      ? normalize3(screenDelta)
-      : index === 1 ? [0, 1, 0] : [1, 0, 0];
-    let positiveDistance = relativeAxisLength, negativeDistance = relativeAxisLength;
-    if (state.tool === 'resize' && state.scaleHandleMode === 'bounds') {
-      let extent;
-      if (selectionContext.multiple || item.type === 'group') {
-        extent = sceneRenderer.getSelectionProjectionExtent(state.project, state.selectedUids, gizmoOrigin, axis) ?? 0;
-      } else extent = item.type === 'cube'
-        ? Math.abs(item.size[index]) / 2
-        : item.shapeType !== 'polygon_prism' || index !== 1
-          ? Math.abs(item.parameters.radius)
-          : Math.abs(item.parameters.height) / 2;
-      positiveDistance = extent + pixelWorld * GIZMO_HEAD_GAP_PIXELS;
-      negativeDistance = positiveDistance;
-    }
-    return { axis: index, vector: axis, screen, screenPerWorld: screenDelta.slice(0, 2), positiveDistance, negativeDistance,
-      basisU: axes[(index + 1) % 3], basisV: axes[(index + 2) % 3],
-      worldPerPixel: 1 / Math.max(pixelsPerUnit, .0001) };
-  });
-  state.gizmoAxes = handles.map(handle => ({ ...handle, centerX: center.x, centerY: center.y }));
-  gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  if (state.tool === 'rotate') {
-    const pixelsPerUnit = 1 / pixelWorld;
-    const radius = 87 / pixelsPerUnit;
-    const sphere = cameraRingGeometry(gizmoOrigin, radius, cameraFrame);
-    const layeredEulerRings = state.transformSpace === 'self' && state.rotationMode === 'euler';
-    const rotationHandles = curveNodeContext?.curve.dimension === 2
-      ? handles.filter(handle => handle.axis === 1)
-      : handles;
-    const rings = rotationHandles.map(handle => {
-      const ringScale = layeredEulerRings ? EULER_RING_RADIUS_SCALES[handle.axis] : .965;
-      const ring = frontRingGeometry(gizmoOrigin, handle.vector, radius * ringScale, cameraFrame);
-      return `<g class="gizmo-control axis-${classes[handle.axis]}" data-axis="${handle.axis}" data-kind="rotate" ${gizmoDepthAttributes('polyline', ring.groups)}>
-        <path class="gizmo-hit rotate-hit" d="${ring.path}"/>${taperedRingMarkup(ring)}
-      </g>`;
-    }).join('');
-    const viewRing = curveNodeContext?.curve.dimension === 2 ? '' : `<g class="gizmo-control sphere-control" data-axis="view" data-kind="rotate-view" ${gizmoDepthAttributes('polyline', sphere.points)}>
-      <path class="gizmo-hit rotate-hit" d="${sphere.path}"/><path class="gizmo-visible rotation-sphere" d="${sphere.path}"/>
-    </g>`;
-    gizmo.innerHTML = `${viewRing}${rings}<circle class="gizmo-visible rotation-pivot" cx="${center.x}" cy="${center.y}" r="5"/>`;
-  } else if (state.tool === 'move' || state.tool === 'pivot') {
-    const planes = GIZMO_PLANES.map(plane => planeMarkup(handles, gizmoOrigin, plane, pixelWorld)).join('');
-    gizmo.innerHTML = `${planes}${handles.map(handle => coneMarkup({ ...handle, centerX: center.x, centerY: center.y }, gizmoOrigin, `axis-${classes[handle.axis]}`, pixelWorld)).join('')}
-      ${centerCubeMarkup(gizmoOrigin, axes, pixelWorld, { axisKey: 'free', kind: 'free', className: 'center-control' })}
-      ${state.tool === 'pivot' && !curveNodeContext && item.type !== 'node' ? pivotMarkerMarkup(gizmoOrigin) : ''}`;
-  } else {
-    const toCamera = cameraFrame.projection === 'perspective'
-      ? normalize3(cameraFrame.eye.map((value, component) => value - gizmoOrigin[component]))
-      : cameraFrame.forward.map(value => -value);
-    const closestSigns = handles.map(handle => dot3(handle.vector, toCamera) >= 0 ? 1 : -1);
-    const planes = GIZMO_PLANES.map(plane => planeMarkup(handles, gizmoOrigin, plane, pixelWorld,
-      plane.axes.map(axisIndex => closestSigns[axisIndex]))).join('');
-    const planeCorners = GIZMO_PLANES.map(plane => planeScaleCornerMarkup(handles, gizmoOrigin, plane, pixelWorld,
-      plane.axes.map(axisIndex => closestSigns[axisIndex]))).join('');
-    const axesMarkup = handles.flatMap(handle => [-1, 1].map(sign => prismMarkup({ ...handle, centerX: center.x, centerY: center.y }, gizmoOrigin, `axis-${classes[handle.axis]}`, pixelWorld, sign))).join('');
-    gizmo.innerHTML = `${planes}${axesMarkup}${planeCorners}${centerCubeMarkup(gizmoOrigin, axes, pixelWorld)}`;
-  }
-  sortGizmoControlsByDepth(gizmo);
-  if (state.dragging?.type === 'transform' && ['move', 'resize', 'pivot'].includes(state.dragging.tool)) {
-    const guideAxes = state.dragging.kind.startsWith('plane')
-      ? state.dragging.axisIndices
-      : state.dragging.axisIndex === null ? [] : [state.dragging.axisIndex];
-    const guides = guideAxes.map(axisIndex => infiniteGuideMarkup(state.gizmoAxes[axisIndex], width, height, `axis-${classes[axisIndex]}`)).join('');
-    gizmo.innerHTML = guides + gizmo.innerHTML;
-  }
-  if (state.dragging?.type === 'transform') {
-    const axis = state.dragging.axisKey;
-    const sign = state.dragging.axisIndex === null ? '' : `[data-sign="${state.dragging.sign}"]`;
-    const active = gizmo.querySelector(`[data-axis="${axis}"]${sign}`) || gizmo.querySelector(`[data-axis="${axis}"]`);
-    active?.classList.add('active');
-    state.dragging.handleElement = active;
-  }
-  gizmo.insertAdjacentHTML('beforeend', editorOverlay);
-  gizmo.removeAttribute('hidden');
-}
+const gizmoController = createGizmoController({
+  state, $, sceneCanvas, sceneRenderer, selected, isBezierElement,
+  isShapeElement, getTransformPivot, selectedMirrorGuideGroup,
+  mirrorControllerWorldFrame, activeCurveNodeContext,
+  activeModifierAnchorContext, getSelectionTransformContext,
+  getModifierAnchorTransformAxes, getCurveNodeTransformAxes,
+  getSelectionTransformAxes, isEffectivelyLocked, finiteWorldGuideMarkup
+});
+function addScaled3(...args) { return gizmoController.addScaled3(...args); }
+function intersectRayPlane(...args) { return gizmoController.intersectRayPlane(...args); }
+function projectViewportPoint(...args) { return gizmoController.projectViewportPoint(...args); }
+function resolveGizmoHandle(...args) { return gizmoController.resolveGizmoHandle(...args); }
+function updateGizmoDepthHover(...args) { return gizmoController.updateGizmoDepthHover(...args); }
+function updateTransformGizmo(...args) { return gizmoController.updateTransformGizmo(...args); }
 
 function updateTexturePreviewFrame(width, height) {
   const safeWidth = Math.max(1, Number(width) || 1);
@@ -5687,8 +1907,6 @@ const PAINT_FACE_LAYOUTS = Object.freeze({
   south: [7, 6, 4, 5], north: [2, 3, 1, 0], east: [6, 2, 5, 1],
   west: [3, 7, 0, 4], up: [3, 2, 7, 6], down: [4, 5, 0, 1]
 });
-const PAINT_FACE_EDGES = Object.freeze([[0, 1], [1, 3], [2, 3], [0, 2]]);
-
 function activeTextureAsset() {
   return state.textureAssets.find(asset => asset._uid === state.activeTextureUid) || null;
 }
@@ -5696,11 +1914,11 @@ function activeTextureAsset() {
 function setPaintColor(color, notify = false, preservePickerHue = false, recordHistory = true) {
   if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
   state.paintColor = String(color).toLowerCase();
-  if (!colorPickerPopupRoot && !colorSpacePickerRoot) {
+  if (!pickerSession.popupRoot && !pickerSession.spaceRoot) {
     syncPaletteSelectionToPaintColor();
     if (recordHistory) recordPaintColorHistory(state.paintColor);
   }
-  if (!colorPickerPopupRoot && !colorSpacePickerRoot && state.tool === 'gradient' && !state.paintGradientPalette) {
+  if (!pickerSession.popupRoot && !pickerSession.spaceRoot && state.tool === 'gradient' && !state.paintGradientPalette) {
     if (state.paintGradientStop === 'end') state.paintGradientEnd = state.paintColor;
     else state.paintGradientStart = state.paintColor;
   }
@@ -5714,7 +1932,7 @@ function setPaintColor(color, notify = false, preservePickerHue = false, recordH
   startButton?.style.setProperty('--gradient-color', state.paintGradientStart);
   endButton?.style.setProperty('--gradient-color', state.paintGradientEnd);
   updatePaintColorPickerVisual();
-  if (colorSpacePickerRoot) colorSpacePickerApply?.(state.paintColor);
+  if (pickerSession.spaceRoot) pickerSession.spaceApply?.(state.paintColor);
   renderPaintGradientPreview();
   if (notify) toast(`繪畫顏色 ${state.paintColor}`);
 }
@@ -6480,7 +2698,7 @@ function applyTextureAssetToFace(asset, hit) {
     persistGeneratedPaintCube(cube);
   }
   markDirty();
-  uvPreviewProjectCache = null;
+  uvPreviewController.uvPreviewProjectCache = null;
   invalidateAllRenderGeometry();
   renderTextureList();
   renderOutliner();
@@ -6637,7 +2855,7 @@ function blendRgbaPixel(data, offset, source, opacity = 1) {
 
 function activePaintGradientStops() {
   if (state.paintGradientPalette) {
-    const row = paletteRows.find(entry => entry.id === selectedPaletteRowId);
+    const row = paletteRows.find(entry => entry.id === palette.selectedRowId);
     if (row?.colorSpaceGradient || row?.colors?.length) return Array.from({ length: 65 }, (_, index) => ({
       color: hexToRgb(samplePaletteGradient(row, index / 64)), alpha: 1
     }));
@@ -6650,7 +2868,7 @@ function activePaintGradientStops() {
 
 function samplePaintGradient(ratio, stops = null) {
   if (state.paintGradientPalette) {
-    const row = paletteRows.find(entry => entry.id === selectedPaletteRowId);
+    const row = paletteRows.find(entry => entry.id === palette.selectedRowId);
     if (row?.colorSpaceGradient || row?.colors?.length) return [...hexToRgb(samplePaletteGradient(row, ratio)), 1];
   }
   stops ||= activePaintGradientStops();
@@ -6964,261 +3182,6 @@ async function sceneBrushSurfaceForHit(drag, hit) {
   return surface;
 }
 
-function paintSymmetryScopeUids(owner) {
-  return new Set(owner?.type === 'group' ? state.project.getDescendantElementUids(owner.uid) : owner ? [owner.uid] : []);
-}
-
-function paintSymmetryFaceKey(face) {
-  return `${face.uid}::${face.cubeUid || face.uid}::${face.faceName}`;
-}
-
-function paintSymmetryFaceRecords(owner) {
-  return sceneRenderer.getFaceQuadsForUids(paintSymmetryScopeUids(owner)).flatMap(face => {
-    const cube = face.cube?.type === 'cube' ? face.cube : state.project.getNode(face.uid);
-    if (cube?.type !== 'cube' || isCubeFaceCulled(cube.faces?.[face.faceName])) return [];
-    const uvSlots = faceUvPixelSlots(cube, face.faceName);
-    if (!uvSlots) return [];
-    return [{ ...face, cube, uvSlots, key: paintSymmetryFaceKey(face) }];
-  });
-}
-
-function paintSymmetryFramePoint(frame, point) {
-  const offset = point.map((value, axis) => value - frame.origin[axis]);
-  return frame.axes.map(axis => dot3(offset, axis));
-}
-
-function paintSymmetryWorldPoint(frame, point) {
-  return frame.origin.map((value, axis) => value
-    + frame.axes[0][axis] * point[0]
-    + frame.axes[1][axis] * point[1]
-    + frame.axes[2][axis] * point[2]);
-}
-
-function paintSymmetryTransforms(operator) {
-  const transforms = [];
-  if (operator.mode === 'axes') {
-    const enabled = ['x', 'y', 'z'].map(axis => operator.axes?.[axis] === true);
-    for (let mask = 1; mask < 8; mask++) {
-      if ([0, 1, 2].some(axis => (mask & (1 << axis)) && !enabled[axis])) continue;
-      transforms.push(point => point.map((value, axis) => mask & (1 << axis) ? -value : value));
-    }
-    return transforms;
-  }
-  const angles = symmetryModifierAngles(operator);
-  const rotate = (point, degrees) => {
-    const angle = degrees * Math.PI / 180, cosine = Math.cos(angle), sine = Math.sin(angle);
-    return [point[0] * cosine + point[2] * sine, point[1], -point[0] * sine + point[2] * cosine];
-  };
-  for (const degrees of angles) {
-    if (Math.abs(((degrees % 360) + 360) % 360) > 1e-6) transforms.push(point => rotate(point, degrees));
-    if (operator.mode === 'mandala') {
-      // R(angle) composed with reflection across local X gives a reflection
-      // axis at half that angle, producing all N distinct mandala reflections.
-      const angle = -degrees * Math.PI / 360;
-      const axis = [Math.cos(angle), Math.sin(angle)];
-      transforms.push(point => {
-        const projection = point[0] * axis[0] + point[2] * axis[1];
-        return [2 * axis[0] * projection - point[0], point[1], 2 * axis[1] * projection - point[2]];
-      });
-    }
-  }
-  return transforms;
-}
-
-function paintSymmetryPermutation(points, candidate, tolerance) {
-  const used = new Set(), permutation = [];
-  for (const point of points) {
-    let best = -1, distance = Infinity;
-    for (let index = 0; index < candidate.length; index++) {
-      if (used.has(index)) continue;
-      const next = Math.hypot(...point.map((value, axis) => value - candidate[index][axis]));
-      if (next < distance) { distance = next; best = index; }
-    }
-    if (best < 0 || distance > tolerance) return null;
-    used.add(best); permutation.push(best);
-  }
-  return permutation;
-}
-
-function paintSymmetryUvEdgesMatch(source, target, permutation) {
-  const edgeKey = (first, second) => first < second ? `${first}:${second}` : `${second}:${first}`;
-  const targetEdges = new Set(PAINT_FACE_EDGES.map(edge => edgeKey(edge[0], edge[1])));
-  return PAINT_FACE_EDGES.every(([first, second]) => {
-    const targetFirst = permutation[first], targetSecond = permutation[second];
-    if (!targetEdges.has(edgeKey(targetFirst, targetSecond))) return false;
-    const sourceLength = Math.hypot(source.uvSlots[first][0] - source.uvSlots[second][0], source.uvSlots[first][1] - source.uvSlots[second][1]);
-    const targetLength = Math.hypot(target.uvSlots[targetFirst][0] - target.uvSlots[targetSecond][0], target.uvSlots[targetFirst][1] - target.uvSlots[targetSecond][1]);
-    return Math.abs(sourceLength - targetLength) <= Math.max(1e-4, Math.max(sourceLength, targetLength) * 1e-5);
-  });
-}
-
-function paintSymmetryCenterKey(points) {
-  return [0, 1, 2].map(axis => Math.round(points.reduce((sum, point) => sum + point[axis], 0) / points.length * 1e4)).join(':');
-}
-
-function paintSymmetryCacheSignature(owner, operator, records, frame) {
-  const geometry = records.map(record => `${record.key}:${record.facePoints.map(point => paintSymmetryFramePoint(frame, point).map(value => value.toFixed(4)).join(',')).join(';')}:${record.uvSlots.map(point => point.map(value => Number(value).toFixed(4)).join(',')).join(';')}`).sort();
-  return JSON.stringify({
-    owner: owner.uid, mode: operator.mode, axes: operator.axes, copies: operator.copies,
-    distribution: operator.distribution, rangeStart: operator.rangeStart, rangeEnd: operator.rangeEnd,
-    geometry
-  });
-}
-
-function buildPaintSymmetryRelationsForFace(cache, key) {
-  if (cache.relations.has(key)) return cache.relations.get(key);
-  const source = cache.records.get(key);
-  if (!source) return [];
-  const relations = [];
-  const seen = new Set();
-  const coordinateScale = Math.max(1, ...source.facePoints.flatMap(point => point.map(value => Math.abs(value))));
-  const tolerance = Math.max(1e-4, coordinateScale * 1e-5);
-  for (const transform of cache.transforms) {
-    const transformed = source.facePoints.map(point => paintSymmetryWorldPoint(cache.frame,
-      transform(paintSymmetryFramePoint(cache.frame, point))));
-    const candidates = cache.centerBuckets.get(paintSymmetryCenterKey(transformed)) || [];
-    for (const target of candidates) {
-      const permutation = paintSymmetryPermutation(transformed, target.facePoints, tolerance);
-      if (!permutation || !paintSymmetryUvEdgesMatch(source, target, permutation)) continue;
-      if (source.key === target.key && permutation.every((slot, index) => slot === index)) continue;
-      const relationKey = `${target.key}:${permutation.join('')}`;
-      if (seen.has(relationKey)) continue;
-      seen.add(relationKey);
-      relations.push({ targetKey: target.key, permutation });
-    }
-  }
-  cache.relations.set(key, relations);
-  cache.relationCount += relations.length;
-  return relations;
-}
-
-function beginPaintSymmetryBackgroundBuild(cache) {
-  if (cache.building) return;
-  cache.building = true;
-  const keys = [...cache.records.keys()];
-  let index = 0;
-  const chunk = () => {
-    const end = Math.min(keys.length, index + 10);
-    while (index < end) buildPaintSymmetryRelationsForFace(cache, keys[index++]);
-    if (index < keys.length) setTimeout(chunk, 0);
-    else { cache.building = false; if (state.inspectorPage === 'operators') renderInspector(); }
-  };
-  setTimeout(chunk, 0);
-}
-
-function schedulePaintSymmetryBuild(owner, operator) {
-  if (!owner || !operator?.enabled || paintSymmetryBuildScheduled.has(operator.uid)) return;
-  paintSymmetryBuildScheduled.add(operator.uid);
-  requestAnimationFrame(() => {
-    paintSymmetryBuildScheduled.delete(operator.uid);
-    if (operator.enabled && owner.operators?.includes(operator) && state.project.getNode(owner.uid) === owner) ensurePaintSymmetryCache(owner, operator);
-  });
-}
-
-function scheduleAllPaintSymmetryBuilds() {
-  for (const owner of [...(state.project.groups || []), ...(state.project.elements || [])]) {
-    for (const operator of owner.operators || []) {
-      if (operator.enabled && operator.type === 'paint_symmetry') schedulePaintSymmetryBuild(owner, operator);
-    }
-  }
-}
-
-function ensurePaintSymmetryCache(owner, operator, session = null) {
-  const sessionCache = session?.paintSymmetryCaches?.get(operator.uid);
-  if (sessionCache) return sessionCache;
-  const frame = mirrorControllerWorldFrame(owner, operator);
-  if (!frame) return null;
-  const records = paintSymmetryFaceRecords(owner);
-  const signature = paintSymmetryCacheSignature(owner, operator, records, frame);
-  let cache = paintSymmetryRelationCache.get(operator.uid);
-  if (cache?.signature === signature) {
-    cache.frame = frame;
-    cache.records = new Map(records.map(record => [record.key, record]));
-    cache.centerBuckets = new Map();
-    for (const record of records) {
-      const key = paintSymmetryCenterKey(record.facePoints);
-      const bucket = cache.centerBuckets.get(key) || [];
-      bucket.push(record); cache.centerBuckets.set(key, bucket);
-    }
-    session?.paintSymmetryCaches?.set(operator.uid, cache);
-    return cache;
-  }
-  cache = {
-    signature, owner, operator, frame,
-    records: new Map(records.map(record => [record.key, record])),
-    relations: new Map(), transforms: paintSymmetryTransforms(operator),
-    relationCount: 0, building: false
-  };
-  cache.centerBuckets = new Map();
-  for (const record of records) {
-    const key = paintSymmetryCenterKey(record.facePoints);
-    const bucket = cache.centerBuckets.get(key) || [];
-    bucket.push(record); cache.centerBuckets.set(key, bucket);
-  }
-  paintSymmetryRelationCache.set(operator.uid, cache);
-  beginPaintSymmetryBackgroundBuild(cache);
-  session?.paintSymmetryCaches?.set(operator.uid, cache);
-  return cache;
-}
-
-function paintSymmetryOperatorsForUid(uidValue, session = null) {
-  if (!session?.paintSymmetryOperatorScopes) {
-    const owners = [...(state.project.groups || []), ...(state.project.elements || [])];
-    const scopes = owners.flatMap(owner => {
-      const operators = (owner.operators || []).filter(operator => operator.enabled && operator.type === 'paint_symmetry');
-      return operators.length ? [{ owner, operators, uids: paintSymmetryScopeUids(owner) }] : [];
-    });
-    if (session) session.paintSymmetryOperatorScopes = scopes;
-    else return scopes.filter(scope => scope.uids.has(uidValue)).flatMap(scope => scope.operators.map(operator => ({ owner: scope.owner, operator })));
-  }
-  return session.paintSymmetryOperatorScopes.filter(scope => scope.uids.has(uidValue))
-    .flatMap(scope => scope.operators.map(operator => ({ owner: scope.owner, operator })));
-}
-
-function paintSymmetryMappedHit(sourceHit, sourceRecord, targetRecord, permutation) {
-  const triangles = [[0, 2, 1], [2, 3, 1]];
-  for (const indices of triangles) {
-    const weights = barycentricPoint(sourceHit.point,
-      sourceRecord.facePoints[indices[0]], sourceRecord.facePoints[indices[1]], sourceRecord.facePoints[indices[2]]);
-    if (!weights) continue;
-    const point = [0, 1, 2].map(axis => indices.reduce((sum, slot, index) =>
-      sum + targetRecord.facePoints[permutation[slot]][axis] * weights[index], 0));
-    return {
-      uid: targetRecord.uid, cubeUid: targetRecord.cubeUid, cubeIndex: targetRecord.cubeIndex,
-      cube: targetRecord.cube, faceName: targetRecord.faceName,
-      facePoints: targetRecord.facePoints.map(entry => [...entry]), point,
-      symmetryPermutation: (sourceHit.symmetryPermutation || [0, 1, 2, 3]).map(slot => permutation[slot]),
-      symmetryInstanceKey: `${targetRecord.key}:${(sourceHit.symmetryPermutation || [0, 1, 2, 3]).map(slot => permutation[slot]).join(',')}`
-    };
-  }
-  return null;
-}
-
-function paintSymmetryRelatedHits(hit, session = null) {
-  const resultKey = paintHit => `${paintSymmetryFaceKey(paintHit)}:${(paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`;
-  const result = new Map([[resultKey(hit), hit]]);
-  const queue = [hit];
-  while (queue.length) {
-    const sourceHit = queue.shift();
-    for (const { owner, operator } of paintSymmetryOperatorsForUid(sourceHit.uid, session)) {
-      const cache = ensurePaintSymmetryCache(owner, operator, session);
-      const sourceKey = paintSymmetryFaceKey(sourceHit);
-      const sourceRecord = cache?.records.get(sourceKey);
-      if (!sourceRecord) continue;
-      // A face requested by a live stroke jumps ahead of the background build.
-      for (const relation of buildPaintSymmetryRelationsForFace(cache, sourceKey)) {
-        const targetRecord = cache.records.get(relation.targetKey);
-        if (!targetRecord) continue;
-        const mapped = paintSymmetryMappedHit(sourceHit, sourceRecord, targetRecord, relation.permutation);
-        if (!mapped) continue;
-        const key = resultKey(mapped);
-        if (result.has(key)) continue;
-        result.set(key, mapped); queue.push(mapped);
-      }
-    }
-  }
-  return [...result.values()];
-}
 
 function queueSceneBrushHit(drag, hit) {
   drag.queue = drag.queue.then(async () => {
@@ -7889,15 +3852,15 @@ function syncRendererTextureAsset(asset, source, composited = false) {
     textureAtlasLayoutByUid = new Map();
     sceneRenderer.setTexture(source);
   }
-  uvPreviewTextureDirty = true;
-  uvPreviewRenderDirty = true;
+  uvPreviewController.uvPreviewTextureDirty = true;
+  uvPreviewController.uvPreviewRenderDirty = true;
   if (uvPreviewIsActive()) {
     if (atlasEntry && source?.width === atlasEntry.width && source?.height === atlasEntry.height) {
       if (!uvPreviewRenderer.updateTextureAtlasRegion(atlasPatch, atlasEntry.x - 1, atlasEntry.y - 1)) {
         uvPreviewRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
       }
     }
-    uvPreviewTextureDirty = false;
+    uvPreviewController.uvPreviewTextureDirty = false;
   }
   scheduleSceneRender();
   if (asset && source) refreshDerivedTileEntries(asset, source);
@@ -7927,615 +3890,6 @@ function renderTexture() {
   resetTextureView(false);
 }
 
-const paletteRows = [
-  { id: crypto.randomUUID(), name: '苔原', gradient: false, marker: .5, colors: ['#172016','#273522','#3a4d2c','#526b35','#708d42','#91ad52','#b4ce68','#d3e18b','#e9efb3','#f5f5da','#c8a85a','#a77a3f','#76502f','#463324'] },
-  { id: crypto.randomUUID(), name: '深潭', gradient: false, marker: .5, colors: ['#11191b','#1d2a29','#2b403a','#3b5b4c','#4b7560','#629178','#7aaf91','#9bc9aa','#c3dfc9','#f1f3dd','#8baab2','#587989','#365261','#263640'] },
-  { id: crypto.randomUUID(), name: '暖岩', gradient: false, marker: .5, colors: ['#22191b','#402329','#663233','#8b443b','#b65e48','#d9805a','#eca875','#f6d09b','#f4e4c2','#8b705b','#66503e','#48382f','#2f2926','#1c1d19'] }
-];
-const PALETTE_ROWS_KEY = 'cubebricks.palette-rows.v1';
-const safePaletteVector = (value, fallback) => Array.from({ length: 3 }, (_, axis) => {
-  const parsed = Number(value?.[axis]);
-  return Number.isFinite(parsed) ? parsed : fallback[axis];
-});
-try {
-  const saved = JSON.parse(localStorage.getItem(PALETTE_ROWS_KEY) || 'null');
-  if (Array.isArray(saved) && saved.length && saved.length <= 256) {
-    const valid = saved.filter(row => row && typeof row.name === 'string' && Array.isArray(row.colors))
-      .map(row => ({
-        id: typeof row.id === 'string' ? row.id : crypto.randomUUID(), name: row.name.slice(0, 100),
-        gradient: Boolean(row.gradient), marker: clamp(Number(row.marker) || 0, 0, 1),
-        colors: row.colors.filter(color => /^#[0-9a-f]{6}$/i.test(color)).slice(0, 256),
-        gradientSegments: ['equal', 'custom', 'curve_length'].includes(row.gradientSegments) ? row.gradientSegments : 'equal',
-        gradientPositions: Array.isArray(row.gradientPositions) ? row.gradientPositions.slice(0, 256).map(value => clamp(Number(value) || 0, 0, 1)) : [],
-        colorSpaceGradient: Boolean(row.colorSpaceGradient),
-        colorSpaceCurve: row.colorSpaceCurve && ['hsv_cube', 'rgb_cube', 'hsv_cylinder'].includes(row.colorSpaceCurve.mode)
-          && Array.isArray(row.colorSpaceCurve.nodes) && row.colorSpaceCurve.nodes.length >= 2
-          ? { mode: row.colorSpaceCurve.mode, revision: 0, nodes: row.colorSpaceCurve.nodes.slice(0, 128).map(entry => {
-            const node = entry && typeof entry === 'object' ? entry : {};
-            return {
-              id: typeof node.id === 'string' ? node.id : crypto.randomUUID(),
-              position: constrainColorPosition(safePaletteVector(node.position, [0, 0, 0]), row.colorSpaceCurve.mode),
-              handleIn: safePaletteVector(node.handleIn, [-.12, 0, 0]),
-              handleOut: safePaletteVector(node.handleOut, [.12, 0, 0]),
-              handlesEnabled: node.handlesEnabled !== false, autoTangent: node.autoTangent !== false,
-              symmetricHandles: node.symmetricHandles !== false
-            };
-          }) } : null
-      }));
-    if (valid.length) paletteRows.splice(0, paletteRows.length, ...valid);
-  }
-} catch { /* A damaged optional palette cache must not block startup. */ }
-function savePaletteRows() {
-  try { localStorage.setItem(PALETTE_ROWS_KEY, JSON.stringify(paletteRows)); } catch { /* Keep editing in memory. */ }
-}
-function ensureColorSpaceCurve(row) {
-  if (!row.colorSpaceCurve) row.colorSpaceCurve = createColorSpaceCurve(row.colors);
-  return row.colorSpaceCurve;
-}
-const paletteArcLengthCache = new WeakMap();
-const equalPalettePositionCache = new Map();
-function cachedEqualPalettePositions(count) {
-  if (!equalPalettePositionCache.has(count)) equalPalettePositionCache.set(count, equalGradientPositions(count));
-  return equalPalettePositionCache.get(count);
-}
-function paletteNodeCount(row) {
-  return row.colorSpaceGradient ? ensureColorSpaceCurve(row).nodes.length : row.colors.length;
-}
-function ensurePaletteCustomPositions(row) {
-  const count = paletteNodeCount(row);
-  if (!Array.isArray(row.gradientPositions) || row.gradientPositions.length !== count) {
-    row.gradientPositions = equalGradientPositions(count);
-  }
-  for (let index = 1; index < count; index++) row.gradientPositions[index] = clamp(
-    Number(row.gradientPositions[index]) || 0, row.gradientPositions[index - 1], 1);
-  return row.gradientPositions;
-}
-function paletteGradientPositions(row) {
-  const count = paletteNodeCount(row);
-  if (row.gradientSegments === 'custom') return row.gradientPositions?.length === count
-    ? row.gradientPositions : ensurePaletteCustomPositions(row);
-  if (row.gradientSegments === 'curve_length' && row.colorSpaceGradient) {
-    const curve = ensureColorSpaceCurve(row);
-    let cache = paletteArcLengthCache.get(curve);
-    if (!cache || cache.revision !== curve.revision || cache.count !== count || cache.mode !== curve.mode) {
-      cache = { revision: curve.revision, count, mode: curve.mode, positions: colorSpaceArcLengthPositions(curve) };
-      paletteArcLengthCache.set(curve, cache);
-    }
-    return cache.positions;
-  }
-  return cachedEqualPalettePositions(count);
-}
-function samplePaletteGradient(row, ratio) {
-  const uniform = gradientRatioToUniform(ratio, paletteGradientPositions(row));
-  return row.colorSpaceGradient ? sampleColorSpaceGradient(ensureColorSpaceCurve(row), uniform)
-    : sampleGradient(row.colors, uniform);
-}
-function paletteGradientCss(row) {
-  const positions = paletteGradientPositions(row);
-  return row.colorSpaceGradient ? colorSpaceGradientCss(ensureColorSpaceCurve(row), 64, positions)
-    : row.colors.length === 1 ? `linear-gradient(90deg, ${row.colors[0]} 0%, ${row.colors[0]} 100%)`
-    : `linear-gradient(90deg, ${row.colors.map((color, index) => `${color} ${(positions[index] * 100).toFixed(3)}%`).join(', ')})`;
-}
-function paletteNodeColor(row, index) {
-  return row.colorSpaceGradient ? colorAtPosition(ensureColorSpaceCurve(row).nodes[index].position, row.colorSpaceCurve.mode) : row.colors[index];
-}
-function insertPalettePosition(row, index) {
-  const positions = ensurePaletteCustomPositions(row).slice();
-  if (!positions.length) positions.push(0);
-  else if (index <= 0) {
-    if (positions[0] <= 0) positions[0] = positions.length > 1 ? positions[1] / 2 : 1;
-    positions.unshift(0);
-  } else if (index >= positions.length) {
-    if (positions.at(-1) >= 1) positions[positions.length - 1] = positions.length > 1 ? (positions.at(-2) + 1) / 2 : 0;
-    positions.push(1);
-  } else positions.splice(index, 0, (positions[index - 1] + positions[index]) / 2);
-  row.gradientPositions = positions;
-}
-function removePalettePosition(row, index) {
-  row.gradientPositions?.splice(index, 1);
-}
-function movePaletteNode(row, from, to) {
-  if (from === to || from < 0 || to < 0) return;
-  const list = row.colorSpaceGradient ? ensureColorSpaceCurve(row).nodes : row.colors;
-  if (from >= list.length || to >= list.length) return;
-  const [entry] = list.splice(from, 1);
-  list.splice(to, 0, entry);
-  if (row.colorSpaceGradient) { row.colorSpaceCurve.revision++; alignPaletteColorsToCurve(row); }
-  selectedPaletteRowId = row.id;
-  selectedPaletteColorIndex = to;
-  renderPalette();
-}
-function alignPaletteColorsToCurve(row) {
-  if (!row.colorSpaceGradient) return;
-  const curve = ensureColorSpaceCurve(row);
-  row.colors = curve.nodes.map(node => colorAtPosition(node.position, curve.mode));
-}
-function insertPaletteGradientNode(row, ratio, color = null, index = null) {
-  const positions = paletteGradientPositions(row);
-  const next = positions.findIndex(position => position > ratio);
-  const insertion = index ?? (positions.length ? Math.max(1, next < 0 ? positions.length - 1 : next) : 0);
-  const sampled = color || samplePaletteGradient(row, ratio);
-  const curvePosition = row.colorSpaceGradient
-    ? constrainColorPosition(sampleColorSpacePosition(ensureColorSpaceCurve(row), gradientRatioToUniform(ratio, positions)), row.colorSpaceCurve.mode)
-    : null;
-  alignPaletteColorsToCurve(row);
-  insertPalettePosition(row, insertion);
-  if (row.gradientSegments === 'custom') row.gradientPositions[insertion] = clamp(ratio,
-    row.gradientPositions[insertion - 1] ?? 0, row.gradientPositions[insertion + 1] ?? 1);
-  row.colors.splice(insertion, 0, sampled);
-  if (row.colorSpaceGradient) {
-    const curve = row.colorSpaceCurve;
-    curve.nodes.splice(insertion, 0, {
-      id: crypto.randomUUID(), position: color ? positionForColor(color, curve.mode) : curvePosition,
-      handlesEnabled: true, autoTangent: true, symmetricHandles: true,
-      handleIn: [-.12, 0, 0], handleOut: [.12, 0, 0]
-    });
-    curve.revision++;
-  }
-  selectedPaletteRowId = row.id;
-  selectedPaletteColorIndex = insertion;
-  renderPalette();
-}
-let selectedPaletteRowId = paletteRows[0].id;
-let selectedPaletteColorIndex = paletteRows[0].colors.indexOf(state.paintColor);
-let draggedPaletteColor = null;
-const PAINT_COLOR_HISTORY_KEY = 'cubebricks.paint-color-history';
-const PAINT_COLOR_HISTORY_LIMIT = 12;
-let paintColorHistory = (() => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(PAINT_COLOR_HISTORY_KEY) || '[]');
-    return Array.isArray(saved) ? [...new Set(saved.filter(color => /^#[0-9a-f]{6}$/i.test(color)).map(color => color.toLowerCase()))].slice(0, PAINT_COLOR_HISTORY_LIMIT) : [];
-  } catch { return []; }
-})();
-
-function renderPaintColorHistory() {
-  $$('[data-paint-color-history]').forEach(row => {
-    row.innerHTML = paintColorHistory.map(color => `<button type="button" class="color-picker-history-swatch" data-history-color="${color}" style="background:${color}" title="${color}" aria-label="使用歷史顏色 ${color}" aria-pressed="${color === state.paintColor}"></button>`).join('')
-      || '<span class="color-picker-history-empty">尚無歷史顏色</span>';
-  });
-}
-
-function recordPaintColorHistory(color) {
-  if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
-  const normalized = color.toLowerCase();
-  paintColorHistory = [normalized, ...paintColorHistory.filter(entry => entry !== normalized)].slice(0, PAINT_COLOR_HISTORY_LIMIT);
-  try { localStorage.setItem(PAINT_COLOR_HISTORY_KEY, JSON.stringify(paintColorHistory)); } catch { /* history remains available for this session */ }
-  renderPaintColorHistory();
-}
-
-function syncPaletteSelectionToPaintColor() {
-  const color = state.paintColor.toLowerCase();
-  const previousRowId = selectedPaletteRowId;
-  const previousColorIndex = selectedPaletteColorIndex;
-  const preferred = paletteRows.find(row => row.id === selectedPaletteRowId);
-  const candidates = preferred ? [preferred, ...paletteRows.filter(row => row !== preferred)] : paletteRows;
-  const match = candidates.find(row => !row.gradient && !row.colorSpaceGradient && row.colors.some(entry => entry.toLowerCase() === color));
-  if (match) {
-    selectedPaletteRowId = match.id;
-    selectedPaletteColorIndex = match.colors.findIndex(entry => entry.toLowerCase() === color);
-  } else {
-    selectedPaletteColorIndex = null;
-    const gradient = candidates.find(row => (row.gradient || row.colorSpaceGradient) && row.colors.some(entry => entry.toLowerCase() === color));
-    if (gradient) selectedPaletteRowId = gradient.id;
-  }
-  if (previousRowId !== selectedPaletteRowId || previousColorIndex !== selectedPaletteColorIndex) {
-    $$('.palette-row-card').forEach(card => card.classList.toggle('selected', card.dataset.paletteId === selectedPaletteRowId));
-    $$('.swatch-item, .gradient-node-head').forEach(item => item.classList.toggle('selected', (item.dataset.paletteRowId || item.dataset.gradientRowId) === selectedPaletteRowId && Number(item.dataset.paletteColorIndex ?? item.dataset.gradientNode) === selectedPaletteColorIndex));
-  }
-}
-
-function renderPalette() {
-  const rows = $('#paletteRows');
-  const restoreFocus = rows === document.activeElement || rows.contains(document.activeElement);
-  $('#paletteSummary').textContent = `${paletteRows.length} 行 · 每行獨立設定`;
-  paletteRows.forEach(row => {
-    if (row.colorSpaceGradient) ensureColorSpaceCurve(row);
-    if (row.gradientSegments === 'custom') ensurePaletteCustomPositions(row);
-  });
-  rows.innerHTML = paletteRows.map((row, index) => `
-    <div class="palette-row-card ${selectedPaletteRowId === row.id ? 'selected' : ''}" data-palette-id="${row.id}">
-      <div class="palette-row-controls">
-        <span class="palette-row-name" title="${escapeAttribute(row.name)}">${escapeHtml(row.name)}</span>
-        <label class="row-gradient-toggle" title="此行使用連續漸變">
-          <input type="checkbox" data-gradient-row="${index}" ${row.gradient ? 'checked' : ''} /> 漸變
-        </label>
-        <label class="row-gradient-toggle" title="在三維色彩空間沿貝塞爾曲線取色；關閉後保留曲線設定">
-          <input type="checkbox" data-color-space-row="${index}" ${row.colorSpaceGradient ? 'checked' : ''} /> 色空
-        </label>
-        <button class="delete-palette-row" data-delete-row="${index}" title="刪除此行">×</button>
-      </div>
-      ${row.gradient || row.colorSpaceGradient
-        ? row.colors.length || row.colorSpaceGradient ? `<div class="palette-gradient-content"><label class="palette-segments-label">漸變分段類別 <select data-gradient-segments="${index}" aria-label="漸變分段類別"><option value="equal" ${row.gradientSegments !== 'custom' && row.gradientSegments !== 'curve_length' ? 'selected' : ''}>平均分</option><option value="custom" ${row.gradientSegments === 'custom' ? 'selected' : ''}>自定義</option>${row.colorSpaceGradient ? `<option value="curve_length" ${row.gradientSegments === 'curve_length' ? 'selected' : ''}>按曲線長度</option>` : ''}</select></label><div class="gradient-picker" data-gradient-picker="${index}" style="background:${paletteGradientCss(row)}"><i class="gradient-marker" style="left:${insetControlPosition(row.marker)}"></i>${paletteGradientPositions(row).map((position, colorIndex) => `<span class="gradient-node-line" style="left:${insetControlPosition(position)}"></span><button type="button" class="gradient-node-head ${selectedPaletteRowId === row.id && selectedPaletteColorIndex === colorIndex ? 'selected' : ''}" data-gradient-node="${colorIndex}" data-gradient-row-id="${row.id}" style="left:${insetControlPosition(position)};--node-color:${paletteNodeColor(row, colorIndex)}" title="${paletteNodeColor(row, colorIndex)} · 節點 ${colorIndex + 1}" aria-label="漸變節點 ${colorIndex + 1}"></button>`).join('')}</div>${row.colorSpaceGradient ? `<button class="edit-space-curve" data-edit-space-curve="${index}" title="編輯三維色彩曲線">曲線 ↗</button>` : ''}</div>`
-          : `<div class="palette-empty">空色卡 · 先從選色器加入顏色</div>`
-        : `<div class="palette-row" data-palette-row="${row.id}">${row.colors.length ? row.colors.map((color, colorIndex) => `<span class="swatch-item ${selectedPaletteRowId === row.id && selectedPaletteColorIndex === colorIndex ? 'selected' : ''}" draggable="true" data-palette-row-id="${row.id}" data-palette-color-index="${colorIndex}"><button class="swatch" data-color="${color}" style="background:${color}" title="${color}"></button></span>`).join('') : `<span class="palette-empty">空色卡 · 從選色器加入顏色</span>`}</div>`}
-    </div>`).join('');
-
-  $$('.palette-row-card').forEach(card => card.addEventListener('pointerdown', () => {
-    selectedPaletteRowId = card.dataset.paletteId;
-    const row = paletteRows.find(entry => entry.id === selectedPaletteRowId);
-    const matchingIndex = state.mode === 'paint' && !row?.gradient && !row?.colorSpaceGradient
-      ? row.colors.findIndex(color => color.toLowerCase() === state.paintColor)
-      : -1;
-    selectedPaletteColorIndex = matchingIndex < 0 ? null : matchingIndex;
-    $$('.palette-row-card').forEach(entry => entry.classList.toggle('selected', entry === card));
-    $$('.swatch-item, .gradient-node-head').forEach(entry => entry.classList.toggle('selected', (entry.dataset.paletteRowId || entry.dataset.gradientRowId) === row?.id && Number(entry.dataset.paletteColorIndex ?? entry.dataset.gradientNode) === selectedPaletteColorIndex));
-  }));
-  $$('.swatch').forEach(swatch => swatch.addEventListener('click', event => {
-    const item = event.currentTarget.closest('.swatch-item');
-    selectedPaletteRowId = item.dataset.paletteRowId;
-    selectedPaletteColorIndex = Number(item.dataset.paletteColorIndex);
-    if (state.mode !== 'paint') snapshot('core.texture.palette');
-    applyPaletteColor(swatch.dataset.color);
-    renderPalette();
-  }));
-  $$('.swatch-item').forEach(item => {
-    item.addEventListener('dragstart', event => {
-      const row = paletteRows.find(entry => entry.id === item.dataset.paletteRowId);
-      if (!row || row.gradient) return event.preventDefault();
-      draggedPaletteColor = { rowId: row.id, index: Number(item.dataset.paletteColorIndex) };
-      event.dataTransfer.effectAllowed = 'move';
-    });
-    item.addEventListener('dragover', event => { if (draggedPaletteColor) event.preventDefault(); });
-    item.addEventListener('drop', event => {
-      if (!draggedPaletteColor) return;
-      event.preventDefault();
-      const source = paletteRows.find(entry => entry.id === draggedPaletteColor.rowId);
-      const target = paletteRows.find(entry => entry.id === item.dataset.paletteRowId);
-      if (!source || !target || target.gradient) return;
-      const [color] = source.colors.splice(draggedPaletteColor.index, 1);
-      let targetIndex = Number(item.dataset.paletteColorIndex);
-      if (source === target && draggedPaletteColor.index < targetIndex) targetIndex--;
-      target.colors.splice(targetIndex, 0, color);
-      selectedPaletteRowId = target.id;
-      selectedPaletteColorIndex = targetIndex;
-      draggedPaletteColor = null;
-      if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
-      renderPalette();
-    });
-    item.addEventListener('dragend', () => { draggedPaletteColor = null; });
-  });
-  $$('.palette-row').forEach(rowNode => {
-    rowNode.addEventListener('dragover', event => { if (draggedPaletteColor) event.preventDefault(); });
-    rowNode.addEventListener('drop', event => {
-      if (!draggedPaletteColor || event.target.closest('.swatch-item')) return;
-      const source = paletteRows.find(entry => entry.id === draggedPaletteColor.rowId);
-      const target = paletteRows.find(entry => entry.id === rowNode.dataset.paletteRow);
-      if (!source || !target || target.gradient) return;
-      const [color] = source.colors.splice(draggedPaletteColor.index, 1);
-      target.colors.push(color);
-      selectedPaletteRowId = target.id; selectedPaletteColorIndex = target.colors.length - 1;
-      draggedPaletteColor = null;
-      if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
-      renderPalette();
-    });
-  });
-  $$('[data-gradient-row]').forEach(toggle => toggle.addEventListener('change', () => {
-    paletteRows[Number(toggle.dataset.gradientRow)].gradient = toggle.checked;
-    renderPalette();
-  }));
-  $$('[data-color-space-row]').forEach(toggle => toggle.addEventListener('change', () => {
-    const row = paletteRows[Number(toggle.dataset.colorSpaceRow)];
-    row.colorSpaceGradient = toggle.checked;
-    if (row.colorSpaceGradient) ensureColorSpaceCurve(row);
-    renderPalette();
-  }));
-  $$('[data-gradient-segments]').forEach(select => select.addEventListener('change', () => {
-    const row = paletteRows[Number(select.dataset.gradientSegments)];
-    if (select.value === 'custom') ensurePaletteCustomPositions(row);
-    row.gradientSegments = select.value;
-    renderPalette();
-  }));
-  $$('[data-edit-space-curve]').forEach(button => button.addEventListener('click', () => {
-    openColorSpaceCurveEditor(paletteRows[Number(button.dataset.editSpaceCurve)]);
-  }));
-  $$('[data-delete-row]').forEach(button => button.addEventListener('click', () => {
-    if (paletteRows.length === 1) return toast('至少保留一行色卡');
-    const removed = paletteRows.splice(Number(button.dataset.deleteRow), 1)[0];
-    if (removed.id === selectedPaletteRowId) { selectedPaletteRowId = paletteRows[0].id; selectedPaletteColorIndex = null; }
-    renderPalette();
-  }));
-  $$('[data-gradient-picker]').forEach(picker => {
-    picker.addEventListener('pointerdown', event => {
-      if (event.button !== 0) return;
-      if (event.target.closest('.gradient-node-head')) return;
-      event.preventDefault();
-      if (state.mode !== 'paint') snapshot('core.texture.palette');
-      picker.setPointerCapture(event.pointerId);
-      pickGradientColor(picker, event);
-    });
-    picker.addEventListener('pointermove', event => { if (picker.hasPointerCapture(event.pointerId)) pickGradientColor(picker, event); });
-    picker.addEventListener('pointerup', () => { savePaletteRows(); if (state.mode === 'paint') recordPaintColorHistory(state.paintColor); });
-  });
-  $$('[data-gradient-node]').forEach(head => {
-    head.addEventListener('pointerdown', event => {
-      if (event.button !== 0) return;
-      event.preventDefault(); event.stopPropagation();
-      const row = paletteRows.find(entry => entry.id === head.dataset.gradientRowId);
-      if (!row) return;
-      const index = Number(head.dataset.gradientNode);
-      selectedPaletteRowId = row.id; selectedPaletteColorIndex = index;
-      head.classList.add('selected');
-      $$('.gradient-node-head').forEach(other => { if (other !== head) other.classList.remove('selected'); });
-      $$('.palette-row-card').forEach(card => card.classList.toggle('selected', card.dataset.paletteId === row.id));
-      head.setPointerCapture(event.pointerId);
-      const rect = head.closest('.gradient-picker').getBoundingClientRect();
-      const startX = event.clientX;
-      head.onpointermove = move => {
-        if (!head.hasPointerCapture(move.pointerId) || Math.abs(move.clientX - startX) < 2) return;
-        if (row.gradientSegments !== 'custom') {
-          head.style.transform = `translateX(calc(-50% + ${move.clientX - startX}px))`;
-          return;
-        }
-        const positions = ensurePaletteCustomPositions(row);
-        positions[index] = clamp(insetControlRatio(move.clientX, rect.left, rect.width), positions[index - 1] ?? 0, positions[index + 1] ?? 1);
-        const position = insetControlPosition(positions[index]);
-        head.style.left = position;
-        head.previousElementSibling.style.left = position;
-        head.closest('.gradient-picker').style.background = paletteGradientCss(row);
-        if (state.tool === 'gradient' && state.paintGradientPalette) renderPaintGradientPreview();
-      };
-      head.onpointerup = up => {
-        if (head.hasPointerCapture(up.pointerId)) head.releasePointerCapture(up.pointerId);
-        head.onpointermove = null; head.onpointerup = null;
-        if (row.gradientSegments !== 'custom' && Math.abs(up.clientX - startX) >= 2) {
-          const ratio = insetControlRatio(up.clientX, rect.left, rect.width);
-          const positions = paletteGradientPositions(row);
-          const target = positions.reduce((best, value, candidate) => Math.abs(value - ratio) < Math.abs(positions[best] - ratio) ? candidate : best, 0);
-          movePaletteNode(row, index, target);
-          return;
-        }
-        if (Math.abs(up.clientX - startX) < 2) applyPaletteColor(paletteNodeColor(row, index), false, false);
-        selectedPaletteRowId = row.id; selectedPaletteColorIndex = index;
-        renderPalette();
-      };
-      head.onpointercancel = head.onpointerup;
-    });
-  });
-  if (restoreFocus) rows.focus({ preventScroll: true });
-  if (state.tool === 'gradient' && state.paintGradientPalette) renderPaintGradientPreview();
-  savePaletteRows();
-}
-
-function addPaletteRow() {
-  const number = paletteRows.length + 1;
-  paletteRows.push({
-    id: crypto.randomUUID(), name: `自定義 ${number}`, gradient: false, marker: .5,
-    colors: []
-  });
-  selectedPaletteRowId = paletteRows.at(-1).id;
-  selectedPaletteColorIndex = null;
-  renderPalette();
-  const rows = $('#paletteRows'); rows.scrollTop = rows.scrollHeight;
-}
-
-function pickGradientColor(picker, event) {
-  const index = Number(picker.dataset.gradientPicker);
-  const rect = picker.getBoundingClientRect();
-  const ratio = insetControlRatio(event.clientX, rect.left, rect.width);
-  paletteRows[index].marker = ratio;
-  picker.querySelector('.gradient-marker').style.left = insetControlPosition(ratio);
-  const row = paletteRows[index];
-  applyPaletteColor(samplePaletteGradient(row, ratio), false, false);
-}
-
-function sampleGradient(colors, ratio) {
-  if (!colors.length) return state.paintColor;
-  if (colors.length === 1) return colors[0];
-  const scaled = ratio * (colors.length - 1);
-  const left = Math.floor(scaled);
-  const right = Math.min(colors.length - 1, left + 1);
-  const amount = scaled - left;
-  const a = hexToRgb(colors[left]), b = hexToRgb(colors[right]);
-  return `#${a.map((channel, axis) => Math.round(channel + (b[axis] - channel) * amount).toString(16).padStart(2, '0')).join('')}`;
-}
-
-function openColorSpaceCurveEditor(row) {
-  if (!row) return;
-  const curve = ensureColorSpaceCurve(row);
-  const dialog = $('#colorSpaceCurveDialog');
-  if (dialog.open) return;
-  const picker = $('#colorSpacePicker');
-  const cards = $('#colorSpaceNodeCards');
-  const savedPaint = {
-    paintColor: state.paintColor,
-    paintColorPickerHue: state.paintColorPickerHue,
-    paintColorPickerSaturation: state.paintColorPickerSaturation,
-    paintColorPickerValue: state.paintColorPickerValue
-  };
-  selectedPaletteRowId = row.id;
-  $('#colorSpaceCurveTitle').textContent = `色彩空間漸變 · ${row.name}`;
-  $('#colorSpaceMode').value = curve.mode;
-  const canvas = $('#colorSpaceCanvas');
-  const viewport = new ColorSpaceCurveViewport(canvas, curve, onCurveChanged, selectNode);
-  const selectedColor = () => colorAtPosition(curve.nodes[viewport.selected].position, curve.mode);
-  const syncPickerToNode = () => {
-    const color = selectedColor();
-    colorSpacePickerApply = null;
-    setPaintColor(color, false, false, false);
-    colorSpacePickerApply = applyPickerColor;
-    if (colorSpacePickerRoot) updatePaintColorPickerVisual(colorSpacePickerRoot);
-  };
-  function selectNode(index) {
-    viewport.selected = Math.max(0, Math.min(curve.nodes.length - 1, index));
-    syncPickerToNode();
-    $$('[data-space-node]', cards).forEach(card => card.classList.toggle('selected', Number(card.dataset.spaceNode) === viewport.selected));
-    viewport.draw();
-  }
-  function renderCards() {
-    cards.innerHTML = curve.nodes.map((node, index) => `<div class="color-space-node-card ${index === viewport.selected ? 'selected' : ''}" data-space-node="${index}" draggable="true">
-      <i class="color-space-node-swatch" style="background:${colorAtPosition(node.position, curve.mode)}"></i>
-      <strong>${index + 1}</strong>
-      <label><input type="checkbox" data-space-node-auto="${index}" ${node.autoTangent ? 'checked' : ''}>自動切線</label>
-      <label><input type="checkbox" data-space-node-handles="${index}" ${node.handlesEnabled ? 'checked' : ''}>貝塞爾手柄</label>
-      <label><input type="checkbox" data-space-node-symmetric="${index}" ${node.symmetricHandles ? 'checked' : ''}>手柄對稱</label>
-    </div>`).join('');
-  }
-  function updateCurveBar() {
-    const index = paletteRows.indexOf(row);
-    const bar = $(`[data-gradient-picker="${index}"]`);
-    if (bar) {
-      bar.style.background = paletteGradientCss(row);
-      const positions = paletteGradientPositions(row);
-      $$('[data-gradient-node]', bar).forEach((head, nodeIndex) => {
-        head.style.left = insetControlPosition(positions[nodeIndex]);
-        head.style.setProperty('--node-color', paletteNodeColor(row, nodeIndex));
-        head.previousElementSibling.style.left = head.style.left;
-      });
-    }
-  }
-  function onCurveChanged(committed = true) {
-    const activeCard = $(`[data-space-node="${viewport.selected}"]`, cards);
-    const swatch = activeCard?.querySelector('.color-space-node-swatch');
-    if (swatch) swatch.style.background = selectedColor();
-    syncPickerToNode();
-    updateCurveBar();
-    if (state.tool === 'gradient' && state.paintGradientPalette) renderPaintGradientPreview();
-    if (committed) { alignPaletteColorsToCurve(row); savePaletteRows(); }
-  }
-  function applyPickerColor(color) {
-    const node = curve.nodes[viewport.selected];
-    if (!node) return;
-    node.position = positionForColor(color, curve.mode);
-    curve.revision++;
-    viewport.draw();
-    const swatch = $(`[data-space-node="${viewport.selected}"] .color-space-node-swatch`, cards);
-    if (swatch) swatch.style.background = color;
-    row.colors[viewport.selected] = color;
-    updateCurveBar();
-    if (state.tool === 'gradient' && state.paintGradientPalette) renderPaintGradientPreview();
-    savePaletteRows();
-  }
-  colorSpacePickerRoot = picker;
-  colorSpacePickerApply = null;
-  syncPickerToNode();
-  renderPaintColorPicker(picker);
-  colorSpacePickerApply = applyPickerColor;
-  renderCards();
-  cards.addEventListener('click', event => {
-    const card = event.target.closest('[data-space-node]');
-    if (card && !event.target.closest('label')) selectNode(Number(card.dataset.spaceNode));
-  });
-  cards.addEventListener('change', event => {
-    const index = Number(event.target.dataset.spaceNodeAuto ?? event.target.dataset.spaceNodeHandles ?? event.target.dataset.spaceNodeSymmetric);
-    const node = curve.nodes[index];
-    if (!node) return;
-    selectNode(index);
-    if (event.target.hasAttribute('data-space-node-auto')) node.autoTangent = event.target.checked;
-    if (event.target.hasAttribute('data-space-node-handles')) node.handlesEnabled = event.target.checked;
-    if (event.target.hasAttribute('data-space-node-symmetric')) {
-      node.symmetricHandles = event.target.checked;
-      if (node.symmetricHandles) node.handleIn = node.handleOut.map(value => -value);
-    }
-    curve.revision++;
-    viewport.draw(); updateCurveBar(); savePaletteRows();
-  });
-  let draggedIndex = null;
-  cards.addEventListener('dragstart', event => {
-    const card = event.target.closest('[data-space-node]');
-    if (!card) return;
-    draggedIndex = Number(card.dataset.spaceNode);
-    event.dataTransfer.effectAllowed = 'move';
-  });
-  cards.addEventListener('dragover', event => { if (draggedIndex !== null) event.preventDefault(); });
-  cards.addEventListener('drop', event => {
-    const card = event.target.closest('[data-space-node]');
-    if (!card || draggedIndex === null) return;
-    event.preventDefault();
-    const target = Number(card.dataset.spaceNode);
-    const [node] = curve.nodes.splice(draggedIndex, 1);
-    curve.nodes.splice(target, 0, node);
-    draggedIndex = null;
-    viewport.selected = target;
-    curve.revision++; renderCards(); onCurveChanged(); renderPalette(); viewport.draw();
-  });
-  cards.addEventListener('dragend', () => { draggedIndex = null; });
-  $('#colorSpaceMode').onchange = event => {
-    changeColorSpaceMode(curve, event.target.value);
-    renderCards(); onCurveChanged(); viewport.draw();
-  };
-  $('#colorSpaceAxis').value = 'all';
-  $('#colorSpaceAxis').onchange = event => { viewport.axisMode = event.target.value; viewport.draw(); };
-  $('#colorSpacePerspective').checked = false;
-  $('#colorSpacePerspective').onchange = event => { viewport.perspective = event.target.checked; viewport.draw(); };
-  $('#colorSpaceAddNode').onclick = () => {
-    const index = viewport.selected;
-    const ratio = Math.min(1, (index + .5) / Math.max(1, curve.nodes.length - 1));
-    const position = constrainColorPosition(sampleColorSpacePosition(curve, ratio), curve.mode);
-    const next = { id: crypto.randomUUID(), position, handlesEnabled: true, autoTangent: true,
-      symmetricHandles: true, handleIn: [-.12, 0, 0], handleOut: [.12, 0, 0] };
-    insertPalettePosition(row, index + 1);
-    curve.nodes.splice(index + 1, 0, next);
-    viewport.selected = index + 1;
-    curve.revision++; renderCards(); onCurveChanged(); renderPalette(); viewport.draw();
-  };
-  $('#colorSpaceDeleteNode').onclick = () => {
-    if (curve.nodes.length <= 2) return toast('曲線至少需要兩個節點');
-    removePalettePosition(row, viewport.selected);
-    curve.nodes.splice(viewport.selected, 1);
-    viewport.selected = Math.min(viewport.selected, curve.nodes.length - 1);
-    curve.revision++; renderCards(); onCurveChanged(); renderPalette(); viewport.draw();
-  };
-  $('#closeColorSpaceCurve').onclick = () => dialog.close();
-  dialog.addEventListener('close', () => {
-    viewport.dispose();
-    canvas.replaceWith(canvas.cloneNode(false));
-    cards.replaceWith(cards.cloneNode(false));
-    colorSpacePickerRoot = null;
-    colorSpacePickerApply = null;
-    Object.assign(state, savedPaint);
-    if (state.mode === 'paint') renderInspector();
-    savePaletteRows();
-  }, { once: true });
-  dialog.showModal();
-  viewport.draw();
-  updatePaintColorPickerVisual(colorSpacePickerRoot);
-}
-
-function addPaintSwatchToSelection() {
-  const row = paletteRows.find(entry => entry.id === selectedPaletteRowId) || paletteRows[0];
-  if (!row) return;
-  const insertion = selectedPaletteColorIndex === null ? paletteNodeCount(row) : selectedPaletteColorIndex + 1;
-  if (row.gradient || row.colorSpaceGradient) {
-    const positions = paletteGradientPositions(row);
-    const before = positions[Math.max(0, insertion - 1)] ?? 0;
-    const after = positions[Math.min(positions.length - 1, insertion)] ?? 1;
-    insertPaletteGradientNode(row, (before + after) / 2, state.paintColor, insertion);
-    toast(`已加入「${row.name}」 ${state.paintColor}`);
-    return;
-  }
-  row.colors.splice(insertion, 0, state.paintColor);
-  selectedPaletteRowId = row.id;
-  selectedPaletteColorIndex = insertion;
-  renderPalette();
-  toast(`已加入「${row.name}」 ${state.paintColor}`);
-}
-
-function deleteSelectedPaletteColor(rowId = selectedPaletteRowId, colorIndex = selectedPaletteColorIndex) {
-  const row = paletteRows.find(entry => entry.id === rowId);
-  if (!row || colorIndex === null || colorIndex < 0 || colorIndex >= paletteNodeCount(row)) return;
-  if (row.colorSpaceGradient && row.colorSpaceCurve.nodes.length <= 2) return toast('曲線至少需要兩個節點');
-  alignPaletteColorsToCurve(row);
-  removePalettePosition(row, colorIndex);
-  if (row.colorSpaceGradient) { row.colorSpaceCurve.nodes.splice(colorIndex, 1); row.colorSpaceCurve.revision++; }
-  if (row.colors[colorIndex]) row.colors.splice(colorIndex, 1);
-  selectedPaletteRowId = row.id;
-  selectedPaletteColorIndex = null;
-  if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
-  renderPalette();
-}
-
-function applyPaletteColor(color, notify = true, recordHistory = true) {
-  if (state.mode === 'paint') {
-    setPaintColor(color, notify, false, recordHistory);
-    return;
-  }
-  const item = selected();
-  if (!item) return toast('先選擇一個物件');
-  noteJournalOperation('core.element.color');
-  item.color = color;
-  markDirty(); renderAll('selection');
-  if (notify) toast(`已套用 ${color}`);
-}
 
 function activeSnapSubdivisions() {
   const projectValue = Number(state.project.snap?.subdivisions);
@@ -8649,7 +4003,7 @@ function renderTextureTileControls() {
       face.tiling[property] = value;
       persistGeneratedPaintCube(cube);
     }
-    uvPreviewProjectCache = null; textureUvEntryCache = null;
+    uvPreviewController.uvPreviewProjectCache = null; textureUvEntryCache = null;
     rebuildTextureAtlas(); markDirty(); renderAll('selection');
   }));
 }
@@ -8663,7 +4017,7 @@ function refreshDerivedTileEntries(asset, source) {
     const patch = textureAtlasPatch(entry);
     sceneRenderer.updateTextureAtlasRegion(patch, entry.x - 1, entry.y - 1);
     if (uvPreviewIsActive()) uvPreviewRenderer.updateTextureAtlasRegion(patch, entry.x - 1, entry.y - 1);
-    else uvPreviewTextureDirty = true;
+    else uvPreviewController.uvPreviewTextureDirty = true;
   }
 }
 
@@ -8740,14 +4094,6 @@ function renderTextureFeatureControls() {
 
 }
 
-const TEMPLATE_FACE_COLORS = Object.freeze({
-  up: { fill: '#ecf8fd', outline: '#b4d4e1' },
-  down: { fill: '#6e788c', outline: '#536174' },
-  east: { fill: '#7bffa3', outline: '#43e88d' },
-  north: { fill: '#7bd4ff', outline: '#5bbcf4' },
-  west: { fill: '#ffa7a4', outline: '#f48686' },
-  south: { fill: '#fff899', outline: '#f8dd72' }
-});
 
 function textureAssetForReference(reference) {
   if (reference === null || reference === undefined) return null;
@@ -8789,441 +4135,6 @@ function loadTextureAssetImage(asset) {
   });
 }
 
-function templateCubeTargets(selectedOnly = false) {
-  const targets = [];
-  const selected = selectedOnly ? getSelectionExpansion().elementSet : null;
-  for (const element of state.project.elements) {
-    if (element.subdivisionOwnerUid) continue;
-    if (element.type === 'cube') {
-      if (selected && !selected.has(element.uid)) continue;
-      targets.push({ cube: element, owner: null, index: -1 });
-      continue;
-    }
-    if (!isProceduralShape(element)) continue;
-    const cubes = subdivisionSession?.ownerUid === element.uid ? subdivisionSession.cubes : element.toCubes();
-    cubes.forEach((cube, index) => {
-      if (!selected || selected.has(element.uid) || selected.has(cube.uid)) targets.push({ cube, owner: element, index });
-    });
-  }
-  return targets;
-}
-
-function facePixelSize(cube, faceName, subdivisions) {
-  const axisPairs = {
-    north: [0, 1], south: [0, 1], east: [2, 1], west: [2, 1], up: [0, 2], down: [0, 2]
-  };
-  const axes = axisPairs[faceName];
-  const roundedPixelLength = value => {
-    const length = Math.abs(Number(value) || 0);
-    return length > 0 ? Math.max(1, Math.round(length)) : 0;
-  };
-  if (cube.uvNormalized !== false) return axes.map(axis => roundedPixelLength(Math.abs(Number(cube.size[axis]) || 0) * subdivisions / 16));
-  const face = cube.faces?.[faceName];
-  const uv = Array.isArray(face?.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
-  const uvLengths = [Math.abs(Number(uv[2]) - Number(uv[0])), Math.abs(Number(uv[3]) - Number(uv[1]))];
-  return axes.map((axis, index) => {
-    const geometryLength = Math.abs(Number(cube.size?.[axis]) || 0);
-    if (geometryLength <= 1e-9) return 0;
-    return Math.max(1, Math.round(uvLengths[index]));
-  });
-}
-
-function cubeFaceHasZeroGeometry(cube, faceName) {
-  const axisPairs = {
-    north: [0, 1], south: [0, 1], east: [2, 1], west: [2, 1], up: [0, 2], down: [0, 2]
-  };
-  return axisPairs[faceName].some(axis => Math.abs(Number(cube.size?.[axis]) || 0) <= 1e-9);
-}
-
-function minimumTemplatePackingSide(rectangles, padding) {
-  if (!rectangles.length) return 1;
-  const dimensions = rectangles.map(entry => ({
-    width: Math.max(1, entry.width) + padding,
-    height: Math.max(1, entry.height) + padding
-  }));
-  const totalArea = dimensions.reduce((sum, entry) => sum + entry.width * entry.height, 0);
-  return Math.max(
-    Math.ceil(Math.sqrt(totalArea)),
-    ...dimensions.map(entry => Math.max(entry.width, entry.height))
-  );
-}
-
-function packTemplateRectangles(rectangles, padding, fixedSide = null) {
-  if (!rectangles.length) return { placements: new Map(), side: 1 };
-  const sorted = [...rectangles].sort((left, right) => right.width * right.height - left.width * left.height
-    || Math.max(right.width, right.height) - Math.max(left.width, left.height));
-  const paddedWidth = entry => Math.max(1, entry.width) + padding;
-  const paddedHeight = entry => Math.max(1, entry.height) + padding;
-  const totalArea = sorted.reduce((sum, entry) => sum + paddedWidth(entry) * paddedHeight(entry), 0);
-  const widest = Math.max(...sorted.map(paddedWidth));
-  const tallest = Math.max(...sorted.map(paddedHeight));
-  const totalWidth = sorted.reduce((sum, entry) => sum + paddedWidth(entry), 0);
-  const lowerBound = Math.max(widest, tallest, Math.ceil(Math.sqrt(totalArea)));
-  const upperBound = Math.max(totalWidth, tallest);
-
-  const strategies = ['diagonal', 'area'];
-  const packIntoSquare = (side, strategy) => {
-    const freeRectangles = [{ x: 0, y: 0, width: side, height: side }];
-    const placements = new Map();
-    for (const entry of sorted) {
-      const width = paddedWidth(entry), height = paddedHeight(entry);
-      let choice = null;
-      for (const free of freeRectangles) {
-        if (width > free.width || height > free.height) continue;
-        const areaWaste = free.width * free.height - width * height;
-        const shortWaste = Math.min(free.width - width, free.height - height);
-        const longWaste = Math.max(free.width - width, free.height - height);
-        const scores = {
-          area: [areaWaste, shortWaste, Math.max(free.x, free.y), free.y, free.x],
-          'short-side': [shortWaste, longWaste, areaWaste, free.y, free.x],
-          diagonal: [Math.max(free.x, free.y), free.x + free.y, areaWaste, shortWaste],
-          'top-left': [free.y, free.x, areaWaste, shortWaste]
-        };
-        const score = scores[strategy];
-        if (!choice || score.some((value, index) => value < choice.score[index]
-          && score.slice(0, index).every((prior, priorIndex) => prior === choice.score[priorIndex]))) {
-          choice = { free, score };
-        }
-      }
-      if (!choice) return null;
-      const used = { x: choice.free.x, y: choice.free.y, width, height };
-      placements.set(entry, { x: used.x, y: used.y });
-      const split = [];
-      for (const free of freeRectangles) {
-        const separated = used.x >= free.x + free.width || used.x + used.width <= free.x
-          || used.y >= free.y + free.height || used.y + used.height <= free.y;
-        if (separated) {
-          split.push(free);
-          continue;
-        }
-        if (used.x > free.x) split.push({ x: free.x, y: free.y, width: used.x - free.x, height: free.height });
-        if (used.x + used.width < free.x + free.width) split.push({
-          x: used.x + used.width, y: free.y,
-          width: free.x + free.width - used.x - used.width, height: free.height
-        });
-        if (used.y > free.y) split.push({ x: free.x, y: free.y, width: free.width, height: used.y - free.y });
-        if (used.y + used.height < free.y + free.height) split.push({
-          x: free.x, y: used.y + used.height,
-          width: free.width, height: free.y + free.height - used.y - used.height
-        });
-      }
-      freeRectangles.length = 0;
-      for (let index = 0; index < split.length; index++) {
-        const candidate = split[index];
-        if (candidate.width <= 0 || candidate.height <= 0) continue;
-        const contained = split.some((other, otherIndex) => {
-          if (otherIndex === index) return false;
-          const inside = candidate.x >= other.x && candidate.y >= other.y
-            && candidate.x + candidate.width <= other.x + other.width
-            && candidate.y + candidate.height <= other.y + other.height;
-          const identical = candidate.x === other.x && candidate.y === other.y
-            && candidate.width === other.width && candidate.height === other.height;
-          return inside && (!identical || otherIndex < index);
-        });
-        if (!contained) freeRectangles.push(candidate);
-      }
-    }
-    const compactness = sorted.reduce((score, entry) => {
-      const placement = placements.get(entry);
-      const width = paddedWidth(entry), height = paddedHeight(entry);
-      return score + (placement.y * side + placement.x) * width * height;
-    }, 0);
-    return { placements, side, score: side * side, compactness };
-  };
-
-  const packAtSide = side => {
-    let preferred = null;
-    for (const strategy of strategies) {
-      const packed = packIntoSquare(side, strategy);
-      if (packed && (!preferred || packed.compactness < preferred.compactness)) preferred = packed;
-    }
-    return preferred;
-  };
-
-  if (fixedSide !== null) return packAtSide(Math.max(lowerBound, Math.ceil(fixedSide)));
-
-  let low = lowerBound, high = upperBound, best = packAtSide(high);
-  while (low <= high) {
-    const side = Math.floor((low + high) / 2);
-    const packed = packAtSide(side);
-    if (packed) {
-      best = packed;
-      high = side - 1;
-    } else {
-      low = side + 1;
-    }
-  }
-  return best;
-}
-
-function beginTextureGenerationProgress(totalFaces) {
-  const dialog = $('#textureProgressDialog');
-  const progressBar = $('#textureGenerationProgress');
-  const status = $('#textureGenerationStatus');
-  const counter = $('#textureGenerationCounter');
-  const total = Math.max(1, Number(totalFaces) || 1);
-  const startedAt = performance.now();
-  const refreshEvery = Math.max(1, Math.ceil(total / 100));
-  let processed = 0, nextRefresh = 0, shown = false, finished = false;
-  progressBar.max = total;
-  progressBar.value = 0;
-  counter.textContent = `0 / ${totalFaces}`;
-  dialog.oncancel = event => event.preventDefault();
-
-  const refresh = async (label, force = false) => {
-    if (finished || (!force && processed < nextRefresh)) return;
-    nextRefresh = processed + refreshEvery;
-    progressBar.value = Math.min(total, processed);
-    status.textContent = label;
-    counter.textContent = `${Math.min(totalFaces, processed)} / ${totalFaces}`;
-    if (!shown && (totalFaces >= 180 || performance.now() - startedAt >= 180)) {
-      if (!dialog.open) dialog.showModal();
-      shown = dialog.open;
-    }
-    if (shown || force) await new Promise(resolve => setTimeout(resolve, 0));
-  };
-
-  return {
-    prepare(label) { return refresh(label, true); },
-    advance(label) { processed++; return refresh(label); },
-    finish() {
-      finished = true;
-      progressBar.value = total;
-      if (dialog.open) dialog.close();
-    }
-  };
-}
-
-function alignedTextureSide(side, powerOfTwo, multiple) {
-  const size = Math.max(1, Math.ceil(side));
-  if (powerOfTwo) return 2 ** Math.ceil(Math.log2(size));
-  const unit = Math.max(1, Math.round(multiple) || 4);
-  return Math.ceil(size / unit) * unit;
-}
-
-function drawTemplateFace(ctx, entry, destination, sourceImages) {
-  const { width, height, sourceUv, sourceAsset, faceName } = entry;
-  if (width <= 0 || height <= 0) return;
-  const image = sourceAsset ? sourceImages.get(sourceAsset._uid) : null;
-  if (image && sourceAsset.mode === 'tiled') {
-    const raster = tiledFaceRaster(entry.target.cube, faceName, imageCanvas(image), null, [width, height]);
-    ctx.drawImage(raster, destination.x, destination.y);
-    return;
-  }
-  if (image && sourceUv) {
-    const left = Math.min(sourceUv[0], sourceUv[2]);
-    const top = Math.min(sourceUv[1], sourceUv[3]);
-    const sourceWidth = Math.abs(sourceUv[2] - sourceUv[0]);
-    const sourceHeight = Math.abs(sourceUv[3] - sourceUv[1]);
-    if (sourceWidth > 0 && sourceHeight > 0) {
-      ctx.drawImage(image, left, top, sourceWidth, sourceHeight, destination.x, destination.y, width, height);
-      return;
-    }
-  }
-  const faceColors = TEMPLATE_FACE_COLORS[faceName] || { fill: '#b7b7b7', outline: '#9f9f9f' };
-  ctx.fillStyle = faceColors.fill;
-  ctx.fillRect(destination.x, destination.y, width, height);
-  ctx.strokeStyle = faceColors.outline;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(destination.x + .5, destination.y + .5, Math.max(0, width - 1), Math.max(0, height - 1));
-}
-
-function faceDestinationUv(entry, destination) {
-  const source = entry.sourceUv || [0, 0, entry.width, entry.height];
-  const uForward = source[2] >= source[0], vForward = source[3] >= source[1];
-  return [
-    uForward ? destination.x : destination.x + entry.width,
-    vForward ? destination.y : destination.y + entry.height,
-    uForward ? destination.x + entry.width : destination.x,
-    vForward ? destination.y + entry.height : destination.y
-  ];
-}
-
-function syncGeneratedTemplateEdits(targets) {
-  const owners = new Set(targets.map(target => target.owner).filter(Boolean));
-  for (const owner of owners) {
-    const ownerTargets = targets.filter(target => target.owner === owner);
-    const edits = { ...(owner.subdivisionEdits || {}) };
-    for (const target of ownerTargets) {
-      const patch = subdivisionPatch(owner, target.cube, target.index);
-      if (patch) edits[target.index] = patch;
-      else delete edits[target.index];
-    }
-    owner.subdivisionEdits = edits;
-  }
-  if (subdivisionSession) syncSubdivisionEdits();
-}
-
-function registerGeneratedTexture(canvas, name, kind) {
-  const id = `texture_${crypto.randomUUID()}`;
-  const asset = {
-    _uid: id, uuid: id, id, name: name.toLowerCase().endsWith('.png') ? name : `${name}.png`,
-    source: canvas.toDataURL('image/png'), uvWidth: canvas.width, uvHeight: canvas.height,
-    kind, groupId: null, useAsDefault: state.textureAssets.length === 0
-  };
-  state.textureAssets.push(asset);
-  state.activeTextureUid = asset._uid;
-  state.project.textureSize = [canvas.width, canvas.height];
-  invalidateUvPreviewTextureState();
-  renderTextureList();
-  activateProjectTexture(state.textureAssets.length - 1);
-  markDirty();
-  return asset;
-}
-
-async function createTextureTemplate(options) {
-  const targets = templateCubeTargets(options.selectedOnly);
-  if (!targets.length) return toast('目前沒有可建立模板的 Cube');
-  const initialFaceCount = targets.reduce((count, target) => count + CUBE_FACE_NAMES.filter(faceName => {
-    const face = target.cube.faces?.[faceName];
-    return !isCubeFaceCulled(face);
-  }).length, 0);
-  if (!initialFaceCount) return toast('目前沒有可建立模板的面');
-  const invalidFaces = [];
-  const invalidFacesByCube = new WeakMap();
-  if (options.cleanInvalidFaces) {
-    for (const target of targets) {
-      for (const faceName of CUBE_FACE_NAMES) {
-        if (isCubeFaceCulled(target.cube.faces?.[faceName]) || !cubeFaceHasZeroGeometry(target.cube, faceName)) continue;
-        invalidFaces.push({ target, faceName });
-        const names = invalidFacesByCube.get(target.cube) || new Set();
-        names.add(faceName);
-        invalidFacesByCube.set(target.cube, names);
-      }
-    }
-  }
-  const cleanedFaceCount = invalidFaces.length;
-  const faceCount = initialFaceCount - cleanedFaceCount;
-  if (!faceCount) {
-    snapshot('core.uv.cull_face');
-    invalidFaces.forEach(({ target, faceName }) => setCubeFaceCulled(target.cube, faceName, true));
-    syncGeneratedTemplateEdits(targets);
-    invalidateAllRenderGeometry();
-    markDirty();
-    renderAll('all');
-    return toast(cleanedFaceCount ? `已清理 ${cleanedFaceCount} 個無效面；沒有可建立模板的面` : '目前沒有可建立模板的面');
-  }
-  snapshot('core.texture.generate');
-  const progress = beginTextureGenerationProgress(faceCount);
-  try {
-  await progress.prepare(`正在準備 ${faceCount} 個面…`);
-  const subdivisions = options.boxUv && formatRules(state.project).moddedEntity ? 16 : activeSnapSubdivisions();
-  const padding = options.paddingEnabled ? Math.max(0, Math.round(options.padding)) : 0;
-  const sourceAssets = new Set();
-  const rectangles = [];
-  const assignments = [];
-  const sharedEntries = new Map();
-  const addFaceEntry = (target, faceName, width, height, boxEntry = null, offset = null) => {
-    const cube = target.cube;
-    const face = cube.faces?.[faceName];
-    const sourceUv = Array.isArray(face?.uv) && face.uv.length >= 4 ? [...face.uv] : [...getBlockbenchBoxUv(cube, faceName)];
-    const sourceAsset = textureAssetForReference(face?.texture);
-    if (sourceAsset) sourceAssets.add(sourceAsset);
-    const duplicateKey = !options.keepMultiTexture && !boxEntry
-      ? `${sourceAsset?._uid || 'color'}:${faceName}:${sourceAsset?.mode === 'tiled' ? JSON.stringify([faceTileSize(cube, faceName), face?.tiling]) : sourceUv.join(',')}:${width}x${height}` : null;
-    let entry = duplicateKey ? sharedEntries.get(duplicateKey) : null;
-    if (!entry) {
-      entry = boxEntry || { width, height, faceName, sourceUv, sourceAsset, targets: [] };
-      if (!boxEntry) rectangles.push(entry);
-      if (duplicateKey) sharedEntries.set(duplicateKey, entry);
-    }
-    const assignment = { target, faceName, width, height, sourceUv, sourceAsset, entry, offset };
-    entry.targets.push(assignment);
-    assignments.push(assignment);
-  };
-  for (const target of targets) {
-    const cube = target.cube;
-    const dimensions = cube.size.map(value => {
-      const scaled = Math.abs(Number(value) || 0) * subdivisions / 16;
-      return scaled > 0 ? Math.max(1, Math.round(scaled)) : 0;
-    });
-    if (options.boxUv) {
-      const [x, y, z] = dimensions;
-      const boxEntry = { width: 2 * (x + z), height: y + z, faceName: 'north', sourceUv: null, sourceAsset: null, targets: [] };
-      rectangles.push(boxEntry);
-      const offsets = {
-        east: [0, z, z, y], north: [z, z, x, y], west: [z + x, z, z, y], south: [z + x + z, z, x, y],
-        up: [z, 0, x, z], down: [z + x, 0, x, z]
-      };
-      for (const faceName of CUBE_FACE_NAMES) {
-        const face = cube.faces?.[faceName];
-      if (isCubeFaceCulled(face) || invalidFacesByCube.get(cube)?.has(faceName)) continue;
-        const [ox, oy, width, height] = offsets[faceName];
-        addFaceEntry(target, faceName, width, height, boxEntry, { x: ox, y: oy });
-      }
-    } else {
-      for (const faceName of CUBE_FACE_NAMES) {
-        const face = cube.faces?.[faceName];
-      if (isCubeFaceCulled(face) || invalidFacesByCube.get(cube)?.has(faceName)) continue;
-        const [width, height] = facePixelSize(cube, faceName, subdivisions);
-        addFaceEntry(target, faceName, width, height);
-      }
-    }
-  }
-  await progress.prepare('正在讀取已有紋理…');
-  const sourceImages = new Map(await Promise.all([...sourceAssets].map(async asset => [asset._uid, await loadTextureAssetImage(asset)])));
-  await progress.prepare('正在由大到小排列 UV…');
-  let packingSide = minimumTemplatePackingSide(rectangles, padding);
-  let packed = null;
-  while (!packed && packingSide <= 8192) {
-    packed = packTemplateRectangles(rectangles, padding, packingSide);
-    if (!packed) packingSide += Math.max(1, Math.ceil(packingSide * .06));
-  }
-  const side = alignedTextureSide(packingSide, options.powerOfTwo, options.multiple);
-  if (!packed || side > 8192) {
-    state.history.pop();
-    return toast(`模板尺寸 ${side} × ${side} 過大，請降低吸附分辨率或間隔`);
-  }
-  invalidFaces.forEach(({ target, faceName }) => setCubeFaceCulled(target.cube, faceName, true));
-  const canvas = document.createElement('canvas');
-  canvas.width = side; canvas.height = side;
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, side, side);
-  for (const assignment of assignments) {
-    const placement = packed.placements.get(assignment.entry);
-    if (placement) {
-      const destination = assignment.offset
-        ? { x: placement.x + assignment.offset.x, y: placement.y + assignment.offset.y }
-        : { x: placement.x, y: placement.y };
-      drawTemplateFace(ctx, { ...assignment, faceName: assignment.faceName }, destination, sourceImages);
-      const cube = assignment.target.cube;
-      cube.faces ||= {};
-      const previous = cube.faces[assignment.faceName] || {};
-      cube.faces[assignment.faceName] = { ...previous, uv: faceDestinationUv(assignment, destination) };
-    }
-    await progress.advance('正在繪製並分配 UV…');
-  }
-  const asset = registerGeneratedTexture(canvas, options.name, 'TEMPLATE');
-  state.project.uvMode = options.boxUv ? 'box' : 'face';
-  for (const target of targets) {
-    target.cube.uvMode = options.boxUv ? 'box' : 'face';
-    target.cube.autoUv = Boolean(options.boxUv);
-    if (options.boxUv) target.cube.uvScale = subdivisions / 16;
-    if (target.owner) {
-      target.owner.uvMode = target.cube.uvMode;
-      target.owner.autoUv = Boolean(options.boxUv);
-    }
-    for (const assignment of assignments.filter(entry => entry.target === target)) {
-      target.cube.faces[assignment.faceName].texture = `#${asset.id}`;
-    }
-    const boxAssignment = assignments.find(assignment => assignment.target === target && assignment.offset);
-    if (boxAssignment) {
-      const placement = packed.placements.get(boxAssignment.entry);
-      target.cube.uv = [placement.x, placement.y];
-    }
-    if (options.boxUv) for (const face of Object.values(target.cube.faces || {})) if (face) delete face.uv;
-  }
-  syncGeneratedTemplateEdits(targets);
-  markDirty();
-  invalidateUvPreviewTextureState();
-  invalidateAllRenderGeometry();
-  renderAll('all');
-  toast(`已建立 ${side} × ${side} 紋理模板${cleanedFaceCount ? `，並清理 ${cleanedFaceCount} 個無效面` : ''}`);
-  } finally {
-    progress.finish();
-  }
-}
 
 function createSimpleTexture(options) {
   snapshot('core.texture.create');
@@ -9359,10 +4270,10 @@ function activateProjectTexture(index) {
 function invalidateUvPreviewTextureState() {
   // Preview cubes copy their face records. Regenerate those copies whenever
   // template creation replaces UV rectangles or texture assignments.
-  uvPreviewProjectCache = null;
+  uvPreviewController.uvPreviewProjectCache = null;
   state.uvPreviewSelectedFace = null;
-  uvPreviewTextureDirty = true;
-  uvPreviewRenderDirty = true;
+  uvPreviewController.uvPreviewTextureDirty = true;
+  uvPreviewController.uvPreviewRenderDirty = true;
   uvPreviewRenderer.invalidateGeometry();
 }
 
@@ -9386,7 +4297,7 @@ function applyModePanelVisibility() {
 
 function setMode(mode) {
   if (mode === 'uv' && !state.separateUvMode) mode = 'edit';
-  if (mode === 'paint' && subdivisionSession) exitSubdivisionEdit(false);
+  if (mode === 'paint' && inspectorController.subdivisionSession) exitSubdivisionEdit(false);
   state.mode = mode;
   renderOutliner();
   document.body.dataset.editorMode = mode;
@@ -9411,14 +4322,14 @@ function setMode(mode) {
 function updateToolVisibility() {
   $$('.tool[data-tool]').forEach(button => {
     button.hidden = !toolSupportsMode(button.dataset.tool);
-    button.disabled = button.dataset.tool === 'knife' && Boolean(subdivisionSession);
+    button.disabled = button.dataset.tool === 'knife' && Boolean(inspectorController.subdivisionSession);
     button.setAttribute('aria-disabled', String(button.disabled));
   });
 }
 
 function setTool(tool, { temporary = false } = {}) {
-  if (!toolSupportsMode(tool) || (tool === 'knife' && subdivisionSession)) {
-    if (tool === 'knife' && subdivisionSession) toast('細分編輯期間不能使用刀具');
+  if (!toolSupportsMode(tool) || (tool === 'knife' && inspectorController.subdivisionSession)) {
+    if (tool === 'knife' && inspectorController.subdivisionSession) toast('細分編輯期間不能使用刀具');
     return;
   }
   if (!temporary && tool !== 'vertexSnap') state.vertexSnapSource = null;
@@ -9563,7 +4474,7 @@ async function openProject() {
     if (window.cubeBricksDesktop) {
       const result = await window.cubeBricksDesktop.openProject();
       if (!result) return;
-      const existing = projectTabs.find(tab => tab.journalId && tab.journalId === result.journalId);
+      const existing = projectTabsController.tabs.find(tab => tab.journalId && tab.journalId === result.journalId);
       if (existing) { activateProjectTab(existing.id); return; }
       loadProjectContent(result.content, result.filePath, result.textureAssets || [], result.journalId || null,
         result.dirty === undefined ? {} : { dirty: result.dirty });
@@ -9634,8 +4545,8 @@ function loadProjectContent(content, filePath = '', resolvedTextures = [], journ
     imported: true
   });
   if (options.dirty !== undefined) {
-    suppressJournalRecording = true;
-    try { markDirty(options.dirty, { constrain: false }); } finally { suppressJournalRecording = false; }
+    journalController.suppressRecording = true;
+    try { markDirty(options.dirty, { constrain: false }); } finally { journalController.suppressRecording = false; }
   } else markDirty(!savedPath, { constrain: false });
   toast(`已打開 ${project.name}`);
 }
@@ -9652,17 +4563,17 @@ async function offerProjectRecovery() {
         restored.add(tab.journalId);
       } catch (error) { toast(`分頁恢復失敗：${error.message}`); }
     }
-    if (restored.size && projectTabs.length > 1) {
-      const initial = projectTabs[0];
+    if (restored.size && projectTabsController.tabs.length > 1) {
+      const initial = projectTabsController.tabs[0];
       if (!initial.session.project.elements.length && !initial.session.project.groups.length
         && !initial.session.dirty && !initial.session.filePath) {
-        projectTabs.shift();
+        projectTabsController.tabs.shift();
         void discardProjectTabJournal(initial).catch(error => toast(`空白工作目錄清理失敗：${error.message}`));
         renderProjectTabs();
       }
       const preferred = retained.find(tab => tab.active && restored.has(tab.journalId));
       if (preferred) {
-        const projectTab = projectTabs.find(tab => tab.journalId === preferred.journalId);
+        const projectTab = projectTabsController.tabs.find(tab => tab.journalId === preferred.journalId);
         if (projectTab) activateProjectTab(projectTab.id);
       }
     }
@@ -9683,7 +4594,7 @@ async function offerProjectRecovery() {
 
 async function saveProject(saveAs = false) {
   try {
-    const activeTab = projectTabById(activeProjectTabId);
+    const activeTab = projectTabById(projectTabsController.activeId);
     await flushProjectJournal(activeTab);
     await activeTab?.journalWrites;
     const content = serializeCbmodel(await serializableTextureAssets());
@@ -9691,7 +4602,7 @@ async function saveProject(saveAs = false) {
       const result = await window.cubeBricksDesktop.saveProject({ filePath: saveAs ? null : state.filePath, name: state.project.name, content, journalId: activeTab?.journalId });
       if (!result) return;
       state.filePath = result.filePath;
-      const tab = projectTabById(activeProjectTabId);
+      const tab = projectTabById(projectTabsController.activeId);
       if (tab) tab.displayName = null;
     } else download(content, `${state.project.name}.cbmodel`, 'application/json');
     markDirty(false); toast('項目已保存');
@@ -9700,7 +4611,7 @@ async function saveProject(saveAs = false) {
 
 async function exportProject() {
   try {
-    const activeTab = projectTabById(activeProjectTabId);
+    const activeTab = projectTabById(projectTabsController.activeId);
     await flushProjectJournal(activeTab);
     await activeTab?.journalWrites;
     const textureAssets = await serializableTextureAssets();
@@ -9973,7 +4884,7 @@ function initializeDockSystem() {
       else requestAnimationFrame(refreshUvPreview);
     },
     onLayoutChange: () => {
-      uvPreviewRenderDirty = true;
+      uvPreviewController.uvPreviewRenderDirty = true;
       const [textureWidth = 16, textureHeight = 16] = state.project.textureSize || [];
       syncUvPreviewPanelAspect(Math.max(1, Number(textureWidth) || 1), Math.max(1, Number(textureHeight) || 1));
       syncTexturePreviewPriority();
@@ -10092,13 +5003,13 @@ function showElementContextMenu(event, uidValue, source = null) {
       }] : []),
       ...(selectedNodes.length > 1 ? [{ icon: '▰', label: '將選中項建立為組', action: addGroup }] : []),
       ...(isProceduralShape(node) && state.mode !== 'paint' ? [{
-        icon: subdivisionSession?.ownerUid === node.uid ? '◆' : '◇',
-        label: subdivisionSession?.ownerUid === node.uid ? '完成細分編輯' : '進入細分編輯',
-        action: () => subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node)
+        icon: inspectorController.subdivisionSession?.ownerUid === node.uid ? '◆' : '◇',
+        label: inspectorController.subdivisionSession?.ownerUid === node.uid ? '完成細分編輯' : '進入細分編輯',
+        action: () => inspectorController.subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node)
       }] : []),
       ...(isProceduralShape(node) ? [{
         icon: '▣', label: '烘焙為 Cube 組', action: () => {
-          if (subdivisionSession?.ownerUid === node.uid) exitSubdivisionEdit(false);
+          if (inspectorController.subdivisionSession?.ownerUid === node.uid) exitSubdivisionEdit(false);
           const generated = node.toCubes();
           if (!generated.length) return toast('這個 Shape 沒有可烘焙的 Cube');
           snapshot('core.shape.bake');
@@ -10245,7 +5156,7 @@ function bindContextMenus() {
     const node = row && state.project.getNode(row.dataset.uid);
     if (!isProceduralShape(node)) return;
     event.preventDefault();
-    subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node);
+    inspectorController.subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node);
   });
   $('#viewport').addEventListener('dblclick', event => {
     if (state.mode === 'paint') return;
@@ -10257,7 +5168,7 @@ function bindContextMenus() {
     if (selectedHit?.generated) return;
     const uidValue = selectedHit?.uid;
     if (!uidValue) {
-      if (!subdivisionSession) return;
+      if (!inspectorController.subdivisionSession) return;
       event.preventDefault();
       exitSubdivisionEdit();
       return;
@@ -10312,6 +5223,7 @@ function bindContextMenus() {
     { icon: '＋', label: '導入新貼圖', action: () => textureInput.click() }
   ] }));
   $('#paletteRows').addEventListener('contextmenu', event => {
+    if (palette.compact) { event.preventDefault(); return; }
     const rowNode = event.target.closest('.palette-row-card');
     if (!rowNode) return;
     const index = paletteRows.findIndex(row => row.id === rowNode.dataset.paletteId);
@@ -10321,8 +5233,8 @@ function bindContextMenus() {
     const barRect = gradientBar?.getBoundingClientRect();
     const barRatio = barRect ? insetControlRatio(event.clientX, barRect.left, barRect.width) : .5;
     if (swatch) {
-      selectedPaletteRowId = row.id;
-      selectedPaletteColorIndex = Number(swatch.dataset.paletteColorIndex ?? swatch.dataset.gradientNode);
+      palette.selectedRowId = row.id;
+      palette.selectedColorIndex = Number(swatch.dataset.paletteColorIndex ?? swatch.dataset.gradientNode);
     }
     showContextMenu(event, { title: row.name, source: rowNode, items: [
       ...(swatch ? [{ icon: '×', label: '刪除顏色', action: () => {
@@ -10366,8 +5278,7 @@ function bindContextMenus() {
   $('#modelCaptureCopy').addEventListener('click', copyModelCapture);
   $('#modelCaptureDialog').addEventListener('close', () => {
     $('#modelCaptureImage').removeAttribute('src');
-    modelCaptureImageCanvas = null;
-    modelCaptureDataUrl = null;
+    clearModelCapture();
   });
 }
 
@@ -10417,7 +5328,7 @@ function bindEvents() {
   const textureDragScroll = createListDragAutoScroll(textureList, () => Boolean(state.textureDrag), pointer => {
     if (pointer) updateTextureDropTarget(pointer.y, document.elementFromPoint(pointer.x, pointer.y));
   });
-  const paletteDragScroll = createListDragAutoScroll($('#paletteRows'), () => Boolean(draggedPaletteColor));
+  const paletteDragScroll = createListDragAutoScroll($('#paletteRows'), () => Boolean(palette.draggedColor));
   function updateOutlinerDropTarget(clientY, target) {
     clearOutlinerDropState({ keepDragging: true });
     const item = target?.closest('.outliner-item');
@@ -10445,7 +5356,7 @@ function bindEvents() {
         clearOutlinerDropState(); removeOutlinerDragGhost(); state.outlinerDragUids = null;
       }
       if (state.textureDrag) { state.textureDrag = null; clearTextureFaceDropTarget(); renderTextureList(); }
-      draggedPaletteColor = null;
+      palette.draggedColor = null;
     });
   }, true);
   document.addEventListener('dragend', () => {
@@ -10457,7 +5368,7 @@ function bindEvents() {
       textureList.querySelectorAll('.is-dragging,.drop-before,.drop-after,.drop-inside').forEach(node =>
         node.classList.remove('is-dragging', 'drop-before', 'drop-after', 'drop-inside'));
     }
-    draggedPaletteColor = null;
+    palette.draggedColor = null;
   }, true);
   document.addEventListener('click', event => {
     const input = event.target.closest('input[type="color"]');
@@ -10509,32 +5420,32 @@ function bindEvents() {
   projectTabsNode.addEventListener('dragstart', event => {
     const tab = event.target.closest('[data-project-tab]');
     if (!tab || event.target.closest('[data-close-project-tab]')) { event.preventDefault(); return; }
-    draggingProjectTabId = tab.dataset.projectTab;
-    draggingProjectTabInsertIndex = projectTabInsertionIndex(event.clientX, draggingProjectTabId);
+    projectTabsController.draggingTabId = tab.dataset.projectTab;
+    projectTabsController.draggingInsertIndex = projectTabInsertionIndex(event.clientX, projectTabsController.draggingTabId);
     tab.classList.add('is-dragging');
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/x-cubebricks-project-tab', draggingProjectTabId);
+    event.dataTransfer.setData('text/x-cubebricks-project-tab', projectTabsController.draggingTabId);
   });
   projectTabsNode.addEventListener('dragover', event => {
-    if (!draggingProjectTabId) return;
+    if (!projectTabsController.draggingTabId) return;
     event.preventDefault();
-    draggingProjectTabInsertIndex = projectTabInsertionIndex(event.clientX);
-    previewProjectTabInsertion(draggingProjectTabInsertIndex);
+    projectTabsController.draggingInsertIndex = projectTabInsertionIndex(event.clientX);
+    previewProjectTabInsertion(projectTabsController.draggingInsertIndex);
   });
   projectTabsNode.addEventListener('drop', event => {
-    if (!draggingProjectTabId) return;
+    if (!projectTabsController.draggingTabId) return;
     event.preventDefault();
-    draggingProjectTabInsertIndex = projectTabInsertionIndex(event.clientX);
-    moveProjectTabToIndex(draggingProjectTabId, draggingProjectTabInsertIndex);
-    draggingProjectTabId = null;
-    draggingProjectTabInsertIndex = null;
+    projectTabsController.draggingInsertIndex = projectTabInsertionIndex(event.clientX);
+    moveProjectTabToIndex(projectTabsController.draggingTabId, projectTabsController.draggingInsertIndex);
+    projectTabsController.draggingTabId = null;
+    projectTabsController.draggingInsertIndex = null;
   });
   projectTabsNode.addEventListener('dragend', event => {
-    if (draggingProjectTabId) {
-      moveProjectTabToIndex(draggingProjectTabId, projectTabInsertionIndex(event.clientX));
+    if (projectTabsController.draggingTabId) {
+      moveProjectTabToIndex(projectTabsController.draggingTabId, projectTabInsertionIndex(event.clientX));
     }
-    draggingProjectTabId = null;
-    draggingProjectTabInsertIndex = null;
+    projectTabsController.draggingTabId = null;
+    projectTabsController.draggingInsertIndex = null;
     projectTabsNode.querySelectorAll('.is-dragging,.drop-before,.drop-after').forEach(node => node.classList.remove('is-dragging', 'drop-before', 'drop-after'));
   });
   $('#newProjectTab').addEventListener('click', openNewProjectDialog);
@@ -10544,7 +5455,7 @@ function bindEvents() {
   });
   $$('[data-action="closeProjectInfo"]').forEach(button => button.addEventListener('click', () => {
     projectInfoDialog.close();
-    editingProjectTabId = null;
+    projectTabsController.editingTabId = null;
   }));
   $$('.mode-tab').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
   $$('.tool').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
@@ -10657,7 +5568,7 @@ function bindEvents() {
   uvPreviewViewport.addEventListener('pointerdown', event => {
     if (![0, 1].includes(event.button) || !uvPreviewIsActive() || !uvPreviewElements().length) return;
     event.preventDefault();
-    uvPreviewDrag = {
+    uvPreviewController.uvPreviewDrag = {
       pointerId: event.pointerId,
       button: event.button,
       rotates: event.button === 1,
@@ -10665,28 +5576,28 @@ function bindEvents() {
       startX: event.clientX, startY: event.clientY,
       moved: false
     };
-    if (uvPreviewDrag.rotates) uvPreviewViewport.classList.add('is-rotating');
+    if (uvPreviewController.uvPreviewDrag.rotates) uvPreviewViewport.classList.add('is-rotating');
     uvPreviewViewport.setPointerCapture(event.pointerId);
   });
   uvPreviewViewport.addEventListener('pointermove', event => {
-    if (!uvPreviewDrag || uvPreviewDrag.pointerId !== event.pointerId) return;
-    const dx = event.clientX - uvPreviewDrag.x;
-    const dy = event.clientY - uvPreviewDrag.y;
-    if (!uvPreviewDrag.moved && Math.hypot(event.clientX - uvPreviewDrag.startX, event.clientY - uvPreviewDrag.startY) < 4) return;
-    uvPreviewDrag.moved = true;
-    uvPreviewDrag.x = event.clientX;
-    uvPreviewDrag.y = event.clientY;
-    if (!uvPreviewDrag.rotates) return;
+    if (!uvPreviewController.uvPreviewDrag || uvPreviewController.uvPreviewDrag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - uvPreviewController.uvPreviewDrag.x;
+    const dy = event.clientY - uvPreviewController.uvPreviewDrag.y;
+    if (!uvPreviewController.uvPreviewDrag.moved && Math.hypot(event.clientX - uvPreviewController.uvPreviewDrag.startX, event.clientY - uvPreviewController.uvPreviewDrag.startY) < 4) return;
+    uvPreviewController.uvPreviewDrag.moved = true;
+    uvPreviewController.uvPreviewDrag.x = event.clientX;
+    uvPreviewController.uvPreviewDrag.y = event.clientY;
+    if (!uvPreviewController.uvPreviewDrag.rotates) return;
     state.uvPreviewYaw -= dx * .01;
     state.uvPreviewPitch = Math.max(-Math.PI / 2 + .02, Math.min(Math.PI / 2 - .02, state.uvPreviewPitch + dy * .01));
     renderUvPreview();
   });
   const endUvPreviewDrag = event => {
-    if (!uvPreviewDrag || uvPreviewDrag.pointerId !== event.pointerId) return;
-    const wasClick = !uvPreviewDrag.moved && uvPreviewDrag.button === 0;
+    if (!uvPreviewController.uvPreviewDrag || uvPreviewController.uvPreviewDrag.pointerId !== event.pointerId) return;
+    const wasClick = !uvPreviewController.uvPreviewDrag.moved && uvPreviewController.uvPreviewDrag.button === 0;
     uvPreviewViewport.releasePointerCapture?.(event.pointerId);
     uvPreviewViewport.classList.remove('is-rotating');
-    uvPreviewDrag = null;
+    uvPreviewController.uvPreviewDrag = null;
     if (wasClick) {
       const rect = uvPreviewCanvas.getBoundingClientRect();
       const cache = getUvPreviewProject();
@@ -10822,15 +5733,15 @@ function bindEvents() {
   }).observe(texturePreview);
   new ResizeObserver(entries => {
     const rect = entries[0]?.contentRect;
-    if (!rect || rect.width < 2 || rect.height < 2 || uvPreviewResizeFrame !== null) return;
-    uvPreviewResizeFrame = requestAnimationFrame(() => {
-      uvPreviewResizeFrame = null;
-      uvPreviewRenderDirty = true;
+    if (!rect || rect.width < 2 || rect.height < 2 || uvPreviewController.uvPreviewResizeFrame !== null) return;
+    uvPreviewController.uvPreviewResizeFrame = requestAnimationFrame(() => {
+      uvPreviewController.uvPreviewResizeFrame = null;
+      uvPreviewController.uvPreviewRenderDirty = true;
       refreshUvPreview(false);
     });
   }).observe(uvPreviewViewport);
   document.fonts?.load('12px "Fusion Pixel Latin"').then(() => {
-    uvPreviewFaceLabelFontRevision++;
+    uvPreviewController.uvPreviewFaceLabelFontRevision++;
     uvPreviewFaceLabelCacheKey = null;
     refreshUvPreview();
   });
@@ -10895,7 +5806,7 @@ function bindEvents() {
     const action = button.dataset.referenceAction;
     if (action === 'import') beginReferenceImageImport();
     if (action === 'edit') {
-      setReferenceImageEditing(!referenceImageEditing);
+      setReferenceImageEditing(!referenceImages.editing);
       setReferenceImageMenu(false);
     }
     if (action === 'reset') resetReferenceImage();
@@ -10905,11 +5816,10 @@ function bindEvents() {
     const button = event.target.closest('[data-reference-select]');
     if (!button) return;
     event.stopPropagation();
-    state.referenceImageSelection[referenceViewKey()] = button.dataset.referenceSelect;
-    updateReferenceImageLayer();
+    referenceImages.selectReference(button.dataset.referenceSelect);
   });
   referenceImageInput.addEventListener('change', () => {
-    loadReferenceImageFiles(referenceImageInput.files, referenceImportViewKey);
+    loadReferenceImageFiles(referenceImageInput.files, referenceImages.importViewKey);
   });
   referenceImageLayer.addEventListener('pointerdown', beginReferenceImageDrag);
   referenceImageLayer.addEventListener('pointermove', moveReferenceImageDrag);
@@ -10976,8 +5886,13 @@ function bindEvents() {
   $('[data-action="playTimeline"]')?.addEventListener('click', playTimeline);
   $('[data-action="stopTimeline"]')?.addEventListener('click', stopTimeline);
   $('[data-action="addPaletteRow"]').addEventListener('click', addPaletteRow);
+  $('#paletteCompactToggle').addEventListener('click', () => {
+    palette.compact = !palette.compact;
+    palette.saveCompactPreference();
+    renderPalette();
+  });
   $('#paletteRows').addEventListener('dragstart', () => {
-    if (draggedPaletteColor) paletteDragScroll.start();
+    if (palette.draggedColor) paletteDragScroll.start();
   });
   $('#paletteRows').addEventListener('dragend', () => paletteDragScroll.stop());
   $('#outlinerSearch').addEventListener('input', renderOutliner);
@@ -11198,7 +6113,7 @@ function bindEvents() {
     renderTextureList();
   });
   $$('[data-view-axis]').forEach(button => button.addEventListener('click', event => {
-    if (suppressAxisWidgetClick) {
+    if (cameraController.suppressAxisWidgetClick) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -11328,9 +6243,9 @@ function bindEvents() {
     if (event.key === 'Escape') {
       setRenderModeMenu(false);
       setReferenceImageMenu(false);
-      if (referenceImageEditing) setReferenceImageEditing(false);
+      if (referenceImages.editing) setReferenceImageEditing(false);
       closeShapeCreateMenu();
-      if (subdivisionSession) exitSubdivisionEdit();
+      if (inspectorController.subdivisionSession) exitSubdivisionEdit();
       clearPaintGradientSelection();
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelected(); }
@@ -11584,8 +6499,6 @@ function startCameraDrag(event, captureTarget) {
   sceneCanvas.classList.add(event.shiftKey || state.axisView ? 'is-panning' : 'is-orbiting');
 }
 
-const CUBE_FACE_NAMES = ['north', 'east', 'south', 'west', 'up', 'down'];
-
 function freezeCubeUvs(cube, disableAutoUv = false) {
   const existing = cube.faces || {};
   cube.faces = Object.fromEntries(CUBE_FACE_NAMES.map(faceName => {
@@ -11760,241 +6673,6 @@ function cubeLocalPointToWorld(cube, localPoint) {
   return applyGroupTransforms(rotated, state.project.getGroupChain(cube.uid));
 }
 
-function getKnifeCandidate(event) {
-  const rect = sceneCanvas.getBoundingClientRect();
-  const hit = sceneRenderer.pickDetailed(state.project, event.clientX - rect.left, event.clientY - rect.top,
-    true, { includeGenerated: !state.modifierResultGhost });
-  if (hit?.generated) return null;
-  const cube = hit && state.project.getNode(hit.uid);
-  const faceAxes = hit && getKnifeFaceAxes(hit.faceName);
-  if (!hit || cube?.type !== 'cube' || !faceAxes) return null;
-  const localPoint = worldPointToCubeLocal(cube, hit.point);
-  for (const axis of [faceAxes.horizontal, faceAxes.vertical]) {
-    localPoint[axis] = clamp(snapValue(localPoint[axis], event), cube.position[axis], cube.position[axis] + cube.size[axis]);
-  }
-  return { uid: cube.uid, faceName: hit.faceName, localPoint, worldPoint: cubeLocalPointToWorld(cube, localPoint) };
-}
-
-function getKnifePreviewAxis() {
-  if (!state.knifeSelection || !state.knifeHover
-    || state.knifeSelection.uid !== state.knifeHover.uid
-    || state.knifeSelection.faceName !== state.knifeHover.faceName) return null;
-  const cube = state.project.getNode(state.knifeSelection.uid);
-  return chooseKnifeCutAxis(state.knifeSelection.localPoint, state.knifeHover.localPoint,
-    state.knifeSelection.faceName, cube);
-}
-
-function getKnifePreviewLabel(axis = getKnifePreviewAxis()) {
-  const faceAxes = state.knifeSelection && getKnifeFaceAxes(state.knifeSelection.faceName);
-  if (axis === null || !faceAxes) return null;
-  return axis === faceAxes.horizontal ? '豎切' : '橫切';
-}
-
-function updateKnifeHover(event) {
-  state.knifePointer = {
-    clientX: event.clientX,
-    clientY: event.clientY,
-    shiftKey: Boolean(event.shiftKey),
-    ctrlKey: Boolean(event.ctrlKey || event.metaKey)
-  };
-  const candidate = getKnifeCandidate(event);
-  state.knifeHover = state.knifeSelection && candidate
-    && (candidate.uid !== state.knifeSelection.uid || candidate.faceName !== state.knifeSelection.faceName)
-    ? null
-    : candidate;
-  updateToolOptions();
-  renderScene();
-}
-
-function refreshKnifeFromModifierEvent(event) {
-  updateKnifeHover({
-    ...state.knifePointer,
-    shiftKey: event.shiftKey,
-    ctrlKey: event.ctrlKey || event.metaKey
-  });
-}
-
-function cancelKnifeSelection(notify = true) {
-  const hadSelection = Boolean(state.knifeSelection);
-  state.knifeSelection = null;
-  state.knifeHover = null;
-  state.knifePointer = null;
-  updateToolOptions();
-  if (state.tool === 'knife') renderScene();
-  if (notify && hadSelection) toast('已取消切割點');
-}
-
-function completeKnifeCut(cube, axis, coordinate) {
-  snapshot('core.knife.cube');
-  freezeCubeUvs(cube, true);
-  const second = splitCubeAt(cube, axis, coordinate);
-  if (!second) {
-    state.history.pop();
-    return toast('切割位置必須位於 Cube 內部');
-  }
-  state.project.elements.push(second);
-  const parent = state.project.getParentGroup(cube.uid);
-  const container = parent ? parent.children : state.project.outliner;
-  const index = container.indexOf(cube.uid);
-  container.splice(index < 0 ? container.length : index + 1, 0, second.uid);
-  state.project.invalidateHierarchyIndex();
-  const cutLabel = getKnifePreviewLabel(axis);
-  state.knifeSelection = null;
-  state.knifeHover = null;
-  state.knifePointer = null;
-  markDirty();
-  renderAll();
-  toast(`已${cutLabel || '完成切割'} ${cube.name}（${'XYZ'[axis]} 軸）`);
-}
-
-function splitBezierAtSegment(curve, segmentIndex) {
-  if (!isBezierElement(curve) || segmentIndex < 1 || segmentIndex > curve.nodes.length - 3) {
-    return toast('切割後兩端都必須至少保留兩個節點');
-  }
-  snapshot('core.knife.curve');
-  const originalNodes = curve.nodes.map(node => new CurveNode(structuredClone(node), curve.dimension === 2));
-  curve.nodes = originalNodes.slice(0, segmentIndex + 1);
-  const second = new BezierElement({
-    name: curve.name, unnamed: curve.unnamed,
-    origin: [...curve.origin], rotation: [...curve.rotation],
-    nodes: originalNodes.slice(segmentIndex + 1).map(node => structuredClone(node)),
-    parameters: structuredClone(curve.parameters), autoUv: curve.autoUv,
-    exported: curve.exported, locked: curve.locked, shade: curve.shade,
-    visible: curve.visible, color: curve.color
-  }, curve.dimension);
-  state.project.elements.push(second);
-  const parent = state.project.getParentGroup(curve.uid);
-  const container = parent ? parent.children : state.project.outliner;
-  const index = container.indexOf(curve.uid);
-  container.splice(index < 0 ? container.length : index + 1, 0, second.uid);
-  state.project.invalidateHierarchyIndex();
-  state.selectedCurveNodeIndex = curve.nodes.length - 1;
-  markDirty(); renderAll(); toast('已將貝塞爾元素斷開為兩段');
-}
-
-function useKnifePoint(event) {
-  const rect = sceneCanvas.getBoundingClientRect();
-  const activeCurve = isBezierElement(selected()) ? selected() : null;
-  const curveHit = sceneRenderer.pickCurveSegment(state.project,
-    event.clientX - rect.left, event.clientY - rect.top, activeCurve?.uid || null);
-  if (curveHit) return splitBezierAtSegment(state.project.getNode(curveHit.uid), curveHit.segmentIndex);
-  const candidate = getKnifeCandidate(event);
-  if (!candidate) return toast(state.knifeSelection ? '第二點必須位於同一個 Cube 面上' : '刀具目前只能切割 Cube');
-  const cube = state.project.getNode(candidate.uid);
-  if (!state.knifeSelection) {
-    if (cube.uid !== state.selectedUid) selectItem(cube.uid, { revealInOutliner: true });
-    state.knifeSelection = candidate;
-    state.knifeHover = candidate;
-    updateToolOptions();
-    renderScene();
-    toast('已選擇切割點；再選橫切或豎切方向');
-    return;
-  }
-  if (candidate.uid !== state.knifeSelection.uid || candidate.faceName !== state.knifeSelection.faceName) {
-    return toast('第二點必須位於同一個 Cube 面上');
-  }
-  state.knifeHover = candidate;
-  const axis = getKnifePreviewAxis();
-  if (axis === null) return toast('這個吸附點無法建立有效切面');
-  completeKnifeCut(cube, axis, state.knifeSelection.localPoint[axis]);
-}
-
-function cssLineColor(variable, fallback) {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
-  const rgb = /^#[0-9a-f]{6}$/i.test(value) ? hexToRgb(value) : fallback;
-  return [...rgb.map(channel => channel / 255), 1];
-}
-
-function offsetKnifePoint(cube, localPoint, faceName) {
-  const axes = getKnifeFaceAxes(faceName);
-  const point = [...localPoint];
-  const center = cube.position[axes.normal] + cube.size[axes.normal] / 2;
-  const fallbackSign = ['east', 'up', 'south'].includes(faceName) ? 1 : -1;
-  point[axes.normal] += (Math.sign(point[axes.normal] - center) || fallbackSign) * .012;
-  return point;
-}
-
-function pushKnifeLocalLine(lines, cube, faceName, start, end, color) {
-  lines.push({
-    start: cubeLocalPointToWorld(cube, offsetKnifePoint(cube, start, faceName)),
-    end: cubeLocalPointToWorld(cube, offsetKnifePoint(cube, end, faceName)),
-    color
-  });
-}
-
-function pushKnifeCutLoop(lines, cube, cutAxis, coordinate, color) {
-  const [firstAxis, secondAxis] = [0, 1, 2].filter(axis => axis !== cutAxis);
-  const inflate = getEffectiveInflate(cube, state.project.getGroupChain(cube.uid));
-  const direction = cube.size.map(value => value < 0 ? -1 : 1);
-  const surfaceStart = cube.position.map((value, axis) => value - direction[axis] * inflate);
-  const surfaceEnd = cube.position.map((value, axis) => value + cube.size[axis] + direction[axis] * inflate);
-  const minimum = surfaceStart.map((value, axis) => Math.min(value, surfaceEnd[axis]));
-  const maximum = surfaceStart.map((value, axis) => Math.max(value, surfaceEnd[axis]));
-  const point = (first, second) => {
-    const result = [0, 0, 0];
-    result[cutAxis] = coordinate;
-    result[firstAxis] = first;
-    result[secondAxis] = second;
-    return result;
-  };
-  const corners = [
-    point(minimum[firstAxis], minimum[secondAxis]),
-    point(maximum[firstAxis], minimum[secondAxis]),
-    point(maximum[firstAxis], maximum[secondAxis]),
-    point(minimum[firstAxis], maximum[secondAxis])
-  ];
-  const edges = [
-    [0, 1, secondAxis, -1],
-    [1, 2, firstAxis, 1],
-    [2, 3, secondAxis, 1],
-    [3, 0, firstAxis, -1]
-  ];
-  for (const [startIndex, endIndex, normalAxis, normalSign] of edges) {
-    const start = [...corners[startIndex]], end = [...corners[endIndex]];
-    start[normalAxis] += normalSign * .012;
-    end[normalAxis] += normalSign * .012;
-    lines.push({ start: cubeLocalPointToWorld(cube, start), end: cubeLocalPointToWorld(cube, end), color });
-  }
-}
-
-function pushKnifeCross(lines, candidate, color) {
-  if (!candidate) return;
-  const cube = state.project.getNode(candidate.uid);
-  const axes = cube && getKnifeFaceAxes(candidate.faceName);
-  if (!cube || !axes) return;
-  const shortest = Math.min(Math.abs(cube.size[axes.horizontal]), Math.abs(cube.size[axes.vertical]));
-  const radius = Math.max(.18, Math.min(.52, shortest * .06 || .3));
-  const thickness = Math.max(.012, Math.min(.026, radius * .05));
-  for (const axis of [axes.horizontal, axes.vertical]) {
-    const thicknessAxis = axis === axes.horizontal ? axes.vertical : axes.horizontal;
-    for (const offset of [-thickness, 0, thickness]) {
-      const start = [...candidate.localPoint], end = [...candidate.localPoint];
-      start[axis] = clamp(start[axis] - radius, cube.position[axis], cube.position[axis] + cube.size[axis]);
-      end[axis] = clamp(end[axis] + radius, cube.position[axis], cube.position[axis] + cube.size[axis]);
-      start[thicknessAxis] = end[thicknessAxis] = clamp(candidate.localPoint[thicknessAxis] + offset,
-        cube.position[thicknessAxis], cube.position[thicknessAxis] + cube.size[thicknessAxis]);
-      pushKnifeLocalLine(lines, cube, candidate.faceName, start, end, color);
-    }
-  }
-}
-
-function buildKnifeOverlayLines() {
-  if (state.tool !== 'knife') return [];
-  const lines = [];
-  const accent = cssLineColor('--accent', [230, 162, 13]);
-  const selectedColor = cssLineColor('--selection-outline', [255, 240, 200]);
-  if (state.knifeSelection) pushKnifeCross(lines, state.knifeSelection, selectedColor);
-  else if (state.knifeHover) pushKnifeCross(lines, state.knifeHover, accent);
-  const axis = getKnifePreviewAxis();
-  if (axis === null || !state.knifeSelection) return lines;
-  const cube = state.project.getNode(state.knifeSelection.uid);
-  pushKnifeCutLoop(lines, cube, axis, state.knifeSelection.localPoint[axis], accent);
-  return lines;
-}
-
-function buildEditorOverlayLines() {
-  return buildKnifeOverlayLines();
-}
 
 function nodeTransformAnchor(node) {
   if (node.type === 'cube' || node.type === 'group' || isShapeElement(node)) return node.pivot;

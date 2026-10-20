@@ -1,4 +1,4 @@
-import { operationDefinition, registerOperation } from '../core/operation-registry.js';
+import { operationDefinition, registerOperation } from '../common/core/operation-registry.js';
 
 const definitions = new Map();
 

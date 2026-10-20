@@ -255,14 +255,19 @@ npm run dist:portable
 
 ```text
 electron/                 Electron 主程序與桌面整合
-src/app.js                編輯器交互與界面狀態
+src/app.js                編輯器入口與尚待遷出的交互組裝
+src/common/               配置、註冊表與跨功能機制
+src/screen/               停靠窗口、參考圖、選色器與色卡界面
+src/utils/                向量、旋轉與排版等純計算
+src/editor/               共享狀態、工具註冊與建模交互
+src/paint/                繪畫與對稱關聯
+src/texture/              貼圖模板、圖層與像素處理
 src/model.js              工程資料、幾何、修改器／操作器實例與格式轉換
 src/render/               WebGL 場景與 UV 預覽渲染
-src/core/                 配置、格式、修改器、操作器等通用註冊表
-src/config/               內置配置、模型格式、修改器與操作器定義
-src/ui/                   停靠窗口等通用界面組件
 scripts/                  預覽服務、測試與輔助工具
 ```
+
+新增代碼的目錄與依賴規則見 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 CubeBricks 的核心方向是把編輯器能力拆成可註冊、可組合的模組，同時保留 Minecraft 模型需要的像素精度、UV 語義與 Blockbench 交換能力。
 
@@ -520,14 +525,19 @@ The first build requires network access to download dependencies and Electron pa
 
 ```text
 electron/                 Electron main process and desktop integration
-src/app.js                Editor interaction and UI state
+src/app.js                Editor bootstrap and remaining legacy wiring
+src/common/               Configuration, registries, and shared mechanisms
+src/screen/               Docking, reference images, color picker, and palette UI
+src/utils/                Pure vector, rotation, and packing algorithms
+src/editor/               Shared state, tool registration, and modeling interactions
+src/paint/                Painting and symmetry relations
+src/texture/              Texture templates, layers, and pixel processing
 src/model.js              Project data, geometry, modifier/operator instances, and format conversion
 src/shapes/               Built-in shape definitions, shared geometry, and shape registry
 src/render/               WebGL scene and UV Preview rendering
-src/core/                 Shared registries for configuration, formats, modifiers, and operators
-src/config/               Built-in configuration, model formats, modifier definitions, and operator definitions
-src/ui/                   Shared UI components such as dockable panels
 scripts/                  Preview server, tests, and helper tools
 ```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for module ownership and dependency rules.
 
 CubeBricks is built around registrable, composable editor capabilities while preserving the pixel precision, UV semantics, and Blockbench interchange required by Minecraft model workflows.

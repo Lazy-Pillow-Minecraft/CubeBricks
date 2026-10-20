@@ -1,6 +1,6 @@
 import { buildModifierRenderInstances } from '../model.js';
-import { tiledFaceReference, tiledFaceRegions } from '../core/texture-features.js';
-import { constrainCube, formatRules } from '../core/format-constraints.js';
+import { tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
+import { constrainCube, formatRules } from '../common/core/format-constraints.js';
 
 const DEG = Math.PI / 180;
 const MIPPED_SUPERSAMPLE = 1.5;

@@ -326,6 +326,7 @@
           <div class="panel-control-strip palette-control-strip">
             <span id="paletteSummary">3 行 · 每行獨立設定</span>
             <button class="add-palette-row" data-action="addPaletteRow">＋ 新增一行</button>
+            <button type="button" class="palette-compact-toggle" id="paletteCompactToggle" aria-pressed="false" title="縮略模式：只保留選色">縮略模式</button>
           </div>
           <div class="dock-content palette-view active" data-dock-view="palette">
             <div class="palette-rows" id="paletteRows" tabindex="0" aria-label="色卡，選中色塊後可按 Delete 刪除"></div>
@@ -535,6 +536,10 @@
     <div class="color-space-edit-bar">
       <div class="color-space-picker-panel"><span>選中節點顏色</span><div id="colorSpacePicker"></div></div>
       <div class="color-space-node-panel"><span>曲線節點 · 拖動卡片以調整順序</span><div id="colorSpaceNodeCards" class="color-space-node-cards"></div></div>
+    </div>
+    <div class="color-space-gradient-footer">
+      <label>漸變分段類別<select id="colorSpaceGradientSegments"><option value="equal">平均分</option><option value="custom">自定義</option><option value="curve_length">按曲線長度</option></select></label>
+      <div id="colorSpaceGradientBarHost"></div>
     </div>
   </dialog>
 

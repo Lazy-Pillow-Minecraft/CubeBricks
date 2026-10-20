@@ -1,7 +1,7 @@
-import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './config/model-formats.js';
-import { modifierRegistry } from './config/modifiers.js';
-import { operatorRegistry } from './config/operators.js';
-import { constrainCube, formatRules } from './core/format-constraints.js';
+import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './common/config/model-formats.js';
+import { modifierRegistry } from './common/config/modifiers.js';
+import { operatorRegistry } from './common/config/operators.js';
+import { constrainCube, formatRules } from './common/core/format-constraints.js';
 import { shapeRegistry } from './shapes/builtins.js';
 import { DODECAHEDRON_UNIT_FACES, TRUNCATED_ICOSAHEDRON_UNIT_FACES, regularPolyhedronCubes } from './shapes/polyhedron-geometry.js';
 import { bezierCubes } from './shapes/bezier-geometry.js';
