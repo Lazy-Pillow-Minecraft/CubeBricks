@@ -5,9 +5,11 @@ const syncFs = require('fs');
 const crypto = require('crypto');
 const { ProjectJournal, atomicWrite } = require('./project-journal.cjs');
 const { JournalOwnership } = require('./journal-ownership.cjs');
+const { listShapePacks } = require('./shape-packs.cjs');
 const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform === 'win32' ? 'shortcut-icon.ico' : 'shortcut-icon.png');
 const journals = new Map();
 const journalQueues = new Map();
+const workspaceLayoutPromises = new Map();
 const journalOwnership = new JournalOwnership();
 const workspaceSettingsPath = () => path.join(app.getPath('userData'), 'project-workspace.json');
 const retainedTabsPath = () => path.join(app.getPath('userData'), 'retained-project-tabs.json');
@@ -18,7 +20,49 @@ async function workspaceRoot() {
   } catch { /* The default is under userData on the system drive. */ }
   return path.join(app.getPath('userData'), 'working-projects');
 }
-async function journalDirectory(id) { return path.join(await workspaceRoot(), id); }
+const JOURNAL_NAME = /^project_[a-f0-9-]{20,50}$/;
+async function workspaceDirectories() {
+  const root = await workspaceRoot();
+  return { root, projects: path.join(root, 'projects'), shapePacks: path.join(root, 'shapepacks') };
+}
+async function ensureWorkspaceLayout() {
+  const directories = await workspaceDirectories();
+  const { root, projects, shapePacks } = directories;
+  if (!workspaceLayoutPromises.has(root)) {
+    const ready = (async () => {
+      await Promise.all([fs.mkdir(projects, { recursive: true }), fs.mkdir(shapePacks, { recursive: true })]);
+      const legacy = await fs.readdir(root, { withFileTypes: true });
+      for (const entry of legacy) {
+        if (!entry.isDirectory() || !JOURNAL_NAME.test(entry.name) || journals.has(entry.name)) continue;
+        const source = path.join(root, entry.name), destination = path.join(projects, entry.name);
+        if (await fs.stat(destination).then(() => true).catch(() => false)) continue;
+        if (await journalOwnership.isLocked(source)) continue;
+        try { await fs.rename(source, destination); }
+        catch (error) { console.warn(`舊項目暫留原位置：${entry.name}`, error.message); continue; }
+        const oldOwner = journalOwnership.lockPath(source), newOwner = journalOwnership.lockPath(destination);
+        if (!await fs.stat(newOwner).then(() => true).catch(() => false)) {
+          await fs.rename(oldOwner, newOwner).catch(error => {
+            if (error.code !== 'ENOENT') console.warn(`舊項目鎖文件未遷移：${entry.name}`, error.message);
+          });
+        }
+      }
+    })().catch(error => { workspaceLayoutPromises.delete(root); throw error; });
+    workspaceLayoutPromises.set(root, ready);
+  }
+  await workspaceLayoutPromises.get(root);
+  return directories;
+}
+async function journalDirectory(id) {
+  const { root, projects } = await ensureWorkspaceLayout();
+  const current = path.join(projects, id), legacy = path.join(root, id);
+  if (await fs.stat(current).then(stat => stat.isDirectory()).catch(() => false)) return current;
+  if (await fs.stat(legacy).then(stat => stat.isDirectory()).catch(() => false)) return legacy;
+  return current;
+}
+async function journalSearchRoots() {
+  const { root, projects } = await ensureWorkspaceLayout();
+  return [projects, root];
+}
 async function openWorkingJournal(id, loader) {
   const existing = journals.get(id);
   if (existing) { await existing.ensureReady(); return existing; }
@@ -52,25 +96,26 @@ const sameFilePath = (left, right) => typeof left === 'string' && typeof right =
     ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
     : path.resolve(left) === path.resolve(right));
 async function journalCandidatesForFile(filePath) {
-  const root = await workspaceRoot();
-  const entries = await fs.readdir(root, { withFileTypes: true }).catch(error => {
-    if (error.code === 'ENOENT') return [];
-    throw error;
-  });
   const candidates = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !/^project_[a-f0-9-]{20,50}$/.test(entry.name)) continue;
-    const directory = path.join(root, entry.name);
-    const saved = await fs.readFile(path.join(directory, 'saved_state'), 'utf8')
-      .then(JSON.parse).catch(() => null);
-    if (!sameFilePath(saved?.filePath, filePath)) continue;
-    if (!journals.has(entry.name) && await journalOwnership.isLocked(directory)) continue;
-    const state = await fs.readFile(path.join(directory, 'current_state'), 'utf8')
-      .then(JSON.parse).catch(() => null);
-    if (state?.status !== 'complete' || !Number.isInteger(state.activeHead)) continue;
-    const projectUuid = await fs.readFile(path.join(directory, 'project_uuid'), 'utf8')
-      .then(JSON.parse).catch(() => null);
-    candidates.push({ id: entry.name, directory, saved, state, projectUuid });
+  const seen = new Set();
+  for (const root of await journalSearchRoots()) {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !JOURNAL_NAME.test(entry.name)) continue;
+      if (seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      const directory = path.join(root, entry.name);
+      const saved = await fs.readFile(path.join(directory, 'saved_state'), 'utf8')
+        .then(JSON.parse).catch(() => null);
+      if (!sameFilePath(saved?.filePath, filePath)) continue;
+      if (!journals.has(entry.name) && await journalOwnership.isLocked(directory)) continue;
+      const state = await fs.readFile(path.join(directory, 'current_state'), 'utf8')
+        .then(JSON.parse).catch(() => null);
+      if (state?.status !== 'complete' || !Number.isInteger(state.activeHead)) continue;
+      const projectUuid = await fs.readFile(path.join(directory, 'project_uuid'), 'utf8')
+        .then(JSON.parse).catch(() => null);
+      candidates.push({ id: entry.name, directory, saved, state, projectUuid });
+    }
   }
   return candidates.sort((left, right) => String(right.saved.savedAt || '').localeCompare(String(left.saved.savedAt || '')));
 }
@@ -364,28 +409,30 @@ ipcMain.handle('project:journal-state', async (_event, payload) => {
 });
 
 ipcMain.handle('project:journal-list-recoverable', async () => {
-  const root = await workspaceRoot();
-  let entries;
-  try { entries = await fs.readdir(root, { withFileTypes: true }); }
-  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
   const recoverable = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !/^project_[a-f0-9-]{20,50}$/.test(entry.name)) continue;
-    const directory = path.join(root, entry.name);
-    if (journals.has(entry.name)) continue;
-    let claimed = false;
-    try {
-      await journalOwnership.acquire(directory);
-      claimed = true;
-      const journal = await new ProjectJournal(directory).load();
-      const saved = JSON.parse(await fs.readFile(path.join(root, entry.name, 'saved_state'), 'utf8').catch(() => 'null'));
-      if (saved?.sequence === journal.state.activeHead) continue;
-      const manifest = journal.activeManifest;
-      if (manifest.sequence === 1 && !manifest.elementOrder.length && !manifest.textureIds.length) continue;
-      recoverable.push({ journalId: entry.name, name: manifest.information.name || '未命名',
-        sequence: journal.state.activeHead, modifiedAt: manifest.timestamp, filePath: saved?.filePath || null });
-    } catch { /* Busy or incomplete projects must not be opened by another writer. */ }
-    finally { if (claimed) await journalOwnership.release(directory); }
+  const seen = new Set();
+  for (const root of await journalSearchRoots()) {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !JOURNAL_NAME.test(entry.name)) continue;
+      if (seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      const directory = path.join(root, entry.name);
+      if (journals.has(entry.name)) continue;
+      let claimed = false;
+      try {
+        await journalOwnership.acquire(directory);
+        claimed = true;
+        const journal = await new ProjectJournal(directory).load();
+        const saved = JSON.parse(await fs.readFile(path.join(directory, 'saved_state'), 'utf8').catch(() => 'null'));
+        if (saved?.sequence === journal.state.activeHead) continue;
+        const manifest = journal.activeManifest;
+        if (manifest.sequence === 1 && !manifest.elementOrder.length && !manifest.textureIds.length) continue;
+        recoverable.push({ journalId: entry.name, name: manifest.information.name || '未命名',
+          sequence: journal.state.activeHead, modifiedAt: manifest.timestamp, filePath: saved?.filePath || null });
+      } catch { /* Busy or incomplete projects must not be opened by another writer. */ }
+      finally { if (claimed) await journalOwnership.release(directory); }
+    }
   }
   return recoverable.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
 });
@@ -399,19 +446,22 @@ ipcMain.handle('project:journal-recover', async (_event, payload) => {
   });
 });
 
-ipcMain.handle('project:workspace-root', async () => workspaceRoot());
+ipcMain.handle('project:workspace-root', async () => (await ensureWorkspaceLayout()).root);
+ipcMain.handle('shape-packs:list', async () => listShapePacks((await ensureWorkspaceLayout()).shapePacks));
 ipcMain.handle('project:choose-workspace-root', async () => {
   const picked = await dialog.showOpenDialog({ title: '選擇項目工作目錄', properties: ['openDirectory', 'createDirectory'] });
   if (picked.canceled || !picked.filePaths[0]) return null;
   const directory = picked.filePaths[0];
   await fs.mkdir(directory, { recursive: true });
   await atomicWrite(workspaceSettingsPath(), JSON.stringify({ directory }, null, 2));
+  await ensureWorkspaceLayout();
   return directory;
 });
 ipcMain.handle('project:set-workspace-root', async (_event, directory) => {
   if (typeof directory !== 'string' || !path.isAbsolute(directory)) throw new Error('請選擇絕對路徑');
   await fs.mkdir(directory, { recursive: true });
   await atomicWrite(workspaceSettingsPath(), JSON.stringify({ directory }, null, 2));
+  await ensureWorkspaceLayout();
   return directory;
 });
 

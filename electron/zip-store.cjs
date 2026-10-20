@@ -57,7 +57,7 @@ function packZip(entries) {
   return Buffer.concat([...locals, ...centrals, end]);
 }
 
-function unpackZip(bytes) {
+function unpackZip(bytes, { maxEntrySize = 512 * 1024 * 1024, maxTotalSize = 2 * 1024 * 1024 * 1024 } = {}) {
   const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   let end = -1;
   for (let index = buffer.length - 22; index >= Math.max(0, buffer.length - 65557); index--) {
@@ -83,13 +83,14 @@ function unpackZip(bytes) {
     if (cursor + 46 + nameLength + extraLength + commentLength > end) throw new Error('ZIP 目錄不完整');
     const name = buffer.toString('utf8', cursor + 46, cursor + 46 + nameLength);
     cursor += 46 + nameLength + extraLength + commentLength;
-    const segments = name.split('/');
+    const directoryEntry = name.endsWith('/');
+    const segments = (directoryEntry ? name.slice(0, -1) : name).split('/');
     if (!name || name.startsWith('/') || name.includes('\\') || name.includes(':')
       || segments.some(segment => !segment || segment === '.' || segment === '..'
         || /[. ]$/.test(segment) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment))) {
       throw new Error('ZIP 包含不安全路徑');
     }
-    if (plainSize > 512 * 1024 * 1024 || (totalPlainSize += plainSize) > 2 * 1024 * 1024 * 1024) {
+    if (plainSize > maxEntrySize || (totalPlainSize += plainSize) > maxTotalSize) {
       throw new Error('ZIP 展開後體積過大');
     }
     if (localOffset + 30 > cursor) throw new Error('ZIP 文件條目位置不正確');
@@ -100,7 +101,9 @@ function unpackZip(bytes) {
     if (compressed.length !== compressedSize) throw new Error('ZIP 文件不完整');
     const plain = method === 8 ? zlib.inflateRawSync(compressed, { maxOutputLength: plainSize + 1 }) : method === 0 ? compressed : null;
     if (!plain || plain.length !== plainSize || crc32(plain) !== checksum) throw new Error(`ZIP 校驗失敗：${name}`);
-    result.set(name, plain);
+    if (directoryEntry) {
+      if (plain.length) throw new Error(`ZIP 目錄條目含資料：${name}`);
+    } else result.set(name, plain);
   }
   return result;
 }

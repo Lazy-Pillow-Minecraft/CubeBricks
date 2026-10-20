@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
   listRecoverableProjects: () => ipcRenderer.invoke('project:journal-list-recoverable'),
   recoverProjectJournal: (payload) => ipcRenderer.invoke('project:journal-recover', payload),
   projectWorkspaceRoot: () => ipcRenderer.invoke('project:workspace-root'),
+  listShapePacks: () => ipcRenderer.invoke('shape-packs:list'),
   chooseProjectWorkspaceRoot: () => ipcRenderer.invoke('project:choose-workspace-root'),
   setProjectWorkspaceRoot: (directory) => ipcRenderer.invoke('project:set-workspace-root', directory),
   onCloseRequested: (listener) => ipcRenderer.on('app:request-close', () => listener()),

@@ -35,6 +35,8 @@ if errorlevel 1 goto :failed
 echo [3/4] Running tests...
 call npm run test:model
 if errorlevel 1 goto :failed
+call npm run test:shape-packs
+if errorlevel 1 goto :failed
 call npm run test:render
 if errorlevel 1 goto :failed
 call npm run test:config

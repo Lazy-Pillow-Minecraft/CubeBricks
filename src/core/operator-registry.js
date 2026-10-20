@@ -1,4 +1,5 @@
 import { registerEntityOperations } from './operation-registry.js';
+import { shapeRegistry } from '../shapes/registry.js';
 
 export class OperatorRegistry {
   constructor() {
@@ -24,7 +25,8 @@ export class OperatorRegistry {
 
   supports(id, targetType) {
     const definition = this.get(id);
-    return Boolean(definition && (definition.targets.includes('*') || definition.targets.includes(targetType)));
+    return Boolean(definition && (definition.targets.includes('*') || definition.targets.includes(targetType)
+      || shapeRegistry.get(targetType)?.external && definition.targets.includes('polygon_prism')));
   }
 
   listFor(targetType) {

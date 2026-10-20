@@ -14,6 +14,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 
 - Cube 使用「位置 + 尺寸 + 樞軸點 + 歐拉角」描述幾何，允許零尺寸與可選的負尺寸。
 - 支援組、Locator、節點、多邊形柱體、正十二面體、足球形截角二十面體、二維 Bezier 與三維 Bezier；程序化 Shape 同樣具有可編輯樞軸點。
+- 內建 Shape 各自擁有獨立定義文件；桌面版可從工作空間的 `shapepacks/` 載入資料夾或 ZIP 形式的外部 Shape 包。編寫格式見 [SHAPE_PACKS.md](SHAPE_PACKS.md)。
 - 程序化 Shape 可進入非破壞式細分編輯；對生成 Cube 的調整以覆寫資料保存，不會破壞原 Shape 參數。
 - 曲線像組一樣可在場景層級展開，內部節點作為子項顯示和選取，不再把整列節點塞入物件屬性。
 - 場景層級支援多選、範圍選擇、拖動排序、拖入組、原位分組、搜索與快速定位；拖動列表項時可用滾輪或靠近上下邊緣自動捲動。
@@ -76,7 +77,8 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 畫筆支援方形／圓形筆尖、抗鋸齒、透明度與三維跨面連續筆畫。筆刷深度會沿 Cube 的實際鄰面及 UV 朝向延伸，疊加繪製只同步處理最前方完全重合的面，不會穿透模型。
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
 - 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算；常用的近期顏色顯示在選色器下方。
-- 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。
+- 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。漸變節點以彩色圓點及下方非互動豎線標識：只拖圓點，右鍵圓點或聚焦色卡後按 Delete 可刪除；在漸變條空白處按右鍵可插入節點。
+- 漸變分段可選「平均分」「自定義」，色彩空間漸變另可選「按曲線長度」。自定義模式可拖動節點調整色段（含兩端節點），其他模式拖動圓點則改變節點順序；切回自定義仍保留原本設定的間隔。色彩空間編輯器的右上角預覽只跟隨視角、不跟隨縮放。
 - 繪畫模式不顯示編輯選中高亮。場景層級保留索引、選取、展開、聚焦及可見／鎖定切換，禁止新建、刪除、拖動重排及幾何操作，也不允許進入 Shape 細分編輯；桌面版會在項目操作記錄中保存繪畫變更。
 - 全部剔除的 Cube 會被移除；單面剔除會同時取消該面的主視圖拾取，但仍可在 UV 預覽中處理。
 
@@ -86,6 +88,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 物件屬性按「基礎／外觀／UV／修改器／操作器」分類，避免長頁面持續向下堆疊。
 - 多項目以頁籤方式同時打開，可切換、拖動排序、編輯項目信息或關閉。
 - 關閉桌面程式時會列出已開啟項目，預設全部勾選保留；取消勾選的工作目錄會在確認後移除。下次啟動會恢復保留的頁籤。
+- 可配置的工作空間目錄分為 `projects/`（新項目的展開記錄）與 `shapepacks/`（外部 Shape 包）；舊版直接放在根目錄的 `project_*` 會在安全時自動遷移，無法遷移時仍可從舊位置讀取。
 - 配置註冊表統一管理繁體中文、簡體中文、英語、外觀、視圖、吸附與工作區選項。
 - 模型格式使用可擴展註冊表，格式可提供自己的初始工程資料、吸附基準、貼圖尺寸與能力標記。Java 方塊／物品可在項目信息中選擇三檔旋轉規則：1.9–1.21.5 為 22.5° 倍數單軸、1.21.6–1.21.10 為自由角度單軸、1.21.11+ 不限角度與軸數；該格式使用逐面 UV。模組版實體使用箱型 UV、整數 Cube 尺寸與組旋轉，Cube 自身不旋轉。
 
@@ -161,7 +164,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 開啟「忽視全透明」時，三維繪畫會穿過完全透明的貼圖像素，選擇射線上第一個可繪畫的有色像素；單筆擦除以起筆時的透明度判定命中，避免擦開前層後繼續擦穿後層。
 - 面漸變要求兩點位於同一面；體漸變要求兩點位於同一 Cube。兩點只定義方向，漸變會覆蓋完整目標。
 - 雙色漸變先點擊第一色或第二色色槽，再在右側選色器調色；兩端 Alpha 可獨立設定。啟用「使用色卡」後會改用目前選中色卡的全部顏色。
-- 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。
+- 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。漸變條的圓形節點可選取；其下方豎線只作位置標記，不可拖動。自定義分段可拖動圓點調整間隔，平均分與曲線長度模式拖動圓點可重排節點；右鍵漸變條空白處可新增節點。
 - 繪畫模式中的場景層級可查找、選取、聚焦及切換元素可見性／鎖定；修改模型幾何需回到編輯模式。畫筆等非漸變工具直接使用右側選色器的當前顏色。桌面版的 `Ctrl+Z`／`Ctrl+Shift+Z` 依當前項目的操作記錄撤銷／重做，包含繪畫與貼圖指派。
 
 ### 使用繪畫對稱
@@ -226,6 +229,7 @@ npm run preview
 npm run check
 npm run test:config
 npm run test:model
+npm run test:shape-packs
 npm run test:render
 npm run test:operations
 npm run test:journal
@@ -276,6 +280,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 
 - Cubes use position, size, pivot, and Euler rotation to describe geometry. Zero-sized dimensions are supported, and negative dimensions are optional.
 - Groups, locators, nodes, polygon columns, dodecahedrons, truncated-icosahedron footballs, and 2D/3D Bezier curves are supported. Procedural shapes have editable pivots as well.
+- Built-in shapes have separate definition files. The desktop app loads external shape packs from `shapepacks/` as folders or ZIP archives; see [SHAPE_PACKS.md](SHAPE_PACKS.md) for the authoring contract.
 - Procedural shapes support non-destructive subdivision editing. Changes to generated cubes are stored as overrides without destroying the original shape parameters.
 - Curves can be expanded in the scene hierarchy like groups, with their nodes displayed and selected as children instead of being placed in a long property list.
 - The hierarchy supports multi-selection, range selection, drag reordering, group nesting, in-place grouping, search, and animated navigation. While dragging list items, use the wheel or move near the top or bottom edge to scroll.
@@ -339,7 +344,8 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Brushes support square and round tips, antialiasing, opacity, and continuous 3D strokes across faces. Brush depth follows actual shared cube edges and each neighboring face's UV orientation. Coincident painting affects exactly overlapping surfaces at the first eligible depth. With "ignore fully transparent" enabled, 3D paint can reach colored pixels behind transparent faces; a stroke keeps its original alpha hit map so erasing the front face cannot tunnel into the next layer.
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
 - The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion. Recent colors appear below the picker.
-- Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient.
+- Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient. Gradient stops have colored circular heads and non-interactive vertical markers: drag only the head, right-click it or press Delete while the palette is focused to remove it, and right-click an empty part of the gradient bar to insert a stop.
+- Gradient spacing supports equal and custom intervals; color-space gradients also support intervals proportional to actual Bezier arc length. Custom spacing is preserved when switching modes. The color-space editor's top-right preview follows orientation but keeps a fixed zoom.
 - Paint mode hides edit-selection highlighting. The hierarchy provides indexing, selection, expansion, focus, and visibility/lock toggles, while creation, deletion, reordering, geometry operations, and shape subdivision editing are disabled. The desktop app records painting changes in the project operation journal.
 - Culling every face removes the cube. A culled individual face is no longer pickable in the main viewport but remains available in UV Preview.
 
@@ -349,6 +355,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Object properties are split into Basic, Appearance, UV, Modifiers, and Operators pages instead of one continuously stacked panel.
 - Multiple projects can remain open as tabs that support selection, drag ordering, project-information editing, and closing.
 - On exit, the desktop app lists open projects with every tab checked for retention by default. Unchecking a tab removes its working directory after confirmation; retained tabs reopen at the next launch.
+- The configurable workspace contains `projects/` for new working journals and `shapepacks/` for external shapes. Legacy `project_*` folders in the workspace root migrate automatically when safe and remain readable in place otherwise.
 - A configuration registry manages Traditional Chinese, Simplified Chinese, English, appearance, viewport, snapping, and workspace settings.
 - Model formats use an extensible registry and may provide their own initial project data, snapping baseline, texture size, and capability flags. Java Block/Item offers three rotation rules in Project Information: 1.9–1.21.5 uses single-axis 22.5° increments; 1.21.6–1.21.10 allows any angle on one axis; 1.21.11+ allows unrestricted angles and axes. It uses per-face UVs. Modded Entity uses box UVs, integer cube dimensions, and group rotation rather than cube rotation.
 
@@ -422,7 +429,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Brush Depth controls how many pixels continue onto neighboring faces when a stroke reaches a cube edge. Coincident Painting affects only exactly overlapping frontmost faces.
 - A face gradient requires both points on one face; a volume gradient requires both points on one cube. The points define direction only, and the gradient covers the complete target.
 - In two-color mode, click the first or second stop button and edit that stop in the right-side picker. Each stop has independent alpha. Enabling **Use Palette** switches to every color in the selected palette row.
-- Palette rows independently support discrete or gradient display and allow color selection, insertion, deletion, and drag reordering.
+- Palette rows independently support discrete or gradient display and allow color selection, insertion, deletion, and drag reordering. Only the circular head of a gradient stop is interactive; its vertical line is a marker. Drag heads, including the endpoints, to adjust custom spacing, or drag heads in equal/curve-length modes to reorder stops. Right-click empty gradient-bar space to insert a stop.
 - The hierarchy in Paint mode can find, select, and focus content or toggle an element's visibility and lock state. Return to Edit mode to change model geometry. Non-gradient paint tools use the current color from the right-side picker. In the desktop app, `Ctrl+Z` and `Ctrl+Shift+Z` follow the active project's operation journal, including painting and texture assignment.
 
 ### Using Paint Symmetry
@@ -487,6 +494,7 @@ Then open `http://127.0.0.1:8765/`.
 npm run check
 npm run test:config
 npm run test:model
+npm run test:shape-packs
 npm run test:render
 npm run test:operations
 npm run test:journal
@@ -514,6 +522,7 @@ The first build requires network access to download dependencies and Electron pa
 electron/                 Electron main process and desktop integration
 src/app.js                Editor interaction and UI state
 src/model.js              Project data, geometry, modifier/operator instances, and format conversion
+src/shapes/               Built-in shape definitions, shared geometry, and shape registry
 src/render/               WebGL scene and UV Preview rendering
 src/core/                 Shared registries for configuration, formats, modifiers, and operators
 src/config/               Built-in configuration, model formats, modifier definitions, and operator definitions

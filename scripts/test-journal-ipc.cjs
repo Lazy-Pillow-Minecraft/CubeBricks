@@ -64,9 +64,49 @@ test('IPC cannot recover or delete a journal already open in another application
     await fs.mkdir(decoy);
     await fs.writeFile(path.join(decoy, 'keep.txt'), 'unrelated');
     await second.call('app:confirm-close', { discarded: [id], retained: [] });
-    await assert.rejects(fs.access(path.join(root, 'profile', 'working-projects', id)), { code: 'ENOENT' });
+    await assert.rejects(fs.access(path.join(root, 'profile', 'working-projects', 'projects', id)), { code: 'ENOENT' });
     assert.equal(await fs.readFile(path.join(decoy, 'keep.txt'), 'utf8'), 'unrelated');
   } finally {
+    await Promise.all(apps.map(app => app.release()));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('legacy working journals move into projects while locked or conflicting folders stay intact', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-layout-test-'));
+  const apps = [];
+  const { ProjectJournal } = require('../electron/project-journal.cjs');
+  const { JournalOwnership } = require('../electron/journal-ownership.cjs');
+  const workspace = path.join(root, 'profile', 'working-projects');
+  const movedId = 'project_11111111-1111-1111-1111-111111111111';
+  const busyId = 'project_22222222-2222-2222-2222-222222222222';
+  const conflictId = 'project_33333333-3333-3333-3333-333333333333';
+  const owner = new JournalOwnership();
+  try {
+    await fs.mkdir(workspace, { recursive: true });
+    for (const id of [movedId, busyId, conflictId]) {
+      await new ProjectJournal(path.join(workspace, id)).initialize(JSON.stringify({
+        name: id, elements: [], groups: [], textures: [], outliner: []
+      }));
+    }
+    await fs.writeFile(path.join(workspace, `${movedId}.owner`), JSON.stringify({ pid: 99999999 }));
+    await owner.acquire(path.join(workspace, busyId));
+    const conflict = path.join(workspace, 'projects', conflictId);
+    await fs.mkdir(conflict, { recursive: true });
+    await fs.writeFile(path.join(conflict, 'keep.txt'), 'do not replace');
+    const app = await application(root);
+    apps.push(app);
+    assert.equal(await app.call('project:workspace-root'), workspace);
+    assert.ok((await fs.stat(path.join(workspace, 'projects', movedId))).isDirectory());
+    await assert.rejects(fs.access(path.join(workspace, movedId)), { code: 'ENOENT' });
+    assert.ok((await fs.stat(path.join(workspace, 'projects', `${movedId}.owner`))).isFile());
+    assert.ok((await fs.stat(path.join(workspace, busyId))).isDirectory());
+    assert.ok((await fs.stat(path.join(workspace, conflictId))).isDirectory());
+    assert.equal(await fs.readFile(path.join(conflict, 'keep.txt'), 'utf8'), 'do not replace');
+    assert.ok((await fs.stat(path.join(workspace, 'shapepacks'))).isDirectory());
+    assert.equal(JSON.parse((await app.call('project:journal-recover', { journalId: movedId })).content).name, movedId);
+  } finally {
+    await owner.releaseAll();
     await Promise.all(apps.map(app => app.release()));
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -100,7 +140,7 @@ test('project UUID survives archive reopening and the same file reuses its worki
     const second = await application(root, { openFile: archive });
     apps.push(second);
     assert.equal((await second.call('project:open')).journalId, opened.journalId);
-    const folders = await fs.readdir(path.join(root, 'profile', 'working-projects'), { withFileTypes: true });
+    const folders = await fs.readdir(path.join(root, 'profile', 'working-projects', 'projects'), { withFileTypes: true });
     assert.equal(folders.filter(entry => entry.isDirectory() && entry.name.startsWith('project_')).length, 1);
   } finally {
     await Promise.all(apps.map(app => app.release()));
@@ -131,7 +171,7 @@ test('a newer archive on the same history replaces only an idle, saved working c
     assert.notEqual(reopened.journalId, original.journalId);
     assert.equal(JSON.parse(reopened.content).projectUuid, source.projectUuid);
     assert.equal(JSON.parse(reopened.content).elements[0].position[0], 7);
-    const folders = await fs.readdir(path.join(root, 'profile', 'working-projects'), { withFileTypes: true });
+    const folders = await fs.readdir(path.join(root, 'profile', 'working-projects', 'projects'), { withFileTypes: true });
     assert.equal(folders.filter(entry => entry.isDirectory() && entry.name.startsWith('project_')).length, 1);
   } finally {
     await Promise.all(apps.map(app => app.release()));
@@ -203,7 +243,7 @@ test('explicit overwrite replaces an idle divergent copy without touching the so
     assert.notEqual(result.journalId, opened.journalId);
     assert.equal(JSON.parse(result.content).elements[0].position[0], 30);
     assert.equal(ProjectJournal.inspectArchive(await fs.readFile(archive)).projectUuid, firstSource.projectUuid);
-    const folders = await fs.readdir(path.join(root, 'profile', 'working-projects'), { withFileTypes: true });
+    const folders = await fs.readdir(path.join(root, 'profile', 'working-projects', 'projects'), { withFileTypes: true });
     assert.equal(folders.filter(entry => entry.isDirectory() && entry.name.startsWith('project_')).length, 1);
   } finally {
     await Promise.all(apps.map(app => app.release()));

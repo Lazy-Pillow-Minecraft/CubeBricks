@@ -241,6 +241,8 @@ const ENGLISH_UI = Object.freeze({
   '刪除物件': 'Delete object', '刪除組及其內容': 'Delete group and contents', '選擇一個 Cube、Shape 或組來編輯。': 'Select a cube, shape, or group to edit.',
   '選擇一個 Cube、Shape、Locator 或組來編輯。': 'Select a cube, shape, locator, or group to edit.', '選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。': 'Select a cube, shape, node, Bezier element, locator, or group to edit.', '已新增 Locator': 'Locator added',
   '一般': 'General', '視圖': 'View', '所有選項即時生效，並通過配置註冊表保存在這台電腦上。': 'All options apply immediately and are saved on this computer through the configuration registry.',
+  '工作空間目錄': 'Workspace folder',
+  'projects/ 保存新項目的展開記錄；shapepacks/ 放外部 Shape 包（僅安裝可信的 JS 包）': 'projects/ stores working journals; shapepacks/ holds external shapes (install trusted JS packs only).',
   '設定分類': 'Settings categories', '介面、視口與編輯行為': 'Interface, viewport, and editing behavior', '介面語言': 'Interface language',
   '視口顯示與鎖定物體虛化': 'Viewport display and locked-object fading', '鎖定物體默認虛化 Alpha': 'Default locked-object alpha',
   '開啟鼠標虛化': 'Enable pointer hover fading', '鼠標虛化 Alpha': 'Pointer hover alpha', '鼠標虛化半徑': 'Pointer fade radius',
@@ -261,6 +263,18 @@ const ENGLISH_UI = Object.freeze({
   '請先建立或導入一張貼圖': 'Create or import a texture first', '鎖定透明度時橡皮擦不會改變貼圖': 'The eraser cannot change the texture while alpha lock is enabled',
   '這個面沒有可用的貼圖': 'This face has no usable texture', '請指向一個 Cube 面': 'Point at a cube face',
   '改用離散色卡': 'Use discrete palette', '啟用連續漸變': 'Enable continuous gradient', '隱藏': 'Hide', '顯示': 'Show',
+  '漸變': 'Gradient', '色空': 'Color space', '色彩空間漸變': 'Color-space gradient',
+  '此行使用連續漸變': 'Use a continuous gradient for this row',
+  '在三維色彩空間沿貝塞爾曲線取色；關閉後保留曲線設定': 'Sample a Bezier path in 3D color space; disabling preserves the curve',
+  '曲線 ↗': 'Curve ↗', '編輯三維色彩曲線': 'Edit 3D color curve',
+  '啟用色彩空間漸變': 'Enable color-space gradient', '關閉色彩空間漸變': 'Disable color-space gradient',
+  '編輯色彩曲線': 'Edit color curve', '色彩空間': 'Color space',
+  'HSV 正方體': 'HSV cube', 'RGB 正方體': 'RGB cube', 'HSV 圓柱': 'HSV cylinder',
+  '手柄': 'Gizmo', '三軸': 'All axes', 'X · 色相／紅／飽和': 'X · Hue / red / saturation',
+  'Y · 飽和／綠／亮度': 'Y · Saturation / green / value', 'Z · 亮度／藍／色相': 'Z · Value / blue / hue',
+  '＋ 節點': '+ Node', '選中節點顏色': 'Selected node color', '曲線節點 · 拖動卡片以調整順序': 'Curve nodes · drag cards to reorder',
+  '手柄對稱': 'Symmetric handles', '曲線至少需要兩個節點': 'A curve needs at least two nodes',
+  '三維色彩空間曲線；左鍵選擇和拖動節點、手柄，中鍵旋轉視角，滾輪縮放': '3D color-space curve; left-click to select and drag nodes or handles, middle-drag to orbit, wheel to zoom',
   '展開組': 'Expand group', '折疊組': 'Collapse group', '刪除': 'Delete', '刪除選中項': 'Delete selection',
   '隱藏選中項': 'Hide selection', '顯示選中項': 'Show selection', '將選中項建立為組': 'Group selection',
   '移到新貼圖組': 'Move to new texture group', '解散貼圖組': 'Ungroup textures', '刪除貼圖': 'Delete texture',
@@ -309,6 +323,8 @@ export function translateUiText(source, language = configRegistry.get(ConfigKey.
   if (ENGLISH_UI[text]) return ENGLISH_UI[text];
   let match = text.match(/^(\d+) 行 · 每行獨立設定$/);
   if (match) return `${match[1]} rows · configured independently`;
+  match = text.match(/^色彩空間漸變 · (.+)$/);
+  if (match) return `Color-space gradient · ${match[1]}`;
   match = text.match(/^多選 (\d+)$/);
   if (match) return `${match[1]} selected`;
   match = text.match(/^節點 (\d+)$/);

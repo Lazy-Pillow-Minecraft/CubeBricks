@@ -2,10 +2,14 @@ import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './conf
 import { modifierRegistry } from './config/modifiers.js';
 import { operatorRegistry } from './config/operators.js';
 import { constrainCube, formatRules } from './core/format-constraints.js';
+import { shapeRegistry } from './shapes/builtins.js';
+import { DODECAHEDRON_UNIT_FACES, TRUNCATED_ICOSAHEDRON_UNIT_FACES, regularPolyhedronCubes } from './shapes/polyhedron-geometry.js';
+import { bezierCubes } from './shapes/bezier-geometry.js';
 
 const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID()}`;
 // Blockbench's standard marker palette (pastel viewport colours).
 export const BLOCKBENCH_MARKER_COLORS = Object.freeze(['#a2ebff', '#fff899', '#f1bb75', '#ff9b97', '#c5a6e8', '#a6c8ff', '#7bffa3', '#bdffa6', '#ffa5d5', '#e0e9fb']);
+const reportedShapeErrors = new Set();
 
 function blockbenchMarkerIndex(color) {
   const rgb = hex => [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16));
@@ -261,150 +265,16 @@ export class Cube {
   }
 }
 
-const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
-
-function unitVector(vector) {
-  const length = Math.hypot(...vector) || 1;
-  return vector.map(value => value / length);
-}
-
-function vectorCross(left, right) {
-  return [
-    left[1] * right[2] - left[2] * right[1],
-    left[2] * right[0] - left[0] * right[2],
-    left[0] * right[1] - left[1] * right[0]
-  ];
-}
-
-function vectorDot(left, right) {
-  return left.reduce((total, value, axis) => total + value * right[axis], 0);
-}
-
-function orderPolyhedronFace(points, normal) {
-  const center = [0, 1, 2].map(axis => points.reduce((sum, point) => sum + point[axis], 0) / points.length);
-  const basisU = unitVector(points[0].map((value, axis) => value - center[axis]));
-  const basisV = unitVector(vectorCross(normal, basisU));
-  const ordered = [...points].sort((left, right) => {
-    const leftOffset = left.map((value, axis) => value - center[axis]);
-    const rightOffset = right.map((value, axis) => value - center[axis]);
-    return Math.atan2(vectorDot(leftOffset, basisV), vectorDot(leftOffset, basisU))
-      - Math.atan2(vectorDot(rightOffset, basisV), vectorDot(rightOffset, basisU));
-  });
-  const winding = vectorDot(vectorCross(
-    ordered[1].map((value, axis) => value - ordered[0][axis]),
-    ordered[2].map((value, axis) => value - ordered[0][axis])
-  ), normal);
-  if (winding < 0) ordered.reverse();
-  return { normal, vertices: ordered };
-}
-
-function convexPolyhedronFaces(vertices, verticesPerFace) {
-  const faces = [];
-  const seen = new Set();
-  const epsilon = 1e-6;
-  for (let first = 0; first < vertices.length - 2; first++) {
-    for (let second = first + 1; second < vertices.length - 1; second++) {
-      for (let third = second + 1; third < vertices.length; third++) {
-        let normal = vectorCross(
-          vertices[second].map((value, axis) => value - vertices[first][axis]),
-          vertices[third].map((value, axis) => value - vertices[first][axis])
-        );
-        if (Math.hypot(...normal) < epsilon) continue;
-        normal = unitVector(normal);
-        const plane = vectorDot(normal, vertices[first]);
-        const distances = vertices.map(vertex => vectorDot(normal, vertex) - plane);
-        if (!distances.every(distance => distance <= epsilon) && !distances.every(distance => distance >= -epsilon)) continue;
-        const indices = distances.map((distance, index) => Math.abs(distance) <= epsilon ? index : -1).filter(index => index >= 0);
-        if (indices.length !== verticesPerFace) continue;
-        const key = [...indices].sort((left, right) => left - right).join(',');
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const center = [0, 1, 2].map(axis => indices.reduce((sum, index) => sum + vertices[index][axis], 0) / indices.length);
-        if (vectorDot(normal, center) < 0) normal = normal.map(value => -value);
-        faces.push(orderPolyhedronFace(indices.map(index => vertices[index]), normal));
-      }
-    }
-  }
-  return faces;
-}
-
-function dodecahedronUnitFaces() {
-  const inverse = 1 / GOLDEN_RATIO;
-  const vertices = [
-    ...[-1, 1].flatMap(x => [-1, 1].flatMap(y => [-1, 1].map(z => [x, y, z]))),
-    ...[-1, 1].flatMap(y => [-1, 1].map(z => [0, y * inverse, z * GOLDEN_RATIO])),
-    ...[-1, 1].flatMap(x => [-1, 1].map(y => [x * inverse, y * GOLDEN_RATIO, 0])),
-    ...[-1, 1].flatMap(x => [-1, 1].map(z => [x * GOLDEN_RATIO, 0, z * inverse]))
-  ].map(unitVector);
-  return convexPolyhedronFaces(vertices, 5);
-}
-
-const DODECAHEDRON_UNIT_FACES = dodecahedronUnitFaces();
-
-function truncatedIcosahedronUnitFaces() {
-  const vertices = [
-    ...[-1, 1].flatMap(y => [-1, 1].map(z => [0, y, z * GOLDEN_RATIO])),
-    ...[-1, 1].flatMap(x => [-1, 1].map(y => [x, y * GOLDEN_RATIO, 0])),
-    ...[-1, 1].flatMap(x => [-1, 1].map(z => [x * GOLDEN_RATIO, 0, z]))
-  ].map(unitVector);
-  const distances = [];
-  for (let left = 0; left < vertices.length; left++) {
-    for (let right = left + 1; right < vertices.length; right++) {
-      const distance = Math.hypot(...vertices[left].map((value, axis) => value - vertices[right][axis]));
-      if (distance > 1e-6) distances.push(distance);
-    }
-  }
-  const edgeLength = Math.min(...distances);
-  const adjacent = (left, right) => Math.abs(Math.hypot(...vertices[left].map((value, axis) => value - vertices[right][axis])) - edgeLength) < 1e-5;
-  const directedPoint = (from, to) => unitVector(vertices[from].map((value, axis) => (value * 2 + vertices[to][axis]) / 3));
-  const pentagons = vertices.map((vertex, index) => {
-    const neighbors = vertices.map((_, candidate) => candidate).filter(candidate => adjacent(index, candidate));
-    return orderPolyhedronFace(neighbors.map(neighbor => directedPoint(index, neighbor)), unitVector(vertex));
-  });
-  const hexagons = [];
-  for (let first = 0; first < vertices.length; first++) {
-    for (let second = first + 1; second < vertices.length; second++) {
-      if (!adjacent(first, second)) continue;
-      for (let third = second + 1; third < vertices.length; third++) {
-        if (!adjacent(first, third) || !adjacent(second, third)) continue;
-        const source = [vertices[first], vertices[second], vertices[third]];
-        let normal = unitVector(vectorCross(
-          source[1].map((value, axis) => value - source[0][axis]),
-          source[2].map((value, axis) => value - source[0][axis])
-        ));
-        const center = [0, 1, 2].map(axis => source.reduce((sum, point) => sum + point[axis], 0) / 3);
-        if (vectorDot(normal, center) < 0) normal = normal.map(value => -value);
-        hexagons.push(orderPolyhedronFace([
-          directedPoint(first, second), directedPoint(second, first),
-          directedPoint(second, third), directedPoint(third, second),
-          directedPoint(third, first), directedPoint(first, third)
-        ], normal));
-      }
-    }
-  }
-  return [...pentagons, ...hexagons];
-}
-
-const TRUNCATED_ICOSAHEDRON_UNIT_FACES = truncatedIcosahedronUnitFaces();
 
 export class Shape {
   constructor(data = {}) {
     const requestedType = data.shapeType || data.type;
-    const shapeType = ['dodecahedron', 'truncated_icosahedron'].includes(requestedType)
-      ? requestedType
-      : 'polygon_prism';
+    const shapeType = requestedType && requestedType !== 'shape' ? requestedType : 'polygon_prism';
     this.type = shapeType;
     this.uid = data.uid || uid('shape');
     initializeNodeNaming(this, data, 'shape');
     this.shapeType = shapeType;
-    const defaults = shapeType !== 'polygon_prism' ? {
-      radius: 4,
-      snapMode: 'edge'
-    } : {
-      radius: 4, height: 8, sides: 8, cubeSize: 1,
-      innerRadiusEnabled: false, innerRadiusMode: 'radius', innerRadius: 2,
-      snapMode: 'edge'
-    };
+    const defaults = shapeRegistry.get(shapeType)?.defaults || {};
     this.parameters = { ...defaults, ...(data.parameters || {}) };
     if (this.parameters.snapMode === 'cube') this.parameters.snapMode = 'edge';
     if (this.parameters.snapMode === 'bounds') this.parameters.snapMode = 'radius';
@@ -426,115 +296,26 @@ export class Shape {
   }
 
   toBaseCubes() {
-    if (this.shapeType === 'dodecahedron') return this.toDodecahedronCubes();
-    if (this.shapeType === 'truncated_icosahedron') return this.toTruncatedIcosahedronCubes();
-    return this.toPolygonPrismCubes();
-  }
-
-  toPolygonPrismCubes() {
-    const radius = Math.max(.001, Number(this.parameters.radius) || 0);
-    const requestedHeight = Math.max(0, Number(this.parameters.height) || 0);
-    const sides = Math.max(3, Math.round(Number(this.parameters.sides) || 3));
-    const halfTurn = Math.PI / sides;
-    const hollow = this.parameters.innerRadiusEnabled === true;
-    const outerApothem = radius * Math.cos(halfTurn);
-    const edgeLength = 2 * radius * Math.sin(halfTurn);
-    const innerValue = Math.max(0, Number(this.parameters.innerRadius) || 0);
-    const height = requestedHeight;
-    const innerRadius = !hollow ? 0
-      : this.parameters.innerRadiusMode === 'depth'
-        ? Math.max(0, outerApothem - Math.min(outerApothem, innerValue))
-        : Math.max(0, Math.min(outerApothem - .001, innerValue));
-    const mergedOpposites = !hollow && sides % 2 === 0;
-    const cubeCount = mergedOpposites ? sides / 2 : sides;
-    return Array.from({ length: cubeCount }, (_, index) => {
-      // The normal of a regular-polygon edge points from the centre toward
-      // the midpoint of that edge. Solid columns reach the centre; opposite
-      // edges of an even polygon can therefore share one continuous cube.
-      const angle = Math.PI / 2 + (index + .5) * Math.PI * 2 / sides;
-      const radial = [Math.cos(angle), Math.sin(angle)];
-      const startRadius = mergedOpposites ? -outerApothem : innerRadius;
-      const endRadius = outerApothem;
-      const cubeLength = endRadius - startRadius;
-      const midpointRadius = (startRadius + endRadius) / 2;
-      const midpoint = radial.map(value => value * midpointRadius);
-      const yaw = Math.atan2(radial[0], radial[1]) * 180 / Math.PI;
-      return new Cube({
-        name: `${this.name}_${index + 1}`,
-        position: [midpoint[0] - edgeLength / 2, 0, midpoint[1] - cubeLength / 2],
-        size: [edgeLength, height, cubeLength],
-        pivot: [midpoint[0], height / 2, midpoint[1]],
-        rotation: [0, yaw, 0],
-        uvMode: this.uvMode,
-        uvNormalized: this.uvNormalized,
-        autoUv: this.autoUv,
-        exported: this.exported,
-        locked: this.locked,
-        shade: this.shade,
-        color: this.color
+    const definition = shapeRegistry.get(this.shapeType);
+    if (!definition) return [];
+    try {
+      const cubes = definition.generate(this, {
+        Cube,
+        regularPolyhedron: (faces, mergeEvenFaces = false) => regularPolyhedronCubes(this, faces, mergeEvenFaces, { Cube, matrixEuler }),
+        dodecahedronFaces: DODECAHEDRON_UNIT_FACES,
+        truncatedIcosahedronFaces: TRUNCATED_ICOSAHEDRON_UNIT_FACES
       });
-    });
+      if (!Array.isArray(cubes) || cubes.length > 10000) throw new Error('generate 必須返回最多 10000 個 Cube');
+      return cubes.map(cube => cube instanceof Cube ? cube : new Cube(cube));
+    } catch (error) {
+      if (!reportedShapeErrors.has(this.shapeType)) {
+        reportedShapeErrors.add(this.shapeType);
+        console.warn(`Shape ${this.shapeType} 生成失敗`, error);
+      }
+      return [];
+    }
   }
 
-  toDodecahedronCubes() {
-    return this.toRegularPolyhedronCubes(DODECAHEDRON_UNIT_FACES);
-  }
-
-  toTruncatedIcosahedronCubes() {
-    return this.toRegularPolyhedronCubes(TRUNCATED_ICOSAHEDRON_UNIT_FACES, true);
-  }
-
-  toRegularPolyhedronCubes(unitFaces, mergeEvenFaces = false) {
-    const radius = Math.max(.001, Number(this.parameters.radius) || 0);
-    return unitFaces.flatMap((face, faceIndex) => {
-      const vertices = face.vertices.map(point => point.map(value => value * radius));
-      const center = [0, 1, 2].map(axis => vertices.reduce((sum, point) => sum + point[axis], 0) / vertices.length);
-      const depth = Math.max(.001, Math.hypot(...center));
-      const mergedOpposites = mergeEvenFaces && vertices.length % 2 === 0;
-      const edgeCount = mergedOpposites ? vertices.length / 2 : vertices.length;
-      return Array.from({ length: edgeCount }, (_, edgeIndex) => {
-        const start = vertices[edgeIndex];
-        const end = vertices[(edgeIndex + 1) % vertices.length];
-        const edge = end.map((value, axis) => value - start[axis]);
-        const edgeLength = Math.hypot(...edge);
-        const edgeMidpoint = start.map((value, axis) => (value + end[axis]) / 2);
-        const oppositeIndex = mergedOpposites ? (edgeIndex + vertices.length / 2) % vertices.length : -1;
-        const oppositeStart = mergedOpposites ? vertices[oppositeIndex] : null;
-        const oppositeEnd = mergedOpposites ? vertices[(oppositeIndex + 1) % vertices.length] : null;
-        const oppositeMidpoint = mergedOpposites
-          ? oppositeStart.map((value, axis) => (value + oppositeEnd[axis]) / 2)
-          : null;
-        const inward = mergedOpposites
-          ? oppositeMidpoint.map((value, axis) => value - edgeMidpoint[axis])
-          : center.map((value, axis) => value - edgeMidpoint[axis]);
-        const faceSpan = Math.hypot(...inward);
-        let xAxis = unitVector(edge);
-        const yAxis = [...face.normal];
-        const zAxis = unitVector(inward);
-        if (vectorDot(vectorCross(xAxis, yAxis), zAxis) < 0) xAxis = xAxis.map(value => -value);
-        const faceMidpoint = mergedOpposites
-          ? edgeMidpoint.map((value, axis) => (value + oppositeMidpoint[axis]) / 2)
-          : edgeMidpoint.map((value, axis) => value + zAxis[axis] * faceSpan / 2);
-        const midpoint = faceMidpoint.map((value, axis) => value - yAxis[axis] * depth / 2);
-        const size = [edgeLength, depth, faceSpan + Math.max(.001, edgeLength * .002)];
-        const orientation = [0, 1, 2].map(row => [xAxis[row], yAxis[row], zAxis[row]]);
-        return new Cube({
-          name: `${this.name}_${faceIndex + 1}_${edgeIndex + 1}`,
-          position: midpoint.map((value, axis) => value - size[axis] / 2),
-          size,
-          pivot: midpoint,
-          rotation: matrixEuler(orientation),
-          uvMode: this.uvMode,
-          uvNormalized: this.uvNormalized,
-          autoUv: this.autoUv,
-          exported: this.exported,
-          locked: this.locked,
-          shade: this.shade,
-          color: this.color
-        });
-      });
-    });
-  }
 
   toCubes() { return applySubdivisionEdits(this.toBaseCubes(), this); }
 }
@@ -670,13 +451,7 @@ export class BezierElement {
       ? [{ position: [-4, 0, 0] }, { position: [4, 0, 0] }]
       : [{ position: [-4, 0, 0] }, { position: [4, 4, 2] }];
     this.nodes = (data.nodes?.length >= 2 ? data.nodes : defaults).map(node => new CurveNode(node, dimension === 2));
-    this.parameters = {
-      thickness: 1,
-      segmentationMode: 'distance',
-      segmentLength: 1,
-      angleStep: 10,
-      ...(data.parameters || {})
-    };
+    this.parameters = { ...shapeRegistry.get(this.type)?.defaults, ...(data.parameters || {}) };
     this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
     this.exported = booleanProperty(data.exported ?? data.export, true);
     this.locked = booleanProperty(data.locked, false);
@@ -824,56 +599,11 @@ export class BezierElement {
   }
 
   toBaseCubes() {
-    const points = this.sampleCurve();
-    const thickness = Math.max(.01, Number(this.parameters.thickness) || 1);
-    const segments = [];
-    for (let index = 0; index < points.length - 1; index++) {
-      const start = points[index].point, end = points[index + 1].point;
-      const delta = end.map((value, axis) => value - start[axis]);
-      const length = vectorLength(delta);
-      if (length < 1e-6) continue;
-      segments.push({ start, end, length, direction: delta.map(value => value / length) });
-    }
-    const jointExtension = (left, right) => {
-      if (!left || !right) return 0;
-      const cosine = Math.max(-1, Math.min(1,
-        left.direction.reduce((sum, value, axis) => sum + value * right.direction[axis], 0)));
-      const turn = Math.acos(cosine);
-      if (turn < 1e-5) return 0;
-      // Butt-ended cube columns leave a wedge on the outside of a bend. A
-      // square-stroke miter closes it by extending both neighbours according
-      // to their half-width and half of the turning angle. Cap pathological
-      // near-reversals so an accidental cusp cannot create a huge cube.
-      return Math.min(thickness * 4, thickness * .5 * Math.tan(Math.min(turn, Math.PI - .02) / 2));
-    };
-    const cubes = [];
-    for (let index = 0; index < segments.length; index++) {
-      const segment = segments[index];
-      const { start, end, direction } = segment;
-      const startExtension = jointExtension(segments[index - 1], segment);
-      const endExtension = jointExtension(segment, segments[index + 1]);
-      const length = segment.length + startExtension + endExtension;
-      const midpoint = start.map((value, axis) => (value + end[axis]) / 2
-        + direction[axis] * (endExtension - startExtension) / 2);
-      const roll = (points[index].roll + points[index + 1].roll) / 2;
-      const rotation = directionFrameEuler(direction, roll);
-      cubes.push(new Cube({
-        name: `${this.name}_${index + 1}`,
-        position: [midpoint[0] - thickness / 2, midpoint[1] - thickness / 2, midpoint[2] - length / 2],
-        size: [thickness, thickness, length],
-        pivot: midpoint,
-        rotation,
-        uvMode: this.uvMode,
-        uvNormalized: this.uvNormalized,
-        autoUv: this.autoUv,
-        exported: this.exported,
-        locked: this.locked,
-        shade: this.shade,
-        color: this.color
-      }));
-    }
-    return cubes;
+    return shapeRegistry.get(this.type)?.generate(this, {
+      bezierCubes: curve => bezierCubes(curve, { Cube, vectorLength, directionFrameEuler })
+    }) || [];
   }
+
 
 
   toCubes() { return applySubdivisionEdits(this.toBaseCubes(), this); }
@@ -1139,7 +869,8 @@ export class CubeBricksProject {
     this.formatData = structuredClone(data.formatData || {});
     this.referenceImages = normalizeReferenceImages(data.referenceImages);
     this.elements = (data.elements || []).map(item => {
-      if (item.type === 'shape' || item.type === 'polygon_prism' || item.type === 'dodecahedron' || item.type === 'truncated_icosahedron') return new Shape(item);
+      if (item.type === 'shape' || shapeRegistry.has(item.shapeType || item.type) && !['bezier2d', 'bezier3d'].includes(item.type)
+        || item.shapeType && !['cube', 'group', 'locator', 'node', 'bezier2d', 'bezier3d'].includes(item.type)) return new Shape(item);
       if (item.type === 'locator') return new Locator(item);
       if (item.type === 'node') return new NodeElement(item);
       if (item.type === 'bezier2d') return new BezierElement(item, 2);
