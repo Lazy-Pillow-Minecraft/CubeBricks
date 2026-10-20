@@ -712,6 +712,7 @@ function applyPaletteColor(color, notify = true, recordHistory = true) {
     paletteRows, renderPalette, renderPaintColorHistory, recordPaintColorHistory,
     syncPaletteSelectionToPaintColor, samplePaletteGradient, addPaletteRow,
     openColorSpaceCurveEditor, addPaintSwatchToSelection, deleteSelectedPaletteColor, applyPaletteColor,
+    insertPaletteGradientNode, ensureColorSpaceCurve,
     get selectedRowId() { return selectedPaletteRowId; },
     set selectedRowId(value) { selectedPaletteRowId = value; },
     get selectedColorIndex() { return selectedPaletteColorIndex; },

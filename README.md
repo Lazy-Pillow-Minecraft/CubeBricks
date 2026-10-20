@@ -203,7 +203,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 npm install
 ```
 
-啟動桌面版：
+在 Windows 上，之後可直接雙擊根目錄的 `CubeBricksStart.vbs` 一鍵啟動桌面版。它會在項目目錄執行 `CubeBricksStart.bat`（即 `npm start`），並隱藏命令列窗口。需要查看啟動錯誤時，改為雙擊 `CubeBricksStart.bat`，或在終端執行：
 
 ```powershell
 npm start
@@ -227,10 +227,12 @@ npm run preview
 
 ```powershell
 npm run check
+npm run test:modules
 npm run test:config
 npm run test:model
 npm run test:shape-packs
 npm run test:render
+npm run test:color-space
 npm run test:operations
 npm run test:journal
 ```
@@ -255,7 +257,7 @@ npm run dist:portable
 
 ```text
 electron/                 Electron 主程序與桌面整合
-src/app.js                編輯器入口與尚待遷出的交互組裝
+src/app.js                編輯器啟動與模組依賴組裝
 src/common/               配置、註冊表與跨功能機制
 src/screen/               停靠窗口、參考圖、選色器與色卡界面
 src/utils/                向量、旋轉與排版等純計算
@@ -263,6 +265,7 @@ src/editor/               共享狀態、工具註冊與建模交互
 src/paint/                繪畫與對稱關聯
 src/texture/              貼圖模板、圖層與像素處理
 src/model.js              工程資料、幾何、修改器／操作器實例與格式轉換
+src/shapes/               內置 Shape、共享幾何與外部包載入
 src/render/               WebGL 場景與 UV 預覽渲染
 scripts/                  預覽服務、測試與輔助工具
 ```
@@ -473,7 +476,7 @@ Node.js is required. Install dependencies once:
 npm install
 ```
 
-Start the desktop application:
+On Windows, you can then double-click `CubeBricksStart.vbs` in the repository root to launch the desktop application. It runs `CubeBricksStart.bat` (`npm start`) from the project directory with the console hidden. To see startup errors, double-click `CubeBricksStart.bat` instead, or run:
 
 ```powershell
 npm start
@@ -497,10 +500,12 @@ Then open `http://127.0.0.1:8765/`.
 
 ```powershell
 npm run check
+npm run test:modules
 npm run test:config
 npm run test:model
 npm run test:shape-packs
 npm run test:render
+npm run test:color-space
 npm run test:operations
 npm run test:journal
 ```
@@ -525,7 +530,7 @@ The first build requires network access to download dependencies and Electron pa
 
 ```text
 electron/                 Electron main process and desktop integration
-src/app.js                Editor bootstrap and remaining legacy wiring
+src/app.js                Editor startup and module dependency assembly
 src/common/               Configuration, registries, and shared mechanisms
 src/screen/               Docking, reference images, color picker, and palette UI
 src/utils/                Pure vector, rotation, and packing algorithms

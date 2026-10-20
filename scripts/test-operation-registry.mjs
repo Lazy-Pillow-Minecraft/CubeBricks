@@ -1,21 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { operationIndex, requireOperation } from '../src/common/core/operation-registry.js';
 import { modifierRegistry } from '../src/common/config/modifiers.js';
 import { operatorRegistry } from '../src/common/config/operators.js';
 
+async function editorSources(directory) {
+  const sources = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const url = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, directory);
+    if (entry.isDirectory()) sources.push(...await editorSources(url));
+    else if (entry.name.endsWith('.js')) sources.push(await readFile(url, 'utf8'));
+  }
+  return sources;
+}
+
 test('every direct snapshot has an operation ID and every literal ID is indexed', async () => {
-  const source = (await Promise.all([
-    '../src/app.js',
-    '../src/project/journal-controller.js',
-    '../src/screen/inspector-controller.js',
-    '../src/screen/gizmo-controller.js',
-    '../src/screen/uv-preview-controller.js',
-    '../src/screen/palette/controller.js',
-    '../src/screen/color-picker/controller.js'
-  ]
-    .map(path => readFile(new URL(path, import.meta.url), 'utf8')))).join('\n');
+  const source = (await editorSources(new URL('../src/', import.meta.url))).join('\n');
   assert.doesNotMatch(source, /\bsnapshot\(\s*\)/, 'A snapshot call has no operation ID');
   const literalIds = [...source.matchAll(/\bsnapshot\('([^']+)'\)/g)].map(match => match[1]);
   for (const id of literalIds) assert.equal(requireOperation(id), id);

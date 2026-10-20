@@ -297,7 +297,7 @@ async function flushProjectJournal(tab = projectTabById(projectTabsController.ac
 return {
   get suppressRecording() { return suppressJournalRecording; },
   set suppressRecording(value) { suppressJournalRecording = Boolean(value); },
-  compactProjectHistorySnapshot, snapshot, undo, redo, markDirty,
+  compactProjectHistorySnapshot, snapshot, restore, undo, redo, markDirty,
   startProjectJournal, scheduleProjectJournal, noteJournalOperation, flushProjectJournal
 };
 }

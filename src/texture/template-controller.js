@@ -332,5 +332,5 @@ async function createTextureTemplate(options) {
     progress.finish();
   }
 }
-return { createTextureTemplate };
+return { createTextureTemplate, registerGeneratedTexture };
 }

@@ -4,10 +4,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../src/app.js'), 'utf8');
+const journalSource = fs.readFileSync(path.join(__dirname, '../src/project/journal-controller.js'), 'utf8');
+const fileSource = fs.readFileSync(path.join(__dirname, '../src/project/file-controller.js'), 'utf8');
+const faceDropSource = fs.readFileSync(path.join(__dirname, '../src/texture/face-drop-controller.js'), 'utf8');
 
 function install(context, names) {
   for (const name of names) {
-    const match = source.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n}`));
+    const expression = new RegExp(`(?:async )?function ${name}\\([^]*?\\n}`);
+    const match = journalSource.match(expression) || fileSource.match(expression)
+      || faceDropSource.match(expression) || source.match(expression);
     assert.ok(match, `missing function ${name}`);
     vm.runInContext(match[0], context);
   }
@@ -32,9 +37,14 @@ function setup() {
     flushProjectJournal: async () => {},
     syncActiveProjectTab() { tabs.find(tab => tab.id === context.activeProjectTabId).session = { ...state }; },
     toast() {}, renderProjectTabs() {}, restoreProjectTextureView() {}, renderAll() {}, scheduleProjectJournal() {},
+    clearSubdivisionSession() { context.subdivisionSession = null; },
     markDirty(value, options) { assert.equal(options.constrain, false); },
     window: { cubeBricksDesktop: { checkoutProjectJournal: () => new Promise(resolve => { finish = resolve; }) } }
   });
+  context.projectTabsController = {
+    tabs,
+    get activeId() { return context.activeProjectTabId; }
+  };
   install(context, ['restoredProjectSession', 'navigateProjectJournal', 'serializeCbmodel']);
   return { context, tabs, state, finish: result => finish(result) };
 }
@@ -88,7 +98,8 @@ test('dragging a texture onto multiple cube faces records one operation before m
     faces: { north: { uv: [1, 2, 5, 6], texture: 'old', enabled: false } } }));
   const records = [];
   const context = vm.createContext({
-    CUBE_FACE_NAMES: ['north'], CULLED_FACE_TEXTURE_KEY: 'culledTexture', UV_FACE_LABELS: {}, uvPreviewProjectCache: {},
+    CUBE_FACE_NAMES: ['north'], CULLED_FACE_TEXTURE_KEY: 'culledTexture', UV_FACE_LABELS: {},
+    uvPreviewController: { uvPreviewProjectCache: {} },
     textureDropCubes: () => cubes, faceTextureReference: () => 'new',
     snapshot(id) { records.push({ id, before: structuredClone(cubes) }); },
     ensureCubeFaceRecord: (cube, name) => cube.faces[name], persistGeneratedPaintCube() {}, markDirty() {},
