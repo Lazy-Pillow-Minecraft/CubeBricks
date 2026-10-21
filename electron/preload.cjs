@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
   checkoutProjectJournal: (payload) => ipcRenderer.invoke('project:journal-checkout', payload),
   projectJournalState: (payload) => ipcRenderer.invoke('project:journal-state', payload),
   listRecoverableProjects: () => ipcRenderer.invoke('project:journal-list-recoverable'),
+  listWorkspaceProjects: (options) => ipcRenderer.invoke('project:list-workspace', options),
   recoverProjectJournal: (payload) => ipcRenderer.invoke('project:journal-recover', payload),
   projectWorkspaceRoot: () => ipcRenderer.invoke('project:workspace-root'),
   listShapePacks: () => ipcRenderer.invoke('shape-packs:list'),

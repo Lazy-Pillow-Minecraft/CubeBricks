@@ -207,13 +207,9 @@ function updateTextureStageTransform() {
   stage.style.width = `${textureWidth}px`;
   stage.style.height = `${textureHeight}px`;
   stage.style.transform = `translate(${left}px, ${top}px) scale(${scale})`;
-  const checker = $('.checkerboard', stage);
-  if (checker) {
-    checker.style.backgroundSize = `${18 / scale}px ${18 / scale}px`;
-    checker.style.backgroundPosition = `0 0, ${9 / scale}px ${9 / scale}px`;
-  }
   textureViewLayout = { left, top, scale, baseScale, viewportWidth, viewportHeight, textureWidth, textureHeight };
   renderTextureUvOverlay();
+  window.dispatchEvent(new Event('cubebricks:texture-view-change'));
 }
 
 function cancelTextureFocus() {

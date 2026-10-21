@@ -54,6 +54,7 @@ export function createEventBinder({
   updateRotationModeButtons, updateScaleHandleModeButtons,
   updateSelectionLabels, updateTextureCreateDialog,
   updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
+  updateTransformGizmo, movePivotToRotationVertex,
   uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView
 }) {
 let recentRotationPress = null;
@@ -888,6 +889,12 @@ function bindEvents() {
       useVertexSnapPoint(state.vertexSnapPoints?.[Number(handle.dataset.vertexIndex)]);
       return;
     }
+    if (handle.dataset.kind === 'rotation-pivot-vertex') {
+      if (event.altKey && state.rotationVertexPick) {
+        movePivotToRotationVertex(state.rotationPivotVertices[Number(handle.dataset.vertexIndex)]);
+      }
+      return;
+    }
     if (state.tool === 'rotate' && handle.dataset.kind?.startsWith('rotate')) {
       const signature = `${handle.dataset.kind}:${handle.dataset.axis || 'view'}:${handle.dataset.sign || 1}`;
       pendingRotationPress = {
@@ -976,6 +983,11 @@ function bindEvents() {
       return;
     }
     if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
+    if (event.key === 'Alt' && state.mode !== 'paint' && state.tool === 'rotate' && !state.rotationVertexPick) {
+      event.preventDefault();
+      state.rotationVertexPick = true;
+      updateTransformGizmo();
+    }
     if (event.key === 'Escape') {
       setRenderModeMenu(false);
       setReferenceImageMenu(false);
@@ -1015,13 +1027,24 @@ function bindEvents() {
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
   });
   window.addEventListener('keyup', event => {
+    if (event.key === 'Alt' && state.rotationVertexPick) {
+      state.rotationVertexPick = false;
+      updateTransformGizmo();
+      event.preventDefault();
+    }
     if (event.key === 'Alt' && endTemporaryEyedropper()) {
       event.preventDefault();
       return;
     }
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
   });
-  window.addEventListener('blur', endTemporaryEyedropper);
+  window.addEventListener('blur', () => {
+    endTemporaryEyedropper();
+    if (state.rotationVertexPick) {
+      state.rotationVertexPick = false;
+      updateTransformGizmo();
+    }
+  });
   document.addEventListener('visibilitychange', scheduleTextureAnimation);
 }
 

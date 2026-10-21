@@ -29,6 +29,7 @@ function renderScene() {
   updateAxisWidget();
   updateReferenceImageLayer();
   refreshUvPreview(false);
+  if (sceneRenderer.hasActiveCubeTransitions()) scheduleSceneRender();
 }
 
 

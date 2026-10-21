@@ -1,12 +1,12 @@
-import { CubeBricksProject } from '../model.js';
-import { createModelProjectData, modelFormatRegistry } from '../common/config/model-formats.js';
+import { modelFormatRegistry } from '../common/config/model-formats.js';
 import { JavaBlockVersion, constrainProject } from '../common/core/format-constraints.js';
+import { normalizeTextureLayers } from '../common/core/texture-features.js';
 
 export const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectedGenerated', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
   'target', 'axisView', 'axisViewSign', 'axisViewCameras', 'generalCamera', 'referenceImageSelection', 'referenceImageSources', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
-  'selectedUvFaces', 'textureView'
+  'selectedUvFaces', 'textureView', 'paintSelection'
 ]);
 
 export function createProjectTabsController({ state, $, escapeHtml, escapeAttribute, projectTabsNode,
@@ -30,7 +30,8 @@ function createProjectSession(project, options = {}) {
   const textureAssets = (options.textureAssets || []).map(asset => ({
     ...asset,
     _uid: textureUid(asset),
-    groupId: asset.groupId || null
+    groupId: asset.groupId || null,
+    layers: normalizeTextureLayers(asset)
   }));
   const preferredTexture = textureAssets.find(asset => asset.useAsDefault) || textureAssets[0] || null;
   return {
@@ -67,6 +68,7 @@ function createProjectSession(project, options = {}) {
     activeTextureUid: preferredTexture?._uid || null,
     paintHistory: [],
     paintFuture: [],
+    paintSelection: { active: false, masks: new Map() },
     selectedUvFaces: new Set(),
     textureView: { zoom: 1, panX: 0, panY: 0 },
     timelineFrame: 0
@@ -91,6 +93,7 @@ function projectTabLabel(tab) {
 
 function renderProjectTabs() {
   if (!projectTabsNode) return;
+  document.body.classList.toggle('project-home-active', projectTabs.length === 0);
   projectTabsNode.innerHTML = projectTabs.map(tab => {
     const active = tab.id === activeProjectTabId;
     const label = projectTabLabel(tab);
@@ -107,6 +110,12 @@ function renderProjectTabs() {
 }
 
 function updateProjectStateLabel() {
+  if (!projectTabs.length) {
+    projectState.textContent = '項目首頁';
+    projectState.style.color = '';
+    document.title = 'CubeBricks';
+    return;
+  }
   const fileName = state.filePath ? state.filePath.split(/[\\/]/).pop() : `${state.project.name}.cbmodel`;
   const label = `${state.dirty ? '● ' : ''}${fileName}`;
   const title = `${state.dirty ? '● ' : ''}${projectTabLabel(projectTabById(activeProjectTabId) || { session: captureProjectSession() })} — CubeBricks`;
@@ -134,6 +143,7 @@ function activateProjectTab(tabId, { render = true } = {}) {
   cancelCameraFocus();
   sceneRenderer.invalidateLockState();
   restoreProjectTextureView();
+  window.dispatchEvent(new Event('cubebricks:texture-change'));
   updateProjectStateLabel();
   renderProjectTabs();
   if (render) renderAll();
@@ -187,12 +197,10 @@ function closeProjectTab(tabId) {
   pending.catch(() => {}).then(() => disposeProjectTab(tab));
   projectTabs.splice(index, 1);
   if (!projectTabs.length) {
-    const project = new CubeBricksProject({ name: 'untitled', ...createModelProjectData('java_block_item', { name: 'untitled' }) });
-    const replacement = { id: `project_${crypto.randomUUID()}`, displayName: null, session: createProjectSession(project) };
-    projectTabs.push(replacement);
-    startProjectJournal(replacement, 'core.project.create');
     activeProjectTabId = null;
-    activateProjectTab(replacement.id);
+    renderProjectTabs();
+    updateProjectStateLabel();
+    window.dispatchEvent(new Event('cubebricks:project-home'));
     return;
   }
   if (tabId === activeProjectTabId) {
@@ -281,10 +289,8 @@ function applyProjectInfo() {
 }
 
 function initializeProjectTabs() {
-  const tab = { id: `project_${crypto.randomUUID()}`, displayName: null, session: captureProjectSession() };
-  projectTabs = [tab];
-  activeProjectTabId = tab.id;
-  startProjectJournal(tab, 'core.project.create');
+  projectTabs = [];
+  activeProjectTabId = null;
   renderProjectTabs();
   updateProjectStateLabel();
 }

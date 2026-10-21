@@ -14,8 +14,21 @@ import { createKnifeController } from '../src/editor/knife-controller.js';
 import { createModelCaptureController } from '../src/render/model-capture.js';
 import { createTextureTemplateController } from '../src/texture/template-controller.js';
 import { createCameraController } from '../src/screen/camera-controller.js';
+import { selectionAffectsModifierResults } from '../src/editor/workspace-coordinator.js';
+import { Cube, Group, CubeBricksProject, addModifier } from '../src/model.js';
 
 assert.equal(state.mode, 'edit');
+assert.equal(state.transformSpace, 'self', 'new sessions default to local transform axes');
+const child = new Cube({ uid: 'modifier-test-child' });
+const parent = new Group({ uid: 'modifier-test-parent', children: [child.uid] });
+const modifierProject = new CubeBricksProject({ elements: [child], groups: [parent], outliner: [parent.uid] });
+const symmetry = addModifier(modifierProject.getNode(parent.uid), 'symmetry');
+assert.equal(symmetry.ignoreDuplicateCubes, true, 'new symmetry modifiers deduplicate by default');
+assert.equal(selectionAffectsModifierResults(modifierProject, [child.uid]), true,
+  'editing a child refreshes its parent modifier result');
+symmetry.enabled = false;
+assert.equal(selectionAffectsModifierResults(modifierProject, [child.uid]), false,
+  'disabled parent modifiers do not force a result rebuild');
 assert.ok(TOOL_REGISTRY.brush.modes.includes('paint'));
 assert.equal(DOCK_PANEL_DEFINITIONS.find(panel => panel.id === 'texture').defaultDock, 'left');
 for (const factory of [createReferenceImageController, createMirrorGuideController,

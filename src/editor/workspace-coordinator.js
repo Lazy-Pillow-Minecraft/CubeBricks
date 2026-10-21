@@ -1,3 +1,21 @@
+export function selectionAffectsModifierResults(project, selectedIds) {
+  if (!selectedIds?.length) return false;
+  const selectedSet = new Set(selectedIds);
+  let selectedGroup = false;
+  for (const uidValue of selectedIds) {
+    const node = project.getNode(uidValue);
+    if (node?.type === 'group') selectedGroup = true;
+    if (node?.modifiers?.some(modifier => modifier.type === 'symmetry' && modifier.enabled)) return true;
+    if (project.getGroupChain(uidValue).some(group =>
+      group.modifiers?.some(modifier => modifier.type === 'symmetry' && modifier.enabled))) return true;
+  }
+  if (!selectedGroup) return false;
+  // Transforming a selected ancestor also moves an embedded modifier frame.
+  return [...project.groups, ...project.elements].some(owner => owner.modifiers?.some(modifier =>
+    modifier.type === 'symmetry' && modifier.enabled)
+    && project.getGroupChain(owner.uid).some(parent => selectedSet.has(parent.uid)));
+}
+
 export function createWorkspaceCoordinator({
   state, $, sceneRenderer, uvPreviewRenderer,
   getTextureAssetController, getTextureAtlasController,
@@ -72,16 +90,7 @@ function selectionAffectsMirrorPreview() {
   const selectedIds = state.selectedUids?.size
     ? [...state.selectedUids]
     : state.selectedUid ? [state.selectedUid] : [];
-  if (!selectedIds.length) return false;
-  const selectedSet = new Set(selectedIds);
-  for (const uidValue of selectedIds) {
-    const node = state.project.getNode(uidValue);
-    if (node?.modifiers?.some(modifier => modifier.type === 'symmetry' && modifier.enabled)) return true;
-  }
-  // Moving an ancestor also moves the embedded symmetry frame even though the
-  // modifier owner itself is not selected.
-  return [...state.project.groups, ...state.project.elements].some(owner => owner.modifiers?.some(modifier => modifier.type === 'symmetry' && modifier.enabled)
-    && state.project.getGroupChain(owner.uid).some(parent => selectedSet.has(parent.uid)));
+  return selectionAffectsModifierResults(state.project, selectedIds);
 }
 
 function invalidateSelectionRenderGeometry(geometryChanged = true) {

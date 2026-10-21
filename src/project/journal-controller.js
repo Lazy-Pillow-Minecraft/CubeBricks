@@ -1,12 +1,13 @@
 import { CubeBricksProject } from '../model.js';
 import { formatRules, constrainNode } from '../common/core/format-constraints.js';
 import { operationDefinition, operationIndex, requireOperation } from '../common/core/operation-registry.js';
+import { normalizeTextureLayers } from '../common/core/texture-features.js';
 import { PROJECT_SESSION_KEYS } from './tabs-controller.js';
 
 export function createProjectJournalController({ state, projectTabsController, textureCanvas,
   isBezierElement, textureUid, clearSubdivisionSession, renderAll, toast,
   renderTextureList, activateProjectTexture, rebuildTextureAtlas,
-  invalidateAllRenderGeometry, restoreProjectTextureView,
+  restoreProjectTextureView,
   serializableTextureAssets, serializeCbmodel, referenceImages,
   getTexturePaintDrag, getTextureUvDrag }) {
 const journalTimers = new Map();
@@ -78,7 +79,8 @@ function restoredProjectSession(session, data, restoreTextures = false) {
     restored.textureAssets = (data.textures || []).map(asset => ({
       ...asset, _uid: textureUid(asset), uvWidth: asset.uv_width,
       uvHeight: asset.uv_height, useAsDefault: asset.use_as_default === true,
-      groupId: asset.group_id || null, activeLayerUid: asset.active_layer_uid || null
+      groupId: asset.group_id || null, activeLayerUid: asset.active_layer_uid || null,
+      layers: normalizeTextureLayers(asset)
     }));
     restored.textureGroups = structuredClone(data.textureGroups || []);
     if (!restored.textureAssets.some(asset => asset._uid === restored.activeTextureUid)) {
@@ -127,9 +129,9 @@ function restoreTexturePaintHistory(sourceStack, targetStack) {
     activateProjectTexture(state.textureAssets.indexOf(activeAsset));
     // A grouped stroke may touch several independent texture assets. Rebuild
     // the atlas as a unit so undo/redo cannot leave non-active faces showing
-    // the previous GPU copy.
+    // the previous GPU copy. UV/geometry has not changed, so the existing
+    // mesh buffers stay valid; rebuilding them made paint undo visibly stall.
     rebuildTextureAtlas();
-    invalidateAllRenderGeometry();
     markDirty();
     return true;
   }
@@ -144,12 +146,39 @@ async function navigateProjectJournal(direction) {
   void flushProjectJournal(tab);
   const requestedRevision = tab.journalEditRevision || 0;
   const previousWrite = tab.journalWrites || Promise.resolve();
+  const navigationSerial = tab.journalNavigationSerial = (tab.journalNavigationSerial || 0) + 1;
+  const localSource = direction === 'undo' ? state.history : state.future;
+  const localTarget = direction === 'undo' ? state.future : state.history;
+  let localPreview = null;
+  if (tab.id === projectTabsController.activeId && state.mode !== 'paint'
+    && Array.isArray(localSource) && Array.isArray(localTarget) && localSource.length) {
+    localPreview = {
+      before: compactProjectHistorySnapshot(state.project, state.referenceImageSources),
+      history: [...state.history], future: [...state.future]
+    };
+    localTarget.push(localPreview.before);
+    suppressJournalRecording = true;
+    try { restore(localSource.pop()); } finally { suppressJournalRecording = false; }
+  }
+  const rollbackLocalPreview = () => {
+    if (!localPreview || navigationSerial !== tab.journalNavigationSerial
+      || tab.id !== projectTabsController.activeId
+      || (tab.journalEditRevision || 0) !== requestedRevision) return;
+    state.history = localPreview.history;
+    state.future = localPreview.future;
+    suppressJournalRecording = true;
+    try { restore(localPreview.before); } finally { suppressJournalRecording = false; }
+  };
   const navigate = async () => {
     await tab.journalReady;
     if ((tab.journalEditRevision || 0) !== requestedRevision) return;
     if (tab.journalPending) throw new Error('目前變更尚未寫入工作記錄');
     const result = await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId, direction });
-    if (!result) { toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作'); return; }
+    if (!result) {
+      rollbackLocalPreview();
+      toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作');
+      return;
+    }
     tab.journalHead = result.sequence;
     if ((tab.journalEditRevision || 0) !== requestedRevision) {
       // An edit made during IPC already owns a later slot in journalWrites (or
@@ -160,8 +189,28 @@ async function navigateProjectJournal(direction) {
       return;
     }
     if (!projectTabsController.tabs.includes(tab)) return;
+    if (navigationSerial !== tab.journalNavigationSerial) return;
     if (tab.id === projectTabsController.activeId) syncActiveProjectTab();
-    tab.session = restoredProjectSession(tab.session, JSON.parse(result.content), true);
+    const resultData = JSON.parse(result.content);
+    // A local geometry undo has already restored and rendered its preview.
+    // The disk checkout confirms that state; rendering the same large model a
+    // second time is the visible pause after Ctrl+Z on Cube-heavy projects.
+    const localData = localPreview && tab.id === projectTabsController.activeId
+      ? JSON.parse(state.project.serialize()) : null;
+    const sameGeometry = localData && ['elements', 'groups', 'outliner', 'textureSize',
+      'formatId', 'modelType', 'renderType', 'cullFaces', 'referenceImages']
+      .every(key => JSON.stringify(localData[key]) === JSON.stringify(resultData[key]));
+    const sameTextures = localData && (resultData.textures || []).length === state.textureAssets.length
+      && JSON.stringify(resultData.textureGroups || []) === JSON.stringify(state.textureGroups || [])
+      && (resultData.textures || []).every((texture, index) =>
+        texture.source === state.textureAssets[index]?.source
+        && (texture.uuid || texture.id) === (state.textureAssets[index]?.uuid || state.textureAssets[index]?.id)
+        && JSON.stringify(texture.layers || null) === JSON.stringify(state.textureAssets[index]?.layers || null)
+        && (texture.active_layer_uid || null) === (state.textureAssets[index]?.activeLayerUid || null)
+        && (texture.uv_width || null) === (state.textureAssets[index]?.uvWidth || null)
+        && (texture.uv_height || null) === (state.textureAssets[index]?.uvHeight || null));
+    if (sameGeometry && sameTextures) { syncActiveProjectTab(); return; }
+    tab.session = restoredProjectSession(tab.session, resultData, true);
     if (tab.id !== projectTabsController.activeId) { renderProjectTabs(); return; }
     suppressJournalRecording = true;
     try {
@@ -176,11 +225,15 @@ async function navigateProjectJournal(direction) {
   tab.journalWrites = navigation;
   try {
     await navigation;
-  } catch (error) { toast(`操作記錄切換失敗：${error.message}`); }
+  } catch (error) { rollbackLocalPreview(); toast(`操作記錄切換失敗：${error.message}`); }
   return true;
 }
 
 async function undo() {
+  if (state.mode === 'paint' && state.paintHistory.length) {
+    restoreTexturePaintHistory(state.paintHistory, state.paintFuture);
+    return;
+  }
   if (await navigateProjectJournal('undo')) return;
   if (state.mode === 'paint') {
     if (!restoreTexturePaintHistory(state.paintHistory, state.paintFuture)) toast('沒有可撤銷的繪畫操作');
@@ -192,6 +245,10 @@ async function undo() {
 }
 
 async function redo() {
+  if (state.mode === 'paint' && state.paintFuture.length) {
+    restoreTexturePaintHistory(state.paintFuture, state.paintHistory);
+    return;
+  }
   if (await navigateProjectJournal('redo')) return;
   if (state.mode === 'paint') {
     if (!restoreTexturePaintHistory(state.paintFuture, state.paintHistory)) toast('沒有可重做的繪畫操作');

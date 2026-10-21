@@ -393,6 +393,7 @@ function applyPendingTransform(drag) {
   }
   updateTransformTooltip(pending.event, drag);
   if (!drag.batchPreview) invalidateSelectionRenderGeometry();
+  if (drag.modifierAnchorContext) sceneRenderer.invalidateMirrorGeometry();
   if (!state.dirty) markDirty();
   if (!drag.selectionContext.multiple) syncInspectorValues();
   return true;

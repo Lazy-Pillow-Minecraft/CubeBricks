@@ -7,6 +7,12 @@ const MIPPED_SUPERSAMPLE = 1.5;
 const LOCATOR_ICON_PIXELS = 17;
 const LOCATOR_NEAR_DISTANCE = 72;
 const LOCATOR_MAX_PIXELS = 96;
+const CUBE_LIFETIME_ANIMATION_MS = 60;
+export function cubeLifetimeScale(kind, elapsed, duration = CUBE_LIFETIME_ANIMATION_MS) {
+  const progress = clamp(elapsed / duration, 0, 1);
+  const t = kind === 'birth' ? progress : 1 - progress;
+  return t < .7 ? 1.05 * t / .7 : 1.05 - .05 * (t - .7) / .3;
+}
 const IDENTITY_MATRIX = Object.freeze([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
 // Minecraft-like pass order: opaque geometry writes depth first, then overlays.
@@ -77,7 +83,11 @@ export class WebGLSceneRenderer {
     if (!this.gl) throw new Error('WebGL is unavailable.');
 
     this.logDepthEnabled = Boolean(this.gl.getExtension('EXT_frag_depth'));
-    this.program = createProgram(this.gl, VERTEX_SHADER, this.logDepthEnabled ? LOG_DEPTH_FRAGMENT_SHADER : FRAGMENT_SHADER);
+    this.selectionDerivativesEnabled = Boolean(this.gl.getExtension('OES_standard_derivatives'));
+    const selectionShaderPrelude = this.selectionDerivativesEnabled
+      ? '#extension GL_OES_standard_derivatives : enable\n#define SCREEN_SELECTION_DERIVATIVES\n' : '';
+    this.program = createProgram(this.gl, VERTEX_SHADER, selectionShaderPrelude
+      + (this.logDepthEnabled ? LOG_DEPTH_FRAGMENT_SHADER : FRAGMENT_SHADER));
     this.postProgram = createProgram(this.gl, POST_VERTEX_SHADER, SSAA_RESOLVE_FRAGMENT_SHADER);
     this.copyProgram = createProgram(this.gl, POST_VERTEX_SHADER, COPY_FRAGMENT_SHADER);
     this.layerProgram = createProgram(this.gl, POST_VERTEX_SHADER, LOCKED_COMPOSITE_FRAGMENT_SHADER);
@@ -95,6 +105,11 @@ export class WebGLSceneRenderer {
     this.opacityLocation = this.gl.getUniformLocation(this.program, 'uOpacity');
     this.colorOverrideLocation = this.gl.getUniformLocation(this.program, 'uColorOverride');
     this.textureLocation = this.gl.getUniformLocation(this.program, 'uTexture');
+    this.selectionMaskLocation = this.gl.getUniformLocation(this.program, 'uSelectionMask');
+    this.selectionActiveLocation = this.gl.getUniformLocation(this.program, 'uSelectionActive');
+    this.selectionTexelLocation = this.gl.getUniformLocation(this.program, 'uSelectionTexel');
+    this.selectionPixelRadiusLocation = this.gl.getUniformLocation(this.program, 'uSelectionPixelRadius');
+    this.selectionPhaseLocation = this.gl.getUniformLocation(this.program, 'uSelectionPhase');
     this.useLogDepthLocation = this.gl.getUniformLocation(this.program, 'uUseLogDepth');
     this.logDepthFactorLocation = this.gl.getUniformLocation(this.program, 'uLogDepthFactor');
     this.postPositionLocation = this.gl.getAttribLocation(this.postProgram, 'aPosition');
@@ -140,10 +155,20 @@ export class WebGLSceneRenderer {
     this.lockedTargetSize = { width: 0, height: 0 };
     this.ghostWireCount = 0;
     this.texture = this.gl.createTexture();
+    this.selectionMaskTexture = this.gl.createTexture();
+    this.selectionMaskReady = false;
+    this.selectionMaskSize = [1, 1];
     this.textureLayout = null;
     this.textureLayoutKey = '';
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.selectionMaskTexture);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+    for (const parameter of [this.gl.TEXTURE_MIN_FILTER, this.gl.TEXTURE_MAG_FILTER])
+      this.gl.texParameteri(this.gl.TEXTURE_2D, parameter, this.gl.NEAREST);
+    for (const parameter of [this.gl.TEXTURE_WRAP_S, this.gl.TEXTURE_WRAP_T])
+      this.gl.texParameteri(this.gl.TEXTURE_2D, parameter, this.gl.CLAMP_TO_EDGE);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
     this.playerReferenceBuffer = this.gl.createBuffer();
     this.playerReferenceTexture = this.gl.createTexture();
     this.playerReferenceVertexCount = 0;
@@ -181,6 +206,13 @@ export class WebGLSceneRenderer {
     this.lastOverlayState = null;
     this.selectionOutline = hexToRgb('#d8f59b');
     this.selectionPreviewTransform = null;
+    this.cubeTransitionSource = null;
+    this.cubeTransitions = [];
+    this.cubeBirthUids = new Set();
+    this.cubeBirthStartByUid = new Map();
+    this.cubeTransitionRevision = -1;
+    this.cubeBirthMs = CUBE_LIFETIME_ANIMATION_MS;
+    this.cubeDeathMs = CUBE_LIFETIME_ANIMATION_MS;
 
     this.gl.enable(this.gl.DEPTH_TEST);
     this.gl.depthFunc(this.gl.LEQUAL);
@@ -203,6 +235,18 @@ export class WebGLSceneRenderer {
       this.textureLayoutKey = '';
       this.invalidateGeometry();
     }
+  }
+
+  setSelectionMaskAtlas(source) {
+    if (!source?.width || !source?.height) { this.selectionMaskReady = false; return; }
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.selectionMaskTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    this.selectionMaskSize = [source.width, source.height];
+    this.selectionMaskReady = true;
+    gl.activeTexture(gl.TEXTURE0);
   }
 
   setPlayerReference(project, source) {
@@ -230,7 +274,7 @@ export class WebGLSceneRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const key = `${source.width}x${source.height}:` + entries.map(entry =>
-      `${entry.uid}:${entry.mode}:${entry.x},${entry.y},${entry.width},${entry.height}:${(entry.references || []).join(',')}`).join('|');
+      `${entry.uid}:${entry.mode}:${entry.x},${entry.y},${entry.width},${entry.height}:${entry.uvWidth},${entry.uvHeight}:${(entry.references || []).join(',')}`).join('|');
     if (key === this.textureLayoutKey) return;
     const byReference = new Map();
     let defaultEntry = null;
@@ -474,6 +518,7 @@ export class WebGLSceneRenderer {
   }
 
   invalidateGeometry() {
+    if (this.staticCache && !this.cubeTransitionSource) this.cubeTransitionSource = this.staticCache;
     this.geometryRevision += 1;
     this.selectionRevision += 1;
     this.staticCache = null;
@@ -498,6 +543,99 @@ export class WebGLSceneRenderer {
     this.selectedCache = null;
     this.faceSelectionCache = null;
     this.lockedBatchCache = null;
+  }
+
+  hasActiveCubeTransitions() {
+    // Also request one final frame if the last animation elapsed while this
+    // frame was being drawn; that frame restores the ordinary merged mesh.
+    return this.cubeTransitions.length > 0;
+  }
+
+  reconcileCubeTransitions(project) {
+    if (this.cubeTransitionRevision === this.geometryRevision) return;
+    this.cubeTransitionRevision = this.geometryRevision;
+    const previous = this.cubeTransitionSource;
+    this.cubeTransitionSource = null;
+    this.cubeTransitions = this.cubeTransitions.filter(transition => {
+      if (performance.now() - transition.started < transition.duration) return true;
+      this.gl.deleteBuffer(transition.buffer);
+      this.gl.deleteBuffer(transition.wireBuffer);
+      return false;
+    });
+    this.cubeBirthUids = new Set();
+    this.cubeBirthStartByUid = new Map();
+    if (!previous || previous.project !== project) return;
+    const current = this.staticCache;
+    const born = [], gone = [];
+    for (const [uid, cubes] of current.cubePoints) {
+      if (!cubes.length) continue;
+      const oldCount = previous.cubePoints.get(uid)?.length || 0;
+      if (cubes.length > oldCount) born.push({ uid, from: oldCount });
+    }
+    for (const [uid, cubes] of previous.cubePoints) {
+      if (!cubes.length) continue;
+      const newCount = current.cubePoints.get(uid)?.length || 0;
+      if (cubes.length > newCount) gone.push({ uid, from: newCount });
+    }
+    const makeBatch = (cache, entries, kind) => {
+      if (!entries.length) return;
+      const triangleRanges = entries.flatMap(({ uid, from }) =>
+        (cache.cubeTriangleRanges.get(uid) || []).slice(from)).filter(range => range?.count);
+      if (!triangleRanges.length) return;
+      const wireRanges = entries.flatMap(({ uid, from }) =>
+        (cache.cubeEdgeRanges.get(uid) || []).slice(from)).filter(range => range?.count);
+      const gather = (source, ranges) => {
+        const count = ranges.reduce((sum, range) => sum + range.count, 0);
+        const result = new Float32Array(count * 12);
+        let offset = 0;
+        for (const range of ranges) {
+          const values = source.slice(range.start * 12, (range.start + range.count) * 12);
+          result.set(values, offset);
+          offset += values.length;
+        }
+        return result;
+      };
+      const vertices = gather(cache.triangles, triangleRanges);
+      const wires = gather(cache.edges, wireRanges);
+      const points = entries.flatMap(({ uid, from }) =>
+        (cache.cubePoints.get(uid) || []).slice(from).flat());
+      const center = geometryBounds(points)?.center;
+      if (!center) return;
+      const buffer = this.gl.createBuffer(), wireBuffer = this.gl.createBuffer();
+      this.uploadBuffer(buffer, vertices, this.gl.STATIC_DRAW);
+      this.uploadBuffer(wireBuffer, wires, this.gl.STATIC_DRAW);
+      this.cubeTransitions.push({ project, kind, started: performance.now(),
+        duration: kind === 'birth' ? this.cubeBirthMs : this.cubeDeathMs, center, entries,
+        buffer, wireBuffer, triangleCount: vertices.length / 12, wireCount: wires.length / 12 });
+      if (kind === 'birth') for (const { uid, from } of entries) {
+        this.cubeBirthStartByUid.set(uid, from);
+        if (from === 0) this.cubeBirthUids.add(uid);
+      }
+    };
+    if (this.cubeBirthMs > 0) makeBatch(current, born, 'birth');
+    if (this.cubeDeathMs > 0) makeBatch(previous, gone, 'death');
+    this.visibleStaticBatchCache = null;
+  }
+
+  drawCubeTransitions(project, camera, viewProjection, primitive) {
+    const now = this.cubeTransitionFrameTime ?? performance.now();
+    const pipeline = camera.renderMode === 'textured'
+      ? getMinecraftRenderType(project.renderType)
+      : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+    for (const transition of this.cubeTransitions) {
+      const progress = Math.min(1, (now - transition.started) / transition.duration);
+      if (progress >= 1) continue;
+      const scale = cubeLifetimeScale(transition.kind, now - transition.started, transition.duration);
+      const matrix = scaleAroundPoint(transition.center, Math.max(.0001, scale));
+      this.drawBuffer(primitive === this.gl.LINES ? transition.wireBuffer : transition.buffer,
+        primitive === this.gl.LINES ? transition.wireCount : transition.triangleCount,
+        primitive, viewProjection, primitive === this.gl.LINES
+          ? { modelTransform: matrix, cull: false, renderMode: 0, depthWrite: true }
+          : { modelTransform: matrix, cull: project.cullFaces,
+              renderMode: getSurfaceRenderMode(camera.renderMode),
+              alphaMode: pipeline.alphaMode, blend: pipeline.blend,
+              depthWrite: pipeline.depthWrite });
+    }
   }
 
   invalidateMirrorGeometry() {
@@ -631,7 +769,12 @@ export class WebGLSceneRenderer {
   }
 
   drawBufferExcluding(buffer, totalCount, excludedUids, rangesByUid, primitive, matrix, options = {}) {
-    for (const range of complementVertexRanges(totalCount, excludedUids, rangesByUid)) {
+    const cache = buffer === this.selectedTriangleBuffer || buffer === this.selectedWireBuffer
+      ? this.selectedCache : this.staticCache;
+    const cubeRanges = primitive === this.gl.LINES ? cache?.cubeEdgeRanges : cache?.cubeTriangleRanges;
+    const births = [...this.cubeBirthStartByUid].flatMap(([uid, from]) =>
+      (cubeRanges?.get(uid) || []).slice(from));
+    for (const range of complementVertexRanges(totalCount, excludedUids, rangesByUid, births)) {
       this.drawBuffer(buffer, range.count, primitive, matrix, { ...options, first: range.start });
     }
   }
@@ -639,14 +782,19 @@ export class WebGLSceneRenderer {
   ensureVisibleStaticBatches(dynamicUids, lockedUids) {
     const dynamicKey = this.currentDynamicElementKey ?? [...dynamicUids].sort().join('|');
     const lockedKey = this.currentLockedKey ?? [...lockedUids].sort().join('|');
-    const key = `${this.geometryRevision}::${dynamicKey}::${lockedKey}`;
+    const birthKey = [...this.cubeBirthStartByUid].sort(([left], [right]) => left.localeCompare(right)).join('|');
+    const key = `${this.geometryRevision}::${dynamicKey}::${lockedKey}::${birthKey}`;
     if (this.visibleStaticBatchCache?.project === this.staticCache.project
       && this.visibleStaticBatchCache.key === key) return this.visibleStaticBatchCache;
-    const excluded = new Set([...dynamicUids, ...lockedUids]);
+    const excluded = new Set([...dynamicUids, ...lockedUids, ...this.cubeBirthUids]);
+    const birthTriangles = [...this.cubeBirthStartByUid].flatMap(([uid, from]) =>
+      (this.staticCache.cubeTriangleRanges.get(uid) || []).slice(from));
+    const birthEdges = [...this.cubeBirthStartByUid].flatMap(([uid, from]) =>
+      (this.staticCache.cubeEdgeRanges.get(uid) || []).slice(from));
     const triangles = collectVertexRanges(this.staticCache.triangles,
-      complementVertexRanges(this.staticCache.triangles.length / 12, excluded, this.staticCache.triangleRanges));
+      complementVertexRanges(this.staticCache.triangles.length / 12, excluded, this.staticCache.triangleRanges, birthTriangles));
     const edges = collectVertexRanges(this.staticCache.edges,
-      complementVertexRanges(this.staticCache.edges.length / 12, excluded, this.staticCache.edgeRanges));
+      complementVertexRanges(this.staticCache.edges.length / 12, excluded, this.staticCache.edgeRanges, birthEdges));
     this.uploadBuffer(this.visibleStaticTriangleBuffer, triangles, this.gl.STATIC_DRAW);
     this.uploadBuffer(this.visibleStaticWireBuffer, edges, this.gl.STATIC_DRAW);
     this.visibleStaticBatchCache = {
@@ -662,7 +810,9 @@ export class WebGLSceneRenderer {
     const wireframe = camera.renderMode === 'wireframe';
     const key = [
       this.geometryRevision, this.selectionRevision, wireframe ? 'wire' : 'surface',
-      [...lockedUids].sort().join('|')
+      [...lockedUids].sort().join('|'),
+      this.cubeBirthStartByUid.size
+        ? [...lockedUids].map(uid => `${uid}:${this.cubeBirthStartByUid.get(uid) ?? '-'}`).sort().join('|') : ''
     ].join('::');
     if (this.lockedBatchCache?.key === key) return this.lockedBatchCache;
 
@@ -672,11 +822,17 @@ export class WebGLSceneRenderer {
       const selected = dynamicUids.has(uid);
       const cache = selected ? this.selectedCache : this.staticCache;
       const source = wireframe ? cache.edges : cache.triangles;
-      const range = (wireframe ? cache.edgeRanges : cache.triangleRanges).get(uid);
-      if (range?.count) vertices.push(...source.slice(range.start * 12, (range.start + range.count) * 12));
+      const birthFrom = this.cubeBirthStartByUid.get(uid);
+      const ranges = birthFrom === undefined
+        ? [(wireframe ? cache.edgeRanges : cache.triangleRanges).get(uid)]
+        : (wireframe ? cache.cubeEdgeRanges : cache.cubeTriangleRanges).get(uid)?.slice(0, birthFrom) || [];
+      for (const range of ranges) if (range?.count)
+        vertices.push(...source.slice(range.start * 12, (range.start + range.count) * 12));
       if (!wireframe && selected) {
-        const outlineRange = cache.edgeRanges.get(uid);
-        if (outlineRange?.count) outlines.push(...cache.edges.slice(outlineRange.start * 12, (outlineRange.start + outlineRange.count) * 12));
+        const outlineRanges = birthFrom === undefined
+          ? [cache.edgeRanges.get(uid)] : cache.cubeEdgeRanges.get(uid)?.slice(0, birthFrom) || [];
+        for (const outlineRange of outlineRanges) if (outlineRange?.count)
+          outlines.push(...cache.edges.slice(outlineRange.start * 12, (outlineRange.start + outlineRange.count) * 12));
       }
     }
     this.uploadBuffer(this.lockedBatchBuffers[0], vertices, this.gl.DYNAMIC_DRAW);
@@ -751,7 +907,9 @@ export class WebGLSceneRenderer {
         instance.key, instance.groupUid, instance.modifierUid, instance.sourceUids.join(','),
         lines ? 'edges' : 'triangles', lockedOnly ? 'locked' : 'visible',
         selectedOnly ? 'selected' : 'all', this.geometryRevision,
-        this.currentDynamicElementKey || '', this.currentLockedKey || ''
+        this.currentDynamicElementKey || '', this.currentLockedKey || '',
+        this.cubeBirthStartByUid.size
+          ? instance.sourceUids.map(uid => `${uid}:${this.cubeBirthStartByUid.get(uid) ?? '-'}`).join(',') : ''
       ].join('::');
       let batches = this.mirrorCache.rangeCache.get(batchKey);
       if (!batches) {
@@ -762,9 +920,13 @@ export class WebGLSceneRenderer {
           const selected = dynamicUids.has(uid);
           const cache = selected ? this.selectedCache : this.staticCache;
           const allowedIndices = instance.cubeIndices?.[uid];
+          const birthFrom = this.cubeBirthStartByUid.get(uid);
           const ranges = allowedIndices && cache?.[cubeRangeKey]?.get(uid)
-            ? allowedIndices.map(index => cache[cubeRangeKey].get(uid)[index]).filter(Boolean)
-            : [cache?.[rangeKey]?.get(uid)];
+            ? allowedIndices.filter(index => birthFrom === undefined || index < birthFrom)
+              .map(index => cache[cubeRangeKey].get(uid)[index]).filter(Boolean)
+            : birthFrom !== undefined && cache?.[cubeRangeKey]?.get(uid)
+              ? cache[cubeRangeKey].get(uid).slice(0, birthFrom)
+              : [cache?.[rangeKey]?.get(uid)];
           for (const range of ranges) if (range?.count) (selected ? selectedRanges : staticRanges).push(range);
         }
         batches = {
@@ -796,11 +958,15 @@ export class WebGLSceneRenderer {
     if (camera.renderMode === 'wireframe') return;
     if (camera.faceDistinct || (camera.renderMode === 'textured' && minecraftRenderType.pass === RenderPass.TRANSLUCENT)) {
       const facePreview = camera.faceDistinct === true;
+      const isBornFace = face => {
+        const from = this.cubeBirthStartByUid.get(face.uid);
+        return from !== undefined && (face.cubeIndex ?? 0) >= from;
+      };
       const staticFaces = this.staticCache.faces
-        .filter(face => !dynamicUids.has(face.uid) && !lockedUids.has(face.uid))
+        .filter(face => !dynamicUids.has(face.uid) && !lockedUids.has(face.uid) && !isBornFace(face))
         .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
       const sortedFaces = [...staticFaces, ...this.selectedCache.faces]
-        .filter(face => !lockedUids.has(face.uid))
+        .filter(face => !lockedUids.has(face.uid) && !isBornFace(face))
         .sort((a, b) => cameraDepth(b.center, cameraState) - cameraDepth(a.center, cameraState));
       const drawFacePass = options => {
         if (!this.selectionPreviewTransform) {
@@ -812,7 +978,7 @@ export class WebGLSceneRenderer {
           ...options
         });
         this.drawBufferExcluding(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12,
-          lockedUids, this.selectedCache.triangleRanges, gl.TRIANGLES, viewProjection, {
+          new Set([...lockedUids, ...this.cubeBirthUids]), this.selectedCache.triangleRanges, gl.TRIANGLES, viewProjection, {
             ...options,
             modelTransform: this.selectionPreviewTransform
           });
@@ -847,6 +1013,7 @@ export class WebGLSceneRenderer {
           blend: minecraftRenderType.blend
         });
       }
+      this.drawCubeTransitions(project, camera, viewProjection, gl.TRIANGLES);
       return;
     }
     const renderMode = getSurfaceRenderMode(camera.renderMode);
@@ -865,8 +1032,9 @@ export class WebGLSceneRenderer {
       gl.TRIANGLES, viewProjection, options);
     this.drawMirrorInstances(dynamicUids, lockedUids, gl.TRIANGLES, viewProjection, options);
     this.drawBufferExcluding(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12,
-      lockedUids, this.selectedCache.triangleRanges, gl.TRIANGLES, viewProjection,
+      new Set([...lockedUids, ...this.cubeBirthUids]), this.selectedCache.triangleRanges, gl.TRIANGLES, viewProjection,
       { ...options, modelTransform: this.selectionPreviewTransform });
+    this.drawCubeTransitions(project, camera, viewProjection, gl.TRIANGLES);
   }
 
   drawGrid(camera, viewProjection) {
@@ -896,6 +1064,28 @@ export class WebGLSceneRenderer {
 
   drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection) {
     const { gl } = this;
+    // Locked objects are color-composited from an independent fade layer, so
+    // its depth does not exist in the main framebuffer. Restore that depth
+    // before selection lines; otherwise outlines shine through faded cubes.
+    if (lockedUids.size || camera.modifierResultGhost) {
+      gl.colorMask(false, false, false, false);
+      if (lockedUids.size) this.drawLockedGeometry(project, camera, getMinecraftRenderType(project.renderType),
+        dynamicUids, lockedUids, viewProjection, true);
+      if (camera.modifierResultGhost) {
+        const wireframe = camera.renderMode === 'wireframe';
+        const pipeline = camera.renderMode === 'textured'
+          ? getMinecraftRenderType(project.renderType) : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+        const primitive = wireframe ? gl.LINES : gl.TRIANGLES;
+        const options = wireframe
+          ? { depthWrite: true, cull: false, renderMode: 0, blend: false }
+          : { depthWrite: true, cull: project.cullFaces, renderMode: getSurfaceRenderMode(camera.renderMode),
+              alphaMode: pipeline.alphaMode, blend: false };
+        this.drawMirrorInstances(dynamicUids, lockedUids, primitive, viewProjection, options, { ghostOnly: true });
+        if (lockedUids.size) this.drawMirrorInstances(dynamicUids, lockedUids, primitive,
+          viewProjection, options, { ghostOnly: true, lockedOnly: true });
+      }
+      gl.colorMask(true, true, true, true);
+    }
     if (camera.renderMode === 'wireframe') {
       const staticBatches = this.ensureVisibleStaticBatches(dynamicUids, lockedUids);
       this.drawBuffer(this.visibleStaticWireBuffer, staticBatches.edgeCount, gl.LINES, viewProjection,
@@ -903,8 +1093,9 @@ export class WebGLSceneRenderer {
       this.drawMirrorInstances(dynamicUids, lockedUids, gl.LINES, viewProjection,
         { depthWrite: true, cull: false, renderMode: 0 });
       this.drawBufferExcluding(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
-        lockedUids, this.selectedCache.edgeRanges, gl.LINES, viewProjection,
+        new Set([...lockedUids, ...this.cubeBirthUids]), this.selectedCache.edgeRanges, gl.LINES, viewProjection,
         { depthWrite: true, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform });
+      this.drawCubeTransitions(project, camera, viewProjection, gl.LINES);
     }
     this.drawBuffer(this.ghostWireBuffer, this.ghostWireCount, gl.LINES, viewProjection, {
       depthWrite: false, cull: false, renderMode: 0
@@ -914,12 +1105,12 @@ export class WebGLSceneRenderer {
     // especially expensive when every cube is selected.
     if (camera.renderMode !== 'wireframe' && camera.tool !== 'faceSelect') {
       this.drawBufferExcluding(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
-        lockedUids, this.selectedCache.edgeRanges, gl.LINES, viewProjection,
-        { depthWrite: false, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform });
+        new Set([...lockedUids, ...this.cubeBirthUids]), this.selectedCache.edgeRanges, gl.LINES, viewProjection,
+        { depthWrite: false, depthTest: true, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform });
     }
     if (camera.wire) {
       const staticWire = [], selectedWire = [];
-      for (const [uid, points] of ownerPoints) if (!lockedUids.has(uid)) {
+      for (const [uid, points] of ownerPoints) if (!lockedUids.has(uid) && !this.cubeBirthStartByUid.has(uid)) {
         (dynamicUids.has(uid) ? selectedWire : staticWire).push(...boundsWireGeometry(points));
       }
       this.drawVertices(staticWire, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
@@ -938,7 +1129,7 @@ export class WebGLSceneRenderer {
         depthWrite: false, cull: false, renderMode: 0
       });
       this.drawVertices(selectedHelpers, gl.LINES, viewProjection, {
-        depthWrite: false, depthTest: false, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform
+        depthWrite: false, depthTest: true, cull: false, renderMode: 0, modelTransform: this.selectionPreviewTransform
       });
     }
     if (camera.editorOverlayLines?.length) {
@@ -1006,6 +1197,7 @@ export class WebGLSceneRenderer {
     const { gl, canvas } = this;
     this.captureModelOnly = camera.captureModelOnly === true;
     this.previewShade = camera.previewShade !== false;
+    this.paintSelectionActive = camera.mode === 'paint' && camera.paintSelection?.active === true && this.selectionMaskReady;
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const width = Math.max(1, Math.floor(camera.captureWidth || rect.width));
@@ -1028,6 +1220,7 @@ export class WebGLSceneRenderer {
     const renderHeight = useMippedAntialias
       ? Math.max(1, Math.floor(pixelHeight * MIPPED_SUPERSAMPLE))
       : pixelHeight;
+    this.selectionPixelRadius = Math.max(1.5, renderWidth / width * 1.5);
     if (useMippedAntialias) {
       this.ensurePostProcessTarget(renderWidth, renderHeight);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.postFramebuffer);
@@ -1097,6 +1290,24 @@ export class WebGLSceneRenderer {
       this.uploadBuffer(this.selectedTriangleBuffer, geometry.triangles, gl.DYNAMIC_DRAW);
       this.uploadBuffer(this.selectedWireBuffer, geometry.edges, gl.DYNAMIC_DRAW);
     }
+    this.cubeBirthMs = Math.max(0, Number(camera.cubeBirthMs ?? CUBE_LIFETIME_ANIMATION_MS));
+    this.cubeDeathMs = Math.max(0, Number(camera.cubeDeathMs ?? CUBE_LIFETIME_ANIMATION_MS));
+    this.reconcileCubeTransitions(project);
+    this.cubeTransitionFrameTime = performance.now();
+    this.cubeTransitions = this.cubeTransitions.filter(transition => {
+      if (transition.project === project
+        && this.cubeTransitionFrameTime - transition.started < transition.duration) return true;
+      this.gl.deleteBuffer(transition.buffer);
+      this.gl.deleteBuffer(transition.wireBuffer);
+      return false;
+    });
+    const activeBirthEntries = this.cubeTransitions
+      .filter(transition => transition.kind === 'birth')
+      .flatMap(transition => transition.entries);
+    const activeBirths = new Set(activeBirthEntries.filter(entry => entry.from === 0).map(entry => entry.uid));
+    if (activeBirths.size !== this.cubeBirthUids.size) this.visibleStaticBatchCache = null;
+    this.cubeBirthUids = activeBirths;
+    this.cubeBirthStartByUid = new Map(activeBirthEntries.map(entry => [entry.uid, entry.from]));
     const ownerPoints = mergeOwnerPoints(this.staticCache.ownerPoints, this.selectedCache.ownerPoints);
     this.lastOwnerPoints = ownerPoints;
     const lockedState = this.getLockedState(project);
@@ -1122,8 +1333,9 @@ export class WebGLSceneRenderer {
         const options = { depthWrite: true, cull: false, renderMode: 0 };
         this.drawBuffer(this.visibleStaticWireBuffer, batches.edgeCount, gl.LINES, viewProjection, options);
         this.drawMirrorInstances(dynamicUids, lockedUids, gl.LINES, viewProjection, options);
-        this.drawBuffer(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
-          gl.LINES, viewProjection, options);
+        this.drawBufferExcluding(this.selectedWireBuffer, this.selectedCache.edges.length / 12,
+          this.cubeBirthUids, this.selectedCache.edgeRanges, gl.LINES, viewProjection, options);
+        this.drawCubeTransitions(project, camera, viewProjection, gl.LINES);
       }
       if (useMippedAntialias) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1785,6 +1997,14 @@ export class WebGLSceneRenderer {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture || this.texture);
     gl.uniform1i(this.textureLocation, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.selectionMaskTexture);
+    gl.uniform1i(this.selectionMaskLocation, 1);
+    gl.uniform1i(this.selectionActiveLocation, this.paintSelectionActive && (!texture || texture === this.texture) ? 1 : 0);
+    gl.uniform2f(this.selectionTexelLocation, 1 / this.selectionMaskSize[0], 1 / this.selectionMaskSize[1]);
+    gl.uniform1f(this.selectionPixelRadiusLocation, this.selectionPixelRadius || 1.5);
+    gl.uniform1f(this.selectionPhaseLocation, Math.floor(performance.now() / 140));
+    gl.activeTexture(gl.TEXTURE0);
     gl.enableVertexAttribArray(this.positionLocation);
     gl.vertexAttribPointer(this.positionLocation, 3, gl.FLOAT, false, 48, 0);
     gl.enableVertexAttribArray(this.colorLocation);
@@ -1823,10 +2043,11 @@ function mergeAdjacentVertexRanges(ranges) {
   return merged;
 }
 
-function complementVertexRanges(totalCount, excludedUids, rangesByUid) {
-  if (!excludedUids?.size) return totalCount ? [{ start: 0, count: totalCount }] : [];
-  const excluded = [...excludedUids]
+function complementVertexRanges(totalCount, excludedUids, rangesByUid, extraRanges = []) {
+  if (!excludedUids?.size && !extraRanges.length) return totalCount ? [{ start: 0, count: totalCount }] : [];
+  const excluded = [...(excludedUids || [])]
     .map(uid => rangesByUid.get(uid))
+    .concat(extraRanges)
     .filter(range => range?.count)
     .sort((left, right) => left.start - right.start);
   const merged = [];
@@ -2491,8 +2712,10 @@ export function createAtlasFaceUvs(rectangle, rotation, atlasEntry, atlasSize, i
   const atlasWidth = Math.max(1, atlasSize?.[0] || 1);
   const atlasHeight = Math.max(1, atlasSize?.[1] || 1);
   const slots = createBlockbenchFaceUvSlots(uv, rotation).map(slot => {
-    const u = Math.max(0, Math.min(atlasEntry.width, slot[0]));
-    const v = Math.max(0, Math.min(atlasEntry.height, slot[1]));
+    const u = Math.max(0, Math.min(atlasEntry.width,
+      slot[0] * atlasEntry.width / Math.max(1, atlasEntry.uvWidth || atlasEntry.width)));
+    const v = Math.max(0, Math.min(atlasEntry.height,
+      slot[1] * atlasEntry.height / Math.max(1, atlasEntry.uvHeight || atlasEntry.height)));
     return [(atlasEntry.x + u) / atlasWidth, 1 - (atlasEntry.y + v) / atlasHeight];
   });
   return FACE_TRIANGLE_SLOTS.map(slot => slots[slot]);
@@ -2594,6 +2817,10 @@ function multiply(a, b) {
     for (let k = 0; k < 4; k++) out[column * 4 + row] += a[k * 4 + row] * b[column * 4 + k];
   }
   return out;
+}
+export function scaleAroundPoint(center, factor) {
+  return [factor, 0, 0, 0, 0, factor, 0, 0, 0, 0, factor, 0,
+    center[0] * (1 - factor), center[1] * (1 - factor), center[2] * (1 - factor), 1];
 }
 function transform(matrix, vector) {
   return [0, 1, 2, 3].map(row => matrix[row] * vector[0] + matrix[4 + row] * vector[1] + matrix[8 + row] * vector[2] + matrix[12 + row] * vector[3]);
@@ -2737,6 +2964,11 @@ const FRAGMENT_SHADER = `
   varying vec4 vColor;
   varying vec2 vUv;
   uniform sampler2D uTexture;
+  uniform sampler2D uSelectionMask;
+  uniform int uSelectionActive;
+  uniform vec2 uSelectionTexel;
+  uniform float uSelectionPixelRadius;
+  uniform float uSelectionPhase;
   uniform int uRenderMode;
   uniform int uAlphaMode;
   uniform float uOpacity;
@@ -2757,6 +2989,27 @@ const FRAGMENT_SHADER = `
       if (uAlphaMode == 2 && color.a < 0.1) discard;
     }
     color.rgb = mix(color.rgb, vec3(1.0), vSelected * 0.13);
+    #ifdef SCREEN_SELECTION_DERIVATIVES
+    vec2 selectionStepX = dFdx(vUv) * uSelectionPixelRadius;
+    vec2 selectionStepY = dFdy(vUv) * uSelectionPixelRadius;
+    #else
+    vec2 selectionStepX = vec2(uSelectionTexel.x, 0.0);
+    vec2 selectionStepY = vec2(0.0, uSelectionTexel.y);
+    #endif
+    if (uSelectionActive == 1 && (uRenderMode == 1 || uRenderMode == 2)) {
+      float selected = hasTexture ? texture2D(uSelectionMask, vUv).r : 0.0;
+      if (selected < 0.5) color.rgb *= 0.57;
+      else if (hasTexture) {
+        float nearest = min(min(texture2D(uSelectionMask, vUv + selectionStepX).r,
+          texture2D(uSelectionMask, vUv - selectionStepX).r),
+          min(texture2D(uSelectionMask, vUv + selectionStepY).r,
+          texture2D(uSelectionMask, vUv - selectionStepY).r));
+        if (nearest < 0.5) {
+          float dash = mod(floor(gl_FragCoord.x * 0.5) + floor(gl_FragCoord.y * 0.5) + uSelectionPhase, 8.0);
+          color.rgb = dash < 4.0 ? vec3(1.0) : vec3(0.0);
+        }
+      }
+    }
     if (uColorOverride.a > 0.5) color.rgb = uColorOverride.rgb;
     color.a *= uOpacity;
     gl_FragColor = color;
@@ -2772,6 +3025,11 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
   varying float vSelected;
   varying float vFragDepth;
   uniform sampler2D uTexture;
+  uniform sampler2D uSelectionMask;
+  uniform int uSelectionActive;
+  uniform vec2 uSelectionTexel;
+  uniform float uSelectionPixelRadius;
+  uniform float uSelectionPhase;
   uniform int uRenderMode;
   uniform int uAlphaMode;
   uniform float uOpacity;
@@ -2793,6 +3051,27 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
       if (uAlphaMode == 2 && color.a < 0.1) discard;
     }
     color.rgb = mix(color.rgb, vec3(1.0), vSelected * 0.13);
+    #ifdef SCREEN_SELECTION_DERIVATIVES
+    vec2 selectionStepX = dFdx(vUv) * uSelectionPixelRadius;
+    vec2 selectionStepY = dFdy(vUv) * uSelectionPixelRadius;
+    #else
+    vec2 selectionStepX = vec2(uSelectionTexel.x, 0.0);
+    vec2 selectionStepY = vec2(0.0, uSelectionTexel.y);
+    #endif
+    if (uSelectionActive == 1 && (uRenderMode == 1 || uRenderMode == 2)) {
+      float selected = hasTexture ? texture2D(uSelectionMask, vUv).r : 0.0;
+      if (selected < 0.5) color.rgb *= 0.57;
+      else if (hasTexture) {
+        float nearest = min(min(texture2D(uSelectionMask, vUv + selectionStepX).r,
+          texture2D(uSelectionMask, vUv - selectionStepX).r),
+          min(texture2D(uSelectionMask, vUv + selectionStepY).r,
+          texture2D(uSelectionMask, vUv - selectionStepY).r));
+        if (nearest < 0.5) {
+          float dash = mod(floor(gl_FragCoord.x * 0.5) + floor(gl_FragCoord.y * 0.5) + uSelectionPhase, 8.0);
+          color.rgb = dash < 4.0 ? vec3(1.0) : vec3(0.0);
+        }
+      }
+    }
     if (uColorOverride.a > 0.5) color.rgb = uColorOverride.rgb;
     color.a *= uOpacity;
     gl_FragDepthEXT = uUseLogDepth == 1

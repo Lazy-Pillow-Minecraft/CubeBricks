@@ -76,7 +76,9 @@ async function rebuildTextureAtlasNow() {
     const original = imageCanvas(image);
     animationRasterCache.set(asset._uid, { canvas: original, source: asset.source });
     const frame = flipbookFrame(asset, original, asset.animation?.currentFrame || 0);
-    return { asset, index, image: frame, width: frame.width, height: frame.height };
+    return { asset, index, image: frame, width: frame.width, height: frame.height,
+      uvWidth: Number(asset.uvWidth) || Number(state.project.textureSize?.[0]) || frame.width,
+      uvHeight: Number(asset.uvHeight) || Number(state.project.textureSize?.[1]) || frame.height };
   }))).filter(Boolean);
   if (revision !== textureAtlasRevision) {
     // A preview switch or paint patch superseded this asynchronous build.
@@ -125,6 +127,7 @@ async function rebuildTextureAtlasNow() {
     packed.push({
       uid: record.asset._uid, x: cursorX + 1, y: cursorY + 1,
       width: record.width, height: record.height,
+      uvWidth: record.uvWidth || record.width, uvHeight: record.uvHeight || record.height,
       references: record.references || textureAtlasReferences(record.asset, record.index),
       mode: record.asset.mode || 'default',
       tileSourceUid: record.tileSourceUid, tileCube: record.tileCube, tileFaceName: record.tileFaceName, tileRegion: record.tileRegion,
@@ -144,6 +147,7 @@ async function rebuildTextureAtlasNow() {
   textureAtlasLayoutByUid = new Map(textureAtlasEntries.map(entry => [entry.uid, entry]));
   sceneRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
   uvPreviewRenderer.setTextureAtlas(textureAtlasCanvas, textureAtlasEntries);
+  window.dispatchEvent(new Event('cubebricks:atlas-change'));
   scheduleSceneRender();
   refreshUvPreview();
   return true;

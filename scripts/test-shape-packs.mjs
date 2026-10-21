@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { CubeBricksProject, Shape } from '../src/model.js';
 import { shapeRegistry } from '../src/shapes/builtins.js';
+import { shapePackUtils } from '../src/utils/index.js';
 
 const require = createRequire(import.meta.url);
 const { listShapePacks } = require('../electron/shape-packs.cjs');
@@ -13,7 +14,12 @@ const root = await mkdtemp(path.join(tmpdir(), 'cubebricks-shape-packs-'));
 const packageJson = JSON.stringify({ version: '1.2.3', shapes: [{ id: 'sample_arch', label: '拱門', file: 'arch.js' }] });
 const source = `export default { id:'sample_arch', label:'Arch', defaults:{width:8},
   fields:[{key:'width',label:'寬度',min:0,step:1}],
-  generate(shape,{Cube}) { return [new Cube({position:[0,0,0],size:[shape.parameters.width,1,1]})]; } };`;
+  generate(shape,{Cube,utils}) { return [new Cube({position:[utils.math.vector3.dot3([shape.parameters.width,0,0],[.5,0,0]),0,0],size:[shape.parameters.width,1,1]})]; } };`;
+
+assert.equal(typeof shapePackUtils.math.rotation.rotateVector, 'function');
+assert.equal(typeof shapePackUtils.shape.bezierGeometry.bezierCubes, 'function');
+assert.equal(shapePackUtils.shape.polyhedronGeometry.DODECAHEDRON_UNIT_FACES.length, 12);
+assert.equal(typeof shapePackUtils.templatePacker.packTemplateRectangles, 'function');
 
 try {
   const folder = path.join(root, 'FolderPack');
@@ -31,6 +37,7 @@ try {
   const project = new CubeBricksProject({ elements: [{ type: 'sample_arch', shapeType: 'sample_arch', parameters: { width: 5 } }] });
   assert.ok(project.elements[0] instanceof Shape);
   assert.equal(project.elements[0].toCubes()[0].size[0], 5);
+  assert.equal(project.elements[0].toCubes()[0].position[0], 2.5, 'external shapes receive shared utils');
   assert.equal(new Shape({ shapeType: 'polygon_prism' }).toCubes().length, 4);
 
   await writeFile(path.join(root, 'ZipPack.zip'), packZip([

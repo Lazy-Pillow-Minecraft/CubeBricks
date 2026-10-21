@@ -135,6 +135,8 @@ function applyRegisteredConfig(id, value, notify = false) {
   }
   if (id === ConfigKey.SHOW_GRID) state.grid = value;
   if (id === ConfigKey.SHOW_WIREFRAME) state.wire = value;
+  if (id === ConfigKey.CUBE_BIRTH_MS) state.cubeBirthMs = value;
+  if (id === ConfigKey.CUBE_DEATH_MS) state.cubeDeathMs = value;
   if (id === ConfigKey.LOCKED_DEFAULT_ALPHA) state.lockedDefaultAlpha = value;
   if (id === ConfigKey.LOCKED_HOVER_FADE) {
     state.lockedHoverFade = value;

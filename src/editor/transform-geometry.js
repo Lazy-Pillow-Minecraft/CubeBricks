@@ -67,6 +67,19 @@ function worldPointToCubeLocal(cube, worldPoint) {
   return inverseRotateVector(offset, cube.rotation || [0, 0, 0]).map((value, axis) => value + cube.pivot[axis]);
 }
 
+function movePivotToRotationVertex(pointEntry) {
+  if (state.tool !== 'rotate' || !state.rotationVertexPick || !pointEntry?.point) return false;
+  const item = state.project.getNode(pointEntry.targetUid);
+  if (!item || !(['cube', 'group'].includes(item.type) || isShapeElement(item))) return false;
+  const nextPivot = worldPointToParentLocal(item, pointEntry.point);
+  if (nextPivot.every((value, axis) => Math.abs(value - item.pivot[axis]) < 1e-8)) return false;
+  snapshot('core.element.pivot');
+  setPivotPreservingGeometry(state.project, item, nextPivot);
+  markDirty();
+  renderAll();
+  return true;
+}
+
 function quaternionFromVectors(from, to) {
   const first = normalize3(from), second = normalize3(to);
   const cosine = Math.max(-1, Math.min(1, dot3(first, second)));
@@ -177,6 +190,7 @@ function clamp(value, minimum, maximum) {
 }
 
 return {
+  movePivotToRotationVertex,
   freezeCubeUvs,
   translateItemByLocalDelta,
   worldVectorToParentLocal,

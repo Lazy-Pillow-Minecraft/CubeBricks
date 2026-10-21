@@ -10,6 +10,8 @@ const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform ===
 const journals = new Map();
 const journalQueues = new Map();
 const workspaceLayoutPromises = new Map();
+const workspaceCatalogs = new Map();
+const workspaceCatalogWrites = new Map();
 const journalOwnership = new JournalOwnership();
 const workspaceSettingsPath = () => path.join(app.getPath('userData'), 'project-workspace.json');
 const retainedTabsPath = () => path.join(app.getPath('userData'), 'retained-project-tabs.json');
@@ -31,14 +33,17 @@ async function ensureWorkspaceLayout() {
   if (!workspaceLayoutPromises.has(root)) {
     const ready = (async () => {
       await Promise.all([fs.mkdir(projects, { recursive: true }), fs.mkdir(shapePacks, { recursive: true })]);
+      const marker = path.join(root, '.workspace-layout-v2');
+      if (await fs.stat(marker).then(() => true).catch(() => false)) return;
       const legacy = await fs.readdir(root, { withFileTypes: true });
+      let migrationFailed = false;
       for (const entry of legacy) {
         if (!entry.isDirectory() || !JOURNAL_NAME.test(entry.name) || journals.has(entry.name)) continue;
         const source = path.join(root, entry.name), destination = path.join(projects, entry.name);
         if (await fs.stat(destination).then(() => true).catch(() => false)) continue;
         if (await journalOwnership.isLocked(source)) continue;
         try { await fs.rename(source, destination); }
-        catch (error) { console.warn(`舊項目暫留原位置：${entry.name}`, error.message); continue; }
+        catch (error) { migrationFailed = true; console.warn(`舊項目暫留原位置：${entry.name}`, error.message); continue; }
         const oldOwner = journalOwnership.lockPath(source), newOwner = journalOwnership.lockPath(destination);
         if (!await fs.stat(newOwner).then(() => true).catch(() => false)) {
           await fs.rename(oldOwner, newOwner).catch(error => {
@@ -46,6 +51,7 @@ async function ensureWorkspaceLayout() {
           });
         }
       }
+      if (!migrationFailed) await atomicWrite(marker, 'complete');
     })().catch(error => { workspaceLayoutPromises.delete(root); throw error; });
     workspaceLayoutPromises.set(root, ready);
   }
@@ -59,9 +65,65 @@ async function journalDirectory(id) {
   if (await fs.stat(legacy).then(stat => stat.isDirectory()).catch(() => false)) return legacy;
   return current;
 }
-async function journalSearchRoots() {
+async function projectSummary(id, directory) {
+  const state = await fs.readFile(path.join(directory, 'current_state'), 'utf8').then(JSON.parse).catch(() => null);
+  if (state?.status !== 'complete' || !Number.isInteger(state.activeHead)) return null;
+  const manifest = await fs.readFile(path.join(directory, 'transactions', `${state.activeHead}.json`), 'utf8')
+    .then(JSON.parse).catch(() => null);
+  if (!manifest) return null;
+  const saved = await fs.readFile(path.join(directory, 'saved_state'), 'utf8').then(JSON.parse).catch(() => null);
+  return { journalId: id, name: manifest.information?.name || '未命名',
+    modifiedAt: manifest.timestamp || '', sequence: state.activeHead,
+    savedSequence: saved?.sequence ?? null, filePath: saved?.filePath || null,
+    elementCount: manifest.elementOrder?.length || 0, textureCount: manifest.textureIds?.length || 0 };
+}
+async function workspaceCatalog() {
   const { root, projects } = await ensureWorkspaceLayout();
-  return [projects, root];
+  if (!workspaceCatalogs.has(root)) workspaceCatalogs.set(root, (async () => {
+    const file = path.join(root, 'project-index.json');
+    const stored = await fs.readFile(file, 'utf8').then(JSON.parse).catch(() => null);
+    if (stored?.version === 1 && Array.isArray(stored.projects)) return stored;
+    // One-time migration: afterwards startup and file-open use the index, not
+    // a deep ProjectJournal.load() pass through every working directory.
+    const found = new Map();
+    for (const searchRoot of [projects, root]) {
+      for (const entry of await fs.readdir(searchRoot, { withFileTypes: true }).catch(() => [])) {
+        if (!entry.isDirectory() || !JOURNAL_NAME.test(entry.name) || found.has(entry.name)) continue;
+        const summary = await projectSummary(entry.name, path.join(searchRoot, entry.name));
+        if (summary) found.set(entry.name, summary);
+      }
+    }
+    const catalog = { version: 1, projects: [...found.values()] };
+    await atomicWrite(file, JSON.stringify(catalog));
+    return catalog;
+  })().catch(error => { workspaceCatalogs.delete(root); throw error; }));
+  return { root, catalog: await workspaceCatalogs.get(root) };
+}
+function mutateWorkspaceCatalog(change) {
+  const pending = (async () => {
+    const { root } = await ensureWorkspaceLayout();
+    const previous = workspaceCatalogWrites.get(root) || Promise.resolve();
+    const current = previous.catch(() => {}).then(async () => {
+      const { catalog } = await workspaceCatalog();
+      await change(catalog);
+      await atomicWrite(path.join(root, 'project-index.json'), JSON.stringify(catalog));
+    });
+    workspaceCatalogWrites.set(root, current);
+    try { await current; } finally { if (workspaceCatalogWrites.get(root) === current) workspaceCatalogWrites.delete(root); }
+  });
+  return pending();
+}
+function indexWorkingJournal(journal) {
+  return mutateWorkspaceCatalog(async catalog => {
+    const summary = await projectSummary(path.basename(journal.directory), journal.directory);
+    catalog.projects = catalog.projects.filter(entry => entry.journalId !== path.basename(journal.directory));
+    if (summary) catalog.projects.push(summary);
+  });
+}
+function unindexWorkingJournal(id) {
+  return mutateWorkspaceCatalog(catalog => {
+    catalog.projects = catalog.projects.filter(entry => entry.journalId !== id);
+  });
 }
 async function openWorkingJournal(id, loader) {
   const existing = journals.get(id);
@@ -71,15 +133,24 @@ async function openWorkingJournal(id, loader) {
   try {
     const journal = await loader(directory);
     journals.set(id, journal);
+    await indexWorkingJournal(journal);
     return journal;
-  } catch (error) { await journalOwnership.release(directory); throw error; }
+  } catch (error) {
+    journals.delete(id);
+    await journalOwnership.release(directory);
+    throw error;
+  }
 }
 function queueJournal(id, task) {
   const previous = journalQueues.get(id) || Promise.resolve();
   const current = previous.catch(() => {}).then(async () => {
     const journal = journals.get(id);
     if (journal) await journalOwnership.assertOwned(journal.directory);
-    return task();
+    const result = await task();
+    const current = journals.get(id);
+    if (current) await indexWorkingJournal(current);
+    else await unindexWorkingJournal(id);
+    return result;
   });
   journalQueues.set(id, current);
   current.finally(() => { if (journalQueues.get(id) === current) journalQueues.delete(id); }).catch(() => {});
@@ -97,25 +168,19 @@ const sameFilePath = (left, right) => typeof left === 'string' && typeof right =
     : path.resolve(left) === path.resolve(right));
 async function journalCandidatesForFile(filePath) {
   const candidates = [];
-  const seen = new Set();
-  for (const root of await journalSearchRoots()) {
-    const entries = await fs.readdir(root, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !JOURNAL_NAME.test(entry.name)) continue;
-      if (seen.has(entry.name)) continue;
-      seen.add(entry.name);
-      const directory = path.join(root, entry.name);
+  const { catalog } = await workspaceCatalog();
+  for (const entry of catalog.projects.filter(project => sameFilePath(project.filePath, filePath))) {
+      const directory = await journalDirectory(entry.journalId);
       const saved = await fs.readFile(path.join(directory, 'saved_state'), 'utf8')
         .then(JSON.parse).catch(() => null);
       if (!sameFilePath(saved?.filePath, filePath)) continue;
-      if (!journals.has(entry.name) && await journalOwnership.isLocked(directory)) continue;
+      if (!journals.has(entry.journalId) && await journalOwnership.isLocked(directory)) continue;
       const state = await fs.readFile(path.join(directory, 'current_state'), 'utf8')
         .then(JSON.parse).catch(() => null);
       if (state?.status !== 'complete' || !Number.isInteger(state.activeHead)) continue;
       const projectUuid = await fs.readFile(path.join(directory, 'project_uuid'), 'utf8')
         .then(JSON.parse).catch(() => null);
-      candidates.push({ id: entry.name, directory, saved, state, projectUuid });
-    }
+      candidates.push({ id: entry.journalId, directory, saved, state, projectUuid });
   }
   return candidates.sort((left, right) => String(right.saved.savedAt || '').localeCompare(String(left.saved.savedAt || '')));
 }
@@ -169,6 +234,7 @@ async function discardIdleJournal(candidate) {
     const state = await fs.readFile(path.join(candidate.directory, 'current_state'), 'utf8').then(JSON.parse);
     if (state.activeHead !== candidate.state.activeHead || state.lastCommitted !== candidate.state.lastCommitted) return false;
     await fs.rm(candidate.directory, { recursive: true, force: true });
+    await unindexWorkingJournal(candidate.id);
     await removeRetainedJournal(candidate.id);
     return true;
   } finally { await journalOwnership.release(candidate.directory); }
@@ -357,6 +423,7 @@ ipcMain.handle('project:open', async () => {
       sequence: journal.state.activeHead, filePath, projectUuid: journal.projectUuid,
       fileHash: archive.fileHash, savedAt: new Date().toISOString()
     }));
+    await indexWorkingJournal(journal);
     const content = await journal.content();
     if (replace && !journals.has(replace.id)) {
       try { await discardIdleJournal(replace); }
@@ -410,31 +477,39 @@ ipcMain.handle('project:journal-state', async (_event, payload) => {
 
 ipcMain.handle('project:journal-list-recoverable', async () => {
   const recoverable = [];
-  const seen = new Set();
-  for (const root of await journalSearchRoots()) {
-    const entries = await fs.readdir(root, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !JOURNAL_NAME.test(entry.name)) continue;
-      if (seen.has(entry.name)) continue;
-      seen.add(entry.name);
-      const directory = path.join(root, entry.name);
-      if (journals.has(entry.name)) continue;
+  const { catalog } = await workspaceCatalog();
+  for (const entry of catalog.projects) {
+      if (journals.has(entry.journalId) || entry.savedSequence === entry.sequence) continue;
+      if (entry.sequence === 1 && !entry.elementCount && !entry.textureCount) continue;
+      const directory = await journalDirectory(entry.journalId);
       let claimed = false;
       try {
         await journalOwnership.acquire(directory);
         claimed = true;
-        const journal = await new ProjectJournal(directory).load();
-        const saved = JSON.parse(await fs.readFile(path.join(directory, 'saved_state'), 'utf8').catch(() => 'null'));
-        if (saved?.sequence === journal.state.activeHead) continue;
-        const manifest = journal.activeManifest;
-        if (manifest.sequence === 1 && !manifest.elementOrder.length && !manifest.textureIds.length) continue;
-        recoverable.push({ journalId: entry.name, name: manifest.information.name || '未命名',
-          sequence: journal.state.activeHead, modifiedAt: manifest.timestamp, filePath: saved?.filePath || null });
+        recoverable.push(entry);
       } catch { /* Busy or incomplete projects must not be opened by another writer. */ }
       finally { if (claimed) await journalOwnership.release(directory); }
-    }
   }
   return recoverable.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
+});
+
+ipcMain.handle('project:list-workspace', async (_event, options = {}) => {
+  if (options.refresh === true) {
+    const { root, projects } = await ensureWorkspaceLayout();
+    await mutateWorkspaceCatalog(async catalog => {
+      const found = new Map();
+      for (const searchRoot of [projects, root]) {
+        for (const entry of await fs.readdir(searchRoot, { withFileTypes: true })) {
+          if (!entry.isDirectory() || !JOURNAL_NAME.test(entry.name) || found.has(entry.name)) continue;
+          const summary = await projectSummary(entry.name, path.join(searchRoot, entry.name));
+          if (summary) found.set(entry.name, summary);
+        }
+      }
+      catalog.projects = [...found.values()];
+    });
+  }
+  const { catalog } = await workspaceCatalog();
+  return [...catalog.projects].sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
 });
 
 ipcMain.handle('project:journal-recover', async (_event, payload) => {
@@ -442,7 +517,10 @@ ipcMain.handle('project:journal-recover', async (_event, payload) => {
   return queueJournal(id, async () => {
     const journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).load());
     const content = await journal.content();
-    return { journalId: id, content, filePath: payload.filePath || null };
+    const { catalog } = await workspaceCatalog();
+    const entry = catalog.projects.find(project => project.journalId === id);
+    return { journalId: id, content, filePath: payload.filePath || entry?.filePath || null,
+      dirty: entry?.savedSequence !== journal.state.activeHead };
   });
 });
 

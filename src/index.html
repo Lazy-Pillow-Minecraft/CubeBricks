@@ -82,6 +82,11 @@
       <button class="project-tab-new" id="newProjectTab" type="button" title="新建項目" aria-label="新建項目">＋</button>
     </div>
 
+    <main class="project-home" id="projectHome" aria-label="項目首頁">
+      <aside class="project-home-types"><h2>新建模型</h2><p>選擇格式開始製作</p><div id="homeFormatList"></div></aside>
+      <section class="project-home-projects"><div class="project-home-heading"><div><span class="eyebrow">WORKSPACE</span><h1>工作項目</h1><p>繼續上次的工作，或從左側新建模型。</p></div><button type="button" id="homeRefreshProjects">重新整理</button></div><div id="homeProjectList"></div></section>
+    </main>
+
     <nav class="tool-strip" aria-label="工具欄">
       <div class="toolbar-lane tool-lane" aria-label="工具">
         <button class="tool active" data-tool="move" title="移動" aria-label="移動"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 184.79 163.37"><g><rect x="80.59" y="38.45" width="23.61" height="66.89"/><path d="M101.73,5.91l24.36,51.3c3.26,6.86-1.75,14.77-9.34,14.77h-48.71c-7.59,0-12.6-7.91-9.34-14.77L83.05,5.91c3.74-7.87,14.94-7.87,18.68,0Z"/></g><g><rect x="30.22" y="110.45" width="66.89" height="23.61" transform="translate(-52.6 48.21) rotate(-30)"/><path d="M1.85,147.16l32.25-46.75c4.31-6.25,13.67-5.87,17.46.7l24.36,42.19c3.8,6.58-.55,14.87-8.12,15.48l-56.61,4.56c-8.69.7-14.29-9-9.34-16.18Z"/></g><g><rect x="109.31" y="88.81" width="23.61" height="66.89" transform="translate(-45.32 166.02) rotate(-60)"/><path d="M182.93,147.16l-32.25-46.75c-4.31-6.25-13.67-5.87-17.46.7l-24.36,42.19c-3.8,6.58.55,14.87,8.12,15.48l56.61,4.56c8.69.7,14.29-9,9.34-16.18Z"/></g></svg></button>
@@ -92,6 +97,7 @@
         <button class="tool" data-tool="knife" title="刀具切割" aria-label="刀具切割"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 186.43 167.88"><rect x="108.09" y="-1.84" width="50.7" height="113.72" rx="9.86" ry="9.86" transform="translate(71.97 -75.57) rotate(42.39)"/><path d="M81.17,88.28c-3.74-3.41-9.53-3.15-12.94.59L0,163.62c25.67,9.52,66.11,3.06,104.54-19.13,6.34-3.66,12.34-7.59,17.95-11.71.89-3.22-.02-6.8-2.65-9.2l-38.68-35.3Z"/></svg></button>
         <button class="tool" data-tool="faceSelect" title="面選擇" aria-label="面選擇"><span>▱</span></button>
         <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆（B）" aria-label="畫筆"><span>◍</span></button>
+        <button class="tool mode-only paint-tool" data-tool="paintSelection" title="繪畫選區" aria-label="繪畫選區"><span>▧</span></button>
         <button class="tool mode-only paint-tool" data-tool="line" title="直線（L）" aria-label="直線"><span>╱</span></button>
         <button class="tool mode-only paint-tool" data-tool="rectangle" title="矩形（M）" aria-label="矩形"><span>□</span></button>
         <button class="tool mode-only paint-tool" data-tool="ellipse" title="橢圓（O）" aria-label="橢圓"><span>○</span></button>
@@ -136,6 +142,15 @@
         <span class="tool-status" id="vertexSnapStatus" hidden>先選來源頂點</span>
         <span class="tool-status" id="knifeStatus" hidden>選擇切割點</span>
         <div class="paint-tool-options" id="paintToolOptions" hidden>
+          <label id="paintSelectionModeControl" hidden><span>選區</span><select id="paintSelectionMode"><option value="rectangle">拉框</option><option value="brush">塗抹</option><option value="lasso">自由圈選</option><option value="transform">像素變換</option></select></label>
+          <label id="paintSelectionBrushControl" hidden><span>尺寸</span><input id="paintSelectionBrushSize" type="number" min="1" max="128" value="18" /></label>
+          <label id="paintSelectionSymmetryControl" hidden title="選區跟隨繪畫對稱"><input id="paintSelectionSymmetry" type="checkbox" /><span>對稱</span></label>
+          <label id="paintSelectionTransformControl" hidden><span>操作</span><select id="paintSelectionTransformMode"><option value="move">移動</option><option value="rotate">旋轉</option></select></label>
+          <label id="paintSelectionFreeRotateControl" hidden title="旋轉時解除 90° 吸附"><input id="paintSelectionFreeRotate" type="checkbox" /><span>自由旋轉</span></label>
+          <button id="paintSelectionCopy" type="button" hidden title="保留原像素，下次變換時複製選中像素">複製像素：關</button>
+          <button id="paintSelectionRotateLeft" type="button" hidden title="選中像素逆時針旋轉 90°">↶ 90°</button>
+          <button id="paintSelectionRotateRight" type="button" hidden title="選中像素順時針旋轉 90°">↷ 90°</button>
+          <button id="paintSelectionClear" type="button" hidden>清除選區</button>
           <label id="paintEraseControl" title="目前工具以設定透明度擦除像素" hidden><input id="paintEraseMode" type="checkbox" /><span>擦除</span></label>
           <label title="目前工具的尺寸"><span>尺寸</span><input id="paintBrushSize" type="number" min="1" max="64" step="1" value="1" /></label>
           <label id="paintBrushShapeControl" title="筆刷形狀"><span>形狀</span><select id="paintBrushShape"><option value="square">方形</option><option value="circle">圓形</option></select></label>
@@ -185,11 +200,13 @@
           <button type="button" data-texture-face="down" title="選中全部下面">下</button>
         </div>
         <div class="texture-preview" id="texturePreview" tabindex="0">
+          <div class="checkerboard"></div>
           <div class="texture-stage" id="textureStage">
-            <div class="checkerboard"></div>
             <canvas id="textureCanvas" width="1" height="1"></canvas>
+            <canvas id="paintSelectionTextureOverlay" width="1" height="1" aria-hidden="true"></canvas>
             <canvas id="textureLayerComposite" width="1" height="1" hidden></canvas>
           </div>
+          <canvas id="paintSelectionBorder" width="1" height="1" aria-hidden="true"></canvas>
           <svg class="texture-uv-overlay" id="textureUvOverlay" aria-label="UV 編輯區"></svg>
           <div class="texture-brush-cursor" id="textureBrushCursor" hidden></div>
           <span>無貼圖</span>
@@ -268,6 +285,7 @@
             <span id="referenceImageHint">拖動平移 · 滾輪縮放</span>
           </div>
           <canvas id="sceneCanvas" tabindex="0"></canvas>
+          <svg class="paint-selection-gesture" id="paintSelectionGesture" aria-hidden="true" hidden></svg>
           <div class="selection-marquee" id="selectionMarquee" aria-hidden="true" hidden></div>
           <svg class="paint-gradient-overlay" id="paintGradientOverlay" aria-label="漸變預覽" aria-hidden="true" hidden></svg>
           <svg class="locator-overlay" id="locatorOverlay" aria-label="Locator 標記" hidden></svg>
@@ -445,6 +463,8 @@
               <label class="config-select-label"><span>視口投影<small>viewport.projection</small></span><select data-config-key="viewport.projection"><option value="perspective">透視</option><option value="orthographic">正交</option></select></label>
               <label class="config-toggle-label"><span>顯示網格<small>viewport.show-grid</small></span><input type="checkbox" data-config-key="viewport.show-grid" /></label>
               <label class="config-toggle-label"><span>線框邊界<small>viewport.show-wireframe</small></span><input type="checkbox" data-config-key="viewport.show-wireframe" /></label>
+              <label class="config-number-label"><span>Cube 出現動畫<small>viewport.cube-birth-ms · ms；0 關閉</small></span><input type="number" min="0" max="500" step="10" data-config-key="viewport.cube-birth-ms" /></label>
+              <label class="config-number-label"><span>Cube 消失動畫<small>viewport.cube-death-ms · ms；0 關閉</small></span><input type="number" min="0" max="500" step="10" data-config-key="viewport.cube-death-ms" /></label>
               <label class="config-toggle-label"><span>僅顯示幾何<small>viewport.show-geometry-only</small></span><input type="checkbox" data-config-key="viewport.show-geometry-only" /></label>
               <label class="config-toggle-label"><span>面陰影預覽<small>viewport.preview-shade</small></span><input type="checkbox" data-config-key="viewport.preview-shade" /></label>
               <div class="player-reference-texture-setting">

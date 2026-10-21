@@ -62,6 +62,7 @@ import { createSnapController } from './editor/snap-controller.js';
 import { escapeHtml, escapeAttribute, round, hexToRgb } from './screen/ui-format.js';
 import { createShapePackLoader } from './shapes/pack-loader.js';
 import { createTexturePaintPointerController } from './paint/texture-pointer-controller.js';
+import { createPaintSelectionController } from './paint/selection-controller.js';
 import { createPaintColorController } from './paint/color-controller.js';
 import { createCurvePlacementController } from './editor/curve-placement.js';
 import { createTimelineController } from './screen/timeline-controller.js';
@@ -167,7 +168,7 @@ const journalController = createProjectJournalController({
   state, projectTabsController, textureCanvas, isBezierElement, textureUid,
   clearSubdivisionSession: () => { inspectorController.subdivisionSession = null; }, renderAll, toast,
   renderTextureList, activateProjectTexture, rebuildTextureAtlas,
-  invalidateAllRenderGeometry, restoreProjectTextureView,
+  restoreProjectTextureView,
   serializableTextureAssets, serializeCbmodel, referenceImages,
   getTexturePaintDrag: () => texturePaintPointerController.texturePaintDrag, getTextureUvDrag: () => uvEditorController.textureUvDrag
 });
@@ -458,7 +459,8 @@ const paintStrokeController = createPaintStrokeController({
   clientToTextureUv, clamp, isFaceTiled, faceUvWorldPoint,
   paintSetting, paintToolErasing, paintToolOpacity, PAINT_FACE_EDGES,
   CUBE_FACE_NAMES, textureAtlasReferences, effectiveFaceTextureReference,
-  textureAssetForReference, paintCanvasForAsset, syncRendererTextureAsset,
+  textureAssetForReference, getTextureAtlasEntries: () => textureAtlasController.textureAtlasEntries,
+  paintCanvasForAsset, syncRendererTextureAsset,
   scheduleSceneRender, uvPreviewIsActive, renderUvPreview,
   updateTexturePreviewFrame, noteJournalOperation, markDirty, toast,
   renderScene, invalidateAllRenderGeometry, paintHitAlphaCache
@@ -536,6 +538,15 @@ function queueSceneBrushPointer(...args) { return scenePaintController.queueScen
 function finishScenePaintDrag(...args) { return scenePaintController.finishScenePaintDrag(...args); }
 function moveScenePaintDrag(...args) { return scenePaintController.moveScenePaintDrag(...args); }
 function startScenePaintPointer(...args) { return scenePaintController.startScenePaintPointer(...args); }
+
+const paintSelectionController = createPaintSelectionController({
+  state, $, sceneCanvas, sceneRenderer, textureCanvas, textureCtx, clientToTextureUv,
+  textureAssetForReference, facePaintUvPoint: scenePaintController.facePaintUvPoint,
+  paintSymmetryRelatedHits, getTextureAtlasEntries: () => textureAtlasController.textureAtlasEntries,
+  getTextureAtlasCanvas: () => textureAtlasController.textureAtlasCanvas,
+  scheduleSceneRender, updateToolOptions, pushTexturePaintHistory,
+  commitPaintedTextureAsset
+});
 
 const texturePointerController = createTexturePointerController({
   state, $, dockManager, uvEditorController, getTexturePaintDrag: () => texturePaintPointerController.texturePaintDrag,
@@ -651,7 +662,7 @@ function exportProject(...args) { return projectFileController.exportProject(...
 
 const modelFormatPicker = createModelFormatPicker({
   $, newProjectDialog, escapeHtml, escapeAttribute, formatNumber,
-  addProjectTab, markDirty, toast, configRegistry
+  addProjectTab, markDirty, toast, configRegistry, loadProjectContent
 });
 function modelFormatIconMarkup(...args) { return modelFormatPicker.modelFormatIconMarkup(...args); }
 function renderModelFormatPicker(...args) { return modelFormatPicker.renderModelFormatPicker(...args); }
@@ -763,6 +774,7 @@ const eventBinder = createEventBinder({
   updateRotationModeButtons, updateScaleHandleModeButtons,
   updateSelectionLabels, updateTextureCreateDialog,
   updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
+  updateTransformGizmo, movePivotToRotationVertex,
   uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView
 });
 function bindEvents(...args) { return eventBinder.bindEvents(...args); }
@@ -800,6 +812,7 @@ function worldPointToCubeLocal(...args) { return transformGeometry.worldPointToC
 function quaternionFromVectors(...args) { return transformGeometry.quaternionFromVectors(...args); }
 function vertexRotationTurn(...args) { return transformGeometry.vertexRotationTurn(...args); }
 function useVertexSnapPoint(...args) { return transformGeometry.useVertexSnapPoint(...args); }
+function movePivotToRotationVertex(...args) { return transformGeometry.movePivotToRotationVertex(...args); }
 function clamp(...args) { return transformGeometry.clamp(...args); }
 
 const transformTargets = createTransformTargets({
@@ -875,6 +888,7 @@ initializeDockSystem();
 initializeConfigRegistry();
 modelFormatRegistry.subscribe(() => {
   renderModelFormatPicker();
+  if (document.body.classList.contains('project-home-active')) void modelFormatPicker.renderProjectHome();
   updateSelectionLabels();
 });
 loadTheme();
@@ -888,9 +902,11 @@ if (window.cubeBricksDesktop?.onCloseRequested) {
 renderTexture();
 renderPalette();
 renderModelFormatPicker();
+modelFormatPicker.bindProjectHome();
 bindEvents();
+paintSelectionController.bind();
 updateToolVisibility();
 renderAll();
 markDirty(false);
 shapePacksReady = loadExternalShapePacks();
-void shapePacksReady.then(offerProjectRecovery);
+void shapePacksReady.then(() => modelFormatPicker.renderProjectHome());

@@ -26,6 +26,8 @@ export const ConfigKey = Object.freeze({
   MODIFIER_RESULT_GHOST: 'viewport.modifier-result-ghost',
   SHOW_GRID: 'viewport.show-grid',
   SHOW_WIREFRAME: 'viewport.show-wireframe',
+  CUBE_BIRTH_MS: 'viewport.cube-birth-ms',
+  CUBE_DEATH_MS: 'viewport.cube-death-ms',
   LOCKED_DEFAULT_ALPHA: 'viewport.locked-default-alpha',
   LOCKED_HOVER_FADE: 'viewport.locked-hover-fade',
   LOCKED_HOVER_ALPHA: 'viewport.locked-hover-alpha',
@@ -111,6 +113,8 @@ configRegistry.registerMany([
   { id: ConfigKey.MODIFIER_RESULT_GHOST, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Display generated modifier results at 75% opacity and disable their selection.' },
   { id: ConfigKey.SHOW_GRID, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Show the viewport floor grid.' },
   { id: ConfigKey.SHOW_WIREFRAME, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Show model wireframe bounds.' },
+  { id: ConfigKey.CUBE_BIRTH_MS, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 60, validate: value => value >= 0 && value <= 500, description: 'Cube appearance animation in milliseconds; zero disables it.' },
+  { id: ConfigKey.CUBE_DEATH_MS, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 60, validate: value => value >= 0 && value <= 500, description: 'Cube disappearance animation in milliseconds; zero disables it.' },
   { id: ConfigKey.LOCKED_DEFAULT_ALPHA, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 100, validate: value => value >= 0 && value <= 100, description: 'Opacity percentage used for locked viewport objects.' },
   { id: ConfigKey.LOCKED_HOVER_FADE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Fade a locked object while the pointer is over it.' },
   { id: ConfigKey.LOCKED_HOVER_ALPHA, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 50, validate: value => value >= 0 && value <= 100, description: 'Opacity percentage at the center of the pointer fade region.' },
@@ -122,6 +126,171 @@ export function getLanguageLabel(language = configRegistry.get(ConfigKey.LANGUAG
 }
 
 const ENGLISH_UI = Object.freeze({
+  '項目首頁': 'Project home', '工作項目': 'Workspace projects', '新建模型': 'New model',
+  '選擇格式開始製作': 'Choose a format to get started', '繼續上次的工作，或從左側新建模型。': 'Continue a project or create a model from the left.',
+  '重新整理': 'Refresh', '本機工作項目只在桌面版顯示。': 'Local projects are available in the desktop app.',
+  '尚無工作項目。從左側選擇模型格式開始吧。': 'No projects yet. Choose a model format on the left to begin.',
+  '未保存的工作項目': 'Unsaved working project', '個元素': 'elements',
+  '繪畫選區': 'Paint selection', '選區': 'Selection', '拉框': 'Rectangle', '塗抹': 'Brush',
+  '自由圈選': 'Freehand lasso', '清除選區': 'Clear selection', '選區跟隨繪畫對稱': 'Apply paint symmetry to selection',
+  '像素變換': 'Pixel transform', '操作': 'Action', '自由旋轉': 'Free rotation',
+  '複製像素：關': 'Copy pixels: off', '複製像素：開': 'Copy pixels: on',
+  'Cube 出現動畫': 'Cube appearance animation', 'Cube 消失動畫': 'Cube disappearance animation',
+  '旋轉時解除 90° 吸附': 'Disable 90° snapping while rotating',
+  '保留原像素，下次變換時複製選中像素': 'Keep original pixels and duplicate the selection on the next transform',
+  '項目列表讀取失敗': 'Could not load the project list', '打開工作項目失敗': 'Could not open the working project',
+  '↥ 導入': '↥ Import', '＋ 新建': '+ New', '＋ 新增一行': '+ Add row', '▰＋ 組': '▰+ Group',
+  '◇ 交點顯示': '◇ Show intersections', '交點顯示': 'Show intersections',
+  '1.21.11+ · 無限制': '1.21.11+ · Unrestricted',
+  '1.21.6 – 1.21.10 · 自由角度／單軸': '1.21.6–1.21.10 · Free angle / one axis',
+  '1.9 – 1.21.5 · 22.5°／單軸': '1.9–1.21.5 · 22.5° / one axis',
+  'Java 方塊／物品版本': 'Java block/item version', '決定 Cube 旋轉限制': 'Sets cube rotation limits',
+  '上': 'Up', '下': 'Down', '北': 'North', '南': 'South', '東': 'East', '西': 'West',
+  '上面': 'Top face', '下面': 'Bottom face', '北面': 'North face', '南面': 'South face', '東面': 'East face', '西面': 'West face',
+  '上下鏡像': 'Mirror up/down', '左右鏡像': 'Mirror left/right',
+  '不同來源的面維持獨立佔位': 'Keep faces from different sources in separate slots',
+  '勾選下次要恢復的分頁。取消勾選會刪除該項目的本機工作記錄，不會刪除已保存的模型檔。': 'Select the tabs to keep for next time. Unselected local working records are deleted; saved model files are not.',
+  '另存為 PNG': 'Save as PNG', '複製到剪切板': 'Copy to clipboard', '透明背景模型截圖預覽': 'Transparent model capture preview',
+  '右視圖 (+X)': 'Right view (+X)', '左視圖 (−X)': 'Left view (−X)', '正視圖 (+Z)': 'Front view (+Z)',
+  '背視圖 (−Z)': 'Back view (−Z)', '頂視圖 (+Y)': 'Top view (+Y)', '底視圖 (−Y)': 'Bottom view (−Y)',
+  '左鍵下一檔，右鍵上一檔': 'Left-click for next snap; right-click for previous',
+  '平均分': 'Even spacing', '自定義': 'Custom', '按曲線長度': 'By curve length',
+  '未選擇面': 'No face selected', '生成物以 75% 可見度的獨立圖層顯示，後方模型與網格可透出；同時禁止選取及頂點捕捉': 'Show generated objects on a separate 75%-visible layer so models and grid show through; disable selection and vertex snapping.',
+  '用不同半透明顏色區分六個面': 'Distinguish the six faces with translucent colors',
+  '在 UV 預覽中選面後自動聚焦貼圖窗口': 'Focus the texture window after selecting a face in UV preview',
+  '多邊形柱體': 'Polygonal prism', '色卡，選中色塊後可按 Delete 刪除': 'Palette; select a swatch and press Delete to remove it',
+  '吸附 1.0': 'Snap 1.0', '更改位置': 'Change location', '建立': 'Create', '按 Cube 建立連續六面展開': 'Unwrap six faces continuously per cube',
+  '生成物以 75% 可見度的獨立圖層顯示': 'Show generated objects at 75% visibility',
+  '貼圖操作': 'Texture actions', '場景層級操作': 'Outliner actions', '圖層與貼圖模式': 'Layers and texture modes',
+  '修改器結果虛化': 'Fade modifier results', '無貼圖': 'No texture', '新增 Shape': 'Add shape',
+  '對稱修改器輔助網格': 'Mirror modifier guide grid', '截屏模型': 'Capture model',
+  '漸變分段類別': 'Gradient segment mode', '漸變預覽': 'Gradient preview',
+  '模式選項': 'Mode options', '確認並關閉': 'Confirm and close', '選中 UV 參數': 'Selected UV coordinates',
+  '選中全部上面': 'Select all top faces', '選中全部下面': 'Select all bottom faces',
+  '選中全部北面': 'Select all north faces', '選中全部南面': 'Select all south faces',
+  '選中全部東面': 'Select all east faces', '選中全部西面': 'Select all west faces',
+  '選中面 UV 操作': 'Selected-face UV actions', '選中面的平鋪': 'Tiling for selected face',
+  '選中面標記': 'Selected-face marker', '選面後聚焦 UV': 'Focus UV after face selection',
+  '默認開啟': 'Enabled by default', '縮略模式': 'Compact mode',
+  '縮略模式：只保留選色': 'Compact mode: color picking only', '關閉軟體': 'Close application',
+  '讀取中…': 'Loading…', '顯示選中元素邊線與周圍元素的三維交點（僅作目標）': 'Show 3D edge intersections around selected elements (targets only)',
+  'UV 尺寸會按照項目基礎吸附分辨率四捨五入；非零邊長至少分配 1px，並由大到小自左上角打包。': 'UV dimensions are rounded using the project base snap; nonzero edges get at least 1 px and are packed largest-first from the top-left.',
+  'UV 面之間保留像素': 'Leave pixels between UV faces', 'UV 面選擇': 'UV face selection',
+  'UV 預覽選項': 'UV preview options', 'UV 編輯區': 'UV editing area',
+  '上移': 'Move up', '下移': 'Move down', '工作空間已切換；新項目使用 projects/，Shape 包從 shapepacks/ 載入': 'Workspace changed. New projects use projects/ and shape packs load from shapepacks/.',
+  '已下載模型截圖': 'Model capture downloaded', '已建立並連接新節點': 'Created and connected a new node',
+  '已剪切選中項': 'Cut selection', '已將貝塞爾元素斷開為兩段': 'Split the Bezier element in two',
+  '已將樞軸移至目標頂點（幾何保持不動）': 'Moved the pivot to the target vertex without moving geometry',
+  '已就地複製選中項': 'Duplicated selection in place', '已貼上元素': 'Pasted elements',
+  '已進入細分編輯；其他物件已虛化': 'Entered Subdivision Edit; other objects are faded',
+  '已新增 Cube': 'Cube added', '已新增組': 'Group added',
+  '已導出 .bbmodel（目前瀏覽器不支援格式選擇）': 'Exported .bbmodel; format selection is unavailable in this browser',
+  '已導出 .bbmodel（程序化物件已轉為 Cube 組）': 'Exported .bbmodel; procedural objects were converted to cube groups',
+  '已導出 .cbmodel': 'Exported .cbmodel', '已複製選中項': 'Copied selection',
+  '元素剪貼簿是空的': 'The element clipboard is empty', '內半徑': 'Inner radius',
+  '分配 UV': 'Assign UV', '分配貼圖': 'Assign texture', '切割 Cube': 'Cut cube',
+  '切割後兩端都必須至少保留兩個節點': 'Each side of the cut must retain at least two nodes',
+  '切換': 'Switch', '切換元素可見性': 'Toggle element visibility', '切換元素選項': 'Toggle element options',
+  '切斷曲線': 'Split curve', '加入參考圖': 'Add reference image', '可見性': 'Visibility',
+  '正在建立面關聯…': 'Building face relations…', '正在截取屏幕內模型…': 'Capturing model visible on screen…',
+  '正在離屏渲染模型…': 'Rendering model offscreen…', '生成貼圖模板': 'Generate texture template',
+  '目前 Java 版本只允許單軸旋轉，請拖動 X、Y 或 Z 軸圓環': 'This Java version only permits one-axis rotation. Drag the X, Y, or Z ring.',
+  '目前沒有可建立模板的 Cube': 'There are no cubes available for a template',
+  '目前沒有可聚焦的物件': 'There is no object to focus',
+  '目前變更尚未寫入工作記錄': 'Current changes have not been saved to the working journal',
+  '交點只能作為目標點，請先選普通頂點或樞軸點': 'Intersections can only be targets. Select a regular vertex or pivot first.',
+  '先選擇一個物件': 'Select an object first', '再選目標頂點或交點': 'Select a target vertex or intersection',
+  '向內延伸距離': 'Inward extension distance',
+  '刪除元素': 'Delete element', '刪除曲線節點': 'Delete curve node', '刪除參考圖': 'Delete reference image',
+  '刪除圖層': 'Delete layer', '刪除顏色': 'Delete color', '在此新增漸變節點': 'Add a gradient node here',
+  '至少保留一行色卡': 'Keep at least one palette row', '色彩空間預覽網格無法建立': 'Could not create the color-space preview grid',
+  '完成細分編輯': 'Finish Subdivision Edit', '折疊停靠區': 'Collapse dock', '展開停靠區': 'Expand dock',
+  '沒有可重做的操作': 'Nothing to redo', '沒有可重做的繪畫操作': 'No paint stroke to redo',
+  '沒有可撤銷的操作': 'Nothing to undo', '沒有可撤銷的繪畫操作': 'No paint stroke to undo',
+  '沒有可複製的選中項': 'No selected item to copy', '系統命名': 'System-generated name',
+  '尚未生成模型截圖': 'No model capture has been generated',
+  '尚有未寫入的操作，工作目錄已保留': 'The working directory was kept because some operations are still unwritten',
+  '底圖': 'Base image', '油漆桶填充': 'Bucket fill', '物件已刪除': 'Object deleted',
+  '直線繪製': 'Draw line', '保留細分編輯': 'Preserve Subdivision Edit', '屏幕截圖': 'Screen capture',
+  '建立 Cube': 'Create cube', '建立 Locator': 'Create locator', '建立 Shape': 'Create shape',
+  '建立貝塞爾曲線': 'Create Bezier curve', '建立組': 'Create group', '建立貼圖': 'Create texture',
+  '建立項目': 'Create project', '重設元素旋轉': 'Reset element rotation', '重設參考圖': 'Reset reference image',
+  '面漸變的第二點必須在同一個 UV 面': 'The second gradient point must be on the same UV face',
+  '面漸變的第二點必須在同一個面': 'The second gradient point must be on the same face',
+  '修改': 'Edit', '修改 Shape 內半徑': 'Edit shape inner radius', '修改 Shape 內半徑模式': 'Edit shape inner-radius mode',
+  '修改 Shape 吸附模式': 'Edit shape snap mode', '修改 UV 座標': 'Edit UV coordinates',
+  '修改元素三軸參數': 'Edit element XYZ values', '修改元素顏色': 'Edit element color',
+  '修改元素屬性': 'Edit element properties', '修改平鋪貼圖參數': 'Edit tiled texture settings',
+  '修改曲線分段': 'Edit curve segments', '修改曲線切線': 'Edit curve tangents',
+  '修改曲線手柄': 'Edit curve handles', '修改曲線滾動角': 'Edit curve roll',
+  '修改色卡': 'Edit palette', '修改背面剔除': 'Edit back-face culling',
+  '修改渲染類型': 'Edit render type', '修改貼圖模式': 'Edit texture mode',
+  '修改項目吸附精度': 'Edit project snap precision', '修改項目信息': 'Edit project information',
+  '修改器結果 · 唯讀': 'Modifier result · read-only',
+  '修改器結果只能作為目標捕捉點': 'Modifier results can only be target snap points',
+  '烘焙 Shape 為 Cube 組': 'Bake shape to cube group', '烘焙為 Cube 組': 'Bake to cube group',
+  '矩形繪製': 'Draw rectangle', '剪下元素': 'Cut elements', '剪切 Ctrl+X': 'Cut Ctrl+X',
+  '參考圖快照缺失': 'Reference-image snapshot is missing', '旋轉 UV': 'Rotate UV',
+  '旋轉元素': 'Rotate element', '深潭': 'Deep Pool', '移動 UV': 'Move UV',
+  '移動元素': 'Move element', '移動曲線節點': 'Move curve node',
+  '移動參考圖': 'Move reference image', '移動節點': 'Move node',
+  '移動層級': 'Move in hierarchy', '移動樞軸點': 'Move pivot',
+  '細分 Cube 由 Shape 管理，不能單獨刪除': 'Subdivision cubes belong to the shape and cannot be deleted individually',
+  '細分編輯期間只能選擇目前 Shape 內的 Cube': 'Only cubes in the current shape can be selected during Subdivision Edit',
+  '透明度 %': 'Opacity %', '這個 Shape 目前沒有可編輯的 Cube': 'This shape has no editable cubes',
+  '這個 Shape 沒有可烘焙的 Cube': 'This shape has no cubes to bake',
+  '這個元素沒有可繪畫的貼圖': 'This element has no paintable texture',
+  '這個面尚未分配貼圖，無法繪製': 'This face has no assigned texture and cannot be painted',
+  '這個格式尚未實現': 'This format is not implemented yet', '這個配置值無效': 'Invalid configuration value',
+  '單面局限時請先指向一個貼圖面': 'Point to a textured face before using single-face mode',
+  '場景中沒有可見模型': 'There is no visible model in the scene',
+  '場景中沒有可截屏的模型': 'There is no model to capture',
+  '無法生成 PNG': 'Could not generate PNG', '無法在目前視覺平面建立節點': 'Could not create a node on the current view plane',
+  '無法讀取這張圖片': 'Could not read this image', '無法讀取模型渲染結果': 'Could not read the model render',
+  '畫筆繪製': 'Brush stroke', '程序化 Shape 請先轉換為 Cube 才能編輯逐面 UV': 'Convert the procedural shape to cubes before editing per-face UVs',
+  '等待首次繪製時建立': 'Create on first paint stroke', '貼上 Ctrl+V': 'Paste Ctrl+V',
+  '貼上元素': 'Paste elements', '貼圖載入失敗': 'Texture load failed',
+  '貼圖轉換失敗': 'Texture conversion failed', '進入細分編輯': 'Enter Subdivision Edit',
+  '項目已保存': 'Project saved', '順時針旋轉 90°': 'Rotate clockwise 90°',
+  '僅桌面版可更改工作目錄': 'The workspace location can only be changed in the desktop app',
+  '新增': 'Add', '新增曲線節點': 'Add curve node', '暖岩': 'Warm Rock',
+  '圖層名稱': 'Layer name', '實際內半徑': 'Actual inner radius', '對稱手柄': 'Symmetric handles',
+  '漸變兩點距離太短': 'The gradient points are too close together',
+  '漸變填充': 'Gradient fill', '漸變範圍無效，或對應面沒有貼圖': 'Invalid gradient range or no texture on the target face',
+  '精確旋轉': 'Precise rotation', '聚焦此物件': 'Focus this object',
+  '模型截圖已保存': 'Model capture saved', '模型截圖已複製到剪切板': 'Model capture copied to clipboard',
+  '模組 ID 與包清單不一致': 'Module ID does not match the package manifest',
+  '模組版實體的 Cube 不能旋轉；請把它放入組後旋轉組': 'Cubes in modded entities cannot rotate; put the cube in a group and rotate the group',
+  '箱型 UV 只能整體移動，不能逐面重新指定': 'Box UVs can only move as a whole, not be reassigned per face',
+  '箱型 UV 的六面相對位置固定，不能單獨修改面座標': 'The six box-UV faces have fixed relative positions and cannot be edited individually',
+  '箱型 UV 的各面位置固定；可在預覽中整體移動': 'Box-UV face positions are fixed; move them together in the preview',
+  '箱型 UV 的面不能單獨鏡像': 'A box-UV face cannot be mirrored individually',
+  '編輯 Shape 細分': 'Edit shape subdivisions', '編輯貼圖組': 'Edit texture group',
+  '編輯貼圖圖層': 'Edit texture layer', '複製 Ctrl+C': 'Copy Ctrl+C',
+  '複製元素': 'Copy elements', '複製元素 Ctrl+D': 'Duplicate elements Ctrl+D',
+  '複製元素到剪貼簿': 'Copy elements to clipboard', '調整貼圖順序': 'Reorder textures',
+  '調整順序': 'Reorder', '請先在 UV 預覽中選擇 Cube 的面': 'Select a cube face in UV preview first',
+  '請先建立或導入貼圖': 'Create or import a texture first',
+  '請在一個 UV 面內選擇漸變點': 'Choose a gradient point inside a UV face',
+  '請指向一個元素的貼圖面': 'Point to a textured element face',
+  '請指向一個貼圖面': 'Point to a textured face', '操作器': 'Operator',
+  '橢圓繪製': 'Draw ellipse', '選擇同一 Cube 上的終點': 'Choose an endpoint on the same cube',
+  '選擇來源物件': 'Choose source object', '選擇面漸變終點': 'Choose the face-gradient endpoint',
+  '選擇圖層': 'Choose layer', '選擇顏色': 'Choose color',
+  '縮放 UV': 'Scale UV', '縮放元素': 'Scale element', '縮放參考圖': 'Scale reference image',
+  '面': 'Face', '面選擇': 'Face selection', '動畫模式': 'Animation mode',
+  '简体中文': 'Simplified Chinese', '繁體中文': 'Traditional Chinese',
+  '解鎖選中項': 'Unlock selection', '鎖定選中項': 'Lock selection',
+  '導入項目': 'Import project', '編輯模式': 'Edit mode', '繪畫模式': 'Paint mode',
+  '瀏覽器預覽不使用展開式工作目錄': 'Browser preview does not use expanded working directories',
+  '離屏渲染': 'Offscreen render', '繪畫貼圖': 'Paint texture', '繪畫對稱': 'Paint symmetry',
+  '鏡像 UV': 'Mirror UV', '關閉': 'Close', '顯示色': 'Display color',
+  '顯示圖層': 'Show layer', '體漸變的第二點必須在同一個 Cube': 'The second volume-gradient point must be on the same cube',
+  '體漸變需要在三維視圖的同一個 Cube 上選取兩點': 'Choose two points on the same cube in the 3D view for a volume gradient',
+  'Cube 尺寸': 'Cube size', 'Cube 不能旋轉；請旋轉其所屬的組': 'Cubes cannot rotate; rotate their parent group',
+  'PNG 圖片': 'PNG image', 'Shape 包掃描失敗': 'Could not scan shape packs',
+  'Shape 包載入失敗': 'Could not load shape pack', 'Shape 定義需要 id、label 和 generate': 'Shape definitions require id, label, and generate',
+  'Shape 細分 Cube': 'Shape subdivision cube', 'UV 編輯': 'UV edit',
   '未保存': 'Unsaved', '主選單': 'Main menu', '新建': 'New', '打開': 'Open', '保存': 'Save', '撤銷': 'Undo', '重做': 'Redo', 'CubeBricks 設定': 'CubeBricks Settings',
   '編輯': 'Edit', 'UV 編輯模式': 'UV Edit mode', '繪畫': 'Paint', '動畫': 'Animate', '設定': 'Settings', '導出': 'Export',
   '工具欄': 'Toolbar', '工具': 'Tools', '目前工具參數': 'Current tool options', '工具參數': 'Tool options',
@@ -253,7 +422,7 @@ const ENGLISH_UI = Object.freeze({
   '面陰影預覽': 'Shading preview', '對稱編輯': 'Symmetry editing', '鎖定透明度': 'Lock alpha',
   '吸附步長為 16 ÷ 精度；16 = 1px，32 = 0.5px': 'Snap step is 16 ÷ precision; 16 = 1px, 32 = 0.5px',
   '允許負尺寸': 'Allow negative size', '關閉時 Cube 最小尺寸為 0': 'When disabled, the minimum cube size is 0', '吸附精度': 'Snap precision',
-  '直接數值': 'Absolute value', '默認乘數': 'Default multiplier', '默認 4': 'Default 4', '默認 8': 'Default 8', '默認 64': 'Default 64',
+  '直接數值': 'Absolute value', '數值': 'Value', '乘數': 'Multiplier', '默認乘數': 'Default multiplier', '默認 4': 'Default 4', '默認 8': 'Default 8', '默認 64': 'Default 64',
   '顏色、圓角與介面縮放': 'Colors, corner radius, and UI scale', '強調色': 'Accent', '背景色': 'Background', '面板色': 'Panel',
   '視窗色': 'Viewport', '選中邊框': 'Selection outline', '圓角': 'Corner radius', '介面縮放': 'UI scale',
   '苔原': 'Moss', '琥珀': 'Amber', '熔岩': 'Ember', '深海': 'Slate', '恢復預設': 'Restore defaults', '完成': 'Done', '外觀已套用': 'Appearance applied',
@@ -367,6 +536,81 @@ export function translateUiText(source, language = configRegistry.get(ConfigKey.
   if (match) return `Pivot ${match[1]}`;
   match = text.match(/^(.+) 個$/);
   if (match) return match[1];
+  match = text.match(/^(.+?)失敗：(.+)$/);
+  if (match) return `${ENGLISH_UI[match[1]] || match[1]} failed: ${translateUiText(match[2], language)}`;
+  match = text.match(/^已(建立|新增|打開|導入|導出|複製|剪切|刪除|恢復|剔除|選|套用|烘焙)\s*(.+)$/);
+  if (match) {
+    const verbs = { 建立: 'Created', 新增: 'Added', 打開: 'Opened', 導入: 'Imported', 導出: 'Exported',
+      複製: 'Copied', 剪切: 'Cut', 刪除: 'Deleted', 恢復: 'Restored', 剔除: 'Culled',
+      選: 'Selected', 套用: 'Applied', 烘焙: 'Baked' };
+    return `${verbs[match[1]]} ${translateUiText(match[2], language)}`;
+  }
+  match = text.match(/^(目前渲染模式|目前|預覽)：(.+)$/);
+  if (match) return `${{ 目前渲染模式: 'Current render mode', 目前: 'Current', 預覽: 'Preview' }[match[1]]}: ${translateUiText(match[2], language)}`;
+  match = text.match(/^(節點|圖層|貼圖組|漸變節點)\s*(\d+)$/);
+  if (match) return `${ENGLISH_UI[match[1]] || { 節點: 'Node', 圖層: 'Layer', 貼圖組: 'Texture group', 漸變節點: 'Gradient node' }[match[1]]} ${match[2]}`;
+  match = text.match(/^(角度|距離|尺寸|滾動角|半徑|高度)\s+(.+)$/);
+  if (match) return `${ENGLISH_UI[match[1]] || match[1]} ${match[2]}`;
+  match = text.match(/^正在(建立|準備|截取|離屏渲染)(.+)$/);
+  if (match) return `${{ 建立: 'Creating', 準備: 'Preparing', 截取: 'Capturing', 離屏渲染: 'Rendering offscreen' }[match[1]]}${match[2]}`;
+  match = text.match(/^「(.+)」尚未保存，仍要關閉嗎？$/);
+  if (match) return `“${match[1]}” has not been saved. Close it anyway?`;
+  match = text.match(/^找到 (\d+) 個未保存的工作項目。要全部恢復到分頁嗎？$/);
+  if (match) return `Found ${match[1]} unsaved working projects. Restore all as tabs?`;
+  match = text.match(/^找到未保存的工作項目「(.+)」。要恢復嗎？$/);
+  if (match) return `Restore the unsaved working project “${match[1]}”?`;
+  match = text.match(/^(\d+) 個 Shape 包項目未載入，詳見主控台$/);
+  if (match) return `${match[1]} Shape pack items failed to load; see the console`;
+  match = text.match(/^已清理 (\d+) 個無效面；沒有可建立模板的面$/);
+  if (match) return `Cleaned ${match[1]} invalid faces; no faces remain for the template`;
+  match = text.match(/^模板尺寸 (.+) 過大，請降低吸附分辨率或間隔$/);
+  if (match) return `Template size ${match[1]} is too large; lower the snap resolution or spacing`;
+  match = text.match(/^(.+) · (北|南|東|西|上|下)( · 已剔除)?$/);
+  if (match) return `${match[1]} · ${{ 北: 'North', 南: 'South', 東: 'East', 西: 'West', 上: 'Up', 下: 'Down' }[match[2]]}${match[3] ? ' · Culled' : ''}`;
+  match = text.match(/^(平面等距|等比尺寸|等比縮放|縮放) (.+)$/);
+  if (match) return `${{ 平面等距: 'Uniform plane scale', 等比尺寸: 'Proportional size', 等比縮放: 'Uniform scale', 縮放: 'Scale' }[match[1]]} ${match[2]}`;
+  match = text.match(/^(前手柄|後手柄|對稱軸點) (.+)$/);
+  if (match) return `${ENGLISH_UI[match[1]]} ${match[2]}`;
+  match = text.match(/^(\d+) 行 · 縮略選色$/);
+  if (match) return `${match[1]} rows · compact palette`;
+  match = text.match(/^(.+) · 節點 (\d+)$/);
+  if (match) return `${match[1]} · Node ${match[2]}`;
+  match = text.match(/^(離屏渲染 · 自動框住可見模型|屏幕截圖 · 僅當前視窗範圍) · (.+)$/);
+  if (match) return `${match[1].startsWith('離屏') ? 'Offscreen render · fit visible model' : 'Screenshot · current viewport only'} · ${match[2]}`;
+  match = text.match(/^折疊(左側|右側|底部)停靠區$/);
+  if (match) return `Collapse ${{ 左側: 'left', 右側: 'right', 底部: 'bottom' }[match[1]]} dock`;
+  match = text.match(/^刪除(組及其內容|物件)$/);
+  if (match) return match[1] === '物件' ? 'Delete object' : 'Delete group and contents';
+  match = text.match(/^吸附精度 (.+)（(.+) px）$/);
+  if (match) return `Snap precision ${match[1]} (${match[2]} px)`;
+  match = text.match(/^無貼圖 · (.+)$/);
+  if (match) return `No texture · ${match[1]}`;
+  match = text.match(/^(.+) · 唯讀$/);
+  if (match) return `${match[1]} · Read-only`;
+  match = text.match(/^文件無法讀取：(.+)$/);
+  if (match) return `Cannot read file: ${match[1]}`;
+  match = text.match(/^未安裝的 Shape：(.+)$/);
+  if (match) return `Shape not installed: ${match[1]}`;
+  match = text.match(/^參考圖快照缺失：(.+)$/);
+  if (match) return `Reference-image snapshot missing: ${match[1]}`;
+  match = text.match(/^Shape (.+) 的 fields 不合法$/);
+  if (match) return `Shape ${match[1]} has invalid fields`;
+  match = text.match(/^Shape ID 已存在：(.+)$/);
+  if (match) return `Shape ID already exists: ${match[1]}`;
+  match = text.match(/^已加入「(.+)」 (.+)$/);
+  if (match) return `Added ${match[2]} to “${match[1]}”`;
+  match = text.match(/^繪畫顏色 (.+)$/);
+  if (match) return `Paint color ${match[1]}`;
+  match = text.match(/^自定義 (.+)$/);
+  if (match) return `Custom ${match[1]}`;
+  match = text.match(/^修改元素(.+)$/);
+  if (match) return `Edit element ${translateUiText(match[1], language)}`;
+  match = text.match(/^修改(.+)三軸參數$/);
+  if (match) return `Edit ${translateUiText(match[1], language)} axis values`;
+  match = text.match(/^修改(.+)：(.+)$/);
+  if (match) return `Edit ${translateUiText(match[1], language)}: ${translateUiText(match[2], language)}`;
+  match = text.match(/^修改(.+)$/);
+  if (match) return `Edit ${translateUiText(match[1], language)}`;
   return text;
 }
 

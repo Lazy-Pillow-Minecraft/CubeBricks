@@ -112,6 +112,29 @@ test('legacy working journals move into projects while locked or conflicting fol
   }
 });
 
+test('workspace home uses its index until the user explicitly refreshes it', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-index-test-'));
+  const apps = [];
+  const id = 'project_44444444-4444-4444-4444-444444444444';
+  try {
+    const app = await application(root);
+    apps.push(app);
+    assert.equal((await app.call('project:list-workspace')).length, 0);
+    const folder = path.join(root, 'profile', 'working-projects', 'projects', id);
+    const { ProjectJournal } = require('../electron/project-journal.cjs');
+    await new ProjectJournal(folder).initialize(JSON.stringify({ name: 'external',
+      elements: [], groups: [], textures: [], outliner: [] }));
+    assert.equal((await app.call('project:list-workspace')).length, 0,
+      'normal home navigation should not rescan every project folder');
+    const refreshed = await app.call('project:list-workspace', { refresh: true });
+    assert.equal(refreshed.length, 1);
+    assert.equal(refreshed[0].name, 'external');
+  } finally {
+    await Promise.all(apps.map(app => app.release()));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test('project UUID survives archive reopening and the same file reuses its working directory', async () => {
   const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-uuid-test-'));
   const apps = [];

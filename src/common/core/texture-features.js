@@ -1,5 +1,23 @@
 export const layerRasterCache = new Map();
 
+// Blockbench stores layer pixels in data_url, while native CubeBricks layers
+// use source. Normalize at the project boundary so the editor, preview and
+// undo all read the same image without changing the imported texture itself.
+export function normalizeTextureLayers(asset) {
+  if (!Array.isArray(asset?.layers) || !asset.layers.length) return null;
+  const textureId = asset.uuid || asset.id || asset._uid || 'texture';
+  const layers = asset.layers.map((layer, index) => {
+    const source = layer?.source || layer?.data_url;
+    if (typeof source !== 'string' || !source.startsWith('data:image/') && !source.startsWith('blob:')) return null;
+    const properties = { ...layer };
+    delete properties.data_url;
+    return { ...properties, uid: layer.uid || layer.uuid || `${textureId}_layer_${index}`,
+      source, visible: layer.visible !== false, opacity: Number.isFinite(Number(layer.opacity))
+        ? Number(layer.opacity) : 100 };
+  }).filter(Boolean);
+  return layers.length ? layers : null;
+}
+
 export function imageCanvas(source, width = source.width || source.naturalWidth, height = source.height || source.naturalHeight) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, width); canvas.height = Math.max(1, height);

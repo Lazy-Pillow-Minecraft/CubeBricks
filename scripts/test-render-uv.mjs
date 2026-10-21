@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { normalizeTextureLayers } from '../src/common/core/texture-features.js';
 import {
   createSignedCubeCorners,
+  cubeLifetimeScale,
+  scaleAroundPoint,
   createAtlasFaceUvs,
   createBlockbenchFaceUvSlots,
   createBlockbenchFaceUvs,
@@ -17,7 +20,50 @@ import {
   WebGLSceneRenderer
 } from '../src/render/webgl-renderer.js';
 
+assert.equal(cubeLifetimeScale('birth', 0), 0);
+assert.equal(cubeLifetimeScale('birth', 42), 1.05);
+assert.equal(cubeLifetimeScale('birth', 60), 1);
+assert.equal(cubeLifetimeScale('death', 0), 1);
+assert.equal(cubeLifetimeScale('death', 18), 1.05);
+assert.equal(cubeLifetimeScale('death', 60), 0);
+const center = [7, -3, 11];
+const centerMatrix = scaleAroundPoint(center, .25);
+assert.deepEqual(center.map((value, axis) => centerMatrix[axis * 5] * value + centerMatrix[12 + axis]), center,
+  'visual growth and shrink preserve the geometric center rather than the pivot');
+const removedCache = {
+  project: {}, triangles: new Array(12 * 12).fill(0), edges: new Array(12 * 4).fill(0),
+  cubePoints: new Map([
+    ['a', [[[0, 0, 0], [2, 2, 2]]]],
+    ['b', [[[10, 0, 0], [12, 2, 2]]]]
+  ]),
+  cubeTriangleRanges: new Map([['a', [{ start: 0, count: 6 }]], ['b', [{ start: 6, count: 6 }]]]),
+  cubeEdgeRanges: new Map([['a', [{ start: 0, count: 2 }]], ['b', [{ start: 2, count: 2 }]]])
+};
+const transitionProbe = {
+  cubeTransitionRevision: -1, geometryRevision: 1, cubeTransitionSource: removedCache,
+  cubeBirthMs: 60, cubeDeathMs: 60,
+  cubeTransitions: [], cubeBirthUids: new Set(), cubeBirthStartByUid: new Map(),
+  staticCache: { project: removedCache.project, cubePoints: new Map() },
+  gl: { createBuffer: () => ({}), deleteBuffer: () => {} },
+  uploadBuffer() {}
+};
+WebGLSceneRenderer.prototype.reconcileCubeTransitions.call(transitionProbe, removedCache.project);
+assert.equal(transitionProbe.cubeTransitions.length, 1, 'multi-delete uses one visual batch');
+assert.deepEqual(transitionProbe.cubeTransitions[0].center, [6, 1, 1],
+  'the multi-delete batch shrinks around its combined geometric center');
+assert.equal(transitionProbe.cubeTransitions[0].triangleCount, 12);
+
 assert.equal(hasAssignedFaceTexture(undefined), false, 'a cube face without a texture stays untextured');
+const importedLayers = normalizeTextureLayers({ uuid: 'bb_texture', layers: [
+  { name: 'base', data_url: 'data:image/png;base64,AA==', visible: true, opacity: 100 },
+  { name: 'detail', data_url: 'data:image/png;base64,BB==', visible: true, opacity: 80 }
+] });
+assert.equal(importedLayers.length, 2, 'Blockbench data_url layers are retained');
+assert.equal(importedLayers[0].source, 'data:image/png;base64,AA==');
+assert.equal('data_url' in importedLayers[0], false, 'pixel data is not duplicated in saved projects');
+assert.equal(importedLayers[1].uid, 'bb_texture_layer_1');
+assert.equal(normalizeTextureLayers({ layers: [{ name: 'missing pixels' }] }), null,
+  'invalid layers fall back to the baked texture');
 assert.equal(hasAssignedFaceTexture({ uv: [0, 0, 16, 16] }), false,
   'UV coordinates alone do not implicitly assign a texture');
 assert.equal(hasAssignedFaceTexture({ texture: null }), false,
@@ -65,6 +111,11 @@ assert.deepEqual(createAtlasFaceUvs([0, 0, 16, 8], 0,
   [.5, .75], [.5, .5], [.75, .75],
   [.5, .5], [.75, .5], [.75, .75]
 ], 'per-face texture UVs are remapped into their own runtime atlas rectangle');
+assert.deepEqual(createAtlasFaceUvs([0, 0, 16, 8], 0,
+  { x: 32, y: 8, width: 64, height: 32, uvWidth: 16, uvHeight: 8 }, [128, 64]), [
+  [.25, .875], [.25, .375], [.75, .875],
+  [.25, .375], [.75, .375], [.75, .875]
+], 'high-density PNGs scale logical Blockbench UV units before atlas placement');
 
 const head = { uv: [0, 0], size: [8, 10, 8], mirrorUv: false };
 assert.deepEqual(getBlockbenchBoxUv(head, 'east'), [0, 8, 8, 18]);

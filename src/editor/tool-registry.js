@@ -7,6 +7,7 @@ export const TOOL_REGISTRY = Object.freeze({
   knife: { modes: ['edit'] },
   faceSelect: { modes: ['edit', 'uv'] },
   brush: { modes: ['paint'] },
+  paintSelection: { modes: ['paint'] },
   line: { modes: ['paint'] },
   rectangle: { modes: ['paint'] },
   ellipse: { modes: ['paint'] },

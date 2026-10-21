@@ -509,8 +509,35 @@ function renderVertexSnapGizmo(gizmo, width, height) {
   gizmo.removeAttribute('hidden');
 }
 
+function renderRotationPivotVertices(gizmo, width, height, selectionContext, item) {
+  const target = selectionContext.multiple ? selectionContext.commonGroup : item;
+  if (!target || !(['cube', 'group'].includes(target.type) || isShapeElement(target))) {
+    state.rotationPivotVertices = [];
+    gizmo.setAttribute('hidden', '');
+    gizmo.innerHTML = '';
+    return;
+  }
+  const vertices = sceneRenderer.getWorldVertices(state.project, target.uid)
+    .map(entry => ({ ...entry, targetUid: target.uid, projected: projectViewportPoint(entry.point) }))
+    .filter(entry => !entry.projected.behind && entry.projected.x >= -13 && entry.projected.y >= -13
+      && entry.projected.x <= width + 13 && entry.projected.y <= height + 13)
+    .sort((left, right) => right.projected.depth - left.projected.depth);
+  state.rotationPivotVertices = vertices;
+  gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  gizmo.innerHTML = vertices.map((entry, index) => `<g class="gizmo-control rotation-pivot-vertex" data-kind="rotation-pivot-vertex"
+      data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected])}>
+      <circle class="gizmo-hit-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="14"/>
+      <path class="gizmo-visible rotation-pivot-vertex-mark" d="M${entry.projected.x},${entry.projected.y - 6}
+        L${entry.projected.x + 6},${entry.projected.y} L${entry.projected.x},${entry.projected.y + 6}
+        L${entry.projected.x - 6},${entry.projected.y} Z"/>
+    </g>`).join('');
+  sortGizmoControlsByDepth(gizmo);
+  gizmo.toggleAttribute('hidden', vertices.length === 0);
+}
+
 function updateTransformGizmo() {
   const gizmo = $('#transformGizmo');
+  state.rotationPivotVertices = [];
   if (state.mode === 'paint') {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
     gizmo.setAttribute('hidden', '');
@@ -538,6 +565,11 @@ function updateTransformGizmo() {
   }
   const curveNodeContext = activeCurveNodeContext();
   const selectionContext = getSelectionTransformContext();
+  if (state.tool === 'rotate' && state.rotationVertexPick) {
+    state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
+    renderRotationPivotVertices(gizmo, width, height, selectionContext, item);
+    return;
+  }
   if (state.tool === 'resize' && (modifierAnchorContext || curveNodeContext || (!selectionContext.multiple && !['cube', 'group'].includes(item.type) && !isShapeElement(item)))) {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
     if (editorOverlay) {

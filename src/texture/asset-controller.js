@@ -1,4 +1,4 @@
-import { activeLayer, compositeLayers, imageCanvas, loadRaster, prepareLayers, tiledFaceRaster } from '../common/core/texture-features.js';
+import { activeLayer, compositeLayers, imageCanvas, loadRaster, normalizeTextureLayers, prepareLayers, tiledFaceRaster } from '../common/core/texture-features.js';
 import { formatRules } from '../common/core/format-constraints.js';
 
 export function createTextureAssetController({
@@ -57,12 +57,14 @@ function addTextureGroup() {
 function updateLayerCompositePreview(asset, canvas) {
   if (asset && asset._uid !== state.activeTextureUid) return;
   const preview = $('#textureLayerComposite');
-  const layered = Boolean(asset?.layers?.length);
-  preview.hidden = !layered;
-  textureCanvas.style.opacity = layered ? '0' : '';
-  if (layered && canvas) {
+  const showComposite = Boolean(asset?.layers?.length && canvas?.width && canvas?.height);
+  preview.hidden = !showComposite;
+  textureCanvas.style.opacity = showComposite ? '0' : '';
+  if (!asset) textureCanvas.style.visibility = '';
+  if (showComposite) {
     preview.width = canvas.width; preview.height = canvas.height;
     const context = preview.getContext('2d');
+    context.imageSmoothingEnabled = false;
     context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(canvas, 0, 0);
   }
 }
@@ -145,11 +147,11 @@ async function addTextureLayer() {
   pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
   if (!asset.layers?.length) {
     const raster = await loadRaster(asset.source);
-    asset.uvWidth = raster.width; asset.uvHeight = raster.height;
+    asset.uvWidth ||= raster.width; asset.uvHeight ||= raster.height;
     asset.layers = [{ uid: crypto.randomUUID(), name: '底圖', source: raster.toDataURL('image/png'), visible: true, opacity: 100 }];
   }
   await prepareLayers(asset);
-  const canvas = document.createElement('canvas'); canvas.width = asset.uvWidth || textureCanvas.width; canvas.height = asset.uvHeight || textureCanvas.height;
+  const canvas = document.createElement('canvas'); canvas.width = textureCanvas.width; canvas.height = textureCanvas.height;
   const layer = { uid: crypto.randomUUID(), name: `圖層 ${asset.layers.length + 1}`, source: canvas.toDataURL('image/png'), visible: true, opacity: 100 };
   asset.layers.push(layer); asset.activeLayerUid = layer.uid;
   await refreshLayeredTexture(asset);
@@ -296,10 +298,12 @@ function importTexture(file) {
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, image.naturalWidth, image.naturalHeight);
     textureCtx.drawImage(image, 0, 0);
+    textureCanvas.style.visibility = '';
+    window.dispatchEvent(new Event('cubebricks:texture-change'));
     syncRendererTexture(textureCanvas);
     renderScene();
     renderTextureFeatureControls();
-    updateTexturePreviewFrame(image.naturalWidth, image.naturalHeight);
+    updateTexturePreviewFrame(asset?.uvWidth || image.naturalWidth, asset?.uvHeight || image.naturalHeight);
     renderTextureList();
     rebuildTextureAtlas();
     markDirty();
@@ -317,13 +321,21 @@ function loadTextureSource(source, name) {
     if (revision !== textureLoadRevision) return;
     pendingTextureImage = null;
     const asset = activeTextureAsset();
-    if (asset) { asset.uvWidth = image.naturalWidth; asset.uvHeight = image.naturalHeight; }
+    // Blockbench may declare UV coordinates in a smaller logical resolution
+    // than the actual high-density PNG. Keep those declared units intact.
+    if (asset) {
+      const fallback = state.project.meta?.importedFrom === 'bbmodel' ? state.project.textureSize : null;
+      asset.uvWidth ||= fallback?.[0] || image.naturalWidth;
+      asset.uvHeight ||= fallback?.[1] || image.naturalHeight;
+    }
     textureCanvas.width = image.naturalWidth;
     textureCanvas.height = image.naturalHeight;
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, image.naturalWidth, image.naturalHeight);
     textureCtx.drawImage(image, 0, 0);
-    updateTexturePreviewFrame(image.naturalWidth, image.naturalHeight);
+    textureCanvas.style.visibility = '';
+    window.dispatchEvent(new Event('cubebricks:texture-change'));
+    updateTexturePreviewFrame(asset?.uvWidth || image.naturalWidth, asset?.uvHeight || image.naturalHeight);
     const activeName = $('.texture-item.active strong');
     if (activeName) activeName.textContent = name;
     syncRendererTexture(textureCanvas);
@@ -340,7 +352,8 @@ function loadTextureSource(source, name) {
 
 function installProjectTextures(assets) {
   state.textureGroups = [];
-  state.textureAssets = assets.map(asset => ({ ...asset, _uid: textureUid(asset), groupId: asset.groupId || null }));
+  state.textureAssets = assets.map(asset => ({ ...asset, _uid: textureUid(asset), groupId: asset.groupId || null,
+    layers: normalizeTextureLayers(asset) }));
   state.activeTextureUid = null;
   if (!assets.length) {
     renderTextureList();
@@ -356,11 +369,19 @@ function installProjectTextures(assets) {
 function activateProjectTexture(index) {
   const asset = state.textureAssets[index];
   if (!asset) return;
+  const switchingAsset = state.activeTextureUid !== asset._uid;
+  // Reject an earlier image load before asynchronous layer preparation begins.
+  const activationRevision = ++textureLoadRevision;
   state.activeTextureUid = asset._uid;
+  if (switchingAsset) {
+    updateLayerCompositePreview(asset, null);
+    textureCanvas.style.visibility = 'hidden';
+  }
+  if (asset.uvWidth && asset.uvHeight) updateTexturePreviewFrame(asset.uvWidth, asset.uvHeight);
   $$('.texture-item').forEach(item => item.classList.toggle('active', item.dataset.textureUid === asset._uid));
   renderTextureFeatureControls();
   if (asset.layers?.length) prepareLayers(asset).then(() => {
-    if (state.activeTextureUid !== asset._uid) return;
+    if (state.activeTextureUid !== asset._uid || activationRevision !== textureLoadRevision) return;
     loadTextureSource(activeLayer(asset).source, asset.name);
     updateLayerCompositePreview(asset, compositeLayers(asset));
   }).catch(error => toast(error.message));

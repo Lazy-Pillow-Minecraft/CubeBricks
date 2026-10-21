@@ -202,6 +202,15 @@ assert.equal('_cubebricksCulledTexture' in culledExport.elements[0].faces.north,
   'the editor-only cull restore texture does not leak into bbmodel export');
 
 const mirrorCube = new Cube({ uid: 'mirror-cube', name: 'petal', position: [2, 0, 0], size: [2, 3, 1], pivot: [2, 0, 0] });
+const overlappingCube = new Cube({ uid: 'overlap-cube', position: [-1, 0, 0], size: [2, 2, 2], pivot: [0, 0, 0] });
+const overlapProject = new CubeBricksProject({ elements: [overlappingCube], outliner: [overlappingCube.uid] });
+const overlapModifier = addModifier(overlapProject.getNode(overlappingCube.uid), 'symmetry');
+assert.equal(overlapModifier.ignoreDuplicateCubes, true, 'new mirror modifiers enable overlap removal by default');
+assert.equal(buildModifierRenderInstances(overlapProject).some(instance => instance.sourceUids.includes(overlappingCube.uid)), false,
+  'an overlapping mirrored cube is excluded immediately');
+overlapProject.getNode(overlappingCube.uid).position[0] = 1;
+assert.equal(buildModifierRenderInstances(overlapProject).some(instance => instance.sourceUids.includes(overlappingCube.uid)), true,
+  'deduplication responds to changed source geometry without leaving a stale result');
 const mirrorGroup = new Group({
   uid: 'mirror-group', name: 'wing', children: [mirrorCube.uid],
   mirror: { enabled: true, mode: 'axes', axes: { x: true, y: false, z: true }, wrapParent: false }

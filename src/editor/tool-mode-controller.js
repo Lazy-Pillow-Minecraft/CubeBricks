@@ -107,7 +107,7 @@ function updateToolOptions() {
   const lane = $('#toolOptionsLane');
   const labels = {
     move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇',
-    brush: '畫筆', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', gradient: '漸變', eyedropper: '取色器'
+    brush: '畫筆', paintSelection: '繪畫選區', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', gradient: '漸變', eyedropper: '取色器'
   };
   const paintTool = PAINT_TOOLS.includes(state.tool);
   lane.hidden = !labels[state.tool];
@@ -123,7 +123,26 @@ function updateToolOptions() {
     ? state.vertexSnapIntersections ? '再選目標頂點或交點' : '再選目標頂點'
     : '先選來源頂點';
   $('#knifeStatus').hidden = state.tool !== 'knife';
-  $('#paintToolOptions').hidden = !paintTool;
+  $('#paintToolOptions').hidden = !paintTool && state.tool !== 'paintSelection';
+  $('#paintSelectionModeControl').hidden = state.tool !== 'paintSelection';
+  $('#paintSelectionBrushControl').hidden = state.tool !== 'paintSelection' || state.paintSelectionMode !== 'brush';
+  $('#paintSelectionSymmetryControl').hidden = state.tool !== 'paintSelection';
+  const selectionTransform = state.tool === 'paintSelection' && state.paintSelectionMode === 'transform';
+  $('#paintSelectionTransformControl').hidden = !selectionTransform;
+  $('#paintSelectionFreeRotateControl').hidden = !selectionTransform || state.paintSelectionTransformMode !== 'rotate';
+  for (const id of ['#paintSelectionCopy', '#paintSelectionRotateLeft', '#paintSelectionRotateRight']) $(id).hidden = !selectionTransform;
+  $('#paintSelectionTransformMode').value = state.paintSelectionTransformMode;
+  $('#paintSelectionFreeRotate').checked = state.paintSelectionFreeRotate;
+  $('#paintSelectionCopy').textContent = `複製像素：${state.paintSelectionCopy ? '開' : '關'}`;
+  $('#paintSelectionClear').hidden = state.tool !== 'paintSelection';
+  $('#paintSelectionMode').value = state.paintSelectionMode;
+  $('#paintSelectionBrushSize').value = String(state.paintSelectionBrushSize);
+  $('#paintSelectionSymmetry').checked = state.paintSelectionSymmetry;
+  for (const selector of ['#paintEraseControl', '#paintBrushSize', '#paintBrushShapeControl', '#paintBrushAaControl', '#paintBrushDepthControl', '#paintBrushOverlayControl', '#paintBrushOpacity', '#paintBucketScopeControl', '#paintBucketSingleFaceControl', '#paintGradientModeControl', '#paintGradientPaletteControl', '#paintGradientStartControl', '#paintGradientStartAlphaControl', '#paintGradientEndControl', '#paintGradientEndAlphaControl']) {
+    const control = $(selector);
+    if (state.tool === 'paintSelection') control.closest('label,button')?.setAttribute('data-selection-hidden', '');
+    else control.closest('label,button')?.removeAttribute('data-selection-hidden');
+  }
   $('#paintEraseControl').hidden = !PAINT_ERASE_TOOLS.includes(state.tool);
   $('#paintEraseMode').checked = paintToolErasing();
   $('#paintBrushSize').disabled = ['eyedropper', 'fill', 'gradient'].includes(state.tool);
@@ -147,7 +166,7 @@ function updateToolOptions() {
   $('#paintGradientEndControl').disabled = state.paintGradientPalette;
   $('#paintGradientStartAlpha').disabled = state.paintGradientPalette;
   $('#paintGradientEndAlpha').disabled = state.paintGradientPalette;
-  $('#snapButton').hidden = paintTool;
+  $('#snapButton').hidden = paintTool || state.tool === 'paintSelection';
   const knifePreview = getKnifePreviewLabel();
   $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
   if (!lane.hidden) $('#toolContext').textContent = labels[state.tool];

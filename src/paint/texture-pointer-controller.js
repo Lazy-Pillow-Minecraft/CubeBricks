@@ -1,4 +1,5 @@
 import { PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
+import { paintSelectionAllows } from './selection-controller.js';
 
 export function createTexturePaintPointerController({
   state, $, textureCanvas, textureCtx, toast, pushTexturePaintHistory,
@@ -41,6 +42,7 @@ function useTexturePaintGradient(asset, point, hit) {
   const minProjection = Math.min(...projections), maxProjection = Math.max(...projections);
   const projectionSpan = Math.max(1e-8, maxProjection - minProjection);
   for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
+    if (!paintSelectionAllows(state, asset._uid, x, y, textureCanvas.width, textureCanvas.height)) continue;
     const projection = (x + .5 - anchor.point[0]) * direction[0] + (y + .5 - anchor.point[1]) * direction[1];
     const rgba = samplePaintGradient((projection - minProjection) / projectionSpan, stops);
     blendRgbaPixel(image.data, (y * textureCanvas.width + x) * 4, rgba, paintToolOpacity('gradient'));
@@ -60,7 +62,9 @@ function startTexturePaintPointer(event) {
   }
   const point = paintPointFromEvent(event);
   if (!paintPointInside(point)) return;
-  const hit = textureUvHit(allTextureUvEntriesForAsset(asset), point);
+  const logicalPoint = [point[0] * (asset.uvWidth || textureCanvas.width) / textureCanvas.width,
+    point[1] * (asset.uvHeight || textureCanvas.height) / textureCanvas.height];
+  const hit = textureUvHit(allTextureUvEntriesForAsset(asset), logicalPoint);
   if (state.tool === 'gradient') {
     useTexturePaintGradient(asset, point, hit);
     return;

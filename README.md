@@ -24,7 +24,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 
 - 修改器由獨立註冊表管理，可按物件類型聲明兼容範圍、默認資料與是否允許重複掛載。
 - 組與單一物件各自保存修改器棧；物件屬性使用獨立的「修改器」頁面管理新增、啟用、排序、折疊與刪除。
-- 內置對稱修改器支援 XYZ 鏡像、徑向旋轉與曼陀羅模式，可重複掛載並依棧順序處理前一個修改器的結果。
+- 內置對稱修改器支援 XYZ 鏡像、徑向旋轉與曼陀羅模式，可重複掛載並依棧順序處理前一個修改器的結果；新掛載時預設忽視重疊 Cube，幾何和軸點變動時會刷新結果。
 - 每個修改器都可單獨烘焙，把該層結果轉成可編輯內容而不必一次套用整個修改器棧。
 - 對稱軸點是所有者內部資料，不會在場景層級生成額外節點；它仍可在主視圖直接選取、移動與旋轉，也不會污染導出結果。
 - 對稱預覽重用已有 GPU 幾何；導出 `.bbmodel` 時才展開實例，並修正負行列式變換的繞序與 UV 鏡像。
@@ -42,7 +42,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 ### 三維編輯
 
 - 移動、縮放、旋轉與樞軸工具具有三維軸、平面及中心手柄；中鍵始終保留給攝像機。
-- 移動與旋轉支援全局、父級和自身參考；自身旋轉可選姿態或歐拉角模式。
+- 移動與旋轉支援全局、父級和自身參考，預設使用自身；自身旋轉可選姿態或歐拉角模式。旋轉時按住 Alt 可顯示選中物件的頂點，點擊頂點會將樞軸移至該處而不移動幾何。
 - 組縮放與多選縮放共用批量操作；每個元素從自己的初始參數計算尺寸和位置補償。縮放手柄使用參與元素的平均軸方向。
 - 樞軸移動會補償幾何位置，只改變旋轉中心而不改變模型外觀。
 - 頂點捕捉支援移動、縮放、旋轉及樞軸點操作；可選的「交點顯示」會標出選中元素邊線與周圍幾何的線線／線面交點，交點只能作為目標點。
@@ -58,6 +58,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 網格、線框、選中覆蓋與輔助線使用獨立抗鋸齒路徑，不受模型表面的 Mipped 設定影響。
 - 操作與對稱引導線按三維空間投影，具有最大延伸距離和末端淡出；接近朝向攝像機時會淡化。
 - 鎖定物件可使用獨立淡化層和螢幕空間漸變區域，不會改寫材質本身的透明度。
+- Cube 新增與刪除使用純視覺的幾何中心縮放動畫；出現、消失時長可分別在「設定 → 視圖」調整，設為 0 即停用，預設各 60ms。
 - 一般視圖與 X／Y／Z 軸向視圖可分別導入多張參考圖；軸向視圖固定使用正交投影，同軸再次點擊可切換正負方向，中鍵專用於平移。
 - 可啟用獨立的玩家尺寸與姿態參考，使用內置皮膚或在設定中替換自定義紋理；參考不參與選取、工程保存與模型導出。
 - 在主視圖空白處右鍵可截屏模型：屏幕截圖只保留目前視窗內的模型，離屏渲染會自動框住可見模型；兩者均使用透明背景，並可預覽、複製或另存為 PNG。
@@ -69,12 +70,14 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 貼圖本身可切換默認、平鋪、動畫三種模式；動畫目前為佔位。面各自保留普通 UV 和平鋪的單片寬高、X／Y 偏移，換貼圖不清除另一套資訊。
 - 拖動列表貼圖時顯示鼠標縮略圖，可直接賦予模型的面；多選時同時賦予所有所選元素的同方向面。平鋪渲染單片快取最高 1024 × 1024px，超出需求的面僅在渲染中拆片，不改動模型、導出結構或模板烘焙。
 - 元素顯示色與一般顏色欄可使用方形、圓形或三角形 HSV 彈窗；BBModel 的 Cube 調色板索引會轉換為對應顯示色，導出時選取最接近的標準色。
-- 貼圖窗口支援多面選取、UV 移動與拉伸、吸附、聚焦、縮放和平移。
+- 貼圖窗口支援多面選取、UV 移動與拉伸、吸附、聚焦、縮放和平移；棋盤背景固定在窗口內，不隨貼圖縮放。
+- 導入高解析度 BBModel 貼圖時保留其宣告的邏輯 UV 尺寸；模型圖集會按實際 PNG 像素尺寸換算，貼圖窗口的 UV 框則維持在邏輯座標上。
 - UV 預覽只渲染選中內容，可選自動旋轉、面向配色、面旋轉及鏡像標記；繪畫時同步使用最新畫布，停用時停止渲染排程。
 - 可建立紋理模板、純色模板或空白貼圖。模板生成會按工程基礎吸附分辨率歸一化尺寸，為非零邊長保留至少 1px，並可清理零面積無效面；UV 使用緊密的矩形裝箱排列，畫布可選 2 冪或指定倍數。
 - 繪畫模式可直接在二維貼圖、Cube 與程序化 Shape 表面作畫，提供畫筆、直線、矩形、橢圓、油漆桶、漸變與取色器；除漸變外，繪製工具可切換擦除模式，並各自記憶尺寸與透明度。鎖定透明度與忽視全透明像素是獨立開關；不同面可引用不同貼圖。
 - 繪畫時可按住 Alt 臨時切換至取色器，鬆開後立即返回原本工具；臨時切換不會清除尚未完成的漸變選點。
 - 畫筆支援方形／圓形筆尖、抗鋸齒、透明度與三維跨面連續筆畫。筆刷深度會沿 Cube 的實際鄰面及 UV 朝向延伸，疊加繪製只同步處理最前方完全重合的面，不會穿透模型。
+- 繪畫選區可在貼圖或模型面建立拉框、塗抹和自由圈選；Shift 追加、Ctrl 擦除。貼圖窗口中的「像素變換」可拖動選中像素、選擇保留原像素的複製模式，或旋轉 90°；自由旋轉會從起始像素重新取樣，以免連續調角累積破洞和畫質誤差。
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
 - 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算；常用的近期顏色顯示在選色器下方。
 - 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。漸變節點以彩色圓點及下方非互動豎線標識：只拖圓點，右鍵圓點或聚焦色卡後按 Delete 可刪除；在漸變條空白處按右鍵可插入節點。
@@ -166,6 +169,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 雙色漸變先點擊第一色或第二色色槽，再在右側選色器調色；兩端 Alpha 可獨立設定。啟用「使用色卡」後會改用目前選中色卡的全部顏色。
 - 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。漸變條的圓形節點可選取；其下方豎線只作位置標記，不可拖動。自定義分段可拖動圓點調整間隔，平均分與曲線長度模式拖動圓點可重排節點；右鍵漸變條空白處可新增節點。
 - 繪畫模式中的場景層級可查找、選取、聚焦及切換元素可見性／鎖定；修改模型幾何需回到編輯模式。畫筆等非漸變工具直接使用右側選色器的當前顏色。桌面版的 `Ctrl+Z`／`Ctrl+Shift+Z` 依當前項目的操作記錄撤銷／重做，包含繪畫與貼圖指派。
+- 使用「繪畫選區」建立範圍後，在工具參數把選區切到「像素變換」：選「移動」可在貼圖窗口拖動範圍內像素；啟用「複製像素」會保留原像素並拖出副本；「↶ 90°／↷ 90°」可逐次轉動。「旋轉」模式拖動時預設按 90° 吸附，勾選「自由旋轉」即可解除。三維視圖用於建立選區，像素變換在二維貼圖窗口進行。
 
 ### 使用繪畫對稱
 
@@ -260,12 +264,12 @@ electron/                 Electron 主程序與桌面整合
 src/app.js                編輯器啟動與模組依賴組裝
 src/common/               配置、註冊表與跨功能機制
 src/screen/               停靠窗口、參考圖、選色器與色卡界面
-src/utils/                向量、旋轉與排版等純計算
+src/utils/                向量、旋轉、Shape 幾何與排版等公共計算；向外部 Shape 包提供 API
 src/editor/               共享狀態、工具註冊與建模交互
 src/paint/                繪畫與對稱關聯
 src/texture/              貼圖模板、圖層與像素處理
 src/model.js              工程資料、幾何、修改器／操作器實例與格式轉換
-src/shapes/               內置 Shape、共享幾何與外部包載入
+src/shapes/               內置 Shape 定義、註冊表與外部包載入
 src/render/               WebGL 場景與 UV 預覽渲染
 scripts/                  預覽服務、測試與輔助工具
 ```
@@ -298,7 +302,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 
 - Modifiers are managed by an extensible registry that declares compatible object types, default data, and whether a modifier can be stacked more than once.
 - Groups and individual objects keep separate modifier stacks. A dedicated Modifiers property page handles creation, enabling, ordering, collapsing, and deletion.
-- The built-in symmetry modifier supports XYZ mirroring, radial repetition, and mandala symmetry. Multiple instances can be stacked, with each modifier processing the previous result.
+- The built-in symmetry modifier supports XYZ mirroring, radial repetition, and mandala symmetry. Multiple instances can be stacked, with each modifier processing the previous result. Newly attached modifiers ignore overlapping cubes by default and refresh after geometry or anchor edits.
 - Each modifier can be baked independently, turning that layer into editable content without applying the entire stack.
 - Symmetry anchors are internal owner data rather than extra hierarchy nodes. They remain directly selectable, movable, and rotatable in the viewport without polluting exports.
 - Symmetry previews reuse existing GPU geometry. Instances are expanded only when exporting `.bbmodel`, including winding and mirrored-UV correction for negative-determinant transforms.
@@ -316,7 +320,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 ### 3D editing
 
 - Move, scale, rotate, and pivot tools provide 3D axis, plane, and center handles. The middle mouse button is always reserved for the camera.
-- Move and rotate support global, parent, and local reference spaces. Local rotation offers pose and Euler modes.
+- Move and rotate support global, parent, and local reference spaces, defaulting to local. Local rotation offers pose and Euler modes. Hold Alt while rotating to show the selected object's vertices; clicking one moves its pivot there without moving the geometry.
 - Groups and multi-selected elements share batch scaling. Each element calculates its size and position compensation from its own starting parameters, and scale gizmos use the participating elements' average axis directions.
 - Moving a pivot compensates the geometry position, changing only the rotation center without changing the visible model.
 - Vertex snapping supports move, scale, rotate, and pivot operations. Optional intersection markers show where selected edges meet nearby edges or faces; these points can only be snap targets.
@@ -332,6 +336,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Grids, wireframes, selection overlays, and guides use an independent antialiasing path and are not affected by the model-surface Mipped option.
 - Transform and symmetry guide lines are projected from 3D space, have a maximum length, and fade at their ends. They also fade when nearly aligned with the camera direction.
 - Locked objects can use a separate fade layer and a screen-space pointer gradient without modifying material transparency.
+- Cube creation and removal use visual-only geometric-center scaling. Set separate appearance/disappearance durations under Settings → View (0 disables either animation; both default to 60 ms).
 - General, X, Y, and Z views can each contain multiple reference images. Axis views are always orthographic; clicking the same axis again reverses direction, and middle-drag always pans.
 - An independent player scale and pose reference can use the bundled skin or a custom texture from Settings. It is excluded from selection, project files, and model exports.
 - Right-click empty viewport space to capture the model. Screen capture keeps only model pixels inside the current view; offscreen rendering frames the visible model. Both have transparent backgrounds and can be previewed, copied, or saved as PNG.
@@ -343,11 +348,13 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Texture assets switch between default, tiled, and animation modes; animation is currently a placeholder. Faces retain both ordinary UVs and tile dimensions/offsets when textures or modes change.
 - Drag textures from the list with a cursor thumbnail to assign them to model faces. Multi-selection assigns the same face direction across selected elements. Tiled render caches are capped at 1024 × 1024px per piece; larger faces are split only for rendering, without changing model data, export structure, or template baking.
 - Element display colors and ordinary color fields can use square, circular, or triangular HSV popups. BBModel cube palette indices are converted to display colors; export selects the nearest standard palette color.
-- The texture panel supports multi-face selection, UV movement and resizing, snapping, focus, zoom, and pan.
+- The texture panel supports multi-face selection, UV movement and resizing, snapping, focus, zoom, and pan. Its checkerboard background stays fixed while the texture moves or zooms.
+- High-resolution BBModel imports retain their declared logical UV dimensions. The model atlas maps those units to actual PNG pixels, while the texture panel keeps UV outlines in logical coordinates.
 - UV Preview renders only selected content and can show automatic rotation, face-direction colors, face rotation, and mirror markers. Painting uses the latest live canvas; disabling the panel stops its render scheduling.
 - Texture templates, solid-color templates, and blank textures can be created. Template generation normalizes sizes against the project base snapping resolution, preserves at least one pixel for non-zero edges, can remove zero-area faces, packs UV rectangles tightly, and supports power-of-two or custom-multiple canvases.
 - Paint mode works directly on 2D textures, cubes, and procedural shape surfaces. Brush, line, rectangle, ellipse, and fill each offer an erase mode and remember their own size and opacity. Alpha lock and ignore fully transparent pixels are separate options. Gradient and eyedropper remain available, and each face may reference a different texture.
 - Painting never assigns the active texture to an untextured face implicitly. The 3D viewport reports the missing assignment and leaves model data unchanged until a texture is explicitly attached.
+- Paint Selection supports rectangle, brush, and freehand masks in the texture view or on model faces, with Shift to add and Ctrl to subtract. In the texture view, Pixel Transform moves selected pixels, optionally copies them while retaining the originals, and rotates by 90° steps or freely. Free-angle previews always resample the starting pixels rather than a prior preview.
 - Holding Alt temporarily activates the eyedropper and releasing it restores the previous tool. Temporary switching preserves an unfinished gradient selection.
 - Brushes support square and round tips, antialiasing, opacity, and continuous 3D strokes across faces. Brush depth follows actual shared cube edges and each neighboring face's UV orientation. Coincident painting affects exactly overlapping surfaces at the first eligible depth. With "ignore fully transparent" enabled, 3D paint can reach colored pixels behind transparent faces; a stroke keeps its original alpha hit map so erasing the front face cannot tunnel into the next layer.
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
@@ -439,6 +446,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - In two-color mode, click the first or second stop button and edit that stop in the right-side picker. Each stop has independent alpha. Enabling **Use Palette** switches to every color in the selected palette row.
 - Palette rows independently support discrete or gradient display and allow color selection, insertion, deletion, and drag reordering. Only the circular head of a gradient stop is interactive; its vertical line is a marker. Drag heads, including the endpoints, to adjust custom spacing, or drag heads in equal/curve-length modes to reorder stops. Right-click empty gradient-bar space to insert a stop.
 - The hierarchy in Paint mode can find, select, and focus content or toggle an element's visibility and lock state. Return to Edit mode to change model geometry. Non-gradient paint tools use the current color from the right-side picker. In the desktop app, `Ctrl+Z` and `Ctrl+Shift+Z` follow the active project's operation journal, including painting and texture assignment.
+- After creating a Paint Selection, switch its tool option to **Pixel Transform**. Choose **Move** and drag selected pixels in the 2D texture view; toggle **Copy Pixels** first to drag a duplicate. The left/right 90° buttons rotate in fixed steps. **Rotate** mode snaps dragging to 90° unless **Free Rotation** is enabled. Create masks in either view, but transform pixels in the 2D texture view.
 
 ### Using Paint Symmetry
 
@@ -533,12 +541,12 @@ electron/                 Electron main process and desktop integration
 src/app.js                Editor startup and module dependency assembly
 src/common/               Configuration, registries, and shared mechanisms
 src/screen/               Docking, reference images, color picker, and palette UI
-src/utils/                Pure vector, rotation, and packing algorithms
+src/utils/                Shared vector, rotation, Shape geometry, and packing API for external Shape packs
 src/editor/               Shared state, tool registration, and modeling interactions
 src/paint/                Painting and symmetry relations
 src/texture/              Texture templates, layers, and pixel processing
 src/model.js              Project data, geometry, modifier/operator instances, and format conversion
-src/shapes/               Built-in shape definitions, shared geometry, and shape registry
+src/shapes/               Built-in shape definitions, registry, and external pack loading
 src/render/               WebGL scene and UV Preview rendering
 scripts/                  Preview server, tests, and helper tools
 ```

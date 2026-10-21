@@ -2,13 +2,14 @@ import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } fro
 import { activeLayer, compositeLayers } from '../common/core/texture-features.js';
 import { requireOperation } from '../common/core/operation-registry.js';
 import { PAINT_TOOLS, PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
+import { paintSelectionAllows } from './selection-controller.js';
 
 export function createPaintStrokeController({
   state, $, $$, textureCanvas, textureCtx, uvEditorController,
   clientToTextureUv, clamp, isFaceTiled, faceUvWorldPoint,
   paintSetting, paintToolErasing, paintToolOpacity, PAINT_FACE_EDGES,
   CUBE_FACE_NAMES, textureAtlasReferences, effectiveFaceTextureReference,
-  textureAssetForReference, paintCanvasForAsset, syncRendererTextureAsset,
+  textureAssetForReference, getTextureAtlasEntries, paintCanvasForAsset, syncRendererTextureAsset,
   scheduleSceneRender, uvPreviewIsActive, renderUvPreview,
   updateTexturePreviewFrame, noteJournalOperation, markDirty, toast,
   renderScene, invalidateAllRenderGeometry, paintHitAlphaCache
@@ -52,7 +53,9 @@ function paintBrushOffsets(size, shape = state.paintBrushShape, antialias = stat
 
 function paintPointFromEvent(event) {
   const point = clientToTextureUv(event.clientX, event.clientY);
-  return [Math.floor(point[0]), Math.floor(point[1])];
+  const asset = state.textureAssets.find(item => item._uid === state.activeTextureUid);
+  return [Math.floor(point[0] * textureCanvas.width / Math.max(1, asset?.uvWidth || textureCanvas.width)),
+    Math.floor(point[1] * textureCanvas.height / Math.max(1, asset?.uvHeight || textureCanvas.height))];
 }
 
 function paintPointInside(point) {
@@ -64,7 +67,14 @@ function faceUvPixelSlots(cube, faceName) {
   if (isFaceTiled(face)) return null;
   const rectangle = Array.isArray(face.uv) && face.uv.length >= 4
     ? face.uv : getBlockbenchBoxUv(cube, faceName);
-  return rectangle ? createBlockbenchFaceUvSlots(rectangle, face.rotation || 0) : null;
+  if (!rectangle) return null;
+  const asset = textureAssetForReference(face.texture);
+  const entry = getTextureAtlasEntries().find(item => item.uid === asset?._uid);
+  const width = asset?._uid === state.activeTextureUid ? textureCanvas.width : entry?.width;
+  const height = asset?._uid === state.activeTextureUid ? textureCanvas.height : entry?.height;
+  const scaleU = (width || asset?.uvWidth || 1) / Math.max(1, asset?.uvWidth || width || 1);
+  const scaleV = (height || asset?.uvHeight || 1) / Math.max(1, asset?.uvHeight || height || 1);
+  return createBlockbenchFaceUvSlots(rectangle.map((value, index) => value * (index % 2 ? scaleV : scaleU)), face.rotation || 0);
 }
 
 function paintFaceDepthNeighbors(hit, target) {
@@ -181,6 +191,7 @@ function compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity) {
 
 function drawPaintPixel(surface, x, y, coverage, tool, opacity) {
   if (!surface?.canvas || !surface.context || x < 0 || y < 0 || x >= surface.canvas.width || y >= surface.canvas.height) return;
+  if (!paintSelectionAllows(state, surface.asset?._uid, x, y, surface.canvas.width, surface.canvas.height)) return;
   if (surface.rootDrag?.holisticStroke && compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity)) return;
   const context = surface.context;
   if (paintToolErasing(tool) && state.alphaLock) return;
@@ -345,11 +356,14 @@ function paintUvBounds(cube, faceName, canvas) {
   const face = cube.faces?.[faceName] || {};
   if (isFaceTiled(face)) return { minU: 0, minV: 0, maxU: canvas.width, maxV: canvas.height };
   const uv = Array.isArray(face.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
+  const asset = textureAssetForReference(face.texture);
+  const scaleU = canvas.width / Math.max(1, asset?.uvWidth || canvas.width);
+  const scaleV = canvas.height / Math.max(1, asset?.uvHeight || canvas.height);
   return {
-    minU: clamp(Math.floor(Math.min(uv[0], uv[2])), 0, canvas.width),
-    minV: clamp(Math.floor(Math.min(uv[1], uv[3])), 0, canvas.height),
-    maxU: clamp(Math.ceil(Math.max(uv[0], uv[2])), 0, canvas.width),
-    maxV: clamp(Math.ceil(Math.max(uv[1], uv[3])), 0, canvas.height)
+    minU: clamp(Math.floor(Math.min(uv[0], uv[2]) * scaleU), 0, canvas.width),
+    minV: clamp(Math.floor(Math.min(uv[1], uv[3]) * scaleV), 0, canvas.height),
+    maxU: clamp(Math.ceil(Math.max(uv[0], uv[2]) * scaleU), 0, canvas.width),
+    maxV: clamp(Math.ceil(Math.max(uv[1], uv[3]) * scaleV), 0, canvas.height)
   };
 }
 
@@ -360,7 +374,10 @@ function fillPaintRects(result, asset, rectangles) {
   for (const rectangle of rectangles) {
     const minX = clamp(Math.floor(rectangle.minU), 0, canvas.width), maxX = clamp(Math.ceil(rectangle.maxU), 0, canvas.width);
     const minY = clamp(Math.floor(rectangle.minV), 0, canvas.height), maxY = clamp(Math.ceil(rectangle.maxV), 0, canvas.height);
-    for (let y = minY; y < maxY; y++) for (let x = minX; x < maxX; x++) blendPaintPixel(image.data, (y * canvas.width + x) * 4, color, opacity, 'fill');
+    for (let y = minY; y < maxY; y++) for (let x = minX; x < maxX; x++) {
+      if (paintSelectionAllows(state, asset._uid, x, y, canvas.width, canvas.height))
+        blendPaintPixel(image.data, (y * canvas.width + x) * 4, color, opacity, 'fill');
+    }
   }
   context.putImageData(image, 0, 0);
   queuePaintedTextureSync(asset, result.canvas);
@@ -389,7 +406,7 @@ function blendPaintPixel(data, offset, color, opacity, tool = 'fill') {
   data[offset + 3] = Math.round(outputAlpha * 255);
 }
 
-function replacePaintColor(result, point, contiguous, clip = null) {
+function replacePaintColor(result, point, contiguous, clip = null, assetUid = null) {
   const { canvas, context } = result;
   const image = context.getImageData(0, 0, canvas.width, canvas.height);
   const startX = clamp(Math.floor(point[0]), 0, canvas.width - 1);
@@ -401,7 +418,8 @@ function replacePaintColor(result, point, contiguous, clip = null) {
     return image.data[offset] === target[0] && image.data[offset + 1] === target[1]
       && image.data[offset + 2] === target[2] && image.data[offset + 3] === target[3];
   };
-  const insideClip = (x, y) => !clip || (x >= clip.minU && y >= clip.minV && x < clip.maxU && y < clip.maxV);
+  const insideClip = (x, y) => (!clip || (x >= clip.minU && y >= clip.minV && x < clip.maxU && y < clip.maxV))
+    && paintSelectionAllows(state, assetUid, x, y, canvas.width, canvas.height);
   const color = paintColorBytes();
   const opacity = paintToolOpacity('fill');
   if (!contiguous) {
@@ -451,7 +469,7 @@ async function paintBucketAsset(asset, point, rectangles = null, contiguous = fa
   pushTexturePaintHistory(asset, result.canvas);
   if (rectangles) fillPaintRects(result, asset, rectangles);
   else {
-    replacePaintColor(result, point, contiguous, clip);
+    replacePaintColor(result, point, contiguous, clip, asset._uid);
     queuePaintedTextureSync(asset, result.canvas);
   }
   syncPaintedTextureNow();
@@ -541,8 +559,10 @@ function commitPaintedTextureAsset(asset, canvas) {
   if (layer) layer.source = canvas.toDataURL('image/png');
   const composite = layer ? compositeLayers(asset, canvas) : canvas;
   asset.source = composite.toDataURL('image/png');
-  asset.uvWidth = canvas.width;
-  asset.uvHeight = canvas.height;
+  // UV units are independent of the PNG's physical pixel density. Painting
+  // must not silently rewrite imported Blockbench uv_width/uv_height.
+  asset.uvWidth ||= canvas.width;
+  asset.uvHeight ||= canvas.height;
   asset.kind = 'PNG';
   if (asset._uid === state.activeTextureUid && canvas !== textureCanvas) {
     textureCanvas.width = canvas.width;
@@ -550,7 +570,7 @@ function commitPaintedTextureAsset(asset, canvas) {
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, canvas.width, canvas.height);
     textureCtx.drawImage(canvas, 0, 0);
-    updateTexturePreviewFrame(canvas.width, canvas.height);
+    updateTexturePreviewFrame(asset.uvWidth, asset.uvHeight);
   }
   syncRendererTextureAsset(asset, composite, true);
   const item = $$('.texture-item').find(node => node.dataset.textureUid === asset._uid);

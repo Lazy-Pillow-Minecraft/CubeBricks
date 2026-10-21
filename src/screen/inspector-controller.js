@@ -683,27 +683,39 @@ function bindInspector() {
     snapshot(`modifier.${modifier.type}.change`); modifier.axes[toggle.dataset.modifierAxis] = toggle.checked;
     sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
   }));
-  $$('[data-modifier-field]', inspector).forEach(input => input.addEventListener('change', () => {
-    const modifier = modifierByUid(input.dataset.modifierUid);
-    if (!modifier) return;
-    const key = input.dataset.modifierField;
-    let value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
-    if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
-    if (!Number.isFinite(value) && input.type === 'number') return;
-    snapshot(`modifier.${modifier.type}.change`); modifier[key] = value;
-    sceneRenderer.invalidateMirrorGeometry(); markDirty();
-    if (key === 'mode' || key === 'distribution') renderInspector();
-    renderScene();
-  }));
+  $$('[data-modifier-field]', inspector).forEach(input => {
+    let snapshotTaken = false;
+    const apply = () => {
+      const modifier = modifierByUid(input.dataset.modifierUid);
+      if (!modifier || (input.type === 'number' && !input.value.trim())) return;
+      const key = input.dataset.modifierField;
+      let value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+      if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
+      if ((input.type === 'number' && !Number.isFinite(value)) || modifier[key] === value) return;
+      if (!snapshotTaken) { snapshot(`modifier.${modifier.type}.change`); snapshotTaken = true; }
+      modifier[key] = value;
+      sceneRenderer.invalidateMirrorGeometry(); markDirty();
+      if (key === 'mode' || key === 'distribution') renderInspector();
+      renderScene();
+    };
+    input.addEventListener(input.type === 'number' ? 'input' : 'change', apply);
+    if (input.type === 'number') {
+      input.addEventListener('change', apply);
+      input.addEventListener('blur', () => { snapshotTaken = false; });
+    }
+  });
   $$('[data-modifier-vector]', inspector).forEach(input => {
     let snapshotTaken = false;
     const apply = () => {
       const modifier = modifierByUid(input.dataset.modifierUid);
+      if (input.value.trim() === '') return;
       const value = Number(input.value);
       if (!modifier || !Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(`modifier.${modifier.type}.transform`); snapshotTaken = true; }
       const [scope, property] = input.dataset.modifierVector.split('.');
-      modifier[scope][property][Number(input.dataset.axis)] = value;
+      const axis = Number(input.dataset.axis);
+      if (modifier[scope][property][axis] === value) return;
+      if (!snapshotTaken) { snapshot(`modifier.${modifier.type}.transform`); snapshotTaken = true; }
+      modifier[scope][property][axis] = value;
       sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
     };
     input.addEventListener('input', apply);
@@ -769,26 +781,38 @@ function bindInspector() {
     invalidatePaintOperator(operator);
     renderScene();
   }));
-  $$('[data-operator-field]', inspector).forEach(input => input.addEventListener('change', () => {
-    const operator = operatorByUid(input.dataset.operatorUid);
-    if (!operator) return;
-    const key = input.dataset.operatorField;
-    let value = input.type === 'number' ? Number(input.value) : input.value;
-    if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
-    if (!Number.isFinite(value) && input.type === 'number') return;
-    snapshot(`operator.${operator.type}.change`); operator[key] = value; invalidatePaintOperator(operator);
-    if (key === 'mode' || key === 'distribution') renderInspector();
-    renderScene();
-  }));
+  $$('[data-operator-field]', inspector).forEach(input => {
+    let snapshotTaken = false;
+    const apply = () => {
+      const operator = operatorByUid(input.dataset.operatorUid);
+      if (!operator || (input.type === 'number' && input.value.trim() === '')) return;
+      const key = input.dataset.operatorField;
+      let value = input.type === 'number' ? Number(input.value) : input.value;
+      if (key === 'copies') value = Math.max(1, Math.min(256, Math.round(value) || 1));
+      if ((input.type === 'number' && !Number.isFinite(value)) || operator[key] === value) return;
+      if (!snapshotTaken) { snapshot(`operator.${operator.type}.change`); snapshotTaken = true; }
+      operator[key] = value; invalidatePaintOperator(operator);
+      if (key === 'mode' || key === 'distribution') renderInspector();
+      renderScene();
+    };
+    input.addEventListener(input.type === 'number' ? 'input' : 'change', apply);
+    if (input.type === 'number') {
+      input.addEventListener('change', apply);
+      input.addEventListener('blur', () => { snapshotTaken = false; });
+    }
+  });
   $$('[data-operator-vector]', inspector).forEach(input => {
     let snapshotTaken = false;
     const apply = () => {
       const operator = operatorByUid(input.dataset.operatorUid);
+      if (input.value.trim() === '') return;
       const value = Number(input.value);
       if (!operator || !Number.isFinite(value)) return;
-      if (!snapshotTaken) { snapshot(`operator.${operator.type}.transform`); snapshotTaken = true; }
       const [scope, property] = input.dataset.operatorVector.split('.');
-      operator[scope][property][Number(input.dataset.axis)] = value;
+      const axis = Number(input.dataset.axis);
+      if (operator[scope][property][axis] === value) return;
+      if (!snapshotTaken) { snapshot(`operator.${operator.type}.transform`); snapshotTaken = true; }
+      operator[scope][property][axis] = value;
       invalidatePaintOperator(operator);
       renderScene();
     };

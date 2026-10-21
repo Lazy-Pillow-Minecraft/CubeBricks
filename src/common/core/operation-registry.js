@@ -96,6 +96,7 @@ const coreOperations = {
   'core.texture.layer': '編輯貼圖圖層',
   'core.texture.group': '編輯貼圖組',
   'core.texture.paint': '繪畫貼圖',
+  'core.texture.selection-transform': '變換選區像素',
   'core.texture.brush': '畫筆繪製',
   'core.texture.line': '直線繪製',
   'core.texture.rectangle': '矩形繪製',

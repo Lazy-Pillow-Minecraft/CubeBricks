@@ -3,8 +3,9 @@ import { modifierRegistry } from './common/config/modifiers.js';
 import { operatorRegistry } from './common/config/operators.js';
 import { constrainCube, formatRules } from './common/core/format-constraints.js';
 import { shapeRegistry } from './shapes/builtins.js';
-import { DODECAHEDRON_UNIT_FACES, TRUNCATED_ICOSAHEDRON_UNIT_FACES, regularPolyhedronCubes } from './shapes/polyhedron-geometry.js';
-import { bezierCubes } from './shapes/bezier-geometry.js';
+import { DODECAHEDRON_UNIT_FACES, TRUNCATED_ICOSAHEDRON_UNIT_FACES, regularPolyhedronCubes } from './utils/shape/polyhedron-geometry.js';
+import { bezierCubes } from './utils/shape/bezier-geometry.js';
+import { shapePackUtils } from './utils/index.js';
 
 const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID()}`;
 // Blockbench's standard marker palette (pastel viewport colours).
@@ -301,6 +302,7 @@ export class Shape {
     try {
       const cubes = definition.generate(this, {
         Cube,
+        utils: shapePackUtils,
         regularPolyhedron: (faces, mergeEvenFaces = false) => regularPolyhedronCubes(this, faces, mergeEvenFaces, { Cube, matrixEuler }),
         dodecahedronFaces: DODECAHEDRON_UNIT_FACES,
         truncatedIcosahedronFaces: TRUNCATED_ICOSAHEDRON_UNIT_FACES
@@ -600,6 +602,8 @@ export class BezierElement {
 
   toBaseCubes() {
     return shapeRegistry.get(this.type)?.generate(this, {
+      Cube,
+      utils: shapePackUtils,
       bezierCubes: curve => bezierCubes(curve, { Cube, vectorLength, directionFrameEuler })
     }) || [];
   }

@@ -4,7 +4,7 @@ import { createModelProjectData, modelFormatRegistry } from '../common/config/mo
 
 export function createModelFormatPicker({
   $, newProjectDialog, escapeHtml, escapeAttribute, formatNumber,
-  addProjectTab, markDirty, toast, configRegistry
+  addProjectTab, markDirty, toast, configRegistry, loadProjectContent
 }) {
 const MODEL_FORMAT_ICONS = Object.freeze({
   generic: '<path d="M4 12 12 8l8 4-8 4-8-4Z" stroke="none"/>',
@@ -50,6 +50,50 @@ function openNewProjectDialog() {
   newProjectDialog.showModal();
 }
 
+function renderHomeFormats() {
+  const container = $('#homeFormatList');
+  if (!container) return;
+  const categories = new Map();
+  for (const format of modelFormatRegistry.list()) {
+    if (!categories.has(format.category)) categories.set(format.category, []);
+    categories.get(format.category).push(format);
+  }
+  container.innerHTML = [...categories].map(([category, formats]) => `<section><h3>${escapeHtml(category === 'general' ? '通用' : category === 'minecraft' ? 'Minecraft' : category)}</h3>${formats.map(format => `<button type="button" data-home-format="${escapeAttribute(format.id)}" ${format.status === 'placeholder' ? 'disabled' : ''} title="${escapeAttribute(format.description || format.name)}">${modelFormatIconMarkup(format.icon)}<span>${escapeHtml(format.name)}</span></button>`).join('')}</section>`).join('');
+}
+
+async function renderProjectHome(refresh = false) {
+  renderHomeFormats();
+  const container = $('#homeProjectList');
+  if (!container) return;
+  if (!window.cubeBricksDesktop?.listWorkspaceProjects) {
+    container.innerHTML = '<p class="project-home-empty">本機工作項目只在桌面版顯示。</p>';
+    return;
+  }
+  try {
+    const projects = await window.cubeBricksDesktop.listWorkspaceProjects({ refresh });
+    container.innerHTML = projects.length ? projects.map(project => `<button type="button" class="project-home-card" data-home-project="${escapeAttribute(project.journalId)}"><strong>${escapeHtml(project.name || '未命名')}</strong><small>${escapeHtml(project.filePath || '未保存的工作項目')}</small><small>${escapeHtml(project.modifiedAt ? new Date(project.modifiedAt).toLocaleString() : '')} · ${project.elementCount || 0} 個元素</small></button>`).join('') : '<p class="project-home-empty">尚無工作項目。從左側選擇模型格式開始吧。</p>';
+  } catch (error) { container.textContent = `項目列表讀取失敗：${error.message}`; }
+}
+
+function bindProjectHome() {
+  $('#homeFormatList')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-home-format]');
+    if (button && !button.disabled) newProject(button.dataset.homeFormat);
+  });
+  $('#homeRefreshProjects')?.addEventListener('click', () => void renderProjectHome(true));
+  $('#homeProjectList')?.addEventListener('click', async event => {
+    const button = event.target.closest('[data-home-project]');
+    if (!button) return;
+    button.disabled = true;
+    try {
+      const result = await window.cubeBricksDesktop.recoverProjectJournal({ journalId: button.dataset.homeProject });
+      loadProjectContent(result.content, result.filePath || '', [], result.journalId,
+        { dirty: result.dirty ?? !result.filePath });
+    } catch (error) { toast(`打開工作項目失敗：${error.message}`); button.disabled = false; }
+  });
+  window.addEventListener('cubebricks:project-home', () => void renderProjectHome());
+}
+
 function newProject(formatId) {
   const format = modelFormatRegistry.get(formatId);
   if (!format) return toast('未知模型格式');
@@ -60,7 +104,7 @@ function newProject(formatId) {
   });
   const project = new CubeBricksProject({ name: 'untitled', ...initialData });
   addProjectTab(project, { dirty: true, textureAssets: [] });
-  newProjectDialog.close();
+  if (newProjectDialog.open) newProjectDialog.close();
   markDirty(); toast(`已建立 ${format.name}`);
 }
 
@@ -69,5 +113,7 @@ return {
   renderModelFormatPicker,
   openNewProjectDialog,
   newProject,
+  renderProjectHome,
+  bindProjectHome,
 };
 }

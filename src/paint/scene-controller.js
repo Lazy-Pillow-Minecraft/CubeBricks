@@ -3,6 +3,7 @@ import { activeLayer, faceTileSize, layerRasterCache, prepareLayers } from '../c
 import { barycentric2d } from '../screen/color-picker/math.js';
 import { dot3 } from '../utils/math/vector3.js';
 import { PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
+import { paintSelectionAllows } from './selection-controller.js';
 
 export function createScenePaintController({
   state, $, sceneCanvas, sceneRenderer, textureCanvas,
@@ -85,7 +86,8 @@ function facePaintUvPoint(hit, target, canvas) {
       hit.facePoints[indices[0]], hit.facePoints[indices[1]], hit.facePoints[indices[2]]);
     if (!weights) continue;
     const uv = [0, 1].map(axis => indices.reduce((sum, slot, index) => sum + slots[slot][axis] * weights[index], 0));
-    const point = [Math.floor(uv[0]), Math.floor(uv[1])];
+    const point = [Math.floor(uv[0] * canvas.width / Math.max(1, target.asset?.uvWidth || canvas.width)),
+      Math.floor(uv[1] * canvas.height / Math.max(1, target.asset?.uvHeight || canvas.height))];
     if (point[0] >= 0 && point[1] >= 0 && point[0] < canvas.width && point[1] < canvas.height) return point;
   }
   return null;
@@ -97,6 +99,11 @@ function faceUvWorldPoint(cube, faceName, facePoints, point) {
   const rectangle = Array.isArray(face.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
   if (!rectangle) return null;
   const slots = createBlockbenchFaceUvSlots(rectangle, face.rotation || 0);
+  const asset = textureAssetForReference(face.texture);
+  const canvas = asset && (asset._uid === state.activeTextureUid
+    ? textureCanvas : animationRasterCache.get(asset._uid)?.canvas);
+  if (canvas) point = [point[0] * (asset.uvWidth || canvas.width) / canvas.width,
+    point[1] * (asset.uvHeight || canvas.height) / canvas.height];
   for (const indices of [[0, 2, 1], [2, 3, 1]]) {
     const weights = barycentric2d(point, slots[indices[0]], slots[indices[1]], slots[indices[2]]);
     if (!weights || weights.some(weight => weight < -1e-5)) continue;
@@ -283,6 +290,7 @@ async function bakePaintGradient(anchorHit, endHit) {
       }
       const bounds = paintUvBounds(target.cube, target.faceName, surface.canvas);
       for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
+        if (!paintSelectionAllows(state, target.asset._uid, x, y, surface.canvas.width, surface.canvas.height)) continue;
         const world = facePixelWorldPoint(target.cube, target.faceName, hit.facePoints, x, y);
         if (!world) continue;
         const pixel = y * surface.canvas.width + x;
@@ -764,5 +772,5 @@ function startScenePaintPointer(event, x, y) {
   });
   return true;
 }
-return { persistGeneratedPaintCube, barycentricPoint, faceUvWorldPoint, blendRgbaPixel, activePaintGradientStops, samplePaintGradient, clearPaintGradientSelection, renderPaintGradientPreview, updatePaintGradientHover, paintCanvasForAsset, queueSceneBrushPointer, finishScenePaintDrag, moveScenePaintDrag, startScenePaintPointer };
+return { persistGeneratedPaintCube, barycentricPoint, facePaintUvPoint, faceUvWorldPoint, blendRgbaPixel, activePaintGradientStops, samplePaintGradient, clearPaintGradientSelection, renderPaintGradientPreview, updatePaintGradientHover, paintCanvasForAsset, queueSceneBrushPointer, finishScenePaintDrag, moveScenePaintDrag, startScenePaintPointer };
 }

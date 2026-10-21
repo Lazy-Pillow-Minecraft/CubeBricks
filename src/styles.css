@@ -70,6 +70,32 @@ input[type="checkbox"]:checked::after { opacity: 1; transform: rotate(45deg) sca
 input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .45; }
 
 .app-shell { height: 100vh; display: grid; grid-template-rows: 38px 32px 46px minmax(0, 1fr) 30px; background: var(--bg); }
+.project-home { display: none; position: fixed; inset: 70px 0 0; z-index: 60; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); background: var(--bg); color: var(--text); }
+.project-home-active .project-home { display: grid; }
+.project-home-active .workspace > .dock-zone-toggle { display: none; }
+.project-home-types { overflow: auto; padding: 30px 18px; border-right: 1px solid var(--line-strong); background: var(--panel); }
+.project-home-types h2, .project-home-heading h1 { margin: 0 0 8px; }
+.project-home-types p, .project-home-heading p { margin: 0 0 22px; color: var(--muted); }
+.project-home-types h3 { margin: 22px 8px 8px; color: var(--muted); font-size: .75rem; }
+.project-home-types button { display: flex; width: 100%; align-items: center; gap: 11px; text-align: left; padding: 10px; border: 1px solid transparent; border-radius: 7px; }
+.project-home-types button:hover:not(:disabled) { color: var(--accent); border-color: var(--line-strong); background: var(--panel-2); }
+.project-home-types button:disabled { opacity: .45; cursor: not-allowed; }
+.project-home-types svg { width: 22px; height: 22px; flex: none; fill: currentColor; stroke: currentColor; }
+.project-home-projects { min-width: 0; overflow: auto; padding: 38px clamp(24px, 5vw, 78px); }
+.project-home-heading { display: flex; justify-content: space-between; align-items: start; gap: 20px; }
+.project-home-heading button { padding: 7px 11px; border: 1px solid var(--line-strong); border-radius: 6px; }
+#homeProjectList { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.project-home-card { display: flex; min-height: 118px; flex-direction: column; justify-content: space-between; text-align: left; padding: 15px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); }
+.project-home-card:hover { border-color: var(--accent); background: var(--panel-2); }
+.project-home-card strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-home-card small { color: var(--muted); }
+.project-home-empty { color: var(--muted); padding: 24px 0; }
+#paintToolOptions [data-selection-hidden] { display: none; }
+.texture-stage #paintSelectionTextureOverlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; image-rendering: pixelated; }
+#paintSelectionBorder { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+.paint-selection-gesture { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.paint-selection-gesture path { fill: none; stroke: #fff; stroke-width: 1.5px; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; animation: paint-selection-march .7s linear infinite; filter: drop-shadow(1px 1px 0 #000); }
+@keyframes paint-selection-march { to { stroke-dashoffset: -9; } }
 .titlebar { -webkit-app-region: drag; display: grid; grid-template-columns: minmax(230px, 1fr) auto 1fr; align-items: center; height: 38px; padding: 0 14px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 80%, var(--surface-tint)); }
 .titlebar button, .titlebar input { -webkit-app-region: no-drag; }
 .brand { display: flex; align-items: center; gap: 9px; min-width: 0; font-weight: 700; letter-spacing: -.02em; }
@@ -268,8 +294,8 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .texture-face-selector button.active { color: var(--accent); border-color: rgba(var(--accent-rgb),.72); background: rgba(var(--accent-rgb),.1); }
 .texture-preview { position: relative; flex: 0 0 auto; width: calc(100% - 24px); height: auto; aspect-ratio: var(--texture-aspect, 1 / 1); margin: 8px auto 7px; overflow: hidden; border-radius: 0; border: 1px solid var(--line-strong); outline: 0; background: #0f110e; display: grid; place-items: center; cursor: default; touch-action: none; }
 .texture-preview.is-panning { cursor: grabbing; }
-.texture-stage { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; transform-origin: 0 0; will-change: transform; }
-.checkerboard { position: absolute; inset: 0; opacity: .22; background-size: 18px 18px; background-position: 0 0, 9px 9px; background-image: linear-gradient(45deg, #777 25%, transparent 25%, transparent 75%, #777 75%), linear-gradient(45deg, #777 25%, transparent 25%, transparent 75%, #777 75%); }
+.texture-stage { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; transform-origin: 0 0; image-rendering: pixelated; }
+.checkerboard { position: absolute; inset: 0; pointer-events: none; opacity: .22; background-size: 18px 18px; background-position: 0 0, 9px 9px; background-image: linear-gradient(45deg, #777 25%, transparent 25%, transparent 75%, #777 75%), linear-gradient(45deg, #777 25%, transparent 25%, transparent 75%, #777 75%); }
 #textureCanvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; z-index: 1; }
 #textureLayerComposite { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; z-index: 1; pointer-events: none; }
 #textureLayerComposite[hidden] { display: none; }
@@ -454,6 +480,8 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .transform-gizmo .sphere-control.active .rotation-sphere { stroke: rgba(255,255,255,.95); stroke-width: 3.5; }
 .transform-gizmo .drag-infinite-line { stroke: var(--gizmo-color); stroke-width: 1.5; opacity: .78; pointer-events: none; }
 .transform-gizmo .vertex-snap-point { fill: rgba(226,232,220,.7); stroke: rgba(14,17,13,.92); stroke-width: 2; transition: r .08s, fill .08s, filter .08s; }
+.transform-gizmo .rotation-pivot-vertex-mark { fill: var(--selection-outline); stroke: var(--panel-3); stroke-width: 1.5; pointer-events: none; transition: fill .08s, filter .08s; }
+.transform-gizmo .rotation-pivot-vertex.depth-hover .rotation-pivot-vertex-mark { fill: #fff; filter: drop-shadow(0 0 5px var(--selection-outline)); }
 .transform-gizmo .vertex-snap-control.source-candidate .vertex-snap-point { fill: var(--selection-outline); }
 .transform-gizmo .vertex-snap-control.generated-reference .vertex-snap-point { filter: invert(1); stroke-dasharray: 2 2; }
 .transform-gizmo .vertex-snap-control.source-active .vertex-snap-point { fill: var(--accent); stroke: #fff; r: 7px; filter: drop-shadow(0 0 5px rgba(var(--accent-rgb),.9)); }

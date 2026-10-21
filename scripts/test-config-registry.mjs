@@ -71,7 +71,15 @@ assert.equal(translateUiText('預覽：豎切', 'en'), 'Preview: vertical cut');
 assert.equal(translateUiText('已豎切 head（X 軸）', 'en'), 'Vertically cut head on the X axis');
 assert.equal(translateUiText('鎖定物體默認虛化 Alpha', 'en'), 'Default locked-object alpha');
 assert.equal(translateUiText('UV 預覽', 'en'), 'UV Preview');
+assert.equal(translateUiText('「demo」尚未保存，仍要關閉嗎？', 'en'), '“demo” has not been saved. Close it anyway?');
+assert.equal(translateUiText('無貼圖 · 16 × 16', 'en'), 'No texture · 16 × 16');
+assert.equal(translateUiText('乘數', 'en'), 'Multiplier');
 assert.equal(translateUiText('僅在此預覽中讓模型慢速轉動', 'zh-Hans'), '仅在此预览中让模型慢速转动');
+
+const translationCatalog = JSON.parse(fs.readFileSync(new URL('../src/common/config/ui-text-catalog.json', import.meta.url), 'utf8'));
+assert.ok(translationCatalog.entries.length > 900, 'UI text extraction includes dynamic modules and settings');
+assert.equal(translationCatalog.entries.filter(entry => !entry.dynamic && entry.englishMissing).length, 0,
+  'Every extracted static UI literal has an English translation');
 
 const uiSource = ['src/index.html', 'src/app.js', 'src/screen/dock-manager.js',
   'src/screen/color-picker/controller.js', 'src/screen/palette/controller.js']
