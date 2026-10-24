@@ -5,6 +5,14 @@ import { dot3 } from '../utils/math/vector3.js';
 import { PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
 import { paintSelectionAllows } from './selection-controller.js';
 
+export function sceneBrushHitKey(hit) {
+  return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.faceName}` : '';
+}
+
+export function sceneBrushBranchKey(sourceHit, targetHit, assetUid) {
+  return `${sceneBrushHitKey(sourceHit)}=>${sceneBrushHitKey(targetHit)}::${assetUid}::${(targetHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`;
+}
+
 export function createScenePaintController({
   state, $, sceneCanvas, sceneRenderer, textureCanvas,
   textureAssetForReference, subdivisionPatch, isFaceTiled,
@@ -15,7 +23,7 @@ export function createScenePaintController({
   drawPaintShape, paintFaceDepthNeighbors, applyTextureBucket,
   loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
-  activateProjectTexture
+  activateProjectTexture, sampleReferenceImage
 }) {
 function facePaintTarget(hit) {
   if (!hit?.faceName) return null;
@@ -470,17 +478,27 @@ function queueSceneBrushHit(drag, hit) {
       return;
     }
     const directHits = drag.tool === 'brush' && state.paintBrushOverlay && hit.coincidentHits?.length ? hit.coincidentHits : [hit];
-    const hits = [...new Map(directHits.flatMap(paintHit => paintSymmetryRelatedHits(paintHit, drag))
-      .map(paintHit => [`${paintSymmetryFaceKey(paintHit)}:${(paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`, paintHit])).values()];
+    // A central cube can be its own radial/mandala counterpart. When a stroke
+    // crosses to the next physical face, symmetry may map that new source face
+    // back onto a target face already active in the stroke. It is a different
+    // branch, not a continuation of the old UV cursor on that target face.
+    const hits = [...new Map(directHits.flatMap(sourceHit =>
+      paintSymmetryRelatedHits(sourceHit, drag).map(paintHit => ({
+        paintHit, sourceHit, sourceFaceKey: sceneBrushHitKey(sourceHit)
+      }))).map(entry => [
+        `${entry.sourceFaceKey}:${paintSymmetryFaceKey(entry.paintHit)}:${(entry.paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`,
+        entry
+      ])).values()];
     const activeKeys = new Set();
-    for (const paintHit of hits) {
+    for (const { paintHit, sourceHit } of hits) {
       const surface = await sceneBrushSurfaceForHit(drag, paintHit);
       if (!surface || drag.canceled) continue;
       const point = facePaintUvPoint(paintHit, surface, surface.canvas);
       if (!point) continue;
-      // Each concrete face owns its own UV-space cursor. This keeps a single
-      // 3D stroke continuous while preventing lines between unrelated UVs.
-      const faceKey = `${sceneBrushHitKey(paintHit)}::${surface.asset._uid}::${(paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`;
+      // Keep one UV-space cursor per source/target face branch. Two adjacent
+      // source faces can map onto the same target face around the symmetry
+      // center, but their points must never be joined into one segment.
+      const faceKey = sceneBrushBranchKey(sourceHit, paintHit, surface.asset._uid);
       const previousPoint = drag.lastByFace.get(faceKey);
       const wrapped = isFaceTiled(surface.cube.faces?.[surface.faceName]) && previousPoint
         && (Math.abs(previousPoint[0] - point[0]) > surface.canvas.width / 2 || Math.abs(previousPoint[1] - point[1]) > surface.canvas.height / 2);
@@ -492,10 +510,6 @@ function queueSceneBrushHit(drag, hit) {
     for (const key of [...drag.lastByFace.keys()]) if (!activeKeys.has(key)) drag.lastByFace.delete(key);
   });
   return drag.queue;
-}
-
-function sceneBrushHitKey(hit) {
-  return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.faceName}` : '';
 }
 
 function sceneBrushBoundary(from, to, drag) {
@@ -662,6 +676,15 @@ function moveScenePaintDrag(event, drag = state.dragging) {
 
 function startScenePaintPointer(event, x, y) {
   const hit = scenePaintHit(event.clientX, event.clientY);
+  if (state.tool === 'eyedropper' && !hit) {
+    const color = sampleReferenceImage?.(event.clientX, event.clientY);
+    if (color) {
+      event.preventDefault();
+      setPaintColor(color, true);
+      updateToolOptions();
+      return true;
+    }
+  }
   if (state.tool === 'gradient') {
     if (!hit?.faceName) { toast('請指向一個 Cube 面'); return true; }
     const cube = hit.cube?.type === 'cube' ? hit.cube : state.project.getNode(hit.uid);

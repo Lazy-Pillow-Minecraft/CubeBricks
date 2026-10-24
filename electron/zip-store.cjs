@@ -57,7 +57,8 @@ function packZip(entries) {
   return Buffer.concat([...locals, ...centrals, end]);
 }
 
-function unpackZip(bytes, { maxEntrySize = 512 * 1024 * 1024, maxTotalSize = 2 * 1024 * 1024 * 1024 } = {}) {
+function unpackZip(bytes, { maxEntrySize = 512 * 1024 * 1024, maxTotalSize = 2 * 1024 * 1024 * 1024,
+  onProgress = null } = {}) {
   const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   let end = -1;
   for (let index = buffer.length - 22; index >= Math.max(0, buffer.length - 65557); index--) {
@@ -104,6 +105,7 @@ function unpackZip(bytes, { maxEntrySize = 512 * 1024 * 1024, maxTotalSize = 2 *
     if (directoryEntry) {
       if (plain.length) throw new Error(`ZIP 目錄條目含資料：${name}`);
     } else result.set(name, plain);
+    onProgress?.((index + 1) / Math.max(1, count), `正在解壓檔案 ${index + 1} / ${count}`);
   }
   return result;
 }

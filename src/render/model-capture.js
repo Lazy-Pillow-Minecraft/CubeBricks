@@ -6,6 +6,32 @@ const modelCaptureCanvas = document.createElement('canvas');
 let modelCaptureRenderer = null;
 let modelCaptureImageCanvas = null;
 let modelCaptureDataUrl = null;
+const coverCanvas = document.createElement('canvas');
+let coverRenderer = null;
+
+function captureProjectCover() {
+  if (!state.project.elements.length) return null;
+  if (!coverRenderer) coverRenderer = new WebGLSceneRenderer(coverCanvas);
+  const width = 256, height = 160;
+  if (getTextureAtlasEntries().length) coverRenderer.setTextureAtlas(getTextureAtlasCanvas(), getTextureAtlasEntries());
+  else coverRenderer.setTexture(textureCanvas);
+  const camera = {
+    ...state, yaw: -Math.PI * 3 / 4, pitch: Math.PI / 6,
+    target: [0, 0, 0], panX: 0, panY: 0, zoom: 1,
+    projection: 'perspective', axisView: null, renderMode: 'textured',
+    selectedUids: new Set(), selectedUvFaces: new Set(),
+    captureModelOnly: true, captureWidth: width, captureHeight: height,
+    capturePixelWidth: width, capturePixelHeight: height,
+    grid: false, wire: false, playerReference: false,
+    modifierResultGhost: false, subdivisionEditOwnerUid: null,
+    lockedDefaultAlpha: 100, lockedHoverFade: false, editorOverlayLines: []
+  };
+  const fitted = sceneRenderer.fitCameraToVisibleModel(state.project, camera, width / height);
+  if (!fitted) return null;
+  Object.assign(camera, fitted);
+  coverRenderer.render(state.project, null, camera);
+  return coverRenderer.captureImageCanvas().toDataURL('image/png');
+}
 
 async function captureModel(mode) {
   try {
@@ -101,5 +127,5 @@ function clearModelCapture() {
   modelCaptureDataUrl = null;
 }
 
-return { captureModel, saveModelCapture, copyModelCapture, clearModelCapture };
+return { captureModel, captureProjectCover, saveModelCapture, copyModelCapture, clearModelCapture };
 }

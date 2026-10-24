@@ -25,7 +25,7 @@ export function createEventBinder({
   beginTemporaryEyedropper, bindContextMenus, bindTextureFaceDropSurface,
   cameraController, clamp, clearOutlinerDropState,
   clearPaintGradientSelection, clearSelection, clearTextureFaceDropTarget,
-  copySelected, createOutlinerDragGhost, createSimpleTexture, cutSelected,
+  copySelected, copyTexture, createOutlinerDragGhost, createSimpleTexture, cutSelected, cutTexture,
   cycleSnap, deleteSelected, editSelectedUvFace, endPointerDrag,
   endTemporaryEyedropper, endTexturePointer, exitSubdivisionEdit,
   exportProject, focusSelected, focusSceneOrigin, focusSelectedTextureUvs, getUvPreviewProject,
@@ -35,7 +35,7 @@ export function createEventBinder({
   nodeAutoUvEnabled, nodeUvNormalizedEnabled, noteJournalOperation,
   onPointerDown, onPointerMove, onScenePointerMove, onTexturePointerMove,
   openNewProjectDialog, openPreciseRotationInput, openProject,
-  openTextureCreateDialog, pasteElements, playTimeline,
+  openTextureCreateDialog, pasteElements, pasteTexture, playTimeline,
   rebuildTextureAtlas, redo, refreshSelectionUi, refreshUvPreview,
   remapNumericFaceTextureReferences, removeOutlinerDragGhost,
   renderAll, renderInspector, renderOutliner, renderOutlinerWindow,
@@ -59,7 +59,57 @@ export function createEventBinder({
 }) {
 let recentRotationPress = null;
 let pendingRotationPress = null;
+let externalDropQueue = Promise.resolve();
+const droppedFileExtension = file => String(file.name || '').split('.').at(-1)?.toLowerCase() || '';
+async function isPngFile(file) {
+  const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+  return header.length === 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => header[index] === byte);
+}
+function choosePngDestination(file) {
+  const dialog = $('#droppedPngDialog');
+  $('#droppedPngName').textContent = file.name;
+  dialog.returnValue = 'cancel';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true });
+    dialog.showModal();
+  });
+}
+async function handleExternalFiles(files) {
+  for (const file of files) {
+    const extension = droppedFileExtension(file);
+    if (['cbmodel', 'bbmodel', 'json'].includes(extension)) {
+      if (window.cubeBricksDesktop?.getPathForFile) {
+        const filePath = window.cubeBricksDesktop.getPathForFile(file);
+        if (!filePath) throw new Error(`無法取得 ${file.name} 的本機路徑`);
+        await openProject(filePath);
+      } else if (extension !== 'cbmodel') loadProjectContent(await file.text(), file.name);
+      else toast('.cbmodel 需要在桌面版打開');
+      continue;
+    }
+    const isReference = file.type?.startsWith('image/')
+      || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'].includes(extension);
+    if (!isReference) { toast(`不支援拖入 ${file.name}`); continue; }
+    if (!projectTabsController.activeId) { toast('請先打開或建立項目，再導入圖片'); continue; }
+    const isPng = extension === 'png' && await isPngFile(file);
+    const choice = isPng ? await choosePngDestination(file) : 'reference';
+    if (choice === 'texture') importTexture(file);
+    else if (choice === 'reference') await loadReferenceImageFiles([file], referenceImages.referenceViewKey());
+  }
+}
 function bindEvents() {
+  document.addEventListener('dragover', event => {
+    if (!event.dataTransfer?.types?.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, true);
+  document.addEventListener('drop', event => {
+    if (!event.dataTransfer?.files?.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const files = [...event.dataTransfer.files];
+    externalDropQueue = externalDropQueue.catch(() => {}).then(() => handleExternalFiles(files))
+      .catch(error => toast(`拖入文件失敗：${error.message}`));
+  }, true);
   const textureList = $('#textureList');
   const outlinerDragScroll = createListDragAutoScroll(outliner, () => Boolean(state.outlinerDragUids?.length), pointer => {
     renderOutlinerWindow();
@@ -253,6 +303,7 @@ function bindEvents() {
       if (directory) {
         $('#projectWorkspaceDirectory').textContent = directory;
         await reloadShapePacks();
+        window.dispatchEvent(new Event('cubebricks:workspace-change'));
         toast('工作空間已切換；新項目使用 projects/，Shape 包從 shapepacks/ 載入');
       }
     } catch (error) { toast(`工作目錄更改失敗：${error.message}`); }
@@ -267,7 +318,8 @@ function bindEvents() {
   $$('[data-config-key]').forEach(control => {
     control.addEventListener('change', () => setConfigFromControl(control));
     if (control.type === 'number') control.addEventListener('input', () => {
-      if (control.value !== '') setConfigFromControl(control);
+      // A partial history-limit number must not immediately delete undo records.
+      if (control.dataset.configKey !== ConfigKey.HISTORY_LIMIT && control.value !== '') setConfigFromControl(control);
     });
   });
   $('[data-action="importPlayerReferenceTexture"]').addEventListener('click', () => {
@@ -280,6 +332,11 @@ function bindEvents() {
   });
   playerReferenceTextureInput.addEventListener('change', () => importPlayerReferenceTexture(playerReferenceTextureInput.files?.[0]));
   $('#alphaLockToggle').addEventListener('change', event => configRegistry.set(ConfigKey.ALPHA_LOCK, event.target.checked, { source: 'toolbar' }));
+  $('#paintExplodeToggle').addEventListener('change', event => {
+    state.paintExplode = event.target.checked;
+    renderScene();
+  });
+  $('#negativeShapeToggle').addEventListener('change', event => configRegistry.set(ConfigKey.ALLOW_NEGATIVE_SIZE, event.target.checked, { source: 'bottom-options' }));
   $('#previewShadeToggle').addEventListener('change', event => configRegistry.set(ConfigKey.PREVIEW_SHADE, event.target.checked, { source: 'toolbar' }));
   $('#playerReferenceToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SHOW_PLAYER_REFERENCE, event.target.checked, { source: 'toolbar' }));
   $('#modifierResultGhostToggle').addEventListener('change', event => configRegistry.set(ConfigKey.MODIFIER_RESULT_GHOST, event.target.checked, { source: 'bottom-options' }));
@@ -523,6 +580,10 @@ function bindEvents() {
     renderScene();
   }));
   $('[data-action="grid"]').addEventListener('click', () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-toolbar' }));
+  $('[data-action="background"]').addEventListener('click', () => {
+    const modes = ['black', 'current', 'grid'];
+    configRegistry.set(ConfigKey.BACKGROUND_MODE, modes[(modes.indexOf(state.backgroundMode) + 1) % modes.length], { source: 'viewport-toolbar' });
+  });
   $('[data-action="wire"]').addEventListener('click', () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-toolbar' }));
   const snapButton = $('[data-action="cycleSnap"]');
   snapButton.addEventListener('click', () => cycleSnap(1));
@@ -983,6 +1044,13 @@ function bindEvents() {
       return;
     }
     if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
+    const textureListFocused = document.activeElement?.closest?.('#textureList');
+    if (textureListFocused && (event.ctrlKey || event.metaKey)) {
+      if (key === 'c') { event.preventDefault(); copyTexture(); return; }
+      if (key === 'x') { event.preventDefault(); cutTexture(); return; }
+      if (key === 'v') { event.preventDefault(); pasteTexture(); return; }
+      if (key === 'd') { event.preventDefault(); pasteTexture({ inPlace: true }); return; }
+    }
     if (event.key === 'Alt' && state.mode !== 'paint' && state.tool === 'rotate' && !state.rotationVertexPick) {
       event.preventDefault();
       state.rotationVertexPick = true;

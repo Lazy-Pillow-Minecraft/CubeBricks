@@ -1,6 +1,8 @@
 import { modelFormatRegistry } from '../common/config/model-formats.js';
 import { JavaBlockVersion, constrainProject } from '../common/core/format-constraints.js';
 import { normalizeTextureLayers } from '../common/core/texture-features.js';
+import { ConfigKey, configRegistry } from '../common/config/app-config.js';
+import { showAppConfirm } from '../screen/prompt-dialog.js';
 
 export const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectedGenerated', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
@@ -13,7 +15,8 @@ export function createProjectTabsController({ state, $, escapeHtml, escapeAttrib
   projectState, projectInfoDialog, textureUid, restoreProjectTextureView, renderAll,
   getSubdivisionSession, exitSubdivisionEdit, referenceImages, cancelCameraFocus,
   sceneRenderer, startProjectJournal, flushProjectJournal, toast,
-  compactProjectHistorySnapshot, markDirty, scheduleProjectJournal }) {
+  compactProjectHistorySnapshot, markDirty, scheduleProjectJournal,
+  onProjectActivated, onProjectClosing }) {
 let projectTabs = [];
 let activeProjectTabId = null;
 let editingProjectTabId = null;
@@ -131,7 +134,10 @@ function activateProjectTab(tabId, { render = true } = {}) {
   if (tabId !== activeProjectTabId && getSubdivisionSession()) exitSubdivisionEdit(false);
   if (tabId !== activeProjectTabId) {
     const previous = syncActiveProjectTab();
-    if (previous?.journalPending) void flushProjectJournal(previous);
+    if (previous) {
+      onProjectClosing?.(previous);
+      if (previous.journalPending) void flushProjectJournal(previous);
+    }
   }
   activeProjectTabId = tabId;
   for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
@@ -147,6 +153,7 @@ function activateProjectTab(tabId, { render = true } = {}) {
   updateProjectStateLabel();
   renderProjectTabs();
   if (render) renderAll();
+  onProjectActivated?.(tab);
   return true;
 }
 
@@ -155,10 +162,13 @@ function addProjectTab(project, options = {}) {
   const tab = {
     id: `project_${crypto.randomUUID()}`,
     displayName: options.displayName || null,
+    createdThisLaunch: !options.imported && !options.journalId,
     session: createProjectSession(project, options)
   };
   projectTabs.push(tab);
   startProjectJournal(tab, options.journalId ? null : options.imported ? 'core.project.import' : 'core.project.create', options.journalId);
+  // Opening an existing project must not put a full history compaction ahead
+  // of the first undo. Commits and saves already enforce the configured cap.
   activateProjectTab(tab.id, { render: options.render !== false });
   return tab;
 }
@@ -179,13 +189,15 @@ async function discardProjectTabJournal(tab) {
   await window.cubeBricksDesktop.discardProjectJournal({ journalId: tab.journalId });
 }
 
-function closeProjectTab(tabId) {
+async function closeProjectTab(tabId) {
   syncActiveProjectTab();
   const index = projectTabs.findIndex(tab => tab.id === tabId);
   if (index < 0) return;
   const tab = projectTabs[index];
-  if (tab.session.dirty && !window.confirm(`「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？`)) return;
+  if (tab.session.dirty && !await showAppConfirm(`「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？`,
+    { title: '關閉項目', detail: '未保存的修改將不再保留於此分頁。', buttons: ['關閉', '取消'] })) return;
   const discard = tab.session.dirty || !tab.session.filePath;
+  if (!discard && tabId === activeProjectTabId) onProjectClosing?.(tab);
   const pending = discard ? discardProjectTabJournal(tab) : (async () => {
     await flushProjectJournal(tab);
     await tab.journalReady;
@@ -247,6 +259,7 @@ function openProjectInfo(tabId) {
   $('#projectInfoTextureWidth').value = project.textureSize?.[0] || 16;
   $('#projectInfoTextureHeight').value = project.textureSize?.[1] || 16;
   $('#projectInfoSnap').value = project.snap?.subdivisions || state.settingsSnap;
+  $('#projectInfoHistoryLimit').value = project.historyLimit ?? '';
   $('#projectInfoDescription').value = project.formatData?.projectDescription || '';
   projectInfoDialog.showModal();
   requestAnimationFrame(() => $('#projectInfoName').focus());
@@ -259,15 +272,21 @@ function applyProjectInfo() {
   const width = Math.max(1, Math.round(Number($('#projectInfoTextureWidth').value)));
   const height = Math.max(1, Math.round(Number($('#projectInfoTextureHeight').value)));
   const snap = Number($('#projectInfoSnap').value);
-  if (!name || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(snap) || snap <= 0) return;
+  const historyText = $('#projectInfoHistoryLimit').value.trim();
+  const historyLimit = historyText === '' ? null : Number(historyText);
+  if (!name || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(snap) || snap <= 0
+    || historyLimit !== null && (!Number.isInteger(historyLimit) || historyLimit < 0 || historyLimit > 10000)) return;
   if (tab.journalPending) void flushProjectJournal(tab);
   tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
-  tab.session.history.push(compactProjectHistorySnapshot(tab.session.project, tab.session.referenceImageSources));
-  if (tab.session.history.length > 60) tab.session.history.shift();
-  tab.session.future.length = 0;
+  if (!window.cubeBricksDesktop?.checkoutProjectJournal) {
+    tab.session.history.push(compactProjectHistorySnapshot(tab.session.project, tab.session.referenceImageSources));
+    if (tab.session.history.length > 60) tab.session.history.shift();
+    tab.session.future.length = 0;
+  }
   tab.session.project.name = name;
   tab.session.project.textureSize = [width, height];
   tab.session.project.snap = { subdivisions: snap };
+  tab.session.project.historyLimit = historyLimit;
   tab.session.project.formatData = {
     ...(tab.session.project.formatData || {}),
     projectDescription: $('#projectInfoDescription').value.trim(),
@@ -293,6 +312,17 @@ function initializeProjectTabs() {
   activeProjectTabId = null;
   renderProjectTabs();
   updateProjectStateLabel();
+  configRegistry.subscribe(ConfigKey.HISTORY_LIMIT, change => {
+    if (!window.cubeBricksDesktop?.compactProjectJournal) return;
+    for (const tab of projectTabs.filter(item => item.session.project.historyLimit === null)) {
+      const compact = async () => {
+        await tab.journalReady;
+        await window.cubeBricksDesktop.compactProjectJournal({ journalId: tab.journalId, historyLimit: change.value });
+      };
+      tab.journalWrites = (tab.journalWrites || Promise.resolve()).catch(() => {}).then(compact);
+      tab.journalWrites.catch(error => toast(`歷史裁剪失敗：${error.message}`));
+    }
+  });
 }
 
 function requestProjectClose() {
@@ -300,7 +330,9 @@ function requestProjectClose() {
   syncActiveProjectTab();
   const dialog = $('#closeProjectsDialog');
   if (dialog.open) return;
-  $('#closeProjectsList').innerHTML = projectTabs.map(tab => `<label class="close-project-row">
+  const newTabs = projectTabs.filter(tab => tab.createdThisLaunch);
+  if (!newTabs.length) { void confirmProjectClose(); return; }
+  $('#closeProjectsList').innerHTML = newTabs.map(tab => `<label class="close-project-row">
     <input type="checkbox" data-retain-tab="${escapeAttribute(tab.id)}" checked />
     <span title="${escapeAttribute(tab.session.filePath || projectTabLabel(tab))}">${escapeHtml(projectTabLabel(tab))}</span>
     <small>${tab.session.dirty ? '未保存' : '已保存'}</small>
@@ -323,11 +355,13 @@ async function confirmProjectClose() {
     const retained = [], discarded = [];
     for (const tab of projectTabs) {
       if (!tab.journalId) continue;
-      const keep = $(`[data-retain-tab="${tab.id}"]`, $('#closeProjectsList'))?.checked;
+      const keep = !tab.createdThisLaunch || $(`[data-retain-tab="${tab.id}"]`, $('#closeProjectsList'))?.checked;
       if (keep) retained.push({ journalId: tab.journalId, filePath: tab.session.filePath, dirty: tab.session.dirty,
         active: tab.id === activeProjectTabId });
       else discarded.push(tab.journalId);
     }
+    const active = projectTabById(activeProjectTabId);
+    if (active && retained.some(tab => tab.journalId === active.journalId)) await onProjectClosing?.(active);
     await window.cubeBricksDesktop.confirmProjectClose({ retained, discarded });
   } catch (error) {
     closingProjects = false;

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { paintSelectionAllows, faceRectangleFrame, faceRectanglePlanePoint,
   faceRectangleCoordinates, faceRectangleWorldPoint } from '../src/paint/selection-controller.js';
 import { transformSelectedPixels } from '../src/paint/selection-transform.js';
+import { sceneBrushBranchKey } from '../src/paint/scene-controller.js';
 
 const state = { paintSelection: { active: false, masks: new Map() } };
 assert.equal(paintSelectionAllows(state, 'a', 0, 0, 2, 2), true);
@@ -39,4 +40,16 @@ assert.equal(rotated.pixels[(2 * 5 + 1) * 4], 255, 'a one-pixel selection rotate
 const angled = transformSelectedPixels(pixelSource, pixelMask, 5, 5, { angle: Math.PI / 4 });
 assert.equal(angled.pixels[(2 * 5 + 1) * 4 + 3] > 0, true,
   'inverse mapping retains coverage during free rotation');
+const centeredNorth = { uid: 'center', faceName: 'north' };
+const centeredEast = { uid: 'center', faceName: 'east' };
+assert.notEqual(
+  sceneBrushBranchKey(centeredNorth, centeredNorth, 'atlas'),
+  sceneBrushBranchKey(centeredEast, centeredNorth, 'atlas'),
+  'radial and mandala reflections must not connect strokes from two source faces on the same target face'
+);
+assert.equal(
+  sceneBrushBranchKey(centeredNorth, centeredEast, 'atlas'),
+  sceneBrushBranchKey(centeredNorth, centeredEast, 'atlas'),
+  'one source-to-target branch remains continuous while the pointer stays on its source face'
+);
 console.log('Paint selection mask tests passed.');

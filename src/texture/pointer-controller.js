@@ -32,6 +32,16 @@ function startTexturePointer(event) {
   const point = clientToTextureUv(event.clientX, event.clientY);
   const entries = textureUvEntries();
   let selectedEntries = selectedTextureUvEntries(entries);
+  if (event.shiftKey || event.ctrlKey || event.metaKey) {
+    uvEditorController.textureUvDrag = {
+      kind: 'marquee', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+      startUv: point, currentUv: point, moved: false,
+      subtract: Boolean(event.ctrlKey || event.metaKey),
+      baseSelection: new Set(state.selectedUvFaces), entries
+    };
+    preview.style.cursor = 'crosshair';
+    return;
+  }
   if (event.altKey && selectedEntries.length) {
     if (selectedEntries.some(entry => entry.cube.uvMode === 'box')) {
       toast('箱型 UV 只能整體移動，不能逐面重新指定');
@@ -87,6 +97,24 @@ function moveTexturePointer(event) {
   }
   if (!uvEditorController.textureUvDrag.moved && Math.hypot(event.clientX - uvEditorController.textureUvDrag.startX, event.clientY - uvEditorController.textureUvDrag.startY) < 3) return;
   uvEditorController.textureUvDrag.moved = true;
+  if (uvEditorController.textureUvDrag.kind === 'marquee') {
+    const drag = uvEditorController.textureUvDrag;
+    drag.currentUv = clientToTextureUv(event.clientX, event.clientY);
+    const [left, right] = [drag.startUv[0], drag.currentUv[0]].sort((a, b) => a - b);
+    const [top, bottom] = [drag.startUv[1], drag.currentUv[1]].sort((a, b) => a - b);
+    const next = new Set(drag.baseSelection);
+    for (const entry of drag.entries) {
+      const [u1, v1, u2, v2] = entry.uv;
+      if (Math.max(u1, u2) < left || Math.min(u1, u2) > right
+        || Math.max(v1, v2) < top || Math.min(v1, v2) > bottom) continue;
+      if (drag.subtract) next.delete(entry.key);
+      else next.add(entry.key);
+    }
+    state.selectedUvFaces = next;
+    renderTextureUvOverlay(true);
+    updateFaceSelectionOverlay();
+    return;
+  }
   if (uvEditorController.textureUvDrag.kind === 'assign') {
     const [width, height] = uvEditorController.texturePreviewSize;
     const point = clientToTextureUv(event.clientX, event.clientY);
@@ -129,6 +157,18 @@ function endTexturePointer(event) {
   if (drag.kind === 'pan') {
     snapTexturePan();
     updateTextureStageTransform();
+  } else if (drag.kind === 'marquee') {
+    if (!drag.moved) {
+      const hit = textureUvHit(drag.entries, drag.startUv);
+      const next = new Set(drag.baseSelection);
+      if (hit) {
+        if (drag.subtract) next.delete(hit.key);
+        else next.add(hit.key);
+      }
+      state.selectedUvFaces = next;
+    }
+    renderTextureUvOverlay(true);
+    updateFaceSelectionOverlay();
   } else if (drag.kind === 'assign' && drag.moved && drag.entries.length) {
     snapshot('core.uv.assign');
     materializeUvFaces(drag.entries);

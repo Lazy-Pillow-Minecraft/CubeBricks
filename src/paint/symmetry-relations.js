@@ -15,7 +15,7 @@ function paintSymmetryFaceKey(face) {
 }
 
 function paintSymmetryFaceRecords(owner) {
-  return sceneRenderer.getFaceQuadsForUids(paintSymmetryScopeUids(owner)).flatMap(face => {
+  return sceneRenderer.getFaceQuadsForUids(paintSymmetryScopeUids(owner), { modelSpace: true }).flatMap(face => {
     const cube = face.cube?.type === 'cube' ? face.cube : state.project.getNode(face.uid);
     if (cube?.type !== 'cube' || isCubeFaceCulled(cube.faces?.[face.faceName])) return [];
     const uvSlots = faceUvPixelSlots(cube, face.faceName);
@@ -218,17 +218,22 @@ function paintSymmetryOperatorsForUid(uidValue, session = null) {
 }
 
 function paintSymmetryMappedHit(sourceHit, sourceRecord, targetRecord, permutation) {
+  const sourceOffset = sceneRenderer.paintExplodeOffsets.get(sourceHit.uid) || [0, 0, 0];
+  const targetOffset = sceneRenderer.paintExplodeOffsets.get(targetRecord.uid) || [0, 0, 0];
+  const modelPoint = sourceHit.modelPoint || sourceHit.point.map((value, axis) => value - sourceOffset[axis]);
   const triangles = [[0, 2, 1], [2, 3, 1]];
   for (const indices of triangles) {
-    const weights = barycentricPoint(sourceHit.point,
+    const weights = barycentricPoint(modelPoint,
       sourceRecord.facePoints[indices[0]], sourceRecord.facePoints[indices[1]], sourceRecord.facePoints[indices[2]]);
     if (!weights) continue;
-    const point = [0, 1, 2].map(axis => indices.reduce((sum, slot, index) =>
+    const mappedModelPoint = [0, 1, 2].map(axis => indices.reduce((sum, slot, index) =>
       sum + targetRecord.facePoints[permutation[slot]][axis] * weights[index], 0));
+    const point = mappedModelPoint.map((value, axis) => value + targetOffset[axis]);
     return {
       uid: targetRecord.uid, cubeUid: targetRecord.cubeUid, cubeIndex: targetRecord.cubeIndex,
       cube: targetRecord.cube, faceName: targetRecord.faceName,
-      facePoints: targetRecord.facePoints.map(entry => [...entry]), point,
+      facePoints: targetRecord.facePoints.map(entry => entry.map((value, axis) => value + targetOffset[axis])), point,
+      modelPoint: mappedModelPoint,
       symmetryPermutation: (sourceHit.symmetryPermutation || [0, 1, 2, 3]).map(slot => permutation[slot]),
       symmetryInstanceKey: `${targetRecord.key}:${(sourceHit.symmetryPermutation || [0, 1, 2, 3]).map(slot => permutation[slot]).join(',')}`
     };

@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="./assets/shortcut-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body>
+<body data-editor-mode="edit">
   <svg class="icon-symbols" aria-hidden="true" width="0" height="0">
     <defs>
       <symbol id="icon-open" viewBox="0 0 179.85 115.4">
@@ -199,7 +199,7 @@
           <button type="button" data-texture-face="up" title="選中全部上面">上</button>
           <button type="button" data-texture-face="down" title="選中全部下面">下</button>
         </div>
-        <div class="texture-preview" id="texturePreview" tabindex="0">
+        <div class="texture-preview" id="texturePreview" tabindex="0" title="Shift 框選追加 UV 面；Ctrl 框選移除 UV 面">
           <div class="checkerboard"></div>
           <div class="texture-stage" id="textureStage">
             <canvas id="textureCanvas" width="1" height="1"></canvas>
@@ -217,9 +217,7 @@
           <label><span>U2</span><input type="number" step="any" data-uv-coordinate="2" placeholder="-" /></label>
           <label><span>V2</span><input type="number" step="any" data-uv-coordinate="3" placeholder="-" /></label>
         </div>
-        <details class="texture-features" id="textureFeatures"><summary>圖層與貼圖模式</summary><div id="textureFeatureControls"></div></details>
-        <details class="texture-features"><summary>選中面的平鋪</summary><div id="textureTileControls"></div></details>
-        <div class="texture-list" id="textureList"></div>
+        <div class="texture-list" id="textureList" tabindex="0"></div>
       </section>
       <section class="dock-panel uv-preview-panel" data-panel="uvPreview">
         <div class="panel-heading compact panel-drag-handle">
@@ -268,7 +266,7 @@
                 <button type="button" class="danger" data-reference-action="remove">移除選中參考圖</button>
               </div>
             </div>
-            <button data-action="frame" title="聚焦">⌖</button><button data-action="grid" title="網格">#</button><button data-action="wire" title="邊界線框">▧</button>
+            <button data-action="frame" title="聚焦">⌖</button><button data-action="grid" title="顯示／隱藏參考網格">#</button><button data-action="background" title="背景：目前背景">◐</button><button data-action="wire" title="邊界線框">▧</button>
             <select id="minecraftRenderType" title="Minecraft Java RenderType" aria-label="Minecraft Java RenderType">
               <option value="solid">實心</option>
               <option value="solid_smooth">實心 Mipped</option>
@@ -389,12 +387,24 @@
           <label class="search-box"><span>⌕</span><input id="outlinerSearch" placeholder="搜尋物件或 UID" /></label>
           <div class="outliner" id="outliner"></div>
         </section>
+        <section class="dock-panel panel-section texture-layers-panel" data-panel="layers">
+          <div class="panel-heading panel-drag-handle">
+            <strong>圖層</strong>
+            <div class="panel-heading-actions"></div>
+          </div>
+          <div class="texture-layer-panel-scroll">
+            <div id="textureFeatureControls"></div>
+            <div class="texture-tiling-block"><strong>選中面的平鋪</strong><div id="textureTileControls"></div></div>
+          </div>
+        </section>
       </aside>
     </main>
     <div class="workspace-options-bar" aria-label="模式選項">
       <label class="toolbar-check" title="全局開啟或關閉面陰影預覽；不會覆蓋物件自身的陰影設定"><input type="checkbox" id="previewShadeToggle" checked /><span>◐</span> 面陰影</label>
       <label class="toolbar-check" title="顯示玩家尺寸與姿態參考；只用於預覽，不會寫入模型工程或導出檔。"><input type="checkbox" id="playerReferenceToggle" /><span>♙</span> 玩家參考</label>
       <label class="toolbar-check" title="只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件"><input type="checkbox" id="geometryOnlyToggle" /><span>◇</span> 僅幾何</label>
+      <label class="toolbar-check paint-only-option" title="只在繪畫視圖按組展開；不更改模型、樞軸或工程資料"><input type="checkbox" id="paintExplodeToggle" /><span>✣</span> 展開組</label>
+      <label class="toolbar-check edit-only-option" title="允許 Cube 尺寸越過零變成負值"><input type="checkbox" id="negativeShapeToggle" /><span>−</span> 負形</label>
       <label class="toolbar-check paint-only-option" title="繪畫時鎖定透明度"><input type="checkbox" id="alphaLockToggle" /><span>◩</span> 鎖透明</label>
       <label class="toolbar-check paint-only-option" title="繪畫時略過原本完全透明的像素"><input type="checkbox" id="paintIgnoreTransparentToggle" /><span>◌</span> 忽視全透明</label>
       <label class="toolbar-check" title="生成物以 75% 可見度的獨立圖層顯示，後方模型與網格可透出；同時禁止選取及頂點捕捉"><input type="checkbox" id="modifierResultGhostToggle" /><span>◈</span> 修改器結果虛化</label>
@@ -420,6 +430,7 @@
         <label><span>貼圖寬度<small>textureSize[0]</small></span><input id="projectInfoTextureWidth" type="number" min="1" step="1" required /></label>
         <label><span>貼圖高度<small>textureSize[1]</small></span><input id="projectInfoTextureHeight" type="number" min="1" step="1" required /></label>
         <label class="wide"><span>標準吸附精度<small>16 ÷ 精度 = 像素步長</small></span><input id="projectInfoSnap" type="number" min="0.0001" step="any" required /></label>
+        <label class="wide"><span>操作歷史上限<small>留空跟隨全域；0 只留目前狀態</small></span><input id="projectInfoHistoryLimit" type="number" min="0" max="10000" step="1" placeholder="跟隨全域設定" /></label>
         <label class="wide project-description-field"><span>項目描述<small>formatData.projectDescription</small></span><textarea id="projectInfoDescription" rows="3" maxlength="1000"></textarea></label>
       </div>
       <div class="dialog-actions project-info-actions"><button type="button" data-action="closeProjectInfo">取消</button><button class="primary-button" type="submit">套用</button></div>
@@ -429,7 +440,7 @@
   <dialog id="closeProjectsDialog" class="theme-dialog close-projects-dialog">
     <form id="closeProjectsForm">
       <div class="dialog-heading"><div><span class="eyebrow">CLOSE CUBEBRICKS</span><h2>關閉軟體</h2></div></div>
-      <p>勾選下次要恢復的分頁。取消勾選會刪除該項目的本機工作記錄，不會刪除已保存的模型檔。</p>
+      <p>以下僅列出本次啟動新建的模型。勾選下次要恢復的分頁；取消勾選會刪除該項目的本機工作記錄，不會刪除已保存的模型檔。原有模型會自動保留。</p>
       <div id="closeProjectsList" class="close-projects-list"></div>
       <div class="dialog-actions"><button type="button" data-action="cancelCloseProjects">取消</button><button class="primary-button" type="submit">確認並關閉</button></div>
     </form>
@@ -451,17 +462,20 @@
             <div class="settings-page-heading"><strong>一般</strong><span>介面、視口與編輯行為</span></div>
             <div class="theme-grid">
               <label class="config-select-label"><span>介面語言<small>application.language</small></span><select id="languageSelect" aria-label="介面語言"><option value="zh-Hant">繁體中文</option><option value="zh-Hans">简体中文</option><option value="en">English</option></select></label>
+              <div class="player-reference-texture-setting"><div><strong>資源包</strong><small>字體、語言與 Shape 包共用管理視窗；包內容分開載入</small></div><div class="player-reference-texture-actions"><button type="button" id="openPacksButton">管理資源包</button></div></div>
               <label class="config-toggle-label"><span>獨立 UV 編輯模式<small>editor.separate-uv-mode</small></span><input type="checkbox" data-config-key="editor.separate-uv-mode" /></label>
+              <label class="config-number-label"><span>預設操作歷史上限<small>application.history-limit · 0–10000 筆</small></span><input type="number" min="0" max="10000" step="1" data-config-key="application.history-limit" /></label>
               <label class="config-toggle-label"><span>對稱編輯<small>editor.symmetry</small></span><input type="checkbox" data-config-key="editor.symmetry" /></label>
               <label class="config-toggle-label"><span>鎖定透明度<small>paint.alpha-lock</small></span><input type="checkbox" data-config-key="paint.alpha-lock" /></label>
-              <div class="player-reference-texture-setting"><div><strong>工作空間目錄</strong><small>projects/ 保存新項目的展開記錄；shapepacks/ 放外部 Shape 包（僅安裝可信的 JS 包）</small><span id="projectWorkspaceDirectory">讀取中…</span></div><div class="player-reference-texture-actions"><button type="button" data-action="chooseProjectWorkspace">更改位置</button></div></div>
+              <div class="player-reference-texture-setting"><div><strong>工作空間目錄</strong><small>projects/、shapepacks/、languagepacks/、fontpacks/ 分開保存；僅安裝可信的 Shape JS 包</small><span id="projectWorkspaceDirectory">讀取中…</span></div><div class="player-reference-texture-actions"><button type="button" data-action="chooseProjectWorkspace">更改位置</button></div></div>
             </div>
           </section>
           <section class="settings-page" data-settings-panel="viewport">
             <div class="settings-page-heading"><strong>視圖</strong><span>視口顯示與鎖定物體虛化</span></div>
             <div class="theme-grid">
               <label class="config-select-label"><span>視口投影<small>viewport.projection</small></span><select data-config-key="viewport.projection"><option value="perspective">透視</option><option value="orthographic">正交</option></select></label>
-              <label class="config-toggle-label"><span>顯示網格<small>viewport.show-grid</small></span><input type="checkbox" data-config-key="viewport.show-grid" /></label>
+              <label class="config-select-label"><span>視口背景<small>viewport.background-mode</small></span><select data-config-key="viewport.background-mode"><option value="black">純黑</option><option value="current">目前背景</option><option value="grid">棋盤格</option></select></label>
+              <label class="config-toggle-label"><span>顯示參考網格<small>viewport.show-grid</small></span><input type="checkbox" data-config-key="viewport.show-grid" /></label>
               <label class="config-toggle-label"><span>線框邊界<small>viewport.show-wireframe</small></span><input type="checkbox" data-config-key="viewport.show-wireframe" /></label>
               <label class="config-number-label"><span>Cube 出現動畫<small>viewport.cube-birth-ms · ms；0 關閉</small></span><input type="number" min="0" max="500" step="10" data-config-key="viewport.cube-birth-ms" /></label>
               <label class="config-number-label"><span>Cube 消失動畫<small>viewport.cube-death-ms · ms；0 關閉</small></span><input type="number" min="0" max="500" step="10" data-config-key="viewport.cube-death-ms" /></label>
@@ -476,6 +490,7 @@
               <label class="config-toggle-label"><span>開啟鼠標虛化<small>viewport.locked-hover-fade</small></span><input type="checkbox" data-config-key="viewport.locked-hover-fade" /></label>
               <label class="config-number-label"><span>鼠標虛化 Alpha<small>viewport.locked-hover-alpha · 0–100</small></span><input type="number" min="0" max="100" step="1" data-config-key="viewport.locked-hover-alpha" /></label>
               <label class="config-number-label"><span>鼠標虛化半徑<small>viewport.locked-hover-radius · px</small></span><input type="number" min="8" max="2048" step="1" data-config-key="viewport.locked-hover-radius" /></label>
+              <label class="config-number-label"><span>繪畫展開組間距<small>paint.explode-gap · 模型單位；0 代表貼邊</small></span><input type="number" min="0" max="1000" step="0.25" data-config-key="paint.explode-gap" /></label>
             </div>
           </section>
           <section class="settings-page" data-settings-panel="snapping">
@@ -491,6 +506,7 @@
           <section class="settings-page" data-settings-panel="appearance">
             <div class="settings-page-heading"><strong>外觀</strong><span>顏色、圓角與介面縮放</span></div>
             <div class="theme-grid">
+              <label class="config-select-label"><span>介面字體<small>application.font</small></span><select id="fontSelect"><option value="pixel">Fusion Pixel（內置）</option><option value="system">系統字體</option></select></label>
               <label>強調色<input type="color" data-theme-var="--accent" value="#b9f55a" /></label>
               <label>背景色<input type="color" data-theme-var="--bg" value="#11130f" /></label>
               <label>面板色<input type="color" data-theme-var="--panel" value="#1b1f18" /></label>
@@ -505,6 +521,17 @@
       </div>
       <div class="dialog-actions"><button type="button" data-action="resetTheme">恢復預設</button><button class="primary-button" value="ok">完成</button></div>
     </form>
+  </dialog>
+
+  <dialog id="packsDialog" class="theme-dialog packs-dialog">
+    <div class="packs-shell">
+      <div class="dialog-heading"><div><span class="eyebrow">RESOURCE PACKS</span><h2>資源包</h2></div><button type="button" id="closePacksButton" class="close-button" aria-label="關閉">×</button></div>
+      <p>語言、字體與 Shape 包分開存放，共用加入、排序和移除操作。Shape 包包含可執行的 JavaScript，請只安裝可信來源。</p>
+      <div class="packs-tabs"><button type="button" data-pack-kind="language" class="active">語言包</button><button type="button" data-pack-kind="font">字體包</button><button type="button" data-pack-kind="shape">Shape 包</button></div>
+      <div id="packsList" class="packs-list"></div>
+      <div id="packsErrors" class="packs-errors" hidden></div>
+      <div class="dialog-actions"><button type="button" id="refreshPacksButton">重新整理</button><button type="button" id="installPackButton" class="primary-button">＋ 加入包</button></div>
+    </div>
   </dialog>
 
   <dialog id="textureCreateDialog" class="theme-dialog texture-create-dialog">
@@ -531,6 +558,21 @@
       </div>
       <p class="texture-template-summary" id="textureTemplateSummary">UV 尺寸會按照項目基礎吸附分辨率四捨五入；非零邊長至少分配 1px，並由大到小自左上角打包。</p>
       <div class="dialog-actions"><button value="cancel" type="button" data-action="cancelTextureCreate">取消</button><button class="primary-button" type="submit">建立</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="projectOpenProgressDialog" class="theme-dialog texture-progress-dialog project-open-progress-dialog" aria-labelledby="projectOpenProgressStatus">
+    <div class="dialog-heading"><div><span class="eyebrow">OPENING PROJECT</span><h2>正在打開項目</h2></div><output id="projectOpenProgressPercent">0%</output></div>
+    <strong id="projectOpenProgressStatus">正在讀取項目檔案…</strong>
+    <progress id="projectOpenProgressBar" max="1" value="0"></progress>
+    <small>大型項目會顯示解壓、校驗和載入進度</small>
+  </dialog>
+
+  <dialog id="droppedPngDialog" class="theme-dialog dropped-png-dialog" aria-labelledby="droppedPngTitle">
+    <form method="dialog">
+      <div class="dialog-heading"><div><span class="eyebrow">IMPORT PNG</span><h2 id="droppedPngTitle">導入 PNG 圖片</h2></div></div>
+      <p id="droppedPngName"></p>
+      <div class="dialog-actions"><button value="cancel">取消</button><button value="reference">作為參考圖</button><button class="primary-button" value="texture">作為貼圖</button></div>
     </form>
   </dialog>
 
@@ -575,8 +617,8 @@
   <div class="context-menu" id="contextMenu" role="menu" hidden></div>
   <div class="toast" id="toast" role="status"></div>
   <input type="file" id="fileInput" accept=".cbmodel,.bbmodel,.json" hidden />
-  <input type="file" id="textureInput" accept="image/png,image/jpeg,image/webp" hidden />
-  <input type="file" id="referenceImageInput" accept="image/png,image/jpeg,image/webp" multiple hidden />
+  <input type="file" id="textureInput" accept="image/png" hidden />
+  <input type="file" id="referenceImageInput" accept="image/*" multiple hidden />
   <input type="file" id="playerReferenceTextureInput" accept="image/png" hidden />
   <script type="module" src="./app.js"></script>
 </body>

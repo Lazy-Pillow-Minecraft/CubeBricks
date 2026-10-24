@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { state } from '../src/editor/state.js';
 import { TOOL_REGISTRY } from '../src/editor/tool-registry.js';
 import { DOCK_PANEL_DEFINITIONS } from '../src/screen/dock-definitions.js';
+import { DockPanelRegistry } from '../src/screen/docks/registry.js';
+import { dockPanelRegistry } from '../src/screen/docks/builtin.js';
+import { DockManager } from '../src/screen/dock-manager.js';
 import { rgbToHsv, hsvToRgb, insetControlRatio } from '../src/screen/color-picker/math.js';
 import { minimumTemplatePackingSide, packTemplateRectangles } from '../src/utils/template-packer.js';
 import { quaternionFromEuler, eulerFromQuaternion } from '../src/utils/math/rotation.js';
@@ -31,6 +34,31 @@ assert.equal(selectionAffectsModifierResults(modifierProject, [child.uid]), fals
   'disabled parent modifiers do not force a result rebuild');
 assert.ok(TOOL_REGISTRY.brush.modes.includes('paint'));
 assert.equal(DOCK_PANEL_DEFINITIONS.find(panel => panel.id === 'texture').defaultDock, 'left');
+assert.deepEqual(dockPanelRegistry.list().map(panel => panel.id), ['texture', 'uvPreview', 'inspector', 'outliner', 'bottom', 'layers']);
+assert.equal(dockPanelRegistry.get('layers').defaultStackWith, 'outliner');
+const localDockRegistry = new DockPanelRegistry();
+localDockRegistry.register({ id: 'sample', index: 2, modes: ['edit'], defaultDock: 'right',
+  defaultPosition: { x: 1, y: 2 }, defaultSize: { width: 200, height: 100 } });
+assert.throws(() => localDockRegistry.register({ id: 'sample', index: 3, modes: ['edit'], defaultDock: 'left' }), /already registered/);
+assert.throws(() => localDockRegistry.register({ id: 'second', index: 2, modes: ['edit'], defaultDock: 'left' }), /unique integer index/);
+const dockHarness = Object.create(DockManager.prototype);
+const makeDockPanel = (id, dock, width, height) => ({ id, index: width, state: {
+  dock, x: width, y: height, width, height, collapsed: false, stackId: null, stackOrder: 0, stackActive: false
+}, element: { after() {} } });
+const hostDock = makeDockPanel('host', 'right', 292, 340);
+const incomingDock = makeDockPanel('incoming', 'left', 236, 620);
+const secondIncomingDock = makeDockPanel('secondIncoming', 'floating', 300, 240);
+dockHarness.panels = new Map([hostDock, incomingDock, secondIncomingDock].map(panel => [panel.id, panel]));
+dockHarness.applyPanelState = () => {};
+dockHarness.syncStacks = () => {};
+dockHarness.refreshZones = () => {};
+dockHarness.renumberZone = () => {};
+dockHarness.joinStack(incomingDock, hostDock, [incomingDock, secondIncomingDock]);
+assert.deepEqual([incomingDock, secondIncomingDock].map(panel => [panel.state.dock, panel.state.width, panel.state.height]),
+  [['right', 292, 340], ['right', 292, 340]], 'receiving dock determines shared stack geometry');
+dockHarness.leaveStack(incomingDock);
+assert.equal(hostDock.state.dock, 'right', 'the dock left in place retains the shared state');
+assert.equal(secondIncomingDock.state.stackId, hostDock.state.stackId, 'the remaining tabs stay together');
 for (const factory of [createReferenceImageController, createMirrorGuideController,
   createPaintSymmetryController, createKnifeController, createModelCaptureController,
   createTextureTemplateController, createCameraController]) assert.equal(typeof factory, 'function');

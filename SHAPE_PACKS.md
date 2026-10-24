@@ -1,6 +1,6 @@
 # CubeBricks Shape 包編寫規範
 
-桌面版會讀取「設定 → 工作空間目錄」下的 `shapepacks/`。一個包可以是資料夾，或是同樣結構的 `.zip`；ZIP 可直接以 `package.json` 為根，也可多包一層總資料夾。包顯示名取最外層資料夾／ZIP 的檔名，而不是 `package.json` 裡的名稱。新增、移除或更新包後重新啟動程式；切換工作空間目錄也會重新載入。
+桌面版會讀取工作空間的 `shapepacks/`。一個包可以是資料夾，或是同樣結構的 `.zip`；ZIP 可直接以 `package.json` 為根，也可多包一層總資料夾。包顯示名取最外層資料夾／ZIP 的檔名，而不是 `package.json` 裡的名稱。可在「設定 → 一般 → 管理資源包」直接加入 ZIP、調整順序、移除或熱重載；資料夾包仍可手動放入目錄後按重新整理。
 
 ```text
 <工作空間>/
@@ -14,7 +14,7 @@
     AnotherPack.zip
 ```
 
-`package.json` 是包清單，`version` 保存包版本，`shapes` 逐一指出腳本和圖標。不同包的 Shape ID 仍須全局唯一，不能佔用內建 ID。
+`package.json` 是包清單，`version` 保存包版本，`shapes` 逐一指出腳本和圖標。`hotReload: false` 可隱藏該包的熱重載按鈕；省略時預設允許。不同包的 Shape ID 仍須全局唯一，不能佔用內建 ID。
 
 ```json
 {

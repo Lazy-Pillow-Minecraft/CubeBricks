@@ -1,7 +1,7 @@
 const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
-const { packZip, unpackZip } = require('./zip-store.cjs');
+const { packArchive, unpackArchive } = require('./archive-codec.cjs');
 const { createTextureDelta, applyTextureDelta, textureSourceFingerprint } = require('./texture-delta.cjs');
 
 const FORMAT = 'cubebricks-journal';
@@ -309,16 +309,23 @@ class ProjectJournal {
     const elements = [], groups = [];
     const seen = new Set();
     for (const [order, output] of [[manifest.groupOrder, groups], [manifest.elementOrder, elements]]) {
-      for (const uid of order) {
-        const pointer = manifest.pointers[uid];
-        if (!pointer || seen.has(uid)) throw new Error(`元素索引損壞：${uid}`);
-        seen.add(uid);
-        const record = await readJson(this.file(`${pointer.folder}/${pointer.local}.json`));
-        if (!record || record.deleted || record.identifier !== uid || record.state?.uid !== uid
-          || (manifest.nodeHashes?.[uid] && digest(record.state) !== manifest.nodeHashes[uid])) {
-          throw new Error(`元素快照損壞：${uid}`);
-        }
-        output.push(record.state);
+      for (let offset = 0; offset < order.length; offset += 64) {
+        // A model can contain thousands of cubes. Serial filesystem reads made
+        // a single undo wait for thousands of round trips; bound concurrency
+        // keeps the original ordering and validation without flooding Windows.
+        const batch = order.slice(offset, offset + 64);
+        const states = await Promise.all(batch.map(async uid => {
+          const pointer = manifest.pointers[uid];
+          if (!pointer || seen.has(uid)) throw new Error(`元素索引損壞：${uid}`);
+          seen.add(uid);
+          const record = await readJson(this.file(`${pointer.folder}/${pointer.local}.json`));
+          if (!record || record.deleted || record.identifier !== uid || record.state?.uid !== uid
+            || (manifest.nodeHashes?.[uid] && digest(record.state) !== manifest.nodeHashes[uid])) {
+            throw new Error(`元素快照損壞：${uid}`);
+          }
+          return record.state;
+        }));
+        output.push(...states);
       }
     }
     return { elements, groups };
@@ -598,10 +605,132 @@ class ProjectJournal {
       textureStates.set(id, { ...fields, source, ...(Array.isArray(layers) ? { layers } : {}) });
     }
   }
-  async archive(filePath) {
+  async compactHistory(limit) {
+    if (!Number.isInteger(limit) || limit < 0 || limit > 10000) throw new Error('歷史上限必須是 0–10000 筆操作');
+    await this.ensureReady();
+    const directory = this.file('transactions');
+    const all = (await fs.readdir(directory)).filter(name => /^\d+\.json$/.test(name)).map(name => Number(name.slice(0, -5)));
+    if (all.length <= limit + 1) return { changed: false, retained: all.length };
+    const lineage = [];
+    let current = this.activeManifest;
+    while (current && lineage.length <= limit) {
+      lineage.push(current);
+      current = current.parent === null ? null : await this.manifest(current.parent);
+    }
+    const keep = new Map(lineage.map(manifest => [manifest.sequence, manifest]));
+    // Retain redo in navigation order if there is room. Obsolete branches go first.
+    let redoParent = this.activeManifest.sequence;
+    for (const sequence of [...(this.state.redoHeads || [])].reverse()) {
+      if (keep.size >= limit + 1) break;
+      const candidate = await this.manifest(sequence);
+      if (candidate.parent !== redoParent) break;
+      keep.set(sequence, candidate);
+      redoParent = sequence;
+    }
+    const baseline = lineage.at(-1);
+    const liveSnapshots = new Set();
+    for (const manifest of keep.values()) {
+      for (const pointer of Object.values(manifest.pointers || {})) {
+        liveSnapshots.add(`${pointer.folder}/${pointer.local}.json`);
+      }
+    }
+    // Verify every retained snapshot before changing the history graph.
+    const snapshots = [...liveSnapshots];
+    for (let offset = 0; offset < snapshots.length; offset += 64) {
+      await Promise.all(snapshots.slice(offset, offset + 64).map(snapshot => fs.access(this.file(snapshot))));
+    }
+    const saved = await readJson(this.file('saved_state'));
+    if (saved?.sequence && !keep.has(saved.sequence) && all.includes(saved.sequence)) {
+      let ancestor = baseline.parent;
+      let isAncestor = false;
+      while (ancestor !== null) {
+        if (ancestor === saved.sequence) { isAncestor = true; break; }
+        ancestor = (await this.manifest(ancestor)).parent;
+      }
+      await writeJson(this.file('saved_state'), { ...saved, prunedAncestor: isAncestor });
+    }
+    const rewritten = baseline.parent === null && !(baseline.textureChanges || []).length
+      ? baseline : { ...baseline, parent: null, textureChanges: [] };
+    if (rewritten !== baseline) await writeJson(this.file(`transactions/${baseline.sequence}.json`), rewritten);
+    if (this.activeManifest.sequence === baseline.sequence) this.activeManifest = rewritten;
+    this.state.redoHeads = (this.state.redoHeads || []).filter(sequence => keep.has(sequence));
+    if (!keep.has(this.state.previousCommitted)) this.state.previousCommitted = null;
+    await writeJson(this.file('current_state.previous'), this.state);
+    await writeJson(this.file('current_state'), this.state);
+    for (const sequence of all) {
+      if (keep.has(sequence)) continue;
+      await fs.rm(this.file(`transactions/${sequence}.json`), { force: true });
+    }
+    const changesRoot = this.file('texture_changes');
+    for (const entry of await fs.readdir(changesRoot, { withFileTypes: true }).catch(error => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    })) {
+      if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
+      if (!keep.has(Number(entry.name)) || Number(entry.name) === baseline.sequence) {
+        await fs.rm(this.file(`texture_changes/${entry.name}`), { recursive: true, force: true });
+      }
+    }
+    const sweep = async relative => {
+      for (const entry of await fs.readdir(this.file(relative), { withFileTypes: true }).catch(error => {
+        if (error.code === 'ENOENT') return [];
+        throw error;
+      })) {
+        const child = `${relative}/${entry.name}`;
+        if (entry.isDirectory()) await sweep(child);
+        else if (entry.isFile() && /^\d+\.json$/.test(entry.name) && !liveSnapshots.has(child)) {
+          await fs.rm(this.file(child), { force: true });
+        }
+      }
+    };
+    await sweep('elements');
+    return { changed: true, retained: keep.size, baseline: baseline.sequence };
+  }
+  async currentSnapshotEntries() {
+    const data = separate(await this.content());
+    data.information.projectUuid = this.projectUuid;
+    const pointers = {}, nodeHashes = {};
+    const placements = placementsFor(data);
+    const files = [
+      ['project_uuid', Buffer.from(pretty(this.projectUuid))],
+      ['index_number', Buffer.from('1')],
+      ['operation_index.json', Buffer.from(pretty(await readJson(this.file('operation_index.json'), [])))],
+      ['project_information.json', Buffer.from(pretty(data.information))]
+    ];
+    for (const node of [...data.groups, ...data.elements]) {
+      const folder = nodeFolder(node);
+      pointers[node.uid] = { folder, local: 1 };
+      nodeHashes[node.uid] = digest(node);
+      files.push([`${folder}/1.json`, Buffer.from(pretty({
+        identifier: node.uid, globalSequence: 1, previousSequence: null,
+        operationId: 'core.project.create', directoryChanged: false,
+        directory: placements[node.uid] || null, storageDirectory: folder, deleted: false, state: node
+      }))]);
+      files.push([`${folder}/local_number`, Buffer.from('1')]);
+      files.push([`${folder}/locator`, Buffer.from(pretty({ identifier: node.uid, globalSequence: 1,
+        local: 1, directory: placements[node.uid] || null, storageDirectory: folder }))]);
+      files.push([`${folder}/branch`, Buffer.from(pretty({ activeHead: 1, local: 1 }))]);
+    }
+    const textureIds = data.textures.map(textureId);
+    const textureHashes = Object.fromEntries(data.textures.map((texture, index) => [textureIds[index], textureDigest(texture)]));
+    data.textures.forEach((texture, index) => files.push([`textures/${textureIds[index]}/current`, Buffer.from(pretty(texture))]));
+    for (const [hash, source] of data.referenceImageSources) files.push([`reference_images/${hash}.txt`, Buffer.from(source)]);
+    files.push(['transactions/1.json', Buffer.from(pretty({
+      format: FORMAT, version: VERSION, sequence: 1, parent: null, operationId: 'core.project.create',
+      operationLabel: '導出的目前狀態', timestamp: new Date().toISOString(),
+      information: data.information, elementOrder: data.elements.map(node => node.uid),
+      groupOrder: data.groups.map(node => node.uid), textureIds, pointers, placements,
+      nodeHashes, textureHashes, textureHashVersion: 2,
+      changed: Object.keys(pointers), textureChanges: []
+    }))]);
+    files.push(['current_state', Buffer.from(pretty({ format: FORMAT, version: VERSION,
+      status: 'complete', sequence: 1, lastCommitted: 1, activeHead: 1, previousCommitted: null }))]);
+    return files;
+  }
+  async archive(filePath, { includeHistory = true, markSaved = true } = {}) {
     await this.ensureReady();
     await this.content();
-    const files = [];
+    const files = includeHistory ? [] : await this.currentSnapshotEntries();
     const visit = async directory => {
       for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
         const absolute = path.join(directory, entry.name);
@@ -609,7 +738,10 @@ class ProjectJournal {
         else if (entry.isFile() && !entry.name.endsWith('.tmp')) files.push([path.relative(this.directory, absolute).replace(/\\/g, '/'), await fs.readFile(absolute)]);
       }
     };
-    await visit(this.directory);
+    if (includeHistory) await visit(this.directory);
+    // saved_state contains a machine-local path and is reconstructed on open.
+    const savedIndex = files.findIndex(([name]) => name === 'saved_state');
+    if (savedIndex >= 0) files.splice(savedIndex, 1);
     // Older working journals may still contain inline copies in historical
     // manifests. Compact them in the archive without rewriting live history.
     const archivedNames = new Set(files.map(([name]) => name));
@@ -629,14 +761,14 @@ class ProjectJournal {
       const name = `reference_images/${reference}.txt`;
       if (!archivedNames.has(name)) files.push([name, Buffer.from(source)]);
     }
-    const archive = packZip(files);
+    const archive = await packArchive(files);
     await atomicWrite(filePath, archive);
-    await writeJson(this.file('saved_state'), { sequence: this.activeManifest.sequence, filePath,
+    if (markSaved) await writeJson(this.file('saved_state'), { sequence: this.activeManifest.sequence, filePath,
       projectUuid: this.projectUuid, fileHash: crypto.createHash('sha256').update(archive).digest('hex'),
       savedAt: new Date().toISOString() });
   }
-  static inspectArchive(bytes) {
-    const entries = unpackZip(bytes);
+  static inspectArchive(bytes, unpackedEntries = null) {
+    const entries = unpackedEntries || unpackArchive(bytes);
     const state = JSON.parse(entries.get('current_state')?.toString('utf8') || 'null');
     if (state?.format !== FORMAT || !Number.isInteger(state.activeHead)) throw new Error('不是展開式 CubeBricks 項目');
     const storedUuid = JSON.parse(entries.get('project_uuid')?.toString('utf8') || 'null');
@@ -663,12 +795,14 @@ class ProjectJournal {
     };
   }
   static historySignature(manifest) { return historySignature(manifest); }
-  static async fromArchive(bytes, directory, entries = null) {
-    entries ||= unpackZip(bytes);
+  static async fromArchive(bytes, directory, entries = null, onProgress = () => {}) {
+    entries ||= unpackArchive(bytes);
     if (!entries.has('current_state')) throw new Error('不是展開式 CubeBricks 項目');
+    let written = 0;
     for (const [name, value] of entries) {
       if (name.startsWith('/') || name.split('/').includes('..')) throw new Error('不安全的項目路徑');
       await atomicWrite(path.join(directory, ...name.split('/')), value);
+      onProgress(++written / entries.size, `正在建立工作檔案 ${written} / ${entries.size}`);
     }
     return new ProjectJournal(directory).load();
   }

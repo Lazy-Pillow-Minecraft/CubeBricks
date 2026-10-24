@@ -1,4 +1,4 @@
-import { ConfigKey, applyLanguage, getLanguageLabel } from '../common/config/app-config.js';
+import { ConfigKey, applyLanguage, getLanguageLabel, translateUiText } from '../common/config/app-config.js';
 
 export function createSettingsController({
   state, $, $$, sceneRenderer, hexToRgb, renderScene, toast,
@@ -107,7 +107,8 @@ function applyRegisteredConfig(id, value, notify = false) {
     state.settingsSnap = value;
     updateSnapButton();
   }
-  if (id === ConfigKey.ALLOW_NEGATIVE_SIZE) state.allowNegativeSize = value;
+  if (id === ConfigKey.ALLOW_NEGATIVE_SIZE) { state.allowNegativeSize = value; $('#negativeShapeToggle').checked = value; }
+  if (id === ConfigKey.PAINT_EXPLODE_GAP) state.paintExplodeGap = value;
   if (id === ConfigKey.SHIFT_SNAP_MODE) state.modifierSnap.shift.mode = value;
   if (id === ConfigKey.SHIFT_SNAP_VALUE) state.modifierSnap.shift.value = value;
   if (id === ConfigKey.CTRL_SNAP_MODE) state.modifierSnap.ctrl.mode = value;
@@ -133,7 +134,20 @@ function applyRegisteredConfig(id, value, notify = false) {
     state.projection = value;
     updateProjectionControls();
   }
-  if (id === ConfigKey.SHOW_GRID) state.grid = value;
+  if (id === ConfigKey.SHOW_GRID) {
+    state.grid = value;
+    const button = $('[data-action="grid"]');
+    if (button) button.setAttribute('aria-pressed', String(value));
+  }
+  if (id === ConfigKey.BACKGROUND_MODE) {
+    state.backgroundMode = value;
+    $('#viewport').dataset.backgroundMode = value;
+    const button = $('[data-action="background"]');
+    if (button) {
+      button.title = translateUiText(`背景：${({ black: '純黑', current: '目前背景', grid: '棋盤格' })[value]}`);
+      button.textContent = ({ black: '●', current: '◐', grid: '▦' })[value];
+    }
+  }
   if (id === ConfigKey.SHOW_WIREFRAME) state.wire = value;
   if (id === ConfigKey.CUBE_BIRTH_MS) state.cubeBirthMs = value;
   if (id === ConfigKey.CUBE_DEATH_MS) state.cubeDeathMs = value;

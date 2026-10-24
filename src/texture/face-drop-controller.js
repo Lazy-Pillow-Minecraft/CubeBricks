@@ -4,7 +4,7 @@ import { CULLED_FACE_TEXTURE_KEY, UV_FACE_LABELS } from './face-constants.js';
 export function createTextureFaceDropController({
   state, $, viewport, uvPreviewViewport, getSelectionExpansion,
   ensureCubeFaceRecord, snapshot, persistGeneratedPaintCube, markDirty,
-  uvPreviewController, invalidateAllRenderGeometry, renderTextureList,
+  uvPreviewController, uvEditorController, invalidateAllRenderGeometry, renderTextureList,
   renderOutliner, renderInspector, renderScene, updateTextureStageTransform,
   toast, CUBE_FACE_NAMES, remapNumericFaceTextureReferences
 }) {
@@ -77,6 +77,7 @@ function applyTextureAssetToFace(asset, hit) {
   }
   markDirty();
   uvPreviewController.uvPreviewProjectCache = null;
+  uvEditorController.textureUvEntryCache = null;
   invalidateAllRenderGeometry();
   renderTextureList();
   renderOutliner();

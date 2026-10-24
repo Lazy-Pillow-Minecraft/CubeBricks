@@ -5,6 +5,8 @@ const path = require('path');
 const { ProjectJournal } = require('../electron/project-journal.cjs');
 const { encodePng, createTextureDelta, applyTextureDelta } = require('../electron/texture-delta.cjs');
 const { packZip, unpackZip } = require('../electron/zip-store.cjs');
+const { packArchive, unpackArchive, unpackArchiveWithProgress, isArchiveV2 } = require('../electron/archive-codec.cjs');
+const zlib = require('node:zlib');
 
 function image(color) {
   const rgba = Buffer.alloc(16 * 16 * 4);
@@ -32,13 +34,86 @@ test('archive reader rejects unsafe Windows paths', () => {
   assert.throws(() => unpackZip(packZip([['texture:alt', Buffer.from('x')]])), /不安全路徑/);
 });
 
+test('legacy ZIP archive reports extraction progress', async () => {
+  const original = [['one', Buffer.from('first')], ['two', Buffer.from('second')]];
+  const progress = [];
+  const restored = await unpackArchiveWithProgress(packZip(original), value => progress.push(value));
+  for (const [name, value] of original) assert.deepEqual(restored.get(name), value);
+  assert.equal(progress.at(-1), 1);
+  assert.ok(progress.some(value => value > 0 && value < 1));
+});
+
+test('CBM2 groups text, deduplicates images and restores exact file bytes', async () => {
+  const source = image(48);
+  const tile = zlib.deflateSync(Buffer.alloc(32 * 32 * 4, 3)).toString('base64');
+  const entries = [
+    ['transactions/1.json', Buffer.from(JSON.stringify({ image: source, value: 1 }, null, 2))],
+    ['textures/example/current', Buffer.from(JSON.stringify({ source, value: 2 }, null, 2))],
+    ['texture_changes/2/example.json', Buffer.from(JSON.stringify({ image: { kind: 'tiles', tiles: [
+      { x: 0, y: 0, before: tile, after: tile }
+    ] } }))],
+    ['empty', Buffer.alloc(0)]
+  ];
+  const bytes = await packArchive(entries);
+  assert.equal(isArchiveV2(bytes), true);
+  const restored = unpackArchive(bytes);
+  for (const [name, original] of entries) assert.deepEqual(restored.get(name), original);
+  const progress = [];
+  const streamed = await unpackArchiveWithProgress(bytes, (value, label) => progress.push({ value, label }));
+  for (const [name, original] of entries) assert.deepEqual(streamed.get(name), original);
+  assert.equal(progress.at(-1).value, 1);
+  assert.ok(progress.some(step => step.value > 0 && step.value < 1));
+  const manifestLength = bytes.readUInt32LE(8);
+  const manifest = JSON.parse(zlib.brotliDecompressSync(bytes.subarray(12, 12 + manifestLength)));
+  assert.equal(manifest.blobs.length, 2);
+  const damaged = Buffer.from(bytes);
+  damaged[damaged.length - 1] ^= 1;
+  assert.throws(() => unpackArchive(damaged), /校驗失敗/);
+});
+
+test('history cap retains a sound undo baseline while snapshot export leaves the working history intact', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-cap-test-'));
+  try {
+    const directory = path.join(root, 'working');
+    const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+    const texture = { uuid: 'texture_a', source: image(0) };
+    const journal = await new ProjectJournal(directory).initialize(model([cube], [texture]));
+    for (let value = 1; value <= 4; value++) {
+      await journal.commit(model([{ ...cube, position: [value, 0, 0] }],
+        [{ ...texture, source: image(value * 40) }]), 'core.element.move');
+    }
+    const currentContent = JSON.parse(await journal.content());
+    const fullPath = path.join(root, 'full.cbmodel');
+    const snapshotPath = path.join(root, 'snapshot.cbmodel');
+    const result = await journal.compactHistory(2);
+    assert.deepEqual([result.retained, result.baseline], [3, 3]);
+    assert.equal((await journal.manifest(3)).parent, null);
+    assert.equal((await journal.navigate('undo')).sequence, 4);
+    assert.equal((await journal.navigate('undo')).sequence, 3);
+    assert.equal(await journal.navigate('undo'), null);
+    assert.equal(JSON.parse(await journal.content()).textures[0].source, image(80));
+    await journal.navigate('redo');
+    await journal.navigate('redo');
+    assert.deepEqual(JSON.parse(await journal.content()), currentContent);
+    await journal.archive(fullPath);
+    await journal.archive(snapshotPath, { includeHistory: false, markSaved: false });
+    const full = await ProjectJournal.fromArchive(await fs.readFile(fullPath), path.join(root, 'full'));
+    const snapshot = await ProjectJournal.fromArchive(await fs.readFile(snapshotPath), path.join(root, 'snapshot'));
+    assert.deepEqual(JSON.parse(await snapshot.content()), currentContent);
+    assert.deepEqual(JSON.parse(await full.content()), currentContent);
+    assert.equal(snapshot.state.activeHead, 1);
+    assert.equal(journal.state.activeHead, 5);
+    assert.equal((await full.navigate('undo')).sequence, 4);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
 test('legacy archive receives one persistent project UUID on first expansion', async () => {
   const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-legacy-uuid-test-'));
   try {
     const original = await new ProjectJournal(path.join(root, 'source')).initialize(model([]));
     const archivePath = path.join(root, 'legacy.cbmodel');
     await original.archive(archivePath);
-    const entries = unpackZip(await fs.readFile(archivePath));
+    const entries = unpackArchive(await fs.readFile(archivePath));
     entries.delete('project_uuid');
     for (const name of ['project_information.json', 'transactions/1.json']) {
       const record = JSON.parse(entries.get(name).toString());
@@ -116,7 +191,7 @@ test('reference images are stored once and indexed by every journal state', asyn
     const legacyJournal = await new ProjectJournal(path.join(root, 'reopened')).load();
     const compactedArchive = path.join(root, 'legacy-compacted.cbmodel');
     await legacyJournal.archive(compactedArchive);
-    const archivedEntries = unpackZip(await fs.readFile(compactedArchive));
+    const archivedEntries = unpackArchive(await fs.readFile(compactedArchive));
     assert.equal([...archivedEntries.keys()].filter(name => name.startsWith('reference_images/')).length, 1);
     assert.equal(JSON.parse(archivedEntries.get('transactions/1.json').toString()).information.referenceImages.general[0].source,
       undefined, 'saving an older journal compacts its inline reference image history');
@@ -292,6 +367,36 @@ test('bulk texture assignment undoes all faces, UV flags, hierarchy and texture 
   assert.equal(result.globalSequence, '2_T');
   assert.deepEqual(JSON.parse((await journal.navigate('undo')).content), before);
   assert.deepEqual(JSON.parse((await journal.navigate('redo')).content), after);
+}));
+
+test('paint and model edits undo and redo in one chronological history', () => withJournal(async root => {
+  const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+  const texture = { uuid: 'texture_a', source: image(10) };
+  const journal = await new ProjectJournal(root).initialize(model([cube], [texture]));
+  await journal.commit(model([cube], [{ ...texture, source: image(80) }]), 'core.paint.stroke');
+  await journal.commit(model([{ ...cube, position: [5, 0, 0] }], [{ ...texture, source: image(80) }]), 'core.element.move');
+  let restored = JSON.parse((await journal.navigate('undo')).content);
+  assert.equal(restored.elements[0].position[0], 0);
+  assert.equal(restored.textures[0].source, image(80));
+  restored = JSON.parse((await journal.navigate('undo')).content);
+  assert.equal(restored.elements[0].position[0], 0);
+  assert.equal(restored.textures[0].source, image(10));
+  restored = JSON.parse((await journal.navigate('redo')).content);
+  assert.equal(restored.textures[0].source, image(80));
+  restored = JSON.parse((await journal.navigate('redo')).content);
+  assert.equal(restored.elements[0].position[0], 5);
+}));
+
+test('batched cube restoration retains outliner order and validates every snapshot', () => withJournal(async root => {
+  const cubes = Array.from({ length: 145 }, (_, index) => ({
+    uid: `cube_${index}`, type: 'cube', position: [index, 0, 0]
+  }));
+  const journal = await new ProjectJournal(root).initialize(model(cubes));
+  await journal.commit(model(cubes.map((cube, index) => index === 80
+    ? { ...cube, position: [999, 0, 0] } : cube)), 'core.element.move');
+  const restored = JSON.parse((await journal.navigate('undo')).content);
+  assert.deepEqual(restored.elements.map(cube => cube.uid), cubes.map(cube => cube.uid));
+  assert.equal(restored.elements[80].position[0], 80);
 }));
 
 test('duplicate node IDs are rejected rather than overwriting a different snapshot', () => withJournal(async root => {

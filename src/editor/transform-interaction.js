@@ -553,6 +553,7 @@ function getPlaneUniformDistance(drag, dx, dy) {
 }
 
 function applyTransformDrag(drag, dx, dy, event) {
+  const rotationDragSensitivity = .75;
   const item = drag.item;
   const axisDelta = drag.kind.startsWith('rotate') && drag.axis
     ? (() => {
@@ -560,7 +561,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       let delta = angle - drag.startAngle;
       while (delta > Math.PI) delta -= Math.PI * 2;
       while (delta < -Math.PI) delta += Math.PI * 2;
-      return delta * 180 / Math.PI * drag.rotationScreenSign;
+      return delta * 180 / Math.PI * drag.rotationScreenSign * rotationDragSensitivity;
     })()
     : drag.axis
     ? (dx * drag.axis.screen[0] + -dy * drag.axis.screen[1]) * drag.axis.worldPerPixel
@@ -879,7 +880,7 @@ function applyTransformDrag(drag, dx, dy, event) {
   }
   if (drag.tool === 'rotate' && drag.targets.length > 1) {
     const angleStep = getAngleSnapStep(event);
-    const angle = drag.axis ? axisDelta : (dx - dy) * .4;
+    const angle = drag.axis ? axisDelta : (dx - dy) * .4 * rotationDragSensitivity;
     const snappedDelta = snapAngle(angle, angleStep);
     const commonAxis = drag.axis
       ? drag.axis.vector.map(value => value * drag.sign)
@@ -917,7 +918,7 @@ function applyTransformDrag(drag, dx, dy, event) {
   }
   if (drag.tool === 'rotate') {
     const angleStep = getAngleSnapStep(event);
-    const angle = drag.axis ? axisDelta : (dx - dy) * .4;
+    const angle = drag.axis ? axisDelta : (dx - dy) * .4 * rotationDragSensitivity;
     const editsCurveRoll = drag.curveNodeContext?.curve.dimension === 3
       && state.transformSpace === 'self'
       && drag.kind === 'rotate'
@@ -953,13 +954,13 @@ function applyTransformDrag(drag, dx, dy, event) {
       drag.tooltipText = `角度 ${formatSigned(snappedDelta)}°`;
     } else {
       const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || item;
-      target.rotation = [snapAngle(drag.rotation[0] - dy * .4, angleStep), snapAngle(drag.rotation[1] + dx * .4, angleStep), drag.rotation[2]];
+      target.rotation = [snapAngle(drag.rotation[0] - dy * .4 * rotationDragSensitivity, angleStep), snapAngle(drag.rotation[1] + dx * .4 * rotationDragSensitivity, angleStep), drag.rotation[2]];
       if (drag.curveNodeContext?.curve.dimension === 2) {
         target.rotation[0] = 0;
         target.rotation[2] = 0;
       }
       if (drag.curveNodeContext) drag.curveNodeContext.node.autoTangent = false;
-      drag.tooltipText = `角度 ${formatSigned(Math.hypot(dx, dy) * .4)}°`;
+      drag.tooltipText = `角度 ${formatSigned(Math.hypot(dx, dy) * .4 * rotationDragSensitivity)}°`;
     }
   }
 }

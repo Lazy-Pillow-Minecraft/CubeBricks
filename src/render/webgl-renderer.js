@@ -1,6 +1,8 @@
 import { buildModifierRenderInstances } from '../model.js';
 import { tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
 import { constrainCube, formatRules } from '../common/core/format-constraints.js';
+import { buildPaintExplodeOffsets, applyPaintExplodeOffsets } from './paint-explode.js';
+import { SELECTION_STRIPE_SIZE, SELECTION_STRIPE_PIXELS, selectionStripePhase } from '../utils/selection-stripes.js';
 
 const DEG = Math.PI / 180;
 const MIPPED_SUPERSAMPLE = 1.5;
@@ -110,6 +112,8 @@ export class WebGLSceneRenderer {
     this.selectionTexelLocation = this.gl.getUniformLocation(this.program, 'uSelectionTexel');
     this.selectionPixelRadiusLocation = this.gl.getUniformLocation(this.program, 'uSelectionPixelRadius');
     this.selectionPhaseLocation = this.gl.getUniformLocation(this.program, 'uSelectionPhase');
+    this.selectionStripeLocation = this.gl.getUniformLocation(this.program, 'uSelectionStripe');
+    this.selectionStripeViewportLocation = this.gl.getUniformLocation(this.program, 'uSelectionStripeViewport');
     this.useLogDepthLocation = this.gl.getUniformLocation(this.program, 'uUseLogDepth');
     this.logDepthFactorLocation = this.gl.getUniformLocation(this.program, 'uLogDepthFactor');
     this.postPositionLocation = this.gl.getAttribLocation(this.postProgram, 'aPosition');
@@ -156,6 +160,7 @@ export class WebGLSceneRenderer {
     this.ghostWireCount = 0;
     this.texture = this.gl.createTexture();
     this.selectionMaskTexture = this.gl.createTexture();
+    this.selectionStripeTexture = this.gl.createTexture();
     this.selectionMaskReady = false;
     this.selectionMaskSize = [1, 1];
     this.textureLayout = null;
@@ -168,6 +173,14 @@ export class WebGLSceneRenderer {
       this.gl.texParameteri(this.gl.TEXTURE_2D, parameter, this.gl.NEAREST);
     for (const parameter of [this.gl.TEXTURE_WRAP_S, this.gl.TEXTURE_WRAP_T])
       this.gl.texParameteri(this.gl.TEXTURE_2D, parameter, this.gl.CLAMP_TO_EDGE);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.selectionStripeTexture);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA,
+      SELECTION_STRIPE_SIZE, SELECTION_STRIPE_SIZE, 0, this.gl.RGBA,
+      this.gl.UNSIGNED_BYTE, SELECTION_STRIPE_PIXELS);
+    for (const parameter of [this.gl.TEXTURE_MIN_FILTER, this.gl.TEXTURE_MAG_FILTER])
+      this.gl.texParameteri(this.gl.TEXTURE_2D, parameter, this.gl.NEAREST);
+    for (const parameter of [this.gl.TEXTURE_WRAP_S, this.gl.TEXTURE_WRAP_T])
+      this.gl.texParameteri(this.gl.TEXTURE_2D, parameter, this.gl.REPEAT);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
     this.playerReferenceBuffer = this.gl.createBuffer();
     this.playerReferenceTexture = this.gl.createTexture();
@@ -191,6 +204,7 @@ export class WebGLSceneRenderer {
     this.geometryRevision = 0;
     this.selectionRevision = 0;
     this.staticCache = null;
+    this.paintExplodeOffsets = new Map();
     this.selectedCache = null;
     this.faceSelectionCache = null;
     this.mirrorCache = null;
@@ -896,12 +910,65 @@ export class WebGLSceneRenderer {
     this.drawLockedGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, false);
   }
 
+  paintExplodeInstanceTranslation(instance, uid) {
+    const offset = this.paintExplodeOffsets.get(uid);
+    if (!offset) return instance.translation;
+    return instance.translation.map((value, axis) => value + offset[axis]
+      - instance.matrix[axis].reduce((sum, coefficient, component) => sum + coefficient * offset[component], 0));
+  }
+
+  paintExplodeInstanceTransform(instance, uid) {
+    const translation = this.paintExplodeInstanceTranslation(instance, uid);
+    if (translation === instance.translation) return instance.transform;
+    const transform = [...instance.transform];
+    for (let axis = 0; axis < 3; axis++) transform[12 + axis] = translation[axis];
+    return transform;
+  }
+
+  paintExplodeInstancePoint(instance, uid, point) {
+    const translation = this.paintExplodeInstanceTranslation(instance, uid);
+    return instance.matrix.map((row, axis) => row[0] * point[0] + row[1] * point[1]
+      + row[2] * point[2] + translation[axis]);
+  }
+
   drawMirrorInstances(dynamicUids, lockedUids, primitive, viewProjection, options = {},
     { lockedOnly = false, selectedOnly = false, ghostOnly = false } = {}) {
     if (Boolean(this.lastCameraInput?.modifierResultGhost) !== ghostOnly) return;
     const lines = primitive === this.gl.LINES;
     const rangeKey = lines ? 'edgeRanges' : 'triangleRanges';
     const cubeRangeKey = lines ? 'cubeEdgeRanges' : 'cubeTriangleRanges';
+    if (this.lastCameraInput?.mode === 'paint' && this.lastCameraInput.paintExplode) {
+      for (const instance of this.mirrorCache?.instances || []) {
+        const groups = new Map();
+        for (const uid of instance.sourceUids) {
+          const locked = lockedUids.has(uid);
+          if (lockedOnly !== locked || (selectedOnly && !dynamicUids.has(uid))) continue;
+          const selected = dynamicUids.has(uid);
+          const cache = selected ? this.selectedCache : this.staticCache;
+          const allowedIndices = instance.cubeIndices?.[uid];
+          const birthFrom = this.cubeBirthStartByUid.get(uid);
+          const cubeRanges = cache?.[cubeRangeKey]?.get(uid);
+          const ranges = allowedIndices && cubeRanges
+            ? allowedIndices.filter(index => birthFrom === undefined || index < birthFrom)
+              .map(index => cubeRanges[index]).filter(Boolean)
+            : birthFrom !== undefined && cubeRanges ? cubeRanges.slice(0, birthFrom)
+              : [cache?.[rangeKey]?.get(uid)];
+          const offsetKey = `${selected}:${(this.paintExplodeOffsets.get(uid) || [0, 0, 0]).join(',')}`;
+          if (!groups.has(offsetKey)) groups.set(offsetKey, { uid, selected, ranges: [] });
+          for (const range of ranges) if (range?.count) groups.get(offsetKey).ranges.push(range);
+        }
+        for (const group of groups.values()) {
+          const buffer = group.selected
+            ? (lines ? this.selectedWireBuffer : this.selectedTriangleBuffer)
+            : (lines ? this.staticWireBuffer : this.staticTriangleBuffer);
+          const modelTransform = this.paintExplodeInstanceTransform(instance, group.uid);
+          for (const range of mergeAdjacentVertexRanges(group.ranges)) this.drawBuffer(buffer, range.count, primitive, viewProjection, {
+            ...options, first: range.start, modelTransform, flipWinding: instance.reflected
+          });
+        }
+      }
+      return;
+    }
     for (const instance of this.mirrorCache?.instances || []) {
       const batchKey = [
         instance.key, instance.groupUid, instance.modifierUid, instance.sourceUids.join(','),
@@ -1044,6 +1111,24 @@ export class WebGLSceneRenderer {
     this.drawVertices(grid.fine, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
     this.drawVertices(grid.major, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
     this.drawVertices(grid.direction, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
+  }
+
+  drawSelectionOcclusionDepth(project, camera, dynamicUids, lockedUids, viewProjection, includeSurfaceDepth) {
+    if (camera.renderMode === 'wireframe') return;
+    const { gl } = this;
+    const options = { depthWrite: true, cull: project.cullFaces, renderMode: 2, alphaMode: 0, blend: false };
+    gl.colorMask(false, false, false, false);
+    if (includeSurfaceDepth) {
+      const staticBatches = this.ensureVisibleStaticBatches(dynamicUids, lockedUids);
+      this.drawBuffer(this.visibleStaticTriangleBuffer, staticBatches.triangleCount, gl.TRIANGLES, viewProjection, options);
+      this.drawBufferExcluding(this.selectedTriangleBuffer, this.selectedCache.triangles.length / 12,
+        new Set([...lockedUids, ...this.cubeBirthUids]), this.selectedCache.triangleRanges, gl.TRIANGLES,
+        viewProjection, { ...options, modelTransform: this.selectionPreviewTransform });
+      this.drawMirrorInstances(dynamicUids, lockedUids, gl.TRIANGLES, viewProjection, options);
+    }
+    if (lockedUids.size) this.drawLockedGeometry(project, camera,
+      { ...getMinecraftRenderType(project.renderType), alphaMode: 0 }, dynamicUids, lockedUids, viewProjection, true);
+    gl.colorMask(true, true, true, true);
   }
 
   drawPlayerReference(camera, viewProjection) {
@@ -1220,6 +1305,7 @@ export class WebGLSceneRenderer {
     const renderHeight = useMippedAntialias
       ? Math.max(1, Math.floor(pixelHeight * MIPPED_SUPERSAMPLE))
       : pixelHeight;
+    this.selectionStripeViewport = [rect.left, rect.top, renderWidth / width, renderHeight];
     this.selectionPixelRadius = Math.max(1.5, renderWidth / width * 1.5);
     if (useMippedAntialias) {
       this.ensurePostProcessTarget(renderWidth, renderHeight);
@@ -1238,19 +1324,40 @@ export class WebGLSceneRenderer {
     this.lastCameraInput = { ...camera };
 
     const selection = camera.selectedUids?.size ? camera.selectedUids : selectedUid;
+    const paintExplode = camera.mode === 'paint' && camera.paintExplode === true;
     const { selectedUids, selectedKey, dynamicUids, dynamicKey } = this.getSelectionDescriptor(project, selection);
     this.currentDynamicElementKey = dynamicKey;
     if (!this.staticCache
       || this.staticCache.project !== project
       || this.staticCache.revision !== this.geometryRevision
-      || this.staticCache.faceDistinct !== (camera.faceDistinct === true)) {
+      || this.staticCache.faceDistinct !== (camera.faceDistinct === true)
+      || this.staticCache.paintExplode !== paintExplode
+      || paintExplode && this.staticCache.paintExplodeGap !== camera.paintExplodeGap) {
+      this.visibleStaticBatchCache = null;
+      this.lockedBatchCache = null;
+      this.faceSelectionCache = null;
+      this.mirrorCache?.rangeCache?.clear();
       const faceDistinct = camera.faceDistinct === true;
       const renderElements = camera.subdivisionEditOwnerUid
         ? project.elements.filter(element => element.uid !== camera.subdivisionEditOwnerUid)
         : project.elements;
       const geometry = buildElementGeometry(project, renderElements, null, [1, 1, 1], faceDistinct, this.textureLayout);
+      if (paintExplode) {
+        const layoutPoints = new Map([...geometry.ownerPoints].map(([uid, points]) => [uid, [...points]]));
+        for (const instance of buildModifierRenderInstances(project)) for (const uid of instance.sourceUids) {
+          const points = layoutPoints.get(uid);
+          if (!points) continue;
+          const cubes = geometry.cubePoints.get(uid) || [];
+          const indices = instance.cubeIndices?.[uid] || cubes.map((_, index) => index);
+          for (const index of indices) for (const point of cubes[index] || [])
+            points.push(modifierInstancePoint(instance, point));
+        }
+        this.paintExplodeOffsets = buildPaintExplodeOffsets(project, layoutPoints, camera.paintExplodeGap ?? 2);
+      } else this.paintExplodeOffsets = new Map();
+      if (paintExplode) applyPaintExplodeOffsets(geometry, this.paintExplodeOffsets);
       this.staticCache = {
-        project, revision: this.geometryRevision, faceDistinct, ...geometry,
+        project, revision: this.geometryRevision, faceDistinct, paintExplode,
+        paintExplodeGap: camera.paintExplodeGap, ...geometry,
         faceIndex: indexFaces(geometry.faces), faceBvh: buildFaceBvh(geometry.faces)
       };
       this.uploadBuffer(this.staticTriangleBuffer, geometry.triangles, gl.STATIC_DRAW);
@@ -1354,6 +1461,7 @@ export class WebGLSceneRenderer {
       this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, pixelWidth, pixelHeight);
+      this.selectionStripeViewport = [rect.left, rect.top, pixelWidth / width, pixelHeight];
       gl.clearColor(0, 0, 0, 0);
       gl.clearDepth(1);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -1368,6 +1476,9 @@ export class WebGLSceneRenderer {
       this.drawLockedOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
         ownerPoints, viewProjection, null, pixelWidth, pixelHeight, renderWidth, renderHeight);
       this.drawFaceLabel(camera, viewProjection);
+      if (selectedUids.size && (minecraftRenderType.pass !== RenderPass.SOLID || lockedUids.size))
+        this.drawSelectionOcclusionDepth(project, camera, dynamicUids, lockedUids, viewProjection,
+          minecraftRenderType.pass !== RenderPass.SOLID);
       this.drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection);
     } else {
       this.drawGrid(camera, viewProjection);
@@ -1378,6 +1489,9 @@ export class WebGLSceneRenderer {
       this.drawLockedOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
         ownerPoints, viewProjection, null, pixelWidth, pixelHeight, pixelWidth, pixelHeight);
       this.drawFaceLabel(camera, viewProjection);
+      if (selectedUids.size && (minecraftRenderType.pass !== RenderPass.SOLID || lockedUids.size))
+        this.drawSelectionOcclusionDepth(project, camera, dynamicUids, lockedUids, viewProjection,
+          minecraftRenderType.pass !== RenderPass.SOLID);
       this.drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection);
     }
 
@@ -1413,7 +1527,7 @@ export class WebGLSceneRenderer {
         const cache = this.selectedCache?.cubePoints?.has(uid) ? this.selectedCache : this.staticCache;
         const cubes = cache?.cubePoints?.get(uid) || [];
         for (const index of instance.cubeIndices?.[uid] || cubes.map((_, cubeIndex) => cubeIndex))
-          for (const point of cubes[index] || []) visit(modifierInstancePoint(instance, point));
+          for (const point of cubes[index] || []) visit(this.paintExplodeInstancePoint(instance, uid, point));
       }
     };
     const minimum = [Infinity, Infinity, Infinity], maximum = [-Infinity, -Infinity, -Infinity];
@@ -1543,10 +1657,13 @@ export class WebGLSceneRenderer {
     }
     if (includeGenerated && !this.lastCameraInput.modifierResultGhost && !lockedOnly) {
       for (const instance of this.mirrorCache?.instances || []) {
+        for (const sourceUid of this.lastCameraInput?.mode === 'paint' && this.lastCameraInput.paintExplode
+          ? instance.sourceUids : [null]) {
+        const translation = sourceUid ? this.paintExplodeInstanceTranslation(instance, sourceUid) : instance.translation;
         const inversePoint = point => [0, 1, 2].map(axis =>
-          instance.matrix[0][axis] * (point[0] - instance.translation[0])
-          + instance.matrix[1][axis] * (point[1] - instance.translation[1])
-          + instance.matrix[2][axis] * (point[2] - instance.translation[2]));
+          instance.matrix[0][axis] * (point[0] - translation[0])
+          + instance.matrix[1][axis] * (point[1] - translation[1])
+          + instance.matrix[2][axis] * (point[2] - translation[2]));
         const inverseDirection = direction => [0, 1, 2].map(axis =>
           instance.matrix[0][axis] * direction[0]
           + instance.matrix[1][axis] * direction[1]
@@ -1555,7 +1672,7 @@ export class WebGLSceneRenderer {
         const candidates = [...queryFaceBvh(this.staticCache?.faceBvh, localRay),
           ...queryFaceBvh(this.selectedCache?.faceBvh, localRay)];
         for (const face of candidates) {
-          if (!instance.sourceUids.includes(face.uid) || this.lastLockedUids.has(face.uid)
+          if ((sourceUid && face.uid !== sourceUid) || !instance.sourceUids.includes(face.uid) || this.lastLockedUids.has(face.uid)
             || candidateUids && !candidateUids.has(face.uid)) continue;
           const indices = instance.cubeIndices?.[face.uid];
           if (indices && !indices.includes(face.cubeIndex ?? 0)) continue;
@@ -1569,10 +1686,13 @@ export class WebGLSceneRenderer {
             closest = {
               uid: face.uid, cubeUid: face.cubeUid || face.uid, cubeIndex: face.cubeIndex ?? null,
               distance, faceName: face.faceName, generated: true, instanceKey: instance.key,
-              facePoints: face.quad.map(point => modifierInstancePoint(instance, point)),
-              point: ray.origin.map((value, axis) => value + ray.direction[axis] * distance)
+              facePoints: face.quad.map(point => this.paintExplodeInstancePoint(instance, face.uid, point)),
+              point: ray.origin.map((value, axis) => value + ray.direction[axis] * distance),
+              modelPoint: localRay.origin.map((value, axis) => value + localRay.direction[axis] * distance
+                - (this.paintExplodeOffsets.get(face.uid)?.[axis] || 0))
             };
           }
+        }
         }
       }
     }
@@ -1640,7 +1760,7 @@ export class WebGLSceneRenderer {
       }));
   }
 
-  getFaceQuadsForUids(uids) {
+  getFaceQuadsForUids(uids, { modelSpace = false } = {}) {
     const wanted = uids instanceof Set ? uids : new Set(uids || []);
     const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
     const seen = new Set();
@@ -1658,7 +1778,7 @@ export class WebGLSceneRenderer {
         cubeIndex: face.cubeIndex ?? null,
         cube: face.cube || null,
         faceName: face.faceName,
-        facePoints: face.quad.map(point => [...point])
+        facePoints: (modelSpace && face.modelQuad ? face.modelQuad : face.quad).map(point => [...point])
       }];
     });
   }
@@ -1703,7 +1823,7 @@ export class WebGLSceneRenderer {
         .flatMap(index => cubePoints[index] || []);
       const seen = new Set();
       for (const point of source) {
-        const transformed = modifierInstancePoint(instance, point);
+        const transformed = this.paintExplodeInstancePoint(instance, uid, point);
         const key = transformed.map(value => Math.round(value * 1e5)).join(',');
         if (seen.has(key)) continue;
         seen.add(key);
@@ -2003,7 +2123,13 @@ export class WebGLSceneRenderer {
     gl.uniform1i(this.selectionActiveLocation, this.paintSelectionActive && (!texture || texture === this.texture) ? 1 : 0);
     gl.uniform2f(this.selectionTexelLocation, 1 / this.selectionMaskSize[0], 1 / this.selectionMaskSize[1]);
     gl.uniform1f(this.selectionPixelRadiusLocation, this.selectionPixelRadius || 1.5);
-    gl.uniform1f(this.selectionPhaseLocation, Math.floor(performance.now() / 140));
+    gl.uniform1f(this.selectionPhaseLocation, selectionStripePhase());
+    gl.uniform4fv(this.selectionStripeViewportLocation, this.selectionStripeViewport || [0, 0, 1, 1]);
+    if (this.paintSelectionActive) {
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.selectionStripeTexture);
+      gl.uniform1i(this.selectionStripeLocation, 2);
+    }
     gl.activeTexture(gl.TEXTURE0);
     gl.enableVertexAttribArray(this.positionLocation);
     gl.vertexAttribPointer(this.positionLocation, 3, gl.FLOAT, false, 48, 0);
@@ -2969,6 +3095,8 @@ const FRAGMENT_SHADER = `
   uniform vec2 uSelectionTexel;
   uniform float uSelectionPixelRadius;
   uniform float uSelectionPhase;
+  uniform sampler2D uSelectionStripe;
+  uniform vec4 uSelectionStripeViewport;
   uniform int uRenderMode;
   uniform int uAlphaMode;
   uniform float uOpacity;
@@ -3005,8 +3133,11 @@ const FRAGMENT_SHADER = `
           min(texture2D(uSelectionMask, vUv + selectionStepY).r,
           texture2D(uSelectionMask, vUv - selectionStepY).r));
         if (nearest < 0.5) {
-          float dash = mod(floor(gl_FragCoord.x * 0.5) + floor(gl_FragCoord.y * 0.5) + uSelectionPhase, 8.0);
-          color.rgb = dash < 4.0 ? vec3(1.0) : vec3(0.0);
+          vec2 screenPoint = vec2(gl_FragCoord.x,
+            uSelectionStripeViewport.w - gl_FragCoord.y) / uSelectionStripeViewport.z
+            + uSelectionStripeViewport.xy;
+          color.rgb = texture2D(uSelectionStripe,
+            (screenPoint + vec2(uSelectionPhase, 0.0)) / 8.0).rgb;
         }
       }
     }
@@ -3030,6 +3161,8 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
   uniform vec2 uSelectionTexel;
   uniform float uSelectionPixelRadius;
   uniform float uSelectionPhase;
+  uniform sampler2D uSelectionStripe;
+  uniform vec4 uSelectionStripeViewport;
   uniform int uRenderMode;
   uniform int uAlphaMode;
   uniform float uOpacity;
@@ -3067,8 +3200,11 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
           min(texture2D(uSelectionMask, vUv + selectionStepY).r,
           texture2D(uSelectionMask, vUv - selectionStepY).r));
         if (nearest < 0.5) {
-          float dash = mod(floor(gl_FragCoord.x * 0.5) + floor(gl_FragCoord.y * 0.5) + uSelectionPhase, 8.0);
-          color.rgb = dash < 4.0 ? vec3(1.0) : vec3(0.0);
+          vec2 screenPoint = vec2(gl_FragCoord.x,
+            uSelectionStripeViewport.w - gl_FragCoord.y) / uSelectionStripeViewport.z
+            + uSelectionStripeViewport.xy;
+          color.rgb = texture2D(uSelectionStripe,
+            (screenPoint + vec2(uSelectionPhase, 0.0)) / 8.0).rgb;
         }
       }
     }

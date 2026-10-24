@@ -4,8 +4,9 @@ const fs = require('fs/promises');
 const syncFs = require('fs');
 const crypto = require('crypto');
 const { ProjectJournal, atomicWrite } = require('./project-journal.cjs');
+const { isArchiveV2, unpackArchiveWithProgress } = require('./archive-codec.cjs');
 const { JournalOwnership } = require('./journal-ownership.cjs');
-const { listShapePacks } = require('./shape-packs.cjs');
+const { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder, readFontPack } = require('./resource-packs.cjs');
 const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform === 'win32' ? 'shortcut-icon.ico' : 'shortcut-icon.png');
 const journals = new Map();
 const journalQueues = new Map();
@@ -15,6 +16,41 @@ const workspaceCatalogWrites = new Map();
 const journalOwnership = new JournalOwnership();
 const workspaceSettingsPath = () => path.join(app.getPath('userData'), 'project-workspace.json');
 const retainedTabsPath = () => path.join(app.getPath('userData'), 'retained-project-tabs.json');
+const coverPath = id => path.join(app.getPath('userData'), 'project-covers', `${safeSessionId(id)}.png`);
+const pendingExternalProjects = [];
+let externalOpenReceiver = null;
+const pendingUiPrompts = new Map();
+function requestUiChoice(sender, options) {
+  if (!sender || sender.isDestroyed()) return Promise.resolve({ index: options.cancelIndex ?? options.buttons.length - 1 });
+  return new Promise(resolve => {
+    const id = crypto.randomUUID();
+    const finish = result => {
+      pendingUiPrompts.delete(id);
+      sender.removeListener('destroyed', canceled);
+      resolve(result);
+    };
+    const canceled = () => finish({ index: options.cancelIndex ?? options.buttons.length - 1 });
+    pendingUiPrompts.set(id, { sender, finish });
+    sender.once('destroyed', canceled);
+    sender.send('app:prompt-request', { id, options });
+  });
+}
+ipcMain.handle('app:prompt-response', (event, response) => {
+  const pending = pendingUiPrompts.get(response?.id);
+  if (!pending || pending.sender !== event.sender) return false;
+  pending.finish({ index: Number(response.index), checked: response.checked === true });
+  return true;
+});
+function externalProjectPath(argumentsList) {
+  return argumentsList.map(value => String(value).replace(/^"|"$/g, ''))
+    .find(value => /\.(?:cbmodel|bbmodel|json)$/i.test(value) && path.isAbsolute(value)) || null;
+}
+function queueExternalProject(filePath) {
+  if (!filePath) return;
+  if (externalOpenReceiver && !externalOpenReceiver.isDestroyed?.())
+    externalOpenReceiver.send?.('project:external-open', filePath);
+  else pendingExternalProjects.push(filePath);
+}
 async function workspaceRoot() {
   try {
     const settings = JSON.parse(await fs.readFile(workspaceSettingsPath(), 'utf8'));
@@ -25,14 +61,15 @@ async function workspaceRoot() {
 const JOURNAL_NAME = /^project_[a-f0-9-]{20,50}$/;
 async function workspaceDirectories() {
   const root = await workspaceRoot();
-  return { root, projects: path.join(root, 'projects'), shapePacks: path.join(root, 'shapepacks') };
+  return { root, projects: path.join(root, 'projects'), shapePacks: path.join(root, 'shapepacks'),
+    languagePacks: path.join(root, 'languagepacks'), fontPacks: path.join(root, 'fontpacks') };
 }
 async function ensureWorkspaceLayout() {
   const directories = await workspaceDirectories();
-  const { root, projects, shapePacks } = directories;
+  const { root, projects, shapePacks, languagePacks, fontPacks } = directories;
   if (!workspaceLayoutPromises.has(root)) {
     const ready = (async () => {
-      await Promise.all([fs.mkdir(projects, { recursive: true }), fs.mkdir(shapePacks, { recursive: true })]);
+      await Promise.all([projects, shapePacks, languagePacks, fontPacks].map(directory => fs.mkdir(directory, { recursive: true })));
       const marker = path.join(root, '.workspace-layout-v2');
       if (await fs.stat(marker).then(() => true).catch(() => false)) return;
       const legacy = await fs.readdir(root, { withFileTypes: true });
@@ -186,6 +223,31 @@ async function journalCandidatesForFile(filePath) {
 }
 async function classifyJournalCandidate(candidate, archive) {
   if (archive.projectUuid && candidate.projectUuid && archive.projectUuid !== candidate.projectUuid) return 'divergent';
+  // A capped working history may no longer contain the saved archive's head.
+  if (candidate.saved?.fileHash && archive.fileHash === candidate.saved.fileHash) {
+    const savedManifest = await fs.readFile(path.join(candidate.directory, 'transactions', `${candidate.saved.sequence}.json`), 'utf8')
+      .then(JSON.parse).catch(() => null);
+    if (!savedManifest && candidate.saved.prunedAncestor === true) {
+      return candidate.state.activeHead === candidate.saved.sequence ? 'same' : 'workspace-ahead';
+    }
+    const archivedSaved = archive.entries.get(`transactions/${candidate.saved.sequence}.json`);
+    if (archivedSaved && savedManifest.parent === null) {
+      const archivedRecord = JSON.parse(archivedSaved.toString('utf8'));
+      const originalSignature = ProjectJournal.historySignature({ ...savedManifest,
+        parent: archivedRecord.parent, textureChanges: archivedRecord.textureChanges });
+      if (originalSignature === archive.signature(candidate.saved.sequence)) {
+        let current = candidate.state.activeHead;
+        const visited = new Set();
+        while (Number.isInteger(current) && !visited.has(current)) {
+          if (current === candidate.saved.sequence) return current === candidate.state.activeHead ? 'same' : 'workspace-ahead';
+          visited.add(current);
+          const manifest = await fs.readFile(path.join(candidate.directory, 'transactions', `${current}.json`), 'utf8')
+            .then(JSON.parse).catch(() => null);
+          current = manifest?.parent;
+        }
+      }
+    }
+  }
   const localHead = candidate.state.activeHead;
   const localManifest = await fs.readFile(path.join(candidate.directory, 'transactions', `${localHead}.json`), 'utf8')
     .then(JSON.parse).catch(() => null);
@@ -220,6 +282,7 @@ async function discardOwnedJournal(id) {
   const target = path.resolve(journal.directory);
   if (path.basename(target) !== id || path.dirname(target) === target) throw new Error('工作目錄不在項目根目錄內');
   await fs.rm(target, { recursive: true, force: true });
+  await fs.rm(coverPath(id), { force: true });
   journals.delete(id);
   await journalOwnership.release(target);
   await removeRetainedJournal(id);
@@ -234,6 +297,7 @@ async function discardIdleJournal(candidate) {
     const state = await fs.readFile(path.join(candidate.directory, 'current_state'), 'utf8').then(JSON.parse);
     if (state.activeHead !== candidate.state.activeHead || state.lastCommitted !== candidate.state.lastCommitted) return false;
     await fs.rm(candidate.directory, { recursive: true, force: true });
+    await fs.rm(coverPath(candidate.id), { force: true });
     await unindexWorkingJournal(candidate.id);
     await removeRetainedJournal(candidate.id);
     return true;
@@ -355,8 +419,11 @@ ipcMain.handle('app:confirm-close', async (event, payload) => {
   return true;
 });
 
-ipcMain.handle('project:open', async () => {
-  const picked = await dialog.showOpenDialog({
+ipcMain.handle('project:open', async (event, options = {}) => {
+  const suppliedPath = typeof options?.filePath === 'string' ? options.filePath : null;
+  if (suppliedPath && (!path.isAbsolute(suppliedPath) || !/\.(?:cbmodel|bbmodel|json)$/i.test(suppliedPath)))
+    throw new Error('不支援的項目文件路徑');
+  const picked = suppliedPath ? { canceled: false, filePaths: [suppliedPath] } : await dialog.showOpenDialog({
     title: '打開模型',
     properties: ['openFile'],
     filters: [
@@ -366,9 +433,21 @@ ipcMain.handle('project:open', async () => {
   });
   if (picked.canceled || !picked.filePaths[0]) return null;
   const filePath = picked.filePaths[0];
+  let lastReportAt = 0, lastReportValue = -1;
+  const report = (value, label) => {
+    const now = Date.now();
+    if (value > 0 && value < 1 && value - lastReportValue < 0.01 && now - lastReportAt < 100) return;
+    lastReportAt = now;
+    lastReportValue = value;
+    event?.sender?.send?.('project:open-progress', { value: Math.max(0, Math.min(1, value)), label });
+  };
+  if (filePath.toLowerCase().endsWith('.cbmodel')) report(0, '正在讀取項目檔案');
   const bytes = await fs.readFile(filePath);
-  if (bytes.subarray(0, 2).toString('ascii') === 'PK') {
-    const archive = ProjectJournal.inspectArchive(bytes);
+  if (bytes.subarray(0, 2).toString('ascii') === 'PK' || isArchiveV2(bytes)) {
+    report(0.04, '正在解壓項目');
+    const entries = await unpackArchiveWithProgress(bytes, (value, label) => report(0.04 + value * 0.66, label));
+    const archive = ProjectJournal.inspectArchive(bytes, entries);
+    report(0.72, '正在比對工作記錄');
     archive.fileHash = fileHash(bytes);
     const candidates = await journalCandidatesForFile(filePath);
     let matched = null;
@@ -383,6 +462,7 @@ ipcMain.handle('project:open', async () => {
       const { candidate } = matched;
       try {
         const journal = await openWorkingJournal(candidate.id, directory => new ProjectJournal(directory).load());
+        report(0.94, '正在載入模型與貼圖');
         const content = await journal.content();
         return { filePath, content, journalId: candidate.id,
           dirty: candidate.saved.sequence !== journal.state.activeHead,
@@ -399,31 +479,34 @@ ipcMain.handle('project:open', async () => {
       ? matched.candidate : null;
     if (!matched && divergent) {
       const active = journals.has(divergent.id);
-      const choice = await dialog.showMessageBox({
-        type: 'warning', title: '同一項目的工作記錄不同',
+      const choice = await requestUiChoice(event.sender, {
+        title: '同一項目的工作記錄不同',
         message: '這個文件與已有的展開工作記錄不屬於同一條歷史。',
         detail: active
           ? '現有工作副本仍在目前視窗使用；可以切換回它，或另外打開文件。'
           : '可以用文件取代舊工作副本，或保留兩份並另外打開。原始文件不會因此被改寫。',
         buttons: active ? ['另開一份', '切換到工作副本', '取消'] : ['另開一份', '以文件覆蓋工作副本', '取消'],
-        defaultId: 0, cancelId: 2, noLink: true
+        defaultIndex: 0, cancelIndex: 2
       });
-      if (choice.response === 2) return null;
-      if (choice.response === 1 && active) {
+      if (choice.index === 2) return null;
+      if (choice.index === 1 && active) {
         const journal = journals.get(divergent.id);
+        report(0.94, '正在載入模型與貼圖');
         const content = await journal.content();
         return { filePath, content, journalId: divergent.id, dirty: true,
           textureAssets: await readTextureAssets(content, filePath) };
       }
-      if (choice.response === 1) replace = divergent;
+      if (choice.index === 1) replace = divergent;
     }
     const journalId = `project_${crypto.randomUUID()}`;
-    const journal = await openWorkingJournal(journalId, directory => ProjectJournal.fromArchive(bytes, directory, archive.entries));
+    const journal = await openWorkingJournal(journalId, directory => ProjectJournal.fromArchive(bytes, directory,
+      archive.entries, (value, label) => report(0.74 + value * 0.2, label)));
     await atomicWrite(path.join(journal.directory, 'saved_state'), JSON.stringify({
       sequence: journal.state.activeHead, filePath, projectUuid: journal.projectUuid,
       fileHash: archive.fileHash, savedAt: new Date().toISOString()
     }));
     await indexWorkingJournal(journal);
+    report(0.95, '正在載入模型與貼圖');
     const content = await journal.content();
     if (replace && !journals.has(replace.id)) {
       try { await discardIdleJournal(replace); }
@@ -433,6 +516,26 @@ ipcMain.handle('project:open', async () => {
   }
   const content = bytes.toString('utf8');
   return { filePath, content, textureAssets: await readTextureAssets(content, filePath) };
+});
+
+ipcMain.handle('project:external-ready', event => {
+  externalOpenReceiver = event.sender;
+  while (pendingExternalProjects.length) externalOpenReceiver.send?.('project:external-open', pendingExternalProjects.shift());
+  return true;
+});
+
+ipcMain.handle('project:cover-save', async (_event, payload) => {
+  const id = safeSessionId(payload?.journalId);
+  return queueJournal(id, async () => {
+    if (!journals.has(id)) return false;
+    const target = coverPath(id);
+    if (!payload?.dataUrl) { await fs.rm(target, { force: true }); return true; }
+    const image = capturePngBuffer(payload.dataUrl);
+    if (image.length > 2 * 1024 * 1024) throw new Error('項目封面過大');
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await atomicWrite(target, image);
+    return true;
+  });
 });
 
 ipcMain.handle('project:journal-init', async (_event, payload) => {
@@ -453,7 +556,20 @@ ipcMain.handle('project:journal-commit', async (_event, payload) => {
   return queueJournal(id, async () => {
     const journal = journals.get(id);
     if (!journal) throw new Error('項目工作目錄尚未建立');
-    return journal.commit(payload.content, payload.operationId, payload.operationLabel, payload.operationIndex || []);
+    const result = await journal.commit(payload.content, payload.operationId, payload.operationLabel, payload.operationIndex || []);
+    if (Number.isInteger(payload.historyLimit)) {
+      try { await journal.compactHistory(payload.historyLimit); }
+      catch (error) { result.historyWarning = error.message; }
+    }
+    return result;
+  });
+});
+ipcMain.handle('project:journal-compact', async (_event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  return queueJournal(id, async () => {
+    const journal = journals.get(id);
+    if (!journal) throw new Error('項目工作目錄尚未建立');
+    return journal.compactHistory(payload.historyLimit);
   });
 });
 
@@ -509,7 +625,17 @@ ipcMain.handle('project:list-workspace', async (_event, options = {}) => {
     });
   }
   const { catalog } = await workspaceCatalog();
-  return [...catalog.projects].sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
+  const ordered = [...catalog.projects].sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
+  const result = [];
+  for (let index = 0; index < ordered.length; index += 8) {
+    result.push(...await Promise.all(ordered.slice(index, index + 8).map(async project => {
+      let cover = null;
+      try { cover = `data:image/png;base64,${(await fs.readFile(coverPath(project.journalId))).toString('base64')}`; }
+      catch { /* A missing or stale cover falls back to the card placeholder. */ }
+      return { ...project, cover };
+    })));
+  }
+  return result;
 });
 
 ipcMain.handle('project:journal-recover', async (_event, payload) => {
@@ -525,7 +651,22 @@ ipcMain.handle('project:journal-recover', async (_event, payload) => {
 });
 
 ipcMain.handle('project:workspace-root', async () => (await ensureWorkspaceLayout()).root);
-ipcMain.handle('shape-packs:list', async () => listShapePacks((await ensureWorkspaceLayout()).shapePacks));
+ipcMain.handle('shape-packs:list', async () => orderedShapePacks((await ensureWorkspaceLayout()).root));
+ipcMain.handle('packs:list', async () => listResourcePacks((await ensureWorkspaceLayout()).root));
+ipcMain.handle('packs:font-data', async (_event, id) => readFontPack((await ensureWorkspaceLayout()).root, id));
+ipcMain.handle('packs:install', async (_event, kind) => {
+  const filters = {
+    shape: [{ name: 'Shape ZIP', extensions: ['zip'] }],
+    language: [{ name: 'Language pack', extensions: ['json', 'zip'] }],
+    font: [{ name: 'Font or font ZIP', extensions: ['ttf', 'otf', 'woff', 'woff2', 'zip'] }]
+  };
+  if (!filters[kind]) throw new Error('未知包類型');
+  const picked = await dialog.showOpenDialog({ title: '加入資源包', properties: ['openFile'], filters: filters[kind] });
+  if (picked.canceled || !picked.filePaths[0]) return null;
+  return installPack((await ensureWorkspaceLayout()).root, kind, picked.filePaths[0]);
+});
+ipcMain.handle('packs:remove', async (_event, id) => removePack((await ensureWorkspaceLayout()).root, id));
+ipcMain.handle('packs:order', async (_event, order) => savePackOrder((await ensureWorkspaceLayout()).root, order));
 ipcMain.handle('project:choose-workspace-root', async () => {
   const picked = await dialog.showOpenDialog({ title: '選擇項目工作目錄', properties: ['openDirectory', 'createDirectory'] });
   if (picked.canceled || !picked.filePaths[0]) return null;
@@ -600,13 +741,14 @@ ipcMain.handle('project:save', async (_event, payload) => {
     if (!journal) {
       journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.content));
     } else if (payload.content) await journal.commit(payload.content, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
+    if (Number.isInteger(payload.historyLimit)) await journal.compactHistory(payload.historyLimit);
     await journal.archive(filePath);
   });
   return { filePath };
 });
 
 ipcMain.handle('project:export', async (_event, payload) => {
-  const picked = await dialog.showSaveDialog({
+  const picked = payload.filePath ? { canceled: false, filePath: payload.filePath } : await dialog.showSaveDialog({
     title: '導出模型',
     defaultPath: `${payload.name || 'untitled'}.bbmodel`,
     filters: [
@@ -622,13 +764,14 @@ ipcMain.handle('project:export', async (_event, payload) => {
     filePath += extension;
   }
   if (extension === '.cbmodel') {
+    if (typeof payload.includeHistory !== 'boolean') return { filePath, extension, requiresHistoryChoice: true };
     const id = payload.journalId ? safeSessionId(payload.journalId) : `project_${crypto.randomUUID()}`;
     await queueJournal(id, async () => {
       let journal = journals.get(id);
       if (!journal) {
         journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.cbmodelContent));
       } else await journal.commit(payload.cbmodelContent, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
-      await journal.archive(filePath);
+      await journal.archive(filePath, { includeHistory: payload.includeHistory, markSaved: false });
     });
   } else await atomicWrite(filePath, payload.bbmodelContent);
   return { filePath, extension };
@@ -663,6 +806,8 @@ ipcMain.handle('image:copy-capture', (_event, dataUrl) => {
   return true;
 });
 
+queueExternalProject(externalProjectPath(process.argv.slice(1)));
+app.on('open-file', (event, filePath) => { event.preventDefault(); queueExternalProject(filePath); });
 app.whenReady().then(() => {
   if (process.platform === 'win32') app.setAppUserModelId('com.cubebricks.desktop');
   createWindow();

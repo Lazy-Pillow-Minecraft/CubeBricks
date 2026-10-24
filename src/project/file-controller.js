@@ -1,5 +1,7 @@
 import { CubeBricksProject, exportBlockbench, importBlockbench } from '../model.js';
 import { constrainProject } from '../common/core/format-constraints.js';
+import { ConfigKey, configRegistry } from '../common/config/app-config.js';
+import { showAppConfirm, showAppChoice } from '../screen/prompt-dialog.js';
 
 export function createProjectFileController({
   state, fileInput, projectTabsController, journalController,
@@ -8,11 +10,31 @@ export function createProjectFileController({
   flushProjectJournal, toast
 }) {
 const blobTextureSourceCache = new Map();
-async function openProject() {
+async function openProject(filePath = null) {
+  const progressDialog = document.getElementById('projectOpenProgressDialog');
+  const progressBar = document.getElementById('projectOpenProgressBar');
+  const progressStatus = document.getElementById('projectOpenProgressStatus');
+  const progressPercent = document.getElementById('projectOpenProgressPercent');
+  let progressTimer = null;
+  let unsubscribeProgress = null;
+  let progressStarted = false;
   try {
     await getShapePacksReady();
     if (window.cubeBricksDesktop) {
-      const result = await window.cubeBricksDesktop.openProject();
+      unsubscribeProgress = window.cubeBricksDesktop.onProjectOpenProgress?.(({ value, label }) => {
+        if (!progressStarted) {
+          progressStarted = true;
+          progressTimer = setTimeout(() => {
+            if (progressDialog && !progressDialog.open) progressDialog.showModal();
+          }, 250);
+        }
+        const fraction = Math.max(0, Math.min(1, Number(value) || 0));
+        if (progressBar) progressBar.value = fraction;
+        if (progressStatus) progressStatus.textContent = label || '正在載入項目…';
+        if (progressPercent) progressPercent.textContent = `${Math.round(fraction * 100)}%`;
+      });
+      if (progressDialog) progressDialog.oncancel = event => event.preventDefault();
+      const result = await window.cubeBricksDesktop.openProject(filePath);
       if (!result) return;
       const existing = projectTabsController.tabs.find(tab => tab.journalId && tab.journalId === result.journalId);
       if (existing) { activateProjectTab(existing.id); return; }
@@ -20,6 +42,11 @@ async function openProject() {
         result.dirty === undefined ? {} : { dirty: result.dirty });
     } else fileInput.click();
   } catch (error) { toast(`打開失敗：${error.message}`); }
+  finally {
+    if (progressTimer) clearTimeout(progressTimer);
+    unsubscribeProgress?.();
+    if (progressDialog?.open) progressDialog.close();
+  }
 }
 
 async function serializableTextureAssets(assets = state.textureAssets) {
@@ -123,7 +150,8 @@ async function offerProjectRecovery() {
     const prompt = pending.length === 1
       ? `找到未保存的工作項目「${pending[0].name}」。要恢復嗎？`
       : `找到 ${pending.length} 個未保存的工作項目。要全部恢復到分頁嗎？`;
-    if (!window.confirm(prompt)) return;
+    if (!await showAppConfirm(prompt, { title: '恢復工作項目',
+      detail: '恢復後會以分頁打開；現有工作項目不會被覆蓋。', buttons: ['恢復', '略過'] })) return;
     for (const project of pending) {
       const result = await window.cubeBricksDesktop.recoverProjectJournal(project);
       loadProjectContent(result.content, project.filePath || '', [], result.journalId, { dirty: true });
@@ -139,7 +167,8 @@ async function saveProject(saveAs = false) {
     await activeTab?.journalWrites;
     const content = serializeCbmodel(await serializableTextureAssets());
     if (window.cubeBricksDesktop) {
-      const result = await window.cubeBricksDesktop.saveProject({ filePath: saveAs ? null : state.filePath, name: state.project.name, content, journalId: activeTab?.journalId });
+      const result = await window.cubeBricksDesktop.saveProject({ filePath: saveAs ? null : state.filePath, name: state.project.name, content, journalId: activeTab?.journalId,
+        historyLimit: state.project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT) });
       if (!result) return;
       state.filePath = result.filePath;
       const tab = projectTabById(projectTabsController.activeId);
@@ -160,9 +189,20 @@ async function exportProject() {
     constrainProject(exportModel);
     const bbmodelContent = JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2);
     if (window.cubeBricksDesktop?.exportProject) {
-      const result = await window.cubeBricksDesktop.exportProject({
-        name: state.project.name, cbmodelContent, bbmodelContent, journalId: activeTab?.journalId
-      });
+      const payload = {
+        name: state.project.name, cbmodelContent, bbmodelContent, journalId: activeTab?.journalId,
+        historyLimit: state.project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT)
+      };
+      let result = await window.cubeBricksDesktop.exportProject(payload);
+      if (result?.requiresHistoryChoice) {
+        const choice = await showAppChoice({ title: 'CubeBricks 導出選項', message: '導出 .cbmodel',
+          detail: '不保留歷史時只保存目前完整模型；工作目錄中的撤回記錄不受影響。',
+          checkboxLabel: '保留操作歷史', checkboxChecked: true,
+          buttons: ['導出', '取消'] });
+        if (choice.index !== 0) return;
+        result = await window.cubeBricksDesktop.exportProject({ ...payload,
+          filePath: result.filePath, includeHistory: choice.checked });
+      }
       if (!result) return;
       toast(result.extension === '.cbmodel'
         ? '已導出 .cbmodel'

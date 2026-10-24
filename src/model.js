@@ -871,6 +871,8 @@ export class CubeBricksProject {
     const snapSubdivisions = Number(data.snap?.subdivisions ?? data.snapSubdivisions ?? format?.snap?.subdivisions);
     this.snap = { subdivisions: Number.isFinite(snapSubdivisions) && snapSubdivisions > 0 ? snapSubdivisions : null };
     this.formatData = structuredClone(data.formatData || {});
+    this.historyLimit = Number.isInteger(data.historyLimit) && data.historyLimit >= 0 && data.historyLimit <= 10000
+      ? data.historyLimit : null;
     this.referenceImages = normalizeReferenceImages(data.referenceImages);
     this.elements = (data.elements || []).map(item => {
       if (item.type === 'shape' || shapeRegistry.has(item.shapeType || item.type) && !['bezier2d', 'bezier3d'].includes(item.type)

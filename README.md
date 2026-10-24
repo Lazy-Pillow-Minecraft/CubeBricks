@@ -43,6 +43,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 
 - 移動、縮放、旋轉與樞軸工具具有三維軸、平面及中心手柄；中鍵始終保留給攝像機。
 - 移動與旋轉支援全局、父級和自身參考，預設使用自身；自身旋轉可選姿態或歐拉角模式。旋轉時按住 Alt 可顯示選中物件的頂點，點擊頂點會將樞軸移至該處而不移動幾何。
+- 旋轉手柄拖拽採用較細的角度控制（原靈敏度的 75%）；精確角度輸入與吸附規則不受影響。
 - 組縮放與多選縮放共用批量操作；每個元素從自己的初始參數計算尺寸和位置補償。縮放手柄使用參與元素的平均軸方向。
 - 樞軸移動會補償幾何位置，只改變旋轉中心而不改變模型外觀。
 - 頂點捕捉支援移動、縮放、旋轉及樞軸點操作；可選的「交點顯示」會標出選中元素邊線與周圍幾何的線線／線面交點，交點只能作為目標點。
@@ -66,11 +67,12 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 ### UV 與貼圖
 
 - Cube 可使用箱型 UV 或逐面 UV，每個面可獨立指定貼圖、旋轉、鏡像與剔除狀態。
-- 貼圖提供基礎圖層：新增、命名、選取、排序、顯示、透明度與刪除；繪畫落在當前圖層，模型顯示合成結果。圖層資料隨 `.cbmodel` 保存。
+- 貼圖提供基礎圖層：新增、命名、選取、排序、顯示、透明度與刪除；繪畫落在當前圖層，模型顯示合成結果。圖層停靠面板只在繪畫模式顯示，資料仍隨 `.cbmodel` 保存。
 - 貼圖本身可切換默認、平鋪、動畫三種模式；動畫目前為佔位。面各自保留普通 UV 和平鋪的單片寬高、X／Y 偏移，換貼圖不清除另一套資訊。
 - 拖動列表貼圖時顯示鼠標縮略圖，可直接賦予模型的面；多選時同時賦予所有所選元素的同方向面。平鋪渲染單片快取最高 1024 × 1024px，超出需求的面僅在渲染中拆片，不改動模型、導出結構或模板烘焙。
 - 元素顯示色與一般顏色欄可使用方形、圓形或三角形 HSV 彈窗；BBModel 的 Cube 調色板索引會轉換為對應顯示色，導出時選取最接近的標準色。
 - 貼圖窗口支援多面選取、UV 移動與拉伸、吸附、聚焦、縮放和平移；棋盤背景固定在窗口內，不隨貼圖縮放。
+- 在貼圖列表右鍵切換貼圖時，預覽會保留上一張可見畫面，待新貼圖完成載入後才替換，避免短暫空白。
 - 導入高解析度 BBModel 貼圖時保留其宣告的邏輯 UV 尺寸；模型圖集會按實際 PNG 像素尺寸換算，貼圖窗口的 UV 框則維持在邏輯座標上。
 - UV 預覽只渲染選中內容，可選自動旋轉、面向配色、面旋轉及鏡像標記；繪畫時同步使用最新畫布，停用時停止渲染排程。
 - 可建立紋理模板、純色模板或空白貼圖。模板生成會按工程基礎吸附分辨率歸一化尺寸，為非零邊長保留至少 1px，並可清理零面積無效面；UV 使用緊密的矩形裝箱排列，畫布可選 2 冪或指定倍數。
@@ -90,9 +92,11 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 左、右、底部面板使用統一停靠物件，可取下、靠近自動吸附、重新排序、折疊及調整整欄寬度。
 - 物件屬性按「基礎／外觀／UV／修改器／操作器」分類，避免長頁面持續向下堆疊。
 - 多項目以頁籤方式同時打開，可切換、拖動排序、編輯項目信息或關閉。
-- 關閉桌面程式時會列出已開啟項目，預設全部勾選保留；取消勾選的工作目錄會在確認後移除。下次啟動會恢復保留的頁籤。
+- 關閉桌面程式時只會詢問本次啟動新建的項目是否保留，預設全部勾選；取消勾選才會刪除其工作目錄。原本存在、這次重新打開的模型會自動保留頁籤。
 - 可配置的工作空間目錄分為 `projects/`（新項目的展開記錄）與 `shapepacks/`（外部 Shape 包）；舊版直接放在根目錄的 `project_*` 會在安全時自動遷移，無法遷移時仍可從舊位置讀取。
-- 配置註冊表統一管理繁體中文、簡體中文、英語、外觀、視圖、吸附與工作區選項。
+- 工作空間另有 `languagepacks/` 和 `fontpacks/`。設定中的「管理資源包」以同一視窗分別加入、排序、熱重載與移除語言／字體／Shape 包；移除的檔案暫存於 `removed-packs/`。外部 Shape 包含 JavaScript，只安裝可信來源。
+- 內置 Fusion Pixel 與系統字體可直接切換；桌面版可匯入單一 TTF／OTF／WOFF 字體或裝有多份字體的 ZIP。繁中、簡中與英文翻譯已拆為獨立檔案，外部語言包可註冊新的介面語言。格式見 [RESOURCE_PACKS.md](RESOURCE_PACKS.md)。
+- 配置註冊表統一管理介面語言、字體、外觀、視圖、吸附與工作區選項。
 - 模型格式使用可擴展註冊表，格式可提供自己的初始工程資料、吸附基準、貼圖尺寸與能力標記。Java 方塊／物品可在項目信息中選擇三檔旋轉規則：1.9–1.21.5 為 22.5° 倍數單軸、1.21.6–1.21.10 為自由角度單軸、1.21.11+ 不限角度與軸數；該格式使用逐面 UV。模組版實體使用箱型 UV、整數 Cube 尺寸與組旋轉，Cube 自身不旋轉。
 
 ## 操作指南
@@ -189,7 +193,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 
 ## 文件格式
 
-- `.cbmodel`：CubeBricks 工程格式，以 ZIP 保存可編輯的 Shape、曲線、修改器、操作器、層級、貼圖和工程設定。每個工程使用固定 UUID 識別；桌面版在可配置的工作目錄記錄項目內的全局操作序列與各元素局部歷史。參考圖按內容保存一份並由歷史記錄引用；貼圖變更保存可雙向套用的像素差異，以便撤銷、重做和異常關閉後恢復。
+- `.cbmodel`：CubeBricks 工程格式。新版以無損 Brotli 區塊合併壓縮操作 JSON，圖片二進位資料按內容去重並逐檔校驗；仍可打開舊版 ZIP 工程。每個工程使用固定 UUID 識別，工作目錄保存全局操作序列與元素局部歷史。全域可設定預設歷史上限（預設 200 筆），項目資訊可單獨覆蓋；裁剪保留可還原的最早基線。導出 `.cbmodel` 時可選擇保留歷史或只導出目前完整模型，後者不會清除工作目錄的撤回紀錄。
 - 工作記錄會保存貼圖分組、拖貼圖到模型面的批量指派，以及撤銷後實際走過的重做分支。多開桌面程式時，同一工作項目只允許一個視窗寫入；遇到缺失或損壞的操作快照時會停止跨越該記錄，保留目前模型狀態。
 - 打開已保存的工程時，會比對同路徑工作記錄的 UUID 與歷史：一致時沿用，文件或工作副本較新時按歷史關係處理；歷史分歧時由用戶選擇另開或取代工作副本，不會直接改寫原始文件。
 - `.bbmodel`：支援 Blockbench 模型匯入與導出；程序化物件和修改器會在導出時展開為兼容的 Cube／組資料。
@@ -207,7 +211,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 npm install
 ```
 
-在 Windows 上，之後可直接雙擊根目錄的 `CubeBricksStart.vbs` 一鍵啟動桌面版。它會在項目目錄執行 `CubeBricksStart.bat`（即 `npm start`），並隱藏命令列窗口。需要查看啟動錯誤時，改為雙擊 `CubeBricksStart.bat`，或在終端執行：
+在 Windows 上，之後可直接雙擊根目錄帶圖標的 `CubeBricksStart.exe` 一鍵啟動桌面版；它只負責啟動本地 Electron，不會彈出命令列。也可以把 `.cbmodel` 拖到這個 EXE 上開啟。若要重新編譯這個臨時啟動器，執行 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-launcher.ps1`。需要查看啟動錯誤時，改為雙擊 `CubeBricksStart.bat`，或在終端執行：
 
 ```powershell
 npm start
@@ -321,6 +325,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 
 - Move, scale, rotate, and pivot tools provide 3D axis, plane, and center handles. The middle mouse button is always reserved for the camera.
 - Move and rotate support global, parent, and local reference spaces, defaulting to local. Local rotation offers pose and Euler modes. Hold Alt while rotating to show the selected object's vertices; clicking one moves its pivot there without moving the geometry.
+- Rotation-gizmo dragging now uses 75% of its previous sensitivity; exact angle entry and snapping are unchanged.
 - Groups and multi-selected elements share batch scaling. Each element calculates its size and position compensation from its own starting parameters, and scale gizmos use the participating elements' average axis directions.
 - Moving a pivot compensates the geometry position, changing only the rotation center without changing the visible model.
 - Vertex snapping supports move, scale, rotate, and pivot operations. Optional intersection markers show where selected edges meet nearby edges or faces; these points can only be snap targets.
@@ -344,11 +349,12 @@ The project is currently an evolving prototype focused on an extensible editor a
 ### UV and texturing
 
 - Cubes support box UV and per-face UV. Every face can independently select a texture, rotation, mirroring, and culling state.
-- Basic texture layers support creation, naming, selection, ordering, visibility, opacity, and deletion. Painting targets the active layer, while the model displays the composite. Layer data is saved in `.cbmodel` projects.
+- Basic texture layers support creation, naming, selection, ordering, visibility, opacity, and deletion. Painting targets the active layer, while the model displays the composite. The Layers dock appears only in Paint mode; its data is still saved in `.cbmodel` projects.
 - Texture assets switch between default, tiled, and animation modes; animation is currently a placeholder. Faces retain both ordinary UVs and tile dimensions/offsets when textures or modes change.
 - Drag textures from the list with a cursor thumbnail to assign them to model faces. Multi-selection assigns the same face direction across selected elements. Tiled render caches are capped at 1024 × 1024px per piece; larger faces are split only for rendering, without changing model data, export structure, or template baking.
 - Element display colors and ordinary color fields can use square, circular, or triangular HSV popups. BBModel cube palette indices are converted to display colors; export selects the nearest standard palette color.
 - The texture panel supports multi-face selection, UV movement and resizing, snapping, focus, zoom, and pan. Its checkerboard background stays fixed while the texture moves or zooms.
+- Right-clicking a texture in the list keeps the previous preview visible until the newly selected image finishes loading, avoiding an empty preview during the switch.
 - High-resolution BBModel imports retain their declared logical UV dimensions. The model atlas maps those units to actual PNG pixels, while the texture panel keeps UV outlines in logical coordinates.
 - UV Preview renders only selected content and can show automatic rotation, face-direction colors, face rotation, and mirror markers. Painting uses the latest live canvas; disabling the panel stops its render scheduling.
 - Texture templates, solid-color templates, and blank textures can be created. Template generation normalizes sizes against the project base snapping resolution, preserves at least one pixel for non-zero edges, can remove zero-area faces, packs UV rectangles tightly, and supports power-of-two or custom-multiple canvases.
@@ -370,8 +376,9 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Object properties are split into Basic, Appearance, UV, Modifiers, and Operators pages instead of one continuously stacked panel.
 - Multiple projects can remain open as tabs that support selection, drag ordering, project-information editing, and closing.
 - On exit, the desktop app lists open projects with every tab checked for retention by default. Unchecking a tab removes its working directory after confirmation; retained tabs reopen at the next launch.
-- The configurable workspace contains `projects/` for new working journals and `shapepacks/` for external shapes. Legacy `project_*` folders in the workspace root migrate automatically when safe and remain readable in place otherwise.
-- A configuration registry manages Traditional Chinese, Simplified Chinese, English, appearance, viewport, snapping, and workspace settings.
+- The configurable workspace contains `projects/` for working journals, plus separate `shapepacks/`, `languagepacks/`, and `fontpacks/` folders. A shared manager in Settings can install, reorder, hot-reload, and remove these packs; removed files are retained under `removed-packs/`. External Shape packs execute JavaScript, so install only trusted ones. Legacy `project_*` folders migrate when safe.
+- The built-in Fusion Pixel and system fonts are selectable; the desktop app also accepts individual TTF/OTF/WOFF fonts or multi-file ZIP font packs. Built-in English and Simplified Chinese translations now live in separate files, and external language packs can register additional languages. See [RESOURCE_PACKS.md](RESOURCE_PACKS.md).
+- A configuration registry manages interface language, font, appearance, viewport, snapping, and workspace settings.
 - Model formats use an extensible registry and may provide their own initial project data, snapping baseline, texture size, and capability flags. Java Block/Item offers three rotation rules in Project Information: 1.9–1.21.5 uses single-axis 22.5° increments; 1.21.6–1.21.10 allows any angle on one axis; 1.21.11+ allows unrestricted angles and axes. It uses per-face UVs. Modded Entity uses box UVs, integer cube dimensions, and group rotation rather than cube rotation.
 
 ## Operation guide
@@ -382,7 +389,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 2. Use project tabs to switch between open projects. Tabs can be reordered by dragging, edited from the context menu, and closed with the middle mouse button or close icon.
 3. Create cubes, shapes, locators, or groups from the controls above the scene hierarchy. New content is inserted relative to the current hierarchy selection.
 4. Use `Ctrl+S` to save and `Ctrl+Shift+S` to save as. Export chooses `.cbmodel` or `.bbmodel` from the selected or typed extension.
-5. When exiting, keep checked the projects you want to reopen. Confirming with a tab unchecked removes that project's working history.
+5. On exit, only projects newly created during this launch ask whether to retain their working history. Previously existing projects are retained automatically; unchecking a new project removes its working directory.
 
 ### Camera and selection
 
@@ -466,7 +473,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 
 ## File formats
 
-- `.cbmodel`: a ZIP-based CubeBricks project preserving editable shapes, curves, modifiers, operators, hierarchy, textures, and settings. Each project has a stable UUID. The desktop app keeps a configurable working directory with a project-scoped operation sequence and per-element history. Reference images are stored once by content and referenced by history entries; texture edits use reversible pixel deltas for undo, redo, and crash recovery.
+- `.cbmodel`: a lossless CubeBricks project format. The new archive combines operation JSON into Brotli-compressed blocks, deduplicates image bytes by content, and verifies restored files; legacy ZIP projects still open. The desktop working directory keeps a project-scoped operation sequence and per-element history. The global history cap defaults to 200 operations and can be overridden per project. Export can retain that history or include only the current complete model without changing the working journal.
 - The operation journal also preserves texture folders, bulk face assignment by dragging textures onto a model, and the redo branch actually traversed by the user. Only one app window may write a given working project at a time. If an operation snapshot is missing or damaged, navigation stops at that boundary and preserves the current model.
 - Opening a saved project compares its UUID and history with same-path working copies. Matching histories reuse the appropriate working state; diverged histories prompt the user to open separately or replace the working copy without silently overwriting the source file.
 - `.bbmodel`: Blockbench import and export. Procedural objects and modifiers are expanded into compatible cube/group data during export.
@@ -484,7 +491,7 @@ Node.js is required. Install dependencies once:
 npm install
 ```
 
-On Windows, you can then double-click `CubeBricksStart.vbs` in the repository root to launch the desktop application. It runs `CubeBricksStart.bat` (`npm start`) from the project directory with the console hidden. To see startup errors, double-click `CubeBricksStart.bat` instead, or run:
+On Windows, double-click the icon-bearing `CubeBricksStart.exe` in the repository root to launch the local Electron app without a console. You can also drop a `.cbmodel` onto this EXE. Rebuild this temporary launcher with `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-launcher.ps1`. To see startup errors, double-click `CubeBricksStart.bat` instead, or run:
 
 ```powershell
 npm start

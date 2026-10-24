@@ -161,7 +161,7 @@ function renderTextureUvOverlay(selectionOnly = false) {
   let selectionUi = overlay.querySelector('.texture-uv-selection-ui');
   if (!selectionOnly || !allPathNode || !culledPathNode || !selectedPathNode || !selectionUi) {
     overlay.setAttribute('viewBox', `0 0 ${layout.viewportWidth} ${layout.viewportHeight}`);
-    overlay.innerHTML = '<path class="texture-uv-all"/><path class="texture-uv-culled"/><path class="texture-uv-selected"/><g class="texture-uv-selection-ui"></g><rect class="texture-uv-alt-box" hidden/>';
+    overlay.innerHTML = '<path class="texture-uv-all"/><path class="texture-uv-culled"/><path class="texture-uv-selected"/><g class="texture-uv-selection-ui"></g><rect class="texture-uv-alt-box" hidden/><rect class="texture-uv-marquee" hidden/>';
     allPathNode = overlay.querySelector('.texture-uv-all');
     culledPathNode = overlay.querySelector('.texture-uv-culled');
     selectedPathNode = overlay.querySelector('.texture-uv-selected');
@@ -182,6 +182,16 @@ function renderTextureUvOverlay(selectionOnly = false) {
     altBox.setAttribute('height', String(Math.abs(end[1] - start[1]) * layout.scale));
     altBox.removeAttribute('hidden');
   } else altBox?.setAttribute('hidden', '');
+  const marquee = overlay.querySelector('.texture-uv-marquee');
+  if (marquee && textureUvDrag?.kind === 'marquee' && textureUvDrag.moved) {
+    const start = textureUvDrag.startUv, end = textureUvDrag.currentUv;
+    marquee.setAttribute('x', String(layout.left + Math.min(start[0], end[0]) * layout.scale));
+    marquee.setAttribute('y', String(layout.top + Math.min(start[1], end[1]) * layout.scale));
+    marquee.setAttribute('width', String(Math.abs(end[0] - start[0]) * layout.scale));
+    marquee.setAttribute('height', String(Math.abs(end[1] - start[1]) * layout.scale));
+    marquee.classList.toggle('subtract', textureUvDrag.subtract);
+    marquee.removeAttribute('hidden');
+  } else marquee?.setAttribute('hidden', '');
   updateTextureUvFields(selectedEntries);
   const selectedFaceCounts = new Map(CUBE_FACE_NAMES.map(faceName => [faceName, 0]));
   selectedEntries.forEach(entry => selectedFaceCounts.set(entry.faceName, (selectedFaceCounts.get(entry.faceName) || 0) + 1));

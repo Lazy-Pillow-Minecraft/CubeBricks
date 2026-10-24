@@ -107,6 +107,9 @@ const coreOperations = {
   'core.texture.mode': '修改貼圖模式',
   'core.texture.import': '導入貼圖',
   'core.texture.delete': '刪除貼圖',
+  'core.texture.cut': '剪切貼圖',
+  'core.texture.paste': '貼上貼圖',
+  'core.texture.duplicate': '原地複製貼圖',
   'core.texture.reorder': '調整貼圖順序',
   'core.history.undo': '撤銷',
   'core.history.redo': '重做'

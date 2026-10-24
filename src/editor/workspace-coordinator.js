@@ -28,12 +28,12 @@ export function createWorkspaceCoordinator({
   scheduleAllPaintSymmetryBuilds, syncSubdivisionEdits
 }) {
 let toastTimer;
-function restoreProjectTextureView() {
+function restoreProjectTextureView({ preserveAtlas = false } = {}) {
   // Texture previews and the scene atlas are separate consumers. Rebuild the
   // atlas as soon as a project becomes active; otherwise an image-load callback
   // for the currently selected preview is the only thing that starts it.
   getTextureAssetController().textureLoadRevision++;
-  getTextureAtlasController().resetAtlas();
+  getTextureAtlasController().resetAtlas({ preserveGpu: preserveAtlas && state.textureAssets.length > 0 });
   livePaintTextureSources.clear();
   animationRasterCache.clear();
   renderTextureList();

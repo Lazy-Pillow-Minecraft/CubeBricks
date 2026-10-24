@@ -17,10 +17,13 @@ async function visit(folder) {
     if (!/\.(?:js|html)$/.test(entry.name) || ignored.has(entry.name)) continue;
     const contents = await fs.readFile(file, 'utf8');
     const relative = path.relative(root, file).replaceAll('\\', '/');
+    if (relative === 'src/common/i18n/simplified.js') continue;
     const conversionTableStart = entry.name === 'app-config.js' ? contents.indexOf('const SIMPLIFIED_PHRASES') : -1;
     const conversionTableEnd = conversionTableStart < 0 ? -1 : contents.indexOf('function toSimplified', conversionTableStart);
-    const translatorStart = entry.name === 'app-config.js' ? contents.indexOf('export function translateUiText') : -1;
-    const translatorEnd = translatorStart < 0 ? -1 : contents.indexOf('let activeLanguage', translatorStart);
+    const translatorStart = entry.name === 'app-config.js' ? contents.indexOf('export function translateUiText')
+      : entry.name === 'english.js' ? contents.indexOf('export function translateEnglishUiText') : -1;
+    const translatorEnd = translatorStart < 0 ? -1 : entry.name === 'english.js'
+      ? contents.length : contents.indexOf('let activeLanguage', translatorStart);
     const candidates = entry.name.endsWith('.html')
       ? [...contents.matchAll(/>\s*([^<>]*[\u3400-\u9fff][^<>]*?)\s*</g)].map(match => ({ text: match[1], index: match.index }))
         .concat([...contents.matchAll(/(?:title|aria-label|placeholder|alt)="([^"]*[\u3400-\u9fff][^"]*)"/g)]

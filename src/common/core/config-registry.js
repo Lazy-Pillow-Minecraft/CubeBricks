@@ -86,6 +86,16 @@ export class ConfigRegistry {
     return this.definitions.get(id);
   }
 
+  setEnumOptions(id, options) {
+    this.assertRegistered(id);
+    const previous = this.definitions.get(id);
+    if (previous.type !== ConfigType.ENUM) throw new TypeError(`Config "${id}" is not an enum.`);
+    const next = this.normalizeDefinition({ ...previous, options });
+    this.definitions.set(id, next);
+    if (!this.isValidValue(next, this.values.get(id))) this.set(id, next.defaultValue, { source: 'enum-options' });
+    return next;
+  }
+
   list({ scope } = {}) {
     const entries = [...this.definitions.values()];
     return scope ? entries.filter(definition => definition.scope === scope) : entries;

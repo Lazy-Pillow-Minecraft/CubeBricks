@@ -17,7 +17,8 @@ export function createContextMenuController({
   setMode, deleteSelectedPaletteColor, insertPaletteGradientNode,
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
-  copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml
+  copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
+  copyTexture, cutTexture, pasteTexture, removeTexture
 }) {
 let contextMenuSource = null;
 
@@ -80,7 +81,7 @@ function showContextMenu(event, { title = '', source = null, items = [] } = {}) 
 function setActiveTextureItem(item) {
   if (!item) return;
   const index = state.textureAssets.findIndex(asset => asset._uid === item.dataset.textureUid);
-  if (index >= 0) activateProjectTexture(index);
+  if (index >= 0 && state.textureAssets[index]._uid !== state.activeTextureUid) activateProjectTexture(index);
 }
 
 function showElementContextMenu(event, uidValue, source = null) {
@@ -226,7 +227,11 @@ function bindContextMenus() {
         ...(selectedNodeUids().length ? [{ icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) }] : []),
         { separator: true },
         captureItem(),
-        { icon: '#', label: state.grid ? '隱藏網格' : '顯示網格', action: () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-context-menu' }) },
+        { icon: '#', label: state.grid ? '隱藏參考網格' : '顯示參考網格', action: () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-context-menu' }) },
+        { icon: '◐', label: '切換背景（純黑／目前／棋盤格）', action: () => {
+          const modes = ['black', 'current', 'grid'];
+          configRegistry.set(ConfigKey.BACKGROUND_MODE, modes[(modes.indexOf(state.backgroundMode) + 1) % modes.length], { source: 'viewport-context-menu' });
+        } },
         { icon: '▧', label: state.wire ? '隱藏邊界線框' : '顯示邊界線框', action: () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-context-menu' }) }
       ]
     });
@@ -309,23 +314,13 @@ function bindContextMenus() {
       const asset = state.textureAssets.find(entry => entry._uid === item.dataset.textureUid);
       return showContextMenu(event, { title: asset?.name || '貼圖', source: item, items: [
         { icon: '◉', label: '設為目前貼圖', action: () => setActiveTextureItem(item) },
+        { icon: '▣', label: '複製貼圖', action: () => copyTexture(asset) },
+        { icon: '✂', label: '剪切貼圖', action: () => cutTexture(asset) },
+        { icon: '▤', label: '貼上貼圖', action: () => pasteTexture() },
+        { icon: '⧉', label: '原地複製貼圖', action: () => pasteTexture({ inPlace: true }) },
         { icon: '▰', label: '移到新貼圖組', action: addTextureGroup },
         { separator: true },
-        { icon: '×', label: '刪除貼圖', danger: true, action: () => {
-          noteJournalOperation('core.texture.delete');
-          const previousAssets = [...state.textureAssets];
-          state.textureAssets = state.textureAssets.filter(entry => entry._uid !== asset?._uid);
-          remapNumericFaceTextureReferences(previousAssets);
-          if (state.activeTextureUid === asset?._uid) state.activeTextureUid = null;
-          renderTextureList();
-          if (state.textureAssets.length) {
-            const nextIndex = Math.max(0, state.textureAssets.findIndex(entry => entry._uid === state.activeTextureUid));
-            activateProjectTexture(nextIndex);
-          } else renderTexture();
-          rebuildTextureAtlas();
-          markDirty();
-          renderScene();
-        } }
+        { icon: '×', label: '刪除貼圖', danger: true, action: () => removeTexture(asset) }
       ] });
     }
     if (groupNode) {
@@ -339,7 +334,9 @@ function bindContextMenus() {
         } }
       ] });
     }
-    event.preventDefault();
+    showContextMenu(event, { title: '貼圖列表', source: $('#textureList'), items: [
+      { icon: '▤', label: '貼上貼圖', action: () => pasteTexture() }
+    ] });
   });
   $('#texturePreview').addEventListener('contextmenu', event => showContextMenu(event, { title: '貼圖預覽', source: $('#texturePreview'), items: [
     { icon: '◒', label: '在繪畫模式打開', action: () => setMode('paint') },

@@ -1,6 +1,10 @@
 import { activeLayer, compositeLayers, imageCanvas, loadRaster, normalizeTextureLayers, prepareLayers, tiledFaceRaster } from '../common/core/texture-features.js';
 import { formatRules } from '../common/core/format-constraints.js';
 
+const CUBE_FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
+let textureClipboard = null;
+const decodedTextureImages = new WeakMap();
+
 export function createTextureAssetController({
   state, $, $$, textureCanvas, textureCtx, sceneRenderer, uvPreviewRenderer,
   uvPreviewController, uvEditorController, livePaintTextureSources,
@@ -229,13 +233,116 @@ function remapNumericFaceTextureReferences(previousAssets) {
 function loadTextureAssetImage(asset) {
   const live = asset && livePaintTextureSources.get(asset._uid);
   if (live && live.savedSource === asset.source) return Promise.resolve(live.source);
-  return new Promise(resolve => {
-    if (!asset?.source) return resolve(null);
+  if (!asset?.source) return Promise.resolve(null);
+  const source = asset.source;
+  const cached = decodedTextureImages.get(asset);
+  if (cached?.source === source) return cached.promise;
+  const promise = new Promise(resolve => {
     const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-    image.src = asset.source;
+    image.onload = () => {
+      if (asset.source !== source && decodedTextureImages.get(asset)?.source === source)
+        decodedTextureImages.delete(asset);
+      resolve(asset.source === source ? image : null);
+    };
+    image.onerror = () => {
+      if (decodedTextureImages.get(asset)?.source === source) decodedTextureImages.delete(asset);
+      resolve(null);
+    };
+    image.src = source;
   });
+  decodedTextureImages.set(asset, { source, promise });
+  return promise;
+}
+
+function assignImportedTextureToBlankFaces(asset) {
+  let assigned = 0;
+  for (const cube of state.project.elements) {
+    if (cube.type !== 'cube') continue;
+    let cubeAssigned = false;
+    for (const faceName of CUBE_FACES) {
+      const face = cube.faces?.[faceName];
+      // A null texture marks a deliberately culled face. Never restore it.
+      if (face?.texture === null || face?.texture !== undefined && face.texture !== '') continue;
+      cube.faces ||= {};
+      cube.faces[faceName] = { ...face, texture: asset._uid };
+      cubeAssigned = true;
+      assigned++;
+    }
+    if (cubeAssigned) cube.autoUv = false;
+  }
+  if (assigned) {
+    invalidateUvPreviewTextureState();
+    invalidateAllRenderGeometry();
+  }
+  return assigned;
+}
+
+function copyTexture(asset = activeTextureAsset()) {
+  if (!asset) return false;
+  textureClipboard = { asset: structuredClone(asset), cut: false };
+  toast(`已複製貼圖 ${asset.name}`);
+  return true;
+}
+
+function removeTexture(asset = activeTextureAsset(), operation = 'core.texture.delete') {
+  if (!asset) return false;
+  if (operation) noteJournalOperation(operation);
+  const previousAssets = [...state.textureAssets];
+  const removedIndex = state.textureAssets.indexOf(asset);
+  state.textureAssets = state.textureAssets.filter(entry => entry !== asset);
+  remapNumericFaceTextureReferences(previousAssets);
+  if (state.activeTextureUid === asset._uid) {
+    const next = state.textureAssets[Math.min(removedIndex, state.textureAssets.length - 1)];
+    state.activeTextureUid = next?._uid || null;
+  }
+  renderTextureList();
+  if (state.textureAssets.length) activateProjectTexture(state.textureAssets.findIndex(entry => entry._uid === state.activeTextureUid));
+  else renderTexture();
+  rebuildTextureAtlas();
+  markDirty();
+  renderScene();
+  return true;
+}
+
+function cutTexture(asset = activeTextureAsset()) {
+  if (!asset) return false;
+  noteJournalOperation('core.texture.cut');
+  textureClipboard = { asset: structuredClone(asset), cut: true };
+  const index = state.textureAssets.indexOf(asset);
+  for (const element of state.project.elements) for (const face of Object.values(element.faces || {})) {
+    if (face && String(face.texture).replace(/^#/, '') === String(index)) face.texture = asset._uid;
+  }
+  const removed = removeTexture(asset, null);
+  if (removed) $('#textureList').focus({ preventScroll: true });
+  return removed;
+}
+
+function pasteTexture({ inPlace = false } = {}) {
+  const original = inPlace ? activeTextureAsset() : textureClipboard?.asset;
+  if (!original) return false;
+  noteJournalOperation(inPlace ? 'core.texture.duplicate' : 'core.texture.paste');
+  const restoreCut = !inPlace && textureClipboard?.cut
+    && !state.textureAssets.some(asset => asset._uid === original._uid);
+  const id = restoreCut ? original._uid : textureUid();
+  const asset = structuredClone(original);
+  asset._uid = id;
+  if (!restoreCut) { asset.uuid = id; asset.id = id; }
+  asset.useAsDefault = false;
+  if (!restoreCut) {
+    const dot = asset.name?.lastIndexOf('.') ?? -1;
+    asset.name = dot > 0 ? `${asset.name.slice(0, dot)}_copy${asset.name.slice(dot)}` : `${asset.name || 'texture'}_copy.png`;
+  }
+  const anchor = state.textureAssets.findIndex(entry => entry._uid === state.activeTextureUid);
+  const index = inPlace && anchor >= 0 ? anchor + 1 : state.textureAssets.length;
+  state.textureAssets.splice(index, 0, asset);
+  if (restoreCut) textureClipboard.cut = false;
+  state.activeTextureUid = asset._uid;
+  renderTextureList();
+  activateProjectTexture(index);
+  rebuildTextureAtlas();
+  markDirty();
+  toast(`已${inPlace ? '原地複製' : '貼上'}貼圖 ${asset.name}`);
+  return true;
 }
 
 
@@ -282,6 +389,10 @@ function openTextureCreateDialog() {
 
 function importTexture(file) {
   if (!file) return;
+  if (!/\.png$/i.test(file.name || '') || (file.type && file.type !== 'image/png')) {
+    toast('目前只有 PNG 可以作為貼圖；其他圖片請導入為參考圖');
+    return;
+  }
   const revision = ++textureLoadRevision;
   const url = URL.createObjectURL(file);
   const image = new Image();
@@ -290,8 +401,10 @@ function importTexture(file) {
     noteJournalOperation('core.texture.import');
     const asset = { _uid: textureUid(), name: file.name, source: url, uvWidth: image.naturalWidth, uvHeight: image.naturalHeight,
       kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null };
+    decodedTextureImages.set(asset, { source: url, promise: Promise.resolve(image) });
     state.textureAssets.push(asset);
     state.activeTextureUid = asset._uid;
+    const assignedFaces = assignImportedTextureToBlankFaces(asset);
     updateLayerCompositePreview(asset, null);
     textureCanvas.width = image.naturalWidth;
     textureCanvas.height = image.naturalHeight;
@@ -307,7 +420,7 @@ function importTexture(file) {
     renderTextureList();
     rebuildTextureAtlas();
     markDirty();
-    toast(`已導入貼圖 ${file.name}`);
+    toast(`已導入貼圖 ${file.name}${assignedFaces ? `，填入 ${assignedFaces} 個空白面` : ''}`);
   };
   image.onerror = () => { URL.revokeObjectURL(url); toast('無法讀取這張圖片'); };
   image.src = url;
@@ -315,39 +428,50 @@ function importTexture(file) {
 
 function loadTextureSource(source, name) {
   const revision = ++textureLoadRevision;
-  const image = new Image();
-  pendingTextureImage = image;
-  image.onload = () => {
+  const loaded = image => {
     if (revision !== textureLoadRevision) return;
     pendingTextureImage = null;
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
     const asset = activeTextureAsset();
     // Blockbench may declare UV coordinates in a smaller logical resolution
     // than the actual high-density PNG. Keep those declared units intact.
     if (asset) {
       const fallback = state.project.meta?.importedFrom === 'bbmodel' ? state.project.textureSize : null;
-      asset.uvWidth ||= fallback?.[0] || image.naturalWidth;
-      asset.uvHeight ||= fallback?.[1] || image.naturalHeight;
+      asset.uvWidth ||= fallback?.[0] || width;
+      asset.uvHeight ||= fallback?.[1] || height;
     }
-    textureCanvas.width = image.naturalWidth;
-    textureCanvas.height = image.naturalHeight;
+    if (!asset?.layers?.length) updateLayerCompositePreview(asset, null);
+    textureCanvas.width = width;
+    textureCanvas.height = height;
     textureCtx.imageSmoothingEnabled = false;
-    textureCtx.clearRect(0, 0, image.naturalWidth, image.naturalHeight);
+    textureCtx.clearRect(0, 0, width, height);
     textureCtx.drawImage(image, 0, 0);
     textureCanvas.style.visibility = '';
     window.dispatchEvent(new Event('cubebricks:texture-change'));
-    updateTexturePreviewFrame(asset?.uvWidth || image.naturalWidth, asset?.uvHeight || image.naturalHeight);
+    updateTexturePreviewFrame(asset?.uvWidth || width, asset?.uvHeight || height);
     const activeName = $('.texture-item.active strong');
     if (activeName) activeName.textContent = name;
     syncRendererTexture(textureCanvas);
     renderScene();
     renderTextureFeatureControls();
   };
-  image.onerror = () => {
+  const failed = () => {
     if (revision !== textureLoadRevision) return;
     pendingTextureImage = null;
+    textureCanvas.style.visibility = '';
     toast(`貼圖載入失敗：${name || '未命名貼圖'}`);
   };
-  image.src = source;
+  const asset = activeTextureAsset();
+  if (asset?.source === source) {
+    loadTextureAssetImage(asset).then(image => image ? loaded(image) : failed());
+  } else {
+    const image = new Image();
+    pendingTextureImage = image;
+    image.onload = () => loaded(image);
+    image.onerror = failed;
+    image.src = source;
+  }
 }
 
 function installProjectTextures(assets) {
@@ -374,8 +498,10 @@ function activateProjectTexture(index) {
   const activationRevision = ++textureLoadRevision;
   state.activeTextureUid = asset._uid;
   if (switchingAsset) {
-    updateLayerCompositePreview(asset, null);
-    textureCanvas.style.visibility = 'hidden';
+    // Keep the previous canvas or layer composite visible while this asset is
+    // loading. Clearing either one here makes right-click texture switches
+    // show an empty preview until the asynchronous decode finishes.
+    textureCanvas.style.visibility = '';
   }
   if (asset.uvWidth && asset.uvHeight) updateTexturePreviewFrame(asset.uvWidth, asset.uvHeight);
   $$('.texture-item').forEach(item => item.classList.toggle('active', item.dataset.textureUid === asset._uid));
@@ -385,7 +511,7 @@ function activateProjectTexture(index) {
     loadTextureSource(activeLayer(asset).source, asset.name);
     updateLayerCompositePreview(asset, compositeLayers(asset));
   }).catch(error => toast(error.message));
-  else { updateLayerCompositePreview(asset, null); loadTextureSource(asset.source, asset.name); }
+  else loadTextureSource(asset.source, asset.name);
   scheduleTextureAnimation();
 }
 
@@ -393,6 +519,7 @@ function invalidateUvPreviewTextureState() {
   // Preview cubes copy their face records. Regenerate those copies whenever
   // template creation replaces UV rectangles or texture assignments.
   uvPreviewController.uvPreviewProjectCache = null;
+  uvEditorController.textureUvEntryCache = null;
   state.uvPreviewSelectedFace = null;
   uvPreviewController.uvPreviewTextureDirty = true;
   uvPreviewController.uvPreviewRenderDirty = true;
@@ -403,6 +530,7 @@ return {
   set textureLoadRevision(value) { textureLoadRevision = value; },
   get pendingTextureImage() { return pendingTextureImage; },
   set pendingTextureImage(value) { pendingTextureImage = value; },
-  textureUid, renderTextureList, addTextureGroup, updateLayerCompositePreview, renderTextureTileControls, refreshDerivedTileEntries, scheduleTextureAnimation, textureAssetForReference, isFaceTiled, remapNumericFaceTextureReferences, loadTextureAssetImage, createSimpleTexture, updateTextureCreateDialog, openTextureCreateDialog, importTexture, loadTextureSource, installProjectTextures, activateProjectTexture, invalidateUvPreviewTextureState
+  textureUid, renderTextureList, addTextureGroup, updateLayerCompositePreview, renderTextureTileControls, refreshDerivedTileEntries, scheduleTextureAnimation, textureAssetForReference, isFaceTiled, remapNumericFaceTextureReferences, loadTextureAssetImage, createSimpleTexture, updateTextureCreateDialog, openTextureCreateDialog, importTexture, loadTextureSource, installProjectTextures, activateProjectTexture, invalidateUvPreviewTextureState,
+  copyTexture, cutTexture, pasteTexture, removeTexture
 };
 }

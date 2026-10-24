@@ -1,10 +1,12 @@
 export function createReferenceImageController({ state, $, $$, escapeHtml, viewport, sceneRenderer,
-  referenceImageInput, referenceImageLayer, referenceImageHint, snapshot, markDirty, toast }) {
+  referenceImageInput, referenceImageLayer, referenceImageHint, snapshot, markDirty, toast,
+  setPaintColor, updateToolOptions }) {
 let referenceImageEditing = false;
 let referenceImageDrag = null;
 let referenceControlsProject = null;
 let referenceControlsKey = '';
 let referenceImportViewKey = 'general';
+const sampleCanvases = new WeakMap();
 
 function referenceViewKey() {
   return state.axisView || 'general';
@@ -137,6 +139,41 @@ function updateReferenceImageLayer() {
   updateReferenceImageControls();
 }
 
+function sampleReferenceImage(clientX, clientY) {
+  if (referenceImageLayer.hidden) return null;
+  const rect = referenceImageLayer.getBoundingClientRect();
+  const screenX = clientX - rect.left;
+  const screenY = clientY - rect.top;
+  // Last imported image is drawn on top. Invert its exact CSS transform so
+  // axis views, negative-axis views and general-view zoom use the same picker.
+  const images = [...referenceImageLayer.querySelectorAll('img')].reverse();
+  for (const image of images) {
+    if (!image.complete || !image.naturalWidth || !image.naturalHeight) continue;
+    let position;
+    try {
+      position = new DOMMatrix(image.style.transform).inverse().transformPoint({ x: screenX, y: screenY });
+    } catch { continue; }
+    const x = Math.floor(position.x);
+    const y = Math.floor(position.y);
+    if (x < 0 || y < 0 || x >= image.naturalWidth || y >= image.naturalHeight) continue;
+    let cached = sampleCanvases.get(image);
+    if (!cached || cached.source !== image.src) {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) continue;
+      context.drawImage(image, 0, 0);
+      cached = { source: image.src, context };
+      sampleCanvases.set(image, cached);
+    }
+    const pixel = cached.context.getImageData(x, y, 1, 1).data;
+    if (!pixel[3]) continue;
+    return `#${[pixel[0], pixel[1], pixel[2]].map(value => value.toString(16).padStart(2, '0')).join('')}`;
+  }
+  return null;
+}
+
 function setReferenceImageEditing(value) {
   referenceImageEditing = Boolean(value && currentReferenceImage());
   referenceImageDrag = null;
@@ -238,6 +275,15 @@ function referenceDragBasis() {
 }
 
 function beginReferenceImageDrag(event) {
+  if (state.mode === 'paint' && state.tool === 'eyedropper' && event.button === 0) {
+    const color = sampleReferenceImage(event.clientX, event.clientY);
+    if (color) {
+      event.preventDefault();
+      setPaintColor(color, true);
+      updateToolOptions();
+    }
+    return;
+  }
   if (!referenceImageEditing || !currentReferenceImage() || ![0, 1].includes(event.button)) return;
   event.preventDefault();
   event.stopPropagation();
@@ -313,7 +359,7 @@ function selectReference(uid) {
 
 return { get editing() { return referenceImageEditing; }, get drag() { return referenceImageDrag; },
   get importViewKey() { return referenceImportViewKey; }, resetInteraction, selectReference,
-  referenceViewKey, updateReferenceImageLayer, setReferenceImageEditing, setReferenceImageMenu,
+  referenceViewKey, updateReferenceImageLayer, sampleReferenceImage, setReferenceImageEditing, setReferenceImageMenu,
   beginReferenceImageImport, resetReferenceImage, removeReferenceImage, loadReferenceImageFiles,
   beginReferenceImageDrag, moveReferenceImageDrag, endReferenceImageDrag, scaleReferenceImage };
 }

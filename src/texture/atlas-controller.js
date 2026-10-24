@@ -14,15 +14,28 @@ const textureAtlasCanvas = document.createElement('canvas');
 const textureAtlasCtx = textureAtlasCanvas.getContext('2d');
 const textureAtlasPatchCanvas = document.createElement('canvas');
 const textureAtlasPatchCtx = textureAtlasPatchCanvas.getContext('2d');
+const neutralTextureCanvas = document.createElement('canvas');
+neutralTextureCanvas.width = neutralTextureCanvas.height = 1;
+const neutralTextureContext = neutralTextureCanvas.getContext('2d');
+neutralTextureContext.fillStyle = '#fff';
+neutralTextureContext.fillRect(0, 0, 1, 1);
 let textureAtlasEntries = [];
 let textureAtlasLayoutByUid = new Map();
 let textureAtlasRevision = 0;
 let textureAtlasRebuildFrame = null;
+const failedImageRetries = new WeakMap();
 
-function resetAtlas() {
+function resetAtlas({ preserveGpu = false } = {}) {
   textureAtlasRevision++;
   textureAtlasEntries = [];
   textureAtlasLayoutByUid = new Map();
+  // Journal navigation can restore the model before its replacement images
+  // finish loading. Keep the previous atlas visible until the new one is
+  // ready instead of flashing the neutral white texture for a frame.
+  if (!preserveGpu) {
+    sceneRenderer.setTexture(neutralTextureCanvas);
+    uvPreviewRenderer.setTexture(neutralTextureCanvas);
+  }
 }
 
 function nextPowerOfTwo(value) {
@@ -61,6 +74,9 @@ function textureAtlasReferences(asset, index) {
 }
 
 function rebuildTextureAtlas() {
+  // Invalidate an in-flight build immediately, not one frame later. Otherwise
+  // an old texture/project can briefly overwrite the new GPU atlas.
+  textureAtlasRevision++;
   if (textureAtlasRebuildFrame !== null) return;
   textureAtlasRebuildFrame = requestAnimationFrame(() => {
     textureAtlasRebuildFrame = null;
@@ -70,7 +86,9 @@ function rebuildTextureAtlas() {
 
 async function rebuildTextureAtlasNow() {
   const revision = ++textureAtlasRevision;
-  const records = (await Promise.all(state.textureAssets.map(async (asset, index) => {
+  const project = state.project;
+  const assets = [...state.textureAssets];
+  const records = (await Promise.all(assets.map(async (asset, index) => {
     const image = await loadTextureAssetImage(asset);
     if (!image) return null;
     const original = imageCanvas(image);
@@ -80,12 +98,26 @@ async function rebuildTextureAtlasNow() {
       uvWidth: Number(asset.uvWidth) || Number(state.project.textureSize?.[0]) || frame.width,
       uvHeight: Number(asset.uvHeight) || Number(state.project.textureSize?.[1]) || frame.height };
   }))).filter(Boolean);
-  if (revision !== textureAtlasRevision) {
+  if (revision !== textureAtlasRevision || project !== state.project
+    || assets.length !== state.textureAssets.length
+    || assets.some((asset, index) => asset !== state.textureAssets[index])) {
     // A preview switch or paint patch superseded this asynchronous build.
     // Ensure the current project's atlas still gets its own final pass.
     rebuildTextureAtlas();
     return false;
   }
+  const loadedAssets = new Set(records.map(record => record.asset));
+  let retryDelay = 0;
+  for (const asset of assets) {
+    if (loadedAssets.has(asset)) { failedImageRetries.delete(asset); continue; }
+    const previous = failedImageRetries.get(asset);
+    const attempts = previous?.source === asset.source ? previous.attempts + 1 : 1;
+    failedImageRetries.set(asset, { source: asset.source, attempts });
+    if (attempts <= 3) retryDelay = Math.max(retryDelay, attempts * 180);
+  }
+  if (retryDelay) setTimeout(() => {
+    if (state.project === project && assets.every(asset => state.textureAssets.includes(asset))) rebuildTextureAtlas();
+  }, retryDelay);
   const tileKeys = new Set();
   for (const element of state.project.elements) {
     const cubes = element.type === 'cube' ? [element] : element.toCubes?.() || [];
@@ -107,8 +139,8 @@ async function rebuildTextureAtlasNow() {
   if (!records.length) {
     textureAtlasEntries = [];
     textureAtlasLayoutByUid = new Map();
-    sceneRenderer.setTexture(textureCanvas);
-    uvPreviewRenderer.setTexture(textureCanvas);
+    sceneRenderer.setTexture(neutralTextureCanvas);
+    uvPreviewRenderer.setTexture(neutralTextureCanvas);
     return false;
   }
   const totalArea = records.reduce((sum, record) => sum + (record.width + 2) * (record.height + 2), 0);

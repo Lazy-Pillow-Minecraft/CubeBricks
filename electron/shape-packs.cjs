@@ -57,7 +57,8 @@ async function loadShapePack(filePath, entry) {
     return { id: record.id, label: String(record.label || record.id),
       source: source.toString('base64'), icon };
   });
-  return { name: packName, version: String(metadata.version || '0.0.0'), shapes };
+  return { name: packName, filename: entry.name, version: String(metadata.version || '0.0.0'),
+    hotReload: metadata.hotReload !== false, shapes };
 }
 
 async function listShapePacks(root) {
@@ -73,4 +74,4 @@ async function listShapePacks(root) {
   return { packs, errors };
 }
 
-module.exports = { listShapePacks };
+module.exports = { listShapePacks, loadShapePack };

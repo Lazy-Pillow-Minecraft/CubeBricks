@@ -539,6 +539,10 @@ async function applyTextureBucket(asset, point, hitEntry = null) {
 function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null, operationId = null) {
   const id = requireOperation(operationId || `core.texture.${PAINT_TOOLS.includes(state.tool) ? state.tool : 'paint'}`);
   noteJournalOperation(id);
+  // The desktop journal records this stroke alongside every other project
+  // edit. Keeping a second paint-only undo stack gives the two histories
+  // incompatible ordering when the user switches tools or modes.
+  if (window.cubeBricksDesktop?.checkoutProjectJournal) return;
   state.paintHistory.push({
     uid: asset._uid,
     source: asset.layers?.length ? asset.source : canvas.toDataURL('image/png'),

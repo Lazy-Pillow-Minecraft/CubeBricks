@@ -39,7 +39,12 @@ function setup() {
     toast() {}, renderProjectTabs() {}, restoreProjectTextureView() {}, renderAll() {}, scheduleProjectJournal() {},
     clearSubdivisionSession() { context.subdivisionSession = null; },
     markDirty(value, options) { assert.equal(options.constrain, false); },
-    window: { cubeBricksDesktop: { checkoutProjectJournal: () => new Promise(resolve => { finish = resolve; }) } }
+    window: { cubeBricksDesktop: {
+      projectJournalState: async () => ({ activeHead: 10 }),
+      checkoutProjectJournal: payload => payload.sequence
+        ? Promise.resolve(result(payload.sequence))
+        : new Promise(resolve => { finish = resolve; })
+    } }
   });
   context.projectTabsController = {
     tabs,
@@ -67,6 +72,17 @@ test('asynchronous undo updates its original tab, never a newly active tab', asy
   assert.equal(tabs[0].session.textureGroups[0].uid, 'folder');
 });
 
+test('undo keeps the existing atlas visible until replacement textures load', async () => {
+  const { context, finish } = setup();
+  let options;
+  context.restoreProjectTextureView = value => { options = value; };
+  const pending = context.navigateProjectJournal('undo');
+  await turn();
+  finish(result(5));
+  await pending;
+  assert.equal(options?.preserveAtlas, true);
+});
+
 test('rapid undo requests execute in order', async () => {
   const { context, state } = setup();
   let running = 0, maximum = 0, head = 10;
@@ -81,6 +97,36 @@ test('rapid undo requests execute in order', async () => {
   assert.equal(state.project.elements[0].position[0], 8);
 });
 
+test('desktop paint mode uses the same ordered undo and redo as model edits', async () => {
+  const directions = [];
+  const context = vm.createContext({
+    state: { mode: 'paint', paintHistory: [{ uid: 'texture_a' }], paintFuture: [{ uid: 'texture_a' }] },
+    window: { cubeBricksDesktop: { checkoutProjectJournal() {} } },
+    navigateProjectJournal: async direction => { directions.push(direction); return true; },
+    restoreTexturePaintHistory: () => { throw new Error('paint-only history must not run on desktop'); }
+  });
+  install(context, ['undo', 'redo']);
+  await context.undo();
+  await context.redo();
+  assert.deepEqual(directions, ['undo', 'redo']);
+});
+
+test('desktop snapshots do not clone a second full model history', () => {
+  const tab = { id: 'project_a', journalPending: null };
+  const context = vm.createContext({
+    state: { project: {}, history: [], future: [] },
+    window: { cubeBricksDesktop: { checkoutProjectJournal() {} } },
+    projectTabsController: { activeId: tab.id },
+    projectTabById: () => tab,
+    requireOperation: id => id,
+    compactProjectHistorySnapshot: () => { throw new Error('unexpected full model clone'); }
+  });
+  install(context, ['snapshot']);
+  context.snapshot('core.element.move');
+  assert.equal(tab.journalPending, 'core.element.move');
+  assert.equal(context.state.history.length, 0);
+});
+
 test('new edit during checkout is not overwritten by its late result', async () => {
   const { context, tabs, state, finish } = setup();
   const pending = context.navigateProjectJournal('undo');
@@ -91,6 +137,32 @@ test('new edit during checkout is not overwritten by its late result', async () 
   await pending;
   assert.equal(state.project.elements[0].position[0], 99);
   assert.equal(tabs[0].journalPending, 'core.element.property');
+  assert.equal(tabs[0].journalHead, 10);
+  assert.equal(tabs[0].journalWriteBlocked, false);
+});
+
+test('failed compensation blocks writes instead of committing a new edit on the undone branch', async () => {
+  const { context, tabs, finish } = setup();
+  const checkout = context.window.cubeBricksDesktop.checkoutProjectJournal;
+  context.window.cubeBricksDesktop.checkoutProjectJournal = payload => payload.sequence
+    ? Promise.reject(new Error('restore failed'))
+    : checkout(payload);
+  const pending = context.navigateProjectJournal('undo');
+  await turn();
+  tabs[0].journalEditRevision = 1;
+  finish(result(5));
+  await pending;
+  assert.equal(tabs[0].journalWriteBlocked, true);
+});
+
+test('a failed renderer restore cannot silently accept edits on a moved journal head', async () => {
+  const { context, tabs, finish } = setup();
+  context.renderAll = () => { throw new Error('render failed'); };
+  const pending = context.navigateProjectJournal('undo');
+  await turn();
+  finish(result(5));
+  await pending;
+  assert.equal(tabs[0].journalWriteBlocked, true);
 });
 
 test('dragging a texture onto multiple cube faces records one operation before mutations', () => {

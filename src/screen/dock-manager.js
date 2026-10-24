@@ -44,8 +44,11 @@ export class DockManager {
     this.mode = 'edit';
     this.previewZone = null;
     this.previewIndex = -1;
+    this.previewStackTarget = null;
     this.placeholder = document.createElement('div');
     this.placeholder.className = 'dock-drop-placeholder';
+    this.placeholder.hidden = true;
+    document.body.append(this.placeholder);
     const saved = readSavedLayout();
 
     for (const [dock, zone] of this.zones) this.installZoneControl(dock, zone);
@@ -57,6 +60,23 @@ export class DockManager {
       this.panels.set(panel.id, panel);
       this.installPanelControls(panel);
     });
+
+    // New panels join the receiving panel's saved position and tab group.
+    for (const definition of definitions) {
+      if (!definition.defaultStackWith || saved[definition.id]) continue;
+      const panel = this.get(definition.id), target = this.get(definition.defaultStackWith);
+      if (!panel || !target) continue;
+      const stackId = target.state.stackId || `dock-stack-${target.id}-default`;
+      if (!target.state.stackId) {
+        target.state.stackId = stackId;
+        target.state.stackOrder = 0;
+        target.state.stackActive = true;
+      }
+      panel.state.stackId = stackId;
+      panel.state.stackOrder = Math.max(...this.stackMembers(stackId).map(member => member.state.stackOrder)) + 1;
+      panel.state.stackActive = false;
+      for (const key of ['dock', 'x', 'y', 'width', 'height', 'collapsed']) panel.state[key] = target.state[key];
+    }
 
     this.restoreLayout();
     window.addEventListener('resize', () => {
@@ -84,6 +104,7 @@ export class DockManager {
   setMode(mode) {
     this.mode = mode;
     for (const panel of this.panels.values()) panel.element.hidden = !panel.modes.includes(mode);
+    this.syncStacks();
     this.refreshZones();
     this.onLayoutChange();
   }
@@ -91,6 +112,7 @@ export class DockManager {
   expand(id) {
     const panel = this.get(id);
     if (!panel) return;
+    if (panel.state.stackId) this.setStackActive(panel.state.stackId, panel.id);
     if (panel.state.dock !== 'floating' && this.zoneState[panel.state.dock]) this.setZoneCollapsed(panel.state.dock, false);
     if (panel.state.collapsed) this.setCollapsed(panel, false);
   }
@@ -135,7 +157,8 @@ export class DockManager {
 
   restoreLayout() {
     const docked = [...this.panels.values()].filter(panel => panel.state.dock !== 'floating')
-      .sort((a, b) => a.state.dock.localeCompare(b.state.dock) || a.state.order - b.state.order || a.index - b.index);
+      .sort((a, b) => a.state.dock.localeCompare(b.state.dock) || a.state.order - b.state.order
+        || a.state.stackOrder - b.state.stackOrder || a.index - b.index);
     docked.forEach(panel => this.placeInZone(panel, panel.state.dock));
     [...this.panels.values()].filter(panel => panel.state.dock === 'floating').forEach(panel => this.placeFloating(panel));
     this.setMode(this.mode);
@@ -165,13 +188,24 @@ export class DockManager {
       || (panel.handle?.classList.contains('dock-tabs') ? panel.handle : panel.handle?.lastElementChild);
     actionHost?.append(collapse);
 
+    const heading = panel.handle?.querySelector(':scope > strong');
+    if (heading) new MutationObserver(() => {
+      const title = heading.textContent.trim();
+      for (const tab of document.querySelectorAll('.dock-stack-tab')) {
+        if (tab.dataset.stackPanel === panel.id) tab.textContent = title;
+      }
+    }).observe(heading, { childList: true, characterData: true, subtree: true });
+
     panel.handle?.addEventListener('pointerdown', event => this.startDrag(event, panel));
     this.applyPanelState(panel);
   }
 
   setCollapsed(panel, collapsed) {
     panel.state.collapsed = collapsed;
-    this.applyPanelState(panel);
+    for (const member of this.stackMembers(panel.state.stackId, panel)) {
+      member.state.collapsed = collapsed;
+      this.applyPanelState(member);
+    }
     this.refreshZones();
     this.persist();
     this.onLayoutChange();
@@ -210,6 +244,135 @@ export class DockManager {
     return Math.max(fallback, Math.ceil(measured));
   }
 
+  stackMembers(id, fallback = null) {
+    if (!id) return fallback ? [fallback] : [];
+    return [...this.panels.values()].filter(panel => panel.state.stackId === id)
+      .sort((a, b) => a.state.stackOrder - b.state.stackOrder || a.index - b.index);
+  }
+
+  copyStackGeometry(source, members) {
+    for (const member of members) {
+      if (member === source) continue;
+      for (const key of ['dock', 'x', 'y', 'width', 'height', 'collapsed']) member.state[key] = source.state[key];
+      this.applyPanelState(member);
+    }
+  }
+
+  syncStacks() {
+    const groups = new Map();
+    for (const panel of this.panels.values()) {
+      if (!panel.state.stackId) continue;
+      if (!groups.has(panel.state.stackId)) groups.set(panel.state.stackId, []);
+      groups.get(panel.state.stackId).push(panel);
+    }
+    for (const [id, members] of groups) {
+      if (members.length > 1) continue;
+      members[0].state.stackId = null;
+      members[0].state.stackActive = false;
+      groups.delete(id);
+    }
+    for (const [id] of groups) {
+      const members = this.stackMembers(id);
+      const available = members.filter(panel => panel.modes.includes(this.mode));
+      const active = available.find(panel => panel.state.stackActive) || available[0];
+      for (const panel of members) {
+        panel.state.stackActive = panel === active;
+        panel.element.classList.toggle('is-stack-inactive', panel !== active);
+        panel.element.classList.add('is-stacked');
+        let tabs = panel.handle?.querySelector('.dock-stack-tabs');
+        if (!tabs && panel.handle) {
+          tabs = document.createElement('div');
+          tabs.className = 'dock-stack-tabs';
+          tabs.setAttribute('role', 'tablist');
+          panel.handle.insertBefore(tabs, panel.handle.querySelector('.panel-heading-actions'));
+        }
+        if (!tabs) continue;
+        tabs.replaceChildren();
+        for (const [index, member] of available.entries()) {
+          if (index) {
+            const divider = document.createElement('span');
+            divider.className = 'dock-stack-divider';
+            divider.textContent = '|';
+            divider.setAttribute('aria-hidden', 'true');
+            tabs.append(divider);
+          }
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'dock-stack-tab';
+          button.textContent = member.handle?.querySelector('strong')?.textContent?.trim() || member.id;
+          button.title = '拖動可拆開';
+          button.dataset.stackPanel = member.id;
+          button.setAttribute('role', 'tab');
+          button.setAttribute('aria-selected', String(member === active));
+          button.addEventListener('click', event => {
+            event.stopPropagation();
+            if (member.state.stackId === id) this.setStackActive(id, member.id);
+          });
+          button.addEventListener('pointerdown', event => {
+            event.stopPropagation();
+            this.startDrag(event, member, panel.element.getBoundingClientRect(), true);
+          });
+          tabs.append(button);
+        }
+      }
+    }
+    for (const panel of this.panels.values()) {
+      if (panel.state.stackId) continue;
+      panel.element.classList.remove('is-stacked', 'is-stack-inactive');
+      panel.handle?.querySelector('.dock-stack-tabs')?.remove();
+    }
+  }
+
+  setStackActive(id, panelId) {
+    const members = this.stackMembers(id);
+    const next = members.find(panel => panel.id === panelId && panel.modes.includes(this.mode));
+    if (!next) return;
+    const current = members.find(panel => panel.state.stackActive);
+    if (current) this.copyStackGeometry(current, members);
+    for (const panel of members) panel.state.stackActive = panel === next;
+    this.syncStacks();
+    this.refreshZones();
+    this.persist();
+    this.onLayoutChange();
+  }
+
+  leaveStack(panel) {
+    const id = panel.state.stackId;
+    if (!id) return;
+    const members = this.stackMembers(id);
+    if (panel.state.stackActive) this.copyStackGeometry(panel, members);
+    panel.state.stackId = null;
+    panel.state.stackOrder = 0;
+    panel.state.stackActive = false;
+    const remaining = members.filter(member => member !== panel);
+    remaining.forEach((member, index) => { member.state.stackOrder = index; });
+    if (remaining.length) remaining[0].state.stackActive = true;
+    this.syncStacks();
+  }
+
+  joinStack(panel, target, moving = [panel]) {
+    if (moving.includes(target)) return;
+    const id = target.state.stackId || `dock-stack-${crypto.randomUUID()}`;
+    if (!target.state.stackId) {
+      target.state.stackId = id;
+      target.state.stackOrder = 0;
+    }
+    const members = this.stackMembers(id);
+    let insertion = members.at(-1).element;
+    moving.forEach((member, index) => {
+      member.state.stackId = id;
+      member.state.stackOrder = members.length + index;
+      for (const key of ['dock', 'x', 'y', 'width', 'height', 'collapsed']) member.state[key] = target.state[key];
+      insertion.after(member.element);
+      insertion = member.element;
+      this.applyPanelState(member);
+    });
+    for (const member of [...members, ...moving]) member.state.stackActive = member === panel;
+    if (target.state.dock !== 'floating') this.renumberZone(target.state.dock);
+    this.syncStacks();
+    this.refreshZones();
+  }
+
   placeInZone(panel, dock, index = null, { expandZone = false } = {}) {
     const zone = this.zones.get(dock);
     if (!zone) return;
@@ -235,7 +398,7 @@ export class DockManager {
       panel.state.x = rect.left;
       panel.state.y = rect.top;
       panel.state.width = rect.width;
-      panel.state.height = Math.max(MIN_HEIGHT, rect.height);
+      if (!panel.state.collapsed) panel.state.height = Math.max(MIN_HEIGHT, rect.height);
     }
     panel.state.dock = 'floating';
     document.body.append(panel.element);
@@ -269,11 +432,12 @@ export class DockManager {
     return sharedWidth;
   }
 
-  startDrag(event, panel) {
-    if (event.button !== 0 || event.target.closest('button,input,select')) return;
+  startDrag(event, panel, rectOverride = null, fromTab = false) {
+    if (event.button !== 0 || (!fromTab && event.target.closest('button,input,select'))) return;
     event.preventDefault();
-    const rect = panel.element.getBoundingClientRect();
+    const rect = rectOverride || panel.element.getBoundingClientRect();
     const start = { x: event.clientX, y: event.clientY, rect, dock: panel.state.dock };
+    const moving = !fromTab && panel.state.stackId ? this.stackMembers(panel.state.stackId) : [panel];
     let active = false;
 
     const move = moveEvent => {
@@ -284,25 +448,33 @@ export class DockManager {
       if (!active) {
         active = true;
         this.onInteraction(true);
-        panel.element.classList.add('is-dragging');
-        if (panel.state.dock !== 'floating') {
-          this.placeFloating(panel, rect);
-          this.onLayoutChange();
+        if (fromTab) this.leaveStack(panel);
+        else if (moving.length > 1) this.copyStackGeometry(panel, moving);
+        for (const member of moving) {
+          member.element.classList.add('is-dragging');
+          this.placeFloating(member, rect);
         }
+        this.onLayoutChange();
       }
-      panel.state.x = clamp(start.rect.left + dx, 0, Math.max(0, innerWidth - panel.state.width));
-      panel.state.y = clamp(start.rect.top + dy, 38, Math.max(38, innerHeight - this.headerHeight(panel)));
-      panel.element.style.left = `${panel.state.x}px`;
-      panel.element.style.top = `${panel.state.y}px`;
-      const candidate = this.findDockCandidate(moveEvent.clientX, moveEvent.clientY, panel);
-      candidate ? this.showDockPreview(panel, candidate.dock, candidate.index) : this.clearDockPreview();
+      for (const member of moving) {
+        member.state.x = clamp(start.rect.left + dx, 0, Math.max(0, innerWidth - member.state.width));
+        member.state.y = clamp(start.rect.top + dy, 38, Math.max(38, innerHeight - this.headerHeight(member)));
+        member.element.style.left = `${member.state.x}px`;
+        member.element.style.top = `${member.state.y}px`;
+      }
+      const candidate = this.findDockCandidate(moveEvent.clientX, moveEvent.clientY, moving);
+      candidate ? this.showDockPreview(candidate) : this.clearDockPreview();
     };
 
     const end = endEvent => {
       if (endEvent.pointerId !== event.pointerId) return;
-      if (active && this.previewZone) this.placeInZone(panel, this.previewZone.dataset.dockZone, this.previewIndex, { expandZone: true });
+      if (active && endEvent.type === 'pointerup') {
+        if (this.previewStackTarget) this.joinStack(panel, this.previewStackTarget, moving);
+        else if (this.previewZone) moving.forEach((member, index) =>
+          this.placeInZone(member, this.previewZone.dataset.dockZone, this.previewIndex + index, { expandZone: true }));
+      }
       this.clearDockPreview();
-      panel.element.classList.remove('is-dragging');
+      for (const member of moving) member.element.classList.remove('is-dragging');
       window.removeEventListener('pointermove', move, true);
       window.removeEventListener('pointerup', end, true);
       window.removeEventListener('pointercancel', end, true);
@@ -321,7 +493,14 @@ export class DockManager {
     window.addEventListener('pointercancel', end, true);
   }
 
-  findDockCandidate(x, y, panel) {
+  findDockCandidate(x, y, moving) {
+    for (const element of document.elementsFromPoint(x, y)) {
+      const targetElement = element.closest?.('.panel-drag-handle')?.closest('[data-panel]');
+      if (!targetElement || moving.some(panel => panel.element === targetElement) || targetElement.hidden
+        || targetElement.classList.contains('is-stack-inactive')) continue;
+      const target = this.get(targetElement.dataset.panel);
+      if (target) return { kind: 'stack', target };
+    }
     const workspace = this.root.getBoundingClientRect();
     const candidates = [];
     const thresholds = { left: 92, right: 92, bottom: 110 };
@@ -338,37 +517,68 @@ export class DockManager {
       else if (dock === 'left') distance = Math.max(0, x - workspace.left);
       else if (dock === 'right') distance = Math.max(0, workspace.right - x);
       else distance = Math.max(0, workspace.bottom - y);
-      if (distance <= thresholds[dock]) candidates.push({ dock, distance, index: this.dropIndex(zone, y, panel) });
+      if (distance <= thresholds[dock]) {
+        const { index, lineY } = this.dropIndex(zone, y, moving);
+        candidates.push({ kind: 'zone', dock, distance, index, lineY });
+      }
     }
     return candidates.sort((a, b) => a.distance / thresholds[a.dock] - b.distance / thresholds[b.dock])[0] || null;
   }
 
-  dropIndex(zone, pointerY, panel) {
-    const siblings = [...zone.children].filter(element => element.matches?.('[data-panel]') && element !== panel.element && !element.hidden);
-    const index = siblings.findIndex(element => pointerY < element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2);
-    return index < 0 ? siblings.length : index;
-  }
-
-  showDockPreview(panel, dock, index) {
-    const zone = this.zones.get(dock);
-    if (!zone) return;
-    if (this.previewZone === zone && this.previewIndex === index && this.placeholder.isConnected) return;
-    this.clearDockPreview(false);
-    this.previewZone = zone;
-    this.previewIndex = index;
-    zone.classList.add('is-dock-target');
-    this.placeholder.style.height = `${panel.state.collapsed ? this.headerHeight(panel) : Math.min(panel.state.height, 150)}px`;
-    const siblings = [...zone.children].filter(element => element.matches?.('[data-panel]') && element !== panel.element);
-    zone.insertBefore(this.placeholder, siblings[index] || null);
-  }
-
-  clearDockPreview(reset = true) {
-    this.previewZone?.classList.remove('is-dock-target');
-    this.placeholder.remove();
-    if (reset) {
-      this.previewZone = null;
-      this.previewIndex = -1;
+  dropIndex(zone, pointerY, moving) {
+    const siblings = [...zone.children].filter(element => element.matches?.('[data-panel]')
+      && !moving.some(panel => panel.element === element));
+    const visible = siblings.filter(element => !element.hidden && !element.classList.contains('is-stack-inactive'));
+    const before = visible.find(element => pointerY < element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2);
+    if (before) {
+      const groupId = this.get(before.dataset.panel)?.state.stackId;
+      const first = groupId ? siblings.find(element => this.get(element.dataset.panel)?.state.stackId === groupId) : before;
+      return { index: siblings.indexOf(first), lineY: before.getBoundingClientRect().top };
     }
+    return { index: siblings.length, lineY: visible.at(-1)?.getBoundingClientRect().bottom || zone.getBoundingClientRect().top + 12 };
+  }
+
+  showDockPreview(candidate) {
+    this.clearDockPreview();
+    let left, top, width, height = 3;
+    if (candidate.kind === 'stack') {
+      this.previewStackTarget = candidate.target;
+      const handle = candidate.target.handle;
+      const rect = handle.getBoundingClientRect();
+      const tabs = [...handle.querySelectorAll('.dock-stack-tab')];
+      const title = tabs.at(-1) || handle.querySelector(':scope > strong');
+      const titleRight = title?.getBoundingClientRect().right || rect.left + 12;
+      const actionsLeft = handle.querySelector('.panel-heading-actions')?.getBoundingClientRect().left || rect.right;
+      left = Math.max(rect.left + 12, Math.min(titleRight + 6, actionsLeft - 10));
+      height = Math.min(24, Math.max(16, rect.height - 16));
+      top = rect.top + (rect.height - height) / 2;
+      width = 3;
+      this.placeholder.classList.add('is-stack-preview');
+    } else {
+      const zone = this.zones.get(candidate.dock);
+      if (!zone) return;
+      this.previewZone = zone;
+      this.previewIndex = candidate.index;
+      const rect = zone.getBoundingClientRect();
+      const workspace = this.root.getBoundingClientRect();
+      const empty = rect.width < 24;
+      left = empty ? candidate.dock === 'right' ? workspace.right - 84 : workspace.left + 8 : rect.left + 8;
+      width = empty ? 76 : Math.max(48, rect.width - 16);
+      top = Math.min(candidate.lineY, workspace.bottom - 12);
+    }
+    this.placeholder.style.left = `${left}px`;
+    this.placeholder.style.top = `${top}px`;
+    this.placeholder.style.width = `${width}px`;
+    this.placeholder.style.height = `${height}px`;
+    this.placeholder.hidden = false;
+  }
+
+  clearDockPreview() {
+    this.placeholder.hidden = true;
+    this.placeholder.classList.remove('is-stack-preview');
+    this.previewZone = null;
+    this.previewIndex = -1;
+    this.previewStackTarget = null;
   }
 
   startResize(event, panel, edge) {
@@ -406,6 +616,7 @@ export class DockManager {
         panel.state.height = clamp(start.state.height + dy, MIN_HEIGHT, Math.max(MIN_HEIGHT, innerHeight - 120));
       }
       this.applyPanelState(panel);
+      if (panel.state.stackId) this.copyStackGeometry(panel, this.stackMembers(panel.state.stackId));
       this.refreshZones();
       this.onLayoutChange();
     };
@@ -425,7 +636,8 @@ export class DockManager {
   }
 
   refreshZones() {
-    const visible = dock => this.zonePanels(dock).filter(panel => !panel.element.hidden);
+    const visible = dock => this.zonePanels(dock)
+      .filter(panel => !panel.element.hidden && !panel.element.classList.contains('is-stack-inactive'));
     const left = visible('left'), right = visible('right'), bottom = visible('bottom');
     this.zones.get('left')?.classList.toggle('is-empty', !left.length);
     this.zones.get('right')?.classList.toggle('is-empty', !right.length);
@@ -484,7 +696,10 @@ function normalizeState(state, defaults) {
     y: finite(state.y, defaults.y),
     width: Math.max(MIN_WIDTH, finite(state.width, defaults.width)),
     height: Math.max(MIN_HEIGHT, finite(state.height, defaults.height)),
-    collapsed: Boolean(state.collapsed)
+    collapsed: Boolean(state.collapsed),
+    stackId: typeof state.stackId === 'string' && state.stackId.startsWith('dock-stack-') ? state.stackId : null,
+    stackOrder: finite(state.stackOrder, 0),
+    stackActive: Boolean(state.stackActive)
   };
 }
 

@@ -3,6 +3,7 @@
 import { tiledFaceRaster } from '../common/core/texture-features.js';
 import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv } from '../render/webgl-renderer.js';
 import { selectionBounds, transformSelectedPixels } from './selection-transform.js';
+import { SELECTION_STRIPE_SIZE, SELECTION_STRIPE_PIXELS, selectionStripePhase } from '../utils/selection-stripes.js';
 
 const FACE_TRIANGLES = [[0, 2, 1], [2, 3, 1]];
 const dot = (a, b) => a.reduce((sum, value, axis) => sum + value * b[axis], 0);
@@ -69,9 +70,14 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
   const textureStage = $('#textureStage');
   let drag = null;
   let animation = null;
-  let phase = 0;
   let renderFrame = null;
   let edges = [];
+  const stripeTile = document.createElement('canvas');
+  stripeTile.width = stripeTile.height = SELECTION_STRIPE_SIZE;
+  stripeTile.getContext('2d').putImageData(new ImageData(
+    new Uint8ClampedArray(SELECTION_STRIPE_PIXELS), SELECTION_STRIPE_SIZE, SELECTION_STRIPE_SIZE), 0, 0);
+  const stripePattern = border?.getContext('2d')?.createPattern(stripeTile, 'repeat');
+  const stripeImageUrl = stripeTile.toDataURL('image/png');
   let sceneMaskDirty = true;
   let overlayMask = null, overlayRevision = -1, overlayAssetUid = null;
   const sceneMaskAtlas = document.createElement('canvas');
@@ -276,6 +282,8 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     const context = border.getContext('2d');
     context.clearRect(0, 0, width, height);
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    stripePattern.setTransform(new DOMMatrix().translate(
+      -previewRect.left + selectionStripePhase(), -previewRect.top));
     const originX = stageRect.left - previewRect.left, originY = stageRect.top - previewRect.top;
     const scaleX = stageRect.width / Math.max(1, textureCanvas.width);
     const scaleY = stageRect.height / Math.max(1, textureCanvas.height);
@@ -288,11 +296,8 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     context.strokeStyle = '#000';
     context.stroke();
     context.lineWidth = 1.5;
-    context.strokeStyle = '#fff';
-    context.setLineDash([5, 4]);
-    context.lineDashOffset = -phase;
+    context.strokeStyle = stripePattern;
     context.stroke();
-    context.setLineDash([]);
     if (drag?.source === 'texture' && drag.mode !== 'brush' && drag.points.length > 1) {
       const points = drag.mode === 'rectangle'
         ? [drag.points[0], [drag.points.at(-1)[0], drag.points[0][1]], drag.points.at(-1),
@@ -307,11 +312,8 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       context.setLineDash([]);
       context.stroke();
       context.lineWidth = 1;
-      context.strokeStyle = '#fff';
-      context.setLineDash([4, 4]);
-      context.lineDashOffset = -phase;
+      context.strokeStyle = stripePattern;
       context.stroke();
-      context.setLineDash([]);
     }
   }
   function drawSceneGesture() {
@@ -338,7 +340,12 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
         [drag.points[0][0], drag.points.at(-1)[1]], drag.points[0]]
       : drag.points;
     const path = points.map(([x, y], index) => `${index ? 'L' : 'M'}${x - rect.left},${y - rect.top}`).join(' ');
-    sceneGesture.innerHTML = `<path d="${path}" />`;
+    sceneGesture.innerHTML = `<defs><pattern id="paintSelectionGestureStripes" patternUnits="userSpaceOnUse"
+      x="${-rect.left + selectionStripePhase()}" y="${-rect.top}"
+      width="${SELECTION_STRIPE_SIZE}" height="${SELECTION_STRIPE_SIZE}">
+      <image href="${stripeImageUrl}" width="${SELECTION_STRIPE_SIZE}" height="${SELECTION_STRIPE_SIZE}"/>
+      </pattern></defs><path class="selection-gesture-underlay" d="${path}"/>
+      <path class="selection-gesture-stripes" d="${path}"/>`;
   }
   function updateSceneMask() {
     if (!sceneMaskDirty) return;
@@ -435,7 +442,7 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
         sceneGesture.replaceChildren();
       }
       if (!state.paintSelection.active || state.mode !== 'paint') return;
-      phase = (phase + 1) % 8;
+      if (sceneGesture && !sceneGesture.hidden) drawSceneGesture();
       if (edges.length < 20000) drawBorder();
       // The 3D marching border does not need to rebuild the whole scene here.
     }, 140);

@@ -3,13 +3,14 @@ import { formatRules, constrainNode } from '../common/core/format-constraints.js
 import { operationDefinition, operationIndex, requireOperation } from '../common/core/operation-registry.js';
 import { normalizeTextureLayers } from '../common/core/texture-features.js';
 import { PROJECT_SESSION_KEYS } from './tabs-controller.js';
+import { ConfigKey, configRegistry } from '../common/config/app-config.js';
 
 export function createProjectJournalController({ state, projectTabsController, textureCanvas,
   isBezierElement, textureUid, clearSubdivisionSession, renderAll, toast,
   renderTextureList, activateProjectTexture, rebuildTextureAtlas,
   restoreProjectTextureView,
   serializableTextureAssets, serializeCbmodel, referenceImages,
-  getTexturePaintDrag, getTextureUvDrag }) {
+  getTexturePaintDrag, getTextureUvDrag, scheduleProjectCover }) {
 const journalTimers = new Map();
 let suppressJournalRecording = false;
 const { projectTabById, captureProjectSession, syncActiveProjectTab,
@@ -53,9 +54,11 @@ function snapshot(operationId = 'core.element.property') {
   if (tab) tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
   if (tab?.journalPending) void flushProjectJournal(tab);
   if (tab) tab.journalPending = operationId;
-  state.history.push(compactProjectHistorySnapshot(state.project, state.referenceImageSources));
-  if (state.history.length > 60) state.history.shift();
-  state.future.length = 0;
+  if (!window.cubeBricksDesktop?.checkoutProjectJournal) {
+    state.history.push(compactProjectHistorySnapshot(state.project, state.referenceImageSources));
+    if (state.history.length > 60) state.history.shift();
+    state.future.length = 0;
+  }
 }
 
 function restoredProjectSession(session, data, restoreTextures = false) {
@@ -147,69 +150,39 @@ async function navigateProjectJournal(direction) {
   const requestedRevision = tab.journalEditRevision || 0;
   const previousWrite = tab.journalWrites || Promise.resolve();
   const navigationSerial = tab.journalNavigationSerial = (tab.journalNavigationSerial || 0) + 1;
-  const localSource = direction === 'undo' ? state.history : state.future;
-  const localTarget = direction === 'undo' ? state.future : state.history;
-  let localPreview = null;
-  if (tab.id === projectTabsController.activeId && state.mode !== 'paint'
-    && Array.isArray(localSource) && Array.isArray(localTarget) && localSource.length) {
-    localPreview = {
-      before: compactProjectHistorySnapshot(state.project, state.referenceImageSources),
-      history: [...state.history], future: [...state.future]
-    };
-    localTarget.push(localPreview.before);
-    suppressJournalRecording = true;
-    try { restore(localSource.pop()); } finally { suppressJournalRecording = false; }
-  }
-  const rollbackLocalPreview = () => {
-    if (!localPreview || navigationSerial !== tab.journalNavigationSerial
-      || tab.id !== projectTabsController.activeId
-      || (tab.journalEditRevision || 0) !== requestedRevision) return;
-    state.history = localPreview.history;
-    state.future = localPreview.future;
-    suppressJournalRecording = true;
-    try { restore(localPreview.before); } finally { suppressJournalRecording = false; }
-  };
+  let diskCheckoutApplied = false;
   const navigate = async () => {
     await tab.journalReady;
     if ((tab.journalEditRevision || 0) !== requestedRevision) return;
     if (tab.journalPending) throw new Error('目前變更尚未寫入工作記錄');
+    const headBefore = tab.journalHead ?? (await window.cubeBricksDesktop.projectJournalState?.({ journalId: tab.journalId }))?.activeHead;
+    if ((tab.journalEditRevision || 0) !== requestedRevision) return;
     const result = await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId, direction });
     if (!result) {
-      rollbackLocalPreview();
       toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作');
       return;
     }
-    tab.journalHead = result.sequence;
+    diskCheckoutApplied = true;
     if ((tab.journalEditRevision || 0) !== requestedRevision) {
-      // An edit made during IPC already owns a later slot in journalWrites (or
-      // is pending). Keep that newer visible state; never overwrite it with an
-      // older asynchronous checkout result.
+      // Without a local preview, a new edit was made against the old visible
+      // head. Undo the disk navigation before that edit's queued commit runs.
+      // If restoration fails, block writes rather than attaching it to the
+      // wrong branch and silently losing the preceding operation.
+      tab.journalWriteBlocked = true;
+      if (!Number.isInteger(headBefore)) throw new Error('無法確認撤回前的歷史位置；已停止後續寫入');
+      await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId, sequence: headBefore });
+      tab.journalHead = headBefore;
+      tab.journalWriteBlocked = false;
+      diskCheckoutApplied = false;
       tab.journalPending ||= 'core.element.property';
       scheduleProjectJournal(tab);
       return;
     }
+    tab.journalHead = result.sequence;
     if (!projectTabsController.tabs.includes(tab)) return;
     if (navigationSerial !== tab.journalNavigationSerial) return;
     if (tab.id === projectTabsController.activeId) syncActiveProjectTab();
     const resultData = JSON.parse(result.content);
-    // A local geometry undo has already restored and rendered its preview.
-    // The disk checkout confirms that state; rendering the same large model a
-    // second time is the visible pause after Ctrl+Z on Cube-heavy projects.
-    const localData = localPreview && tab.id === projectTabsController.activeId
-      ? JSON.parse(state.project.serialize()) : null;
-    const sameGeometry = localData && ['elements', 'groups', 'outliner', 'textureSize',
-      'formatId', 'modelType', 'renderType', 'cullFaces', 'referenceImages']
-      .every(key => JSON.stringify(localData[key]) === JSON.stringify(resultData[key]));
-    const sameTextures = localData && (resultData.textures || []).length === state.textureAssets.length
-      && JSON.stringify(resultData.textureGroups || []) === JSON.stringify(state.textureGroups || [])
-      && (resultData.textures || []).every((texture, index) =>
-        texture.source === state.textureAssets[index]?.source
-        && (texture.uuid || texture.id) === (state.textureAssets[index]?.uuid || state.textureAssets[index]?.id)
-        && JSON.stringify(texture.layers || null) === JSON.stringify(state.textureAssets[index]?.layers || null)
-        && (texture.active_layer_uid || null) === (state.textureAssets[index]?.activeLayerUid || null)
-        && (texture.uv_width || null) === (state.textureAssets[index]?.uvWidth || null)
-        && (texture.uv_height || null) === (state.textureAssets[index]?.uvHeight || null));
-    if (sameGeometry && sameTextures) { syncActiveProjectTab(); return; }
     tab.session = restoredProjectSession(tab.session, resultData, true);
     if (tab.id !== projectTabsController.activeId) { renderProjectTabs(); return; }
     suppressJournalRecording = true;
@@ -217,20 +190,27 @@ async function navigateProjectJournal(direction) {
       clearSubdivisionSession();
       for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
       markDirty(true, { constrain: false });
-      restoreProjectTextureView();
+      restoreProjectTextureView({ preserveAtlas: true });
       renderAll();
+      diskCheckoutApplied = false;
     } finally { suppressJournalRecording = false; }
   };
   const navigation = previousWrite.catch(() => {}).then(navigate);
   tab.journalWrites = navigation;
   try {
     await navigation;
-  } catch (error) { rollbackLocalPreview(); toast(`操作記錄切換失敗：${error.message}`); }
+  } catch (error) {
+    if (diskCheckoutApplied) tab.journalWriteBlocked = true;
+    toast(`操作記錄切換失敗：${error.message}`);
+  }
   return true;
 }
 
 async function undo() {
-  if (state.mode === 'paint' && state.paintHistory.length) {
+  // Desktop projects have one ordered journal for geometry, UVs and pixels.
+  // The paint-only stack is a browser fallback; using it here makes Ctrl+Z
+  // skip newer modelling edits and turns an undo into a fresh journal commit.
+  if (!window.cubeBricksDesktop?.checkoutProjectJournal && state.mode === 'paint' && state.paintHistory.length) {
     restoreTexturePaintHistory(state.paintHistory, state.paintFuture);
     return;
   }
@@ -245,7 +225,7 @@ async function undo() {
 }
 
 async function redo() {
-  if (state.mode === 'paint' && state.paintFuture.length) {
+  if (!window.cubeBricksDesktop?.checkoutProjectJournal && state.mode === 'paint' && state.paintFuture.length) {
     restoreTexturePaintHistory(state.paintFuture, state.paintHistory);
     return;
   }
@@ -337,14 +317,18 @@ async function flushProjectJournal(tab = projectTabById(projectTabsController.ac
   const textureSnapshot = serializableTextureAssets(assets);
   const write = async () => {
     await tab.journalReady;
+    if (tab.journalWriteBlocked) throw new Error('歷史指針未能安全恢復，請先另存目前模型並重新開啟');
     const textures = await textureSnapshot;
     const content = serializeCbmodel(textures, JSON.parse(projectContent), textureGroups);
     const result = await window.cubeBricksDesktop.commitProjectJournal({
       journalId: tab.journalId, content, operationId,
       operationLabel: operationDefinition(operationId).label,
-      operationIndex: operationIndex()
+      operationIndex: operationIndex(),
+      historyLimit: session.project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT)
     });
     if (result?.sequence) tab.journalHead = result.sequence;
+    if (result?.sequence) scheduleProjectCover?.(tab);
+    if (result?.historyWarning) toast(`歷史裁剪未完成：${result.historyWarning}`);
     return result;
   };
   tab.journalWrites = (tab.journalWrites || Promise.resolve()).catch(() => {}).then(write);

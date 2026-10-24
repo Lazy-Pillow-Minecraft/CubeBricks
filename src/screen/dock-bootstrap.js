@@ -1,5 +1,5 @@
 import { DockManager } from './dock-manager.js';
-import { DOCK_PANEL_DEFINITIONS } from './dock-definitions.js';
+import { dockPanelRegistry } from './docks/builtin.js';
 
 export function createDockSystem({
   state, $, stopUvPreviewAnimation, refreshUvPreview,
@@ -8,7 +8,7 @@ export function createDockSystem({
 }) {
   const dockManager = new DockManager({
     root: $('.workspace'),
-    definitions: DOCK_PANEL_DEFINITIONS,
+    definitions: dockPanelRegistry.list(),
     onInteraction: active => {
       state.layoutResizing = active;
       if (active) stopUvPreviewAnimation();

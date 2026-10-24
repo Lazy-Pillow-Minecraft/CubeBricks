@@ -21,9 +21,10 @@ async function application(root, options = {}) {
     BrowserWindow: { fromWebContents: () => ({ approveProjectClose() { closed = true; } }) },
     dialog: {
       showOpenDialog: async () => ({ canceled: !options.openFile, filePaths: options.openFile ? [options.openFile] : [] }),
+      showSaveDialog: async () => ({ canceled: !options.saveFile, filePath: options.saveFile || null }),
       showMessageBox: async data => {
         options.messages?.push(data);
-        return { response: options.choice ?? 0 };
+        return { response: options.choice ?? 0, checkboxChecked: options.keepHistory !== false };
       }
     }, ipcMain: { handle: (name, handler) => handlers.set(name, handler) }
   };
@@ -38,6 +39,92 @@ async function application(root, options = {}) {
     release: () => vm.runInContext('journalOwnership.releaseAll()', context)
   };
 }
+
+test('a supplied cbmodel path opens directly and its home cover stays outside the archive', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-cover-test-'));
+  const app = await application(root);
+  const id = 'project_12345678-1234-1234-1234-123456789077';
+  const filePath = path.join(root, 'cover.cbmodel');
+  const content = JSON.stringify({ name: 'cover-test', elements: [], groups: [], textures: [], outliner: [] });
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+  try {
+    await app.call('project:journal-init', { journalId: id, content });
+    await app.call('project:cover-save', { journalId: id, dataUrl: `data:image/png;base64,${png}` });
+    const listing = await app.call('project:list-workspace');
+    assert.ok(listing.find(project => project.journalId === id)?.cover?.startsWith('data:image/png;base64,'));
+    await app.call('project:save', { journalId: id, filePath, content });
+    const opened = await app.call('project:open', { filePath });
+    assert.equal(opened.journalId, id);
+    const { unpackArchive } = require('../electron/archive-codec.cjs');
+    assert.ok(![...unpackArchive(await fs.readFile(filePath)).keys()].some(name => name.includes('cover')));
+    await app.call('project:cover-save', { journalId: id, dataUrl: null });
+    assert.equal((await app.call('project:list-workspace')).find(project => project.journalId === id).cover, null);
+    await app.call('project:journal-discard', { journalId: id });
+    assert.equal(await app.call('project:cover-save', { journalId: id, dataUrl: `data:image/png;base64,${png}` }), false);
+    await assert.rejects(fs.stat(path.join(root, 'profile', 'project-covers', `${id}.png`)), { code: 'ENOENT' });
+  } finally {
+    await app.release();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('cbmodel export offers full history or current-state snapshot without truncating the working journal', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-export-choice-test-'));
+  const apps = [];
+  const { ProjectJournal } = require('../electron/project-journal.cjs');
+  const id = 'project_12345678-1234-1234-1234-123456789099';
+  const content = x => JSON.stringify({ name: 'export-choice', elements: [{ uid: 'cube_a', type: 'cube', position: [x, 0, 0] }],
+    groups: [], textures: [], outliner: ['cube_a'] });
+  try {
+    const messages = [];
+    const snapshotPath = path.join(root, 'snapshot.cbmodel');
+    const fullPath = path.join(root, 'full.cbmodel');
+    const options = { saveFile: snapshotPath, keepHistory: false, messages };
+    const app = await application(root, options);
+    apps.push(app);
+    await app.call('project:journal-init', { journalId: id, content: content(0) });
+    await app.call('project:journal-commit', { journalId: id, content: content(1), operationId: 'core.element.move' });
+    await app.call('project:export', { journalId: id, name: 'export-choice', cbmodelContent: content(1), bbmodelContent: '{}' });
+    const snapshot = await ProjectJournal.fromArchive(await fs.readFile(snapshotPath), path.join(root, 'snapshot'));
+    assert.equal(snapshot.state.activeHead, 1);
+    assert.equal(JSON.parse(await snapshot.content()).elements[0].position[0], 1);
+    assert.equal((await app.call('project:journal-state', { journalId: id })).activeHead, 2);
+    options.saveFile = fullPath;
+    options.keepHistory = true;
+    await app.call('project:export', { journalId: id, name: 'export-choice', cbmodelContent: content(1), bbmodelContent: '{}' });
+    const full = await ProjectJournal.fromArchive(await fs.readFile(fullPath), path.join(root, 'full'));
+    assert.equal(full.state.activeHead, 2);
+    assert.equal(JSON.parse((await full.navigate('undo')).content).elements[0].position[0], 0);
+    assert.ok(messages.some(message => message.checkboxLabel === '保留操作歷史'));
+  } finally {
+    await Promise.all(apps.map(app => app.release()));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('opening the saved file still reuses a working copy after its saved ancestor was capped away', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-capped-open-test-'));
+  const apps = [];
+  const { ProjectJournal } = require('../electron/project-journal.cjs');
+  const content = x => JSON.stringify({ name: 'capped-open', elements: [{ uid: 'cube_a', type: 'cube', position: [x, 0, 0] }],
+    groups: [], textures: [], outliner: ['cube_a'] });
+  try {
+    const archive = path.join(root, 'model.cbmodel');
+    const source = await new ProjectJournal(path.join(root, 'source')).initialize(content(0));
+    await source.archive(archive);
+    const app = await application(root, { openFile: archive });
+    apps.push(app);
+    const opened = await app.call('project:open');
+    await app.call('project:journal-commit', { journalId: opened.journalId, content: content(1),
+      operationId: 'core.element.move', historyLimit: 0 });
+    const reopened = await app.call('project:open');
+    assert.equal(reopened.journalId, opened.journalId);
+    assert.equal(JSON.parse(reopened.content).elements[0].position[0], 1);
+  } finally {
+    await Promise.all(apps.map(app => app.release()));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 test('IPC cannot recover or delete a journal already open in another application instance', async () => {
   const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-ipc-test-'));
