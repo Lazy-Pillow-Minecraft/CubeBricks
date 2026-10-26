@@ -97,13 +97,11 @@
         <button class="tool" data-tool="knife" title="刀具切割" aria-label="刀具切割"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 186.43 167.88"><rect x="108.09" y="-1.84" width="50.7" height="113.72" rx="9.86" ry="9.86" transform="translate(71.97 -75.57) rotate(42.39)"/><path d="M81.17,88.28c-3.74-3.41-9.53-3.15-12.94.59L0,163.62c25.67,9.52,66.11,3.06,104.54-19.13,6.34-3.66,12.34-7.59,17.95-11.71.89-3.22-.02-6.8-2.65-9.2l-38.68-35.3Z"/></svg></button>
         <button class="tool" data-tool="faceSelect" title="面選擇" aria-label="面選擇"><span>▱</span></button>
         <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆（B）" aria-label="畫筆"><span>◍</span></button>
-        <button class="tool mode-only paint-tool" data-tool="paintSelection" title="繪畫選區" aria-label="繪畫選區"><span>▧</span></button>
-        <button class="tool mode-only paint-tool" data-tool="line" title="直線（L）" aria-label="直線"><span>╱</span></button>
-        <button class="tool mode-only paint-tool" data-tool="rectangle" title="矩形（M）" aria-label="矩形"><span>□</span></button>
-        <button class="tool mode-only paint-tool" data-tool="ellipse" title="橢圓（O）" aria-label="橢圓"><span>○</span></button>
+        <button class="tool paint-shape-main paint-only-option" id="paintShapeButton" type="button" title="圖形繪製（目前：直線）" aria-label="圖形繪製"><span>╱</span></button>
         <button class="tool mode-only paint-tool" data-tool="fill" title="油漆桶（G）" aria-label="油漆桶"><span>◩</span></button>
         <button class="tool mode-only paint-tool" data-tool="gradient" title="漸變（J）" aria-label="漸變"><span>▨</span></button>
         <button class="tool mode-only paint-tool" data-tool="eyedropper" title="取色器（I）" aria-label="取色器"><span>⌖</span></button>
+        <button class="tool mode-only paint-tool" data-tool="paintSelection" title="繪畫選區" aria-label="繪畫選區"><span>▧</span></button>
       </div>
       <div class="toolbar-lane tool-options-lane" id="toolOptionsLane" aria-label="目前工具參數" hidden>
         <span class="lane-caption" id="toolContext">工具參數</span>
@@ -112,6 +110,7 @@
           <button type="button" data-transform-space="parent" title="父級坐標系">父級</button>
           <button type="button" data-transform-space="self" title="自身坐標系">自身</button>
         </div>
+        <div class="toolbar-segment" id="pivotCenterControl" hidden><button type="button" id="pivotCenterButton" title="將所選物件的樞軸點移到整體幾何中心">樞軸點居中</button></div>
         <div class="toolbar-segment" id="rotationModeControl" role="group" aria-label="自身旋轉模式" hidden>
           <button type="button" data-rotation-mode="pose" title="姿態模式：沿物件目前姿態的局部軸旋轉">姿態</button>
           <button type="button" data-rotation-mode="euler" title="歐拉角模式：按 Z → Y → X 層級直接調整歐拉角">歐拉角</button>
@@ -142,7 +141,8 @@
         <span class="tool-status" id="vertexSnapStatus" hidden>先選來源頂點</span>
         <span class="tool-status" id="knifeStatus" hidden>選擇切割點</span>
         <div class="paint-tool-options" id="paintToolOptions" hidden>
-          <label id="paintSelectionModeControl" hidden><span>選區</span><select id="paintSelectionMode"><option value="rectangle">拉框</option><option value="brush">塗抹</option><option value="lasso">自由圈選</option><option value="transform">像素變換</option></select></label>
+          <div class="paint-mode-picker" id="paintShapeModeControl" hidden><span>圖形</span><button type="button" id="paintShapeModeButton" aria-expanded="false">直線</button><div class="paint-tool-menu" id="paintShapeMenu" hidden><button type="button" data-paint-shape="line">直線</button><button type="button" data-paint-shape="rectangle">矩形</button><button type="button" data-paint-shape="ellipse">橢圓</button></div></div>
+          <div class="paint-mode-picker" id="paintSelectionModeControl" hidden><span>選區</span><button type="button" id="paintSelectionModeButton" aria-expanded="false">拉框</button><div class="paint-tool-menu" id="paintSelectionModeMenu" hidden><button type="button" data-paint-selection-mode="rectangle">拉框</button><button type="button" data-paint-selection-mode="brush">塗抹</button><button type="button" data-paint-selection-mode="lasso">自由圈選</button></div><select id="paintSelectionMode" hidden><option value="rectangle">拉框</option><option value="brush">塗抹</option><option value="lasso">自由圈選</option></select></div>
           <label id="paintSelectionBrushControl" hidden><span>尺寸</span><input id="paintSelectionBrushSize" type="number" min="1" max="128" value="18" /></label>
           <label id="paintSelectionSymmetryControl" hidden title="選區跟隨繪畫對稱"><input id="paintSelectionSymmetry" type="checkbox" /><span>對稱</span></label>
           <label id="paintSelectionTransformControl" hidden><span>操作</span><select id="paintSelectionTransformMode"><option value="move">移動</option><option value="rotate">旋轉</option></select></label>
@@ -266,7 +266,7 @@
                 <button type="button" class="danger" data-reference-action="remove">移除選中參考圖</button>
               </div>
             </div>
-            <button data-action="frame" title="聚焦">⌖</button><button data-action="grid" title="顯示／隱藏參考網格">#</button><button data-action="background" title="背景：目前背景">◐</button><button data-action="wire" title="邊界線框">▧</button>
+            <button data-action="grid" title="顯示／隱藏參考網格">#</button><button data-action="background" title="背景：目前背景">◐</button><button data-action="wire" title="邊界線框">▧</button>
             <select id="minecraftRenderType" title="Minecraft Java RenderType" aria-label="Minecraft Java RenderType">
               <option value="solid">實心</option>
               <option value="solid_smooth">實心 Mipped</option>

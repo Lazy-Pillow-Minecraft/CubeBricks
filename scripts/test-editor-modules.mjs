@@ -14,6 +14,7 @@ import { createReferenceImageController } from '../src/screen/reference-images.j
 import { createMirrorGuideController } from '../src/screen/mirror-guides.js';
 import { createPaintSymmetryController } from '../src/paint/symmetry-relations.js';
 import { createKnifeController } from '../src/editor/knife-controller.js';
+import { createElementCommands } from '../src/editor/element-commands.js';
 import { createModelCaptureController } from '../src/render/model-capture.js';
 import { createTextureTemplateController } from '../src/texture/template-controller.js';
 import { createCameraController } from '../src/screen/camera-controller.js';
@@ -26,6 +27,25 @@ import { Cube, Group, CubeBricksProject, addModifier } from '../src/model.js';
 
 assert.equal(state.mode, 'edit');
 assert.equal(state.transformSpace, 'self', 'new sessions default to local transform axes');
+{
+  const project = new CubeBricksProject({ elements: [], groups: [], outliner: [] });
+  const creationState = { mode: 'edit', project, selectedUid: null, selectedUids: new Set(), collapsedGroups: new Set() };
+  const commands = createElementCommands({ state: creationState,
+    selectedNodeUids: () => [...creationState.selectedUids], topLevelSelectedUids: () => [...creationState.selectedUids],
+    snapshot() {}, markDirty() {}, renderAll() {}, toast() {}, captureOutlinerRowPositions() { return []; },
+    animateOutlinerReorder() {}, inspectorController: {} });
+  commands.addCube();
+  const groundCube = project.getNode(creationState.selectedUid);
+  assert.deepEqual([groundCube.position, groundCube.size, groundCube.pivot],
+    [[-1, 0, -1], [2, 2, 2], [0, 0, 0]], 'new cubes sit on the ground with a ground-level pivot');
+  const parent = new Group({ pivot: [9, 5, -2], children: [] });
+  project.groups.push(parent); project.outliner.push(parent.uid); project.invalidateHierarchyIndex();
+  creationState.selectedUid = parent.uid; creationState.selectedUids = new Set([parent.uid]);
+  commands.addCube();
+  const child = project.getNode(creationState.selectedUid);
+  assert.deepEqual([child.position, child.pivot], [[8, 5, -3], [9, 5, -2]],
+    'new cubes inside a group share its pivot without sinking below their local ground');
+}
 const verticalRows = [
   { top: 20, height: 30 }, { top: 50, height: 30 }, { top: 80, height: 30 }
 ];
@@ -53,6 +73,13 @@ assert.deepEqual(insertLayerNearSelection(grouped, { uid: 'new' }, 'group').map(
   ['bottom', 'middle', 'new', 'group', 'top'], 'new layers append inside the selected group');
 const nested = moveLayerEntry(grouped, 'top', 'group', 'inside');
 assert.equal(nested.find(layer => layer.uid === 'top').parentUid, 'group');
+const appendedToGroup = moveLayerEntry(grouped, 'top', 'group', 'inside-end');
+assert.deepEqual(layerDisplayRows(appendedToGroup).map(row => [row.layer.uid, row.depth]),
+  [['group', 0], ['middle', 1], ['top', 1], ['bottom', 0]],
+  'dropping on a group footer appends at the visible bottom of that group');
+assert.deepEqual(layerDisplayRows(moveLayerEntry(appendedToGroup, 'top', 'group', 'after')).map(row => [row.layer.uid, row.depth]),
+  [['group', 0], ['middle', 1], ['top', 0], ['bottom', 0]],
+  'dropping beyond the group rail places the layer outside the group');
 assert.equal(moveLayerEntry(nested, 'group', 'top', 'inside'), nested, 'groups cannot move into descendants');
 assert.equal(activeLayer({ layers: nested, activeLayerUid: 'group' }).uid, 'top',
   'painting from a selected group targets its highest child layer');
@@ -149,6 +176,11 @@ assert.match(virtualWindow.innerHTML, /class="outliner-tree-line ends-here" data
   'the nested group line terminates at its own footer without ending the parent line');
 assert.match(virtualWindow.innerHTML, /data-group-line-uid="outliner-outer"/,
   'ancestor guide lines continue through nested rows');
+outlinerState.selectedUids.add(outerGroup.uid);
+outlinerState.outlinerWindowStart = -1;
+outlinerController.renderOutlinerWindow();
+assert.doesNotMatch(virtualWindow.innerHTML, /is-selected-group-line/,
+  'a selected group keeps normal rails until the pointer hovers over one');
 const localDockRegistry = new DockPanelRegistry();
 localDockRegistry.register({ id: 'sample', index: 2, modes: ['edit'], defaultDock: 'right',
   defaultPosition: { x: 1, y: 2 }, defaultSize: { width: 200, height: 100 } });

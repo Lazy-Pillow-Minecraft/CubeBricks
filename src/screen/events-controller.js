@@ -56,6 +56,7 @@ export function createEventBinder({
   updateSelectionLabels, updateTextureCreateDialog,
   updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
   updateTransformGizmo, movePivotToRotationVertex,
+  centerSelectedPivots,
   uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView
 }) {
 let recentRotationPress = null;
@@ -313,7 +314,39 @@ function bindEvents() {
     projectTabsController.editingTabId = null;
   }));
   $$('.mode-tab').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
-  $$('.tool').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
+  $$('.tool[data-tool]').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
+  const shapeButton = $('#paintShapeButton'), shapeModeButton = $('#paintShapeModeButton'), shapeMenu = $('#paintShapeMenu');
+  shapeButton.addEventListener('click', () => setTool(state.paintShapeTool || 'line'));
+  const placePaintMenu = (menu, anchor) => {
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = `${Math.min(rect.left, window.innerWidth - 150)}px`;
+    menu.style.top = `${Math.min(rect.bottom + 5, window.innerHeight - 135)}px`;
+  };
+  shapeModeButton.addEventListener('click', event => {
+    event.stopPropagation(); shapeMenu.hidden = !shapeMenu.hidden;
+    if (!shapeMenu.hidden) placePaintMenu(shapeMenu, shapeModeButton);
+    shapeModeButton.setAttribute('aria-expanded', String(!shapeMenu.hidden));
+  });
+  $$('[data-paint-shape]').forEach(button => button.addEventListener('click', () => {
+    state.paintShapeTool = button.dataset.paintShape;
+    setTool(state.paintShapeTool);
+    shapeMenu.hidden = true; shapeModeButton.setAttribute('aria-expanded', 'false');
+  }));
+  const selectionModeButton = $('#paintSelectionModeButton'), selectionModeMenu = $('#paintSelectionModeMenu');
+  selectionModeButton.addEventListener('click', event => {
+    event.stopPropagation(); selectionModeMenu.hidden = !selectionModeMenu.hidden;
+    if (!selectionModeMenu.hidden) placePaintMenu(selectionModeMenu, selectionModeButton);
+    selectionModeButton.setAttribute('aria-expanded', String(!selectionModeMenu.hidden));
+  });
+  $$('[data-paint-selection-mode]').forEach(button => button.addEventListener('click', () => {
+    const select = $('#paintSelectionMode'); select.value = button.dataset.paintSelectionMode;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    selectionModeMenu.hidden = true; selectionModeButton.setAttribute('aria-expanded', 'false');
+  }));
+  document.addEventListener('click', event => {
+    if (!event.target.closest('#paintShapeModeControl')) { shapeMenu.hidden = true; shapeModeButton.setAttribute('aria-expanded', 'false'); }
+    if (!event.target.closest('#paintSelectionModeControl')) { selectionModeMenu.hidden = true; selectionModeButton.setAttribute('aria-expanded', 'false'); }
+  });
   $$('.dock-tab').forEach(button => button.addEventListener('click', () => activateDock(button.dataset.dock)));
   $('[data-action="addCube"]').addEventListener('click', addCube);
   const shapeCreateButton = $('[data-action="toggleShapeCreate"]');
@@ -618,6 +651,7 @@ function bindEvents() {
     updateToolOptions();
     renderScene();
   }));
+  $('#pivotCenterButton').addEventListener('click', centerSelectedPivots);
   $$('[data-rotation-mode]').forEach(button => button.addEventListener('click', () => {
     state.rotationMode = button.dataset.rotationMode;
     updateRotationModeButtons();
@@ -663,7 +697,6 @@ function bindEvents() {
     event.stopPropagation();
     cycleSnap(-1);
   });
-  $('[data-action="frame"]').addEventListener('click', focusSelected);
   $$('[data-projection]').forEach(button => button.addEventListener('click', () => {
     if (state.axisView) return;
     configRegistry.set(ConfigKey.PROJECTION, button.dataset.projection, { source: 'viewport-toolbar' });
@@ -773,6 +806,17 @@ function bindEvents() {
     renderOutlinerWindow();
   });
   outliner.addEventListener('scroll', scheduleOutlinerWindow, { passive: true });
+  outliner.addEventListener('pointerover', event => {
+    const line = event.target.closest('[data-group-line-uid]');
+    if (!line || !outliner.contains(line)) return;
+    outliner.querySelectorAll('[data-group-line-uid]').forEach(item =>
+      item.classList.toggle('is-hovered-group-line', item.dataset.groupLineUid === line.dataset.groupLineUid));
+  });
+  outliner.addEventListener('pointerout', event => {
+    const line = event.target.closest('[data-group-line-uid]');
+    if (!line || event.relatedTarget?.closest?.('[data-group-line-uid]')?.dataset.groupLineUid === line.dataset.groupLineUid) return;
+    outliner.querySelectorAll('.is-hovered-group-line').forEach(item => item.classList.remove('is-hovered-group-line'));
+  });
   outliner.addEventListener('click', event => {
     const groupLine = event.target.closest('[data-group-line-uid]');
     if (groupLine) {

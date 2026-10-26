@@ -401,6 +401,7 @@ function inverseApplyGroupTransforms(...args) { return transformContext.inverseA
 function selectedWorldPoints(...args) { return transformContext.selectedWorldPoints(...args); }
 function selectionGeometryCenter(...args) { return transformContext.selectionGeometryCenter(...args); }
 function getSelectionTransformContext(...args) { return transformContext.getSelectionTransformContext(...args); }
+function clearSelectionTransformContext(...args) { return transformContext.clearCache(...args); }
 function getTransformAxes(...args) { return transformContext.getTransformAxes(...args); }
 function getSelectionTransformAxes(...args) { return transformContext.getSelectionTransformAxes(...args); }
 function activeCurveNodeContext(...args) { return transformContext.activeCurveNodeContext(...args); }
@@ -792,7 +793,7 @@ const eventBinder = createEventBinder({
   updateRotationModeButtons, updateScaleHandleModeButtons,
   updateSelectionLabels, updateTextureCreateDialog,
   updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
-  updateTransformGizmo, movePivotToRotationVertex,
+  updateTransformGizmo, movePivotToRotationVertex, centerSelectedPivots,
   uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView
 });
 function bindEvents(...args) { return eventBinder.bindEvents(...args); }
@@ -820,8 +821,11 @@ function startCameraDrag(...args) { return viewportPointerController.startCamera
 const transformGeometry = createTransformGeometry({
   state, CUBE_FACE_NAMES, isShapeElement, isBezierElement,
   captureGroupMembers, selected, updateToolOptions, renderScene,
-  toast, snapshot, markDirty, invalidateAllRenderGeometry, renderAll
+  toast, snapshot, markDirty, invalidateAllRenderGeometry, renderAll,
+  sceneRenderer, selectedTopLevelNodes, getTransformPivot, clearSelectionTransformContext
 });
+function setNodePivotAtWorldPoint(...args) { return transformGeometry.setNodePivotAtWorldPoint(...args); }
+function centerSelectedPivots(...args) { return transformGeometry.centerSelectedPivots(...args); }
 function freezeCubeUvs(...args) { return transformGeometry.freezeCubeUvs(...args); }
 function translateItemByLocalDelta(...args) { return transformGeometry.translateItemByLocalDelta(...args); }
 function worldVectorToParentLocal(...args) { return transformGeometry.worldVectorToParentLocal(...args); }
@@ -858,6 +862,7 @@ const transformInteraction = createTransformInteraction({
   captureModifierAnchors, captureTransformTarget, clearSelection,
   discardSubdivisionEdits, finishScenePaintDrag, formatNumber, formatSigned,
   freezeCubeUvs, getAngleSnapStep, getSelectionTransformContext,
+  clearSelectionTransformContext, setNodePivotAtWorldPoint,
   intersectRayPlane, invalidateSelectionRenderGeometry, isBezierElement,
   isEffectivelyLocked, isShapeElement, localDeltaFromWorld, markDirty,
   moveScenePaintDrag, polyhedronEdgeLength, queueSceneBrushPointer,

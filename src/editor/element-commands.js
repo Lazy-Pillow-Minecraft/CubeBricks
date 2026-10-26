@@ -43,12 +43,27 @@ function selectCreatedNode(uidValue) {
   state.selectedCurveNodeIndex = null;
 }
 
+function alignNewNodeWithParent(uidValue) {
+  const node = state.project.getNode(uidValue);
+  const parent = state.project.getParentGroup(uidValue);
+  if (!node || !parent) return;
+  const anchor = parent.pivot;
+  const pivot = node.pivot || node.origin || node.position;
+  if (!pivot) return;
+  const delta = anchor.map((value, axis) => value - pivot[axis]);
+  if (node.type === 'cube') node.position = node.position.map((value, axis) => value + delta[axis]);
+  if (node.origin) node.origin = node.origin.map((value, axis) => value + delta[axis]);
+  if (node.position && node.type !== 'cube') node.position = node.position.map((value, axis) => value + delta[axis]);
+  if (node.pivot) node.pivot = [...anchor];
+}
+
 function addCube() {
   if (state.mode === 'paint') return;
   snapshot('core.cube.create');
-  const cube = new Cube({ position: [-3, 1, -3], size: [6, 6, 6], pivot: [0, 4, 0], color: '#a7d352' });
+  const cube = new Cube({ position: [-1, 0, -1], size: [2, 2, 2], pivot: [0, 0, 0], color: '#a7d352' });
   state.project.elements.push(cube);
   insertNewNodeUid(cube.uid);
+  alignNewNodeWithParent(cube.uid);
   selectCreatedNode(cube.uid);
   markDirty(); renderAll(); toast('已新增 Cube');
 }
@@ -62,6 +77,7 @@ function addShape(shapeType = 'polygon_prism') {
   const shape = new Shape({ type, shapeType: type, origin: [0, 2, 0], pivot: [0, 2, 0] });
   state.project.elements.push(shape);
   insertNewNodeUid(shape.uid);
+  alignNewNodeWithParent(shape.uid);
   selectCreatedNode(shape.uid);
   const label = definition.label;
   markDirty(); renderAll(); toast(`已新增${label} Shape`);
@@ -73,6 +89,7 @@ function addLocator() {
   const locator = new Locator({ position: [0, 4, 0] });
   state.project.elements.push(locator);
   insertNewNodeUid(locator.uid);
+  alignNewNodeWithParent(locator.uid);
   selectCreatedNode(locator.uid);
   markDirty(); renderAll(); toast('已新增 Locator');
 }
@@ -83,6 +100,7 @@ function addBezierElement(dimension, variant = 'standard') {
   const curve = new BezierElement({ origin: [0, 0, 0], rotation: dimension === 2 ? [-90, 0, 0] : [0, 0, 0], variant }, dimension);
   state.project.elements.push(curve);
   insertNewNodeUid(curve.uid);
+  alignNewNodeWithParent(curve.uid);
   selectCreatedNode(curve.uid);
   state.selectedCurveNodeIndex = null;
   markDirty(); renderAll(); toast(`已新增${dimension === 2 ? '二維' : '三維'}${variant === 'envelope' ? '包絡' : ''}貝塞爾元素`);
@@ -134,6 +152,7 @@ function addGroup() {
     insertNewNodeUid(group.uid);
   }
   state.project.invalidateHierarchyIndex();
+  alignNewNodeWithParent(group.uid);
   group.children.forEach(childUid => refreshAutomaticNodeName(state.project, state.project.getNode(childUid)));
   selectCreatedNode(group.uid);
   markDirty(); renderAll(); animateOutlinerReorder(previousRowPositions); toast('已新增組');

@@ -6,8 +6,35 @@ import { inverseRotateVector, quaternionFromAxisAngle, quaternionMultiply, quate
 export function createTransformGeometry({
   state, CUBE_FACE_NAMES, isShapeElement, isBezierElement,
   captureGroupMembers, selected, updateToolOptions, renderScene,
-  toast, snapshot, markDirty, invalidateAllRenderGeometry, renderAll
+  toast, snapshot, markDirty, invalidateAllRenderGeometry, renderAll,
+  sceneRenderer, selectedTopLevelNodes, getTransformPivot, clearSelectionTransformContext
 }) {
+function setNodePivotAtWorldPoint(item, worldPoint) {
+  const local = worldPointToParentLocal(item, worldPoint);
+  if (['cube', 'group'].includes(item.type) || isShapeElement(item)) {
+    setPivotPreservingGeometry(state.project, item, local);
+  } else if (isBezierElement(item)) {
+    const delta = local.map((value, axis) => value - item.origin[axis]);
+    const compensation = inverseRotateVector(delta, item.rotation || [0, 0, 0]);
+    item.origin = local;
+    item.nodes.forEach(node => { node.position = node.position.map((value, axis) => value - compensation[axis]); });
+  } else if (item.position) item.position = local;
+}
+
+function centerSelectedPivots() {
+  if (state.mode === 'paint') return;
+  const nodes = selectedTopLevelNodes();
+  if (!nodes.length) return;
+  const bounds = sceneRenderer.getSelectionBounds(state.project, state.selectedUids);
+  const center = bounds?.center || sceneRenderer.getGeometryCenter(state.project, nodes[0].uid) || getTransformPivot(nodes[0]);
+  if (!center) return;
+  snapshot('core.element.pivot');
+  nodes.forEach(node => setNodePivotAtWorldPoint(node, center));
+  clearSelectionTransformContext();
+  markDirty();
+  invalidateAllRenderGeometry();
+  renderAll();
+}
 function freezeCubeUvs(cube, disableAutoUv = false) {
   const existing = cube.faces || {};
   cube.faces = Object.fromEntries(CUBE_FACE_NAMES.map(faceName => {
@@ -190,6 +217,8 @@ function clamp(value, minimum, maximum) {
 }
 
 return {
+  setNodePivotAtWorldPoint,
+  centerSelectedPivots,
   movePivotToRotationVertex,
   freezeCubeUvs,
   translateItemByLocalDelta,

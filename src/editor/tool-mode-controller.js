@@ -11,6 +11,7 @@ export function createToolModeController({
   getDockManager
 }) {
 let temporaryPaintTool = null;
+let renderModeBeforePaint = null;
 function toolSupportsMode(tool, mode = state.mode) {
   const registered = TOOL_REGISTRY[tool]?.modes.includes(mode);
   if (!registered) return false;
@@ -32,7 +33,19 @@ function applyModePanelVisibility() {
 function setMode(mode) {
   if (mode === 'uv' && !state.separateUvMode) mode = 'edit';
   if (mode === 'paint' && inspectorController.subdivisionSession) exitSubdivisionEdit(false);
+  if (mode === 'paint' && state.mode !== 'paint') {
+    renderModeBeforePaint = state.renderMode;
+    state.renderMode = 'textured';
+  } else if (state.mode === 'paint' && mode !== 'paint' && renderModeBeforePaint) {
+    state.renderMode = renderModeBeforePaint;
+    renderModeBeforePaint = null;
+  }
   state.mode = mode;
+  $('#paintShapeMenu').hidden = true;
+  $('#paintShapeModeButton').setAttribute('aria-expanded', 'false');
+  $('#paintSelectionModeMenu').hidden = true;
+  $('#paintSelectionModeButton').setAttribute('aria-expanded', 'false');
+  updateRenderModeControl();
   renderOutliner();
   document.body.dataset.editorMode = mode;
   if (mode !== 'paint') {
@@ -74,8 +87,10 @@ function setTool(tool, { temporary = false } = {}) {
     state.paintGradientStart = state.paintColor;
   }
   state.tool = tool;
+  if (['line', 'rectangle', 'ellipse'].includes(tool)) state.paintShapeTool = tool;
   sceneCanvas.classList.toggle('is-knife', tool === 'knife');
   $$('.tool').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
+  $('#paintShapeButton').classList.toggle('active', ['line', 'rectangle', 'ellipse'].includes(tool));
   updateToolOptions();
   renderScene();
 }
@@ -110,8 +125,21 @@ function updateToolOptions() {
     brush: '畫筆', paintSelection: '繪畫選區', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', gradient: '漸變', eyedropper: '取色器'
   };
   const paintTool = PAINT_TOOLS.includes(state.tool);
+  if (state.paintSelectionMode === 'transform') state.paintSelectionMode = 'rectangle';
+  const shapeNames = { line: '直線', rectangle: '矩形', ellipse: '橢圓' };
+  const shapeTool = state.paintShapeTool || 'line';
+  $('#paintShapeButton').title = `圖形繪製（目前：${shapeNames[shapeTool]}）`;
+  $('#paintShapeButton').dataset.shape = shapeTool;
+  $('#paintShapeModeButton').textContent = shapeNames[shapeTool];
+  $('#paintShapeModeButton').dataset.shape = shapeTool;
+  $$('[data-paint-shape]').forEach(button => button.classList.toggle('active', button.dataset.paintShape === shapeTool));
+  const selectionNames = { rectangle: '拉框', brush: '塗抹', lasso: '自由圈選' };
+  $('#paintSelectionModeButton').textContent = selectionNames[state.paintSelectionMode] || selectionNames.rectangle;
+  $('#paintSelectionModeButton').dataset.selectionShape = state.paintSelectionMode;
+  $$('[data-paint-selection-mode]').forEach(button => button.classList.toggle('active', button.dataset.paintSelectionMode === state.paintSelectionMode));
   lane.hidden = !labels[state.tool];
   $('#transformSpaceControl').hidden = !['move', 'rotate', 'pivot'].includes(state.tool);
+  $('#pivotCenterControl').hidden = state.tool !== 'pivot';
   $('#rotationModeControl').hidden = state.tool !== 'rotate' || state.transformSpace !== 'self';
   $('#multiTransformModeControl').hidden = selectedTopLevelNodes().length < 2 || !['move', 'rotate'].includes(state.tool);
   $('#scaleHandleModeControl').hidden = state.tool !== 'resize';
@@ -124,6 +152,7 @@ function updateToolOptions() {
     : '先選來源頂點';
   $('#knifeStatus').hidden = state.tool !== 'knife';
   $('#paintToolOptions').hidden = !paintTool && state.tool !== 'paintSelection';
+  $('#paintShapeModeControl').hidden = !['line', 'rectangle', 'ellipse'].includes(state.tool);
   $('#paintSelectionModeControl').hidden = state.tool !== 'paintSelection';
   $('#paintSelectionBrushControl').hidden = state.tool !== 'paintSelection' || state.paintSelectionMode !== 'brush';
   $('#paintSelectionSymmetryControl').hidden = state.tool !== 'paintSelection';

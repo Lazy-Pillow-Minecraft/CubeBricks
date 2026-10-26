@@ -584,10 +584,7 @@ function updateTransformGizmo() {
     gizmo.insertAdjacentHTML('beforeend', editorOverlay);
     return;
   }
-  if (state.tool === 'pivot' && selectionContext.multiple && !selectionContext.commonGroup) {
-    gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;
-  }
-  const transformItem = state.tool === 'pivot' && selectionContext.multiple ? selectionContext.commonGroup : item;
+  const transformItem = item;
   if (state.tool === 'pivot' && !modifierAnchorContext && !curveNodeContext
     && !['cube', 'group', 'node'].includes(transformItem?.type) && !isShapeElement(transformItem)) {
     gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; return;

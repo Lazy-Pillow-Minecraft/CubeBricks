@@ -58,7 +58,7 @@ function textureItemMarkup(asset, index) {
   return `<button class="texture-item ${asset._uid === state.activeTextureUid ? 'active' : ''}" draggable="true"
       data-texture-uid="${escapeAttribute(asset._uid)}" data-texture-index="${index}">
     <span class="texture-thumb" style="background-image:url(&quot;${escapeAttribute(asset.source || '')}&quot;);background-size:cover;image-rendering:pixelated"></span>
-    <span><strong>${escapeHtml(asset.name || `texture_${index + 1}.png`)}</strong><small>${asset.uvWidth || '?'} × ${asset.uvHeight || '?'} · ${asset.kind || 'IMAGE'}</small></span><i>◉</i>
+    <span><strong>${escapeHtml(asset.name || `texture_${index + 1}.png`)}</strong><small>${asset.uvWidth || '?'} × ${asset.uvHeight || '?'} · ${asset.kind || 'IMAGE'}</small></span>
   </button>`;
 }
 
@@ -253,32 +253,83 @@ function bindLayerDrag(root) {
   layerDragBound = true;
   const scroll = root.closest('.texture-layer-panel-scroll');
   const autoScroll = createListDragAutoScroll(scroll, () => Boolean(layerDrag?.active), pointer => {
-    if (pointer) updateLayerDropTarget(root, pointer.y);
+    if (pointer) updateLayerDropTarget(root, pointer.y, pointer.x);
   });
-  const clearTarget = () => root.querySelectorAll('.drop-before,.drop-after,.drop-inside').forEach(row =>
-    row.classList.remove('drop-before', 'drop-after', 'drop-inside'));
-  function updateLayerDropTarget(rootNode, y) {
+  const clearTarget = () => {
+    root.querySelectorAll('.drop-highlight').forEach(line => {
+      line.classList.remove('drop-highlight');
+      line.style.removeProperty('--drop-highlight-height');
+    });
+    const guide = root.querySelector('.texture-layer-drop-guide');
+    if (guide) {
+      guide.hidden = true;
+      guide.classList.remove('is-nested-drop');
+    }
+  };
+  function updateLayerDropTarget(rootNode, y, x) {
     clearTarget();
+    if (!layerDrag) return;
     layerDrag.targetUid = null;
     layerDrag.position = null;
-    const target = verticalDropTarget([...rootNode.querySelectorAll('[data-layer-row]')], y);
-    const row = target?.entry;
-    if (!row || row.dataset.layerRow === layerDrag?.uid) return;
-    layerDrag.targetUid = row.dataset.layerRow;
     const asset = layerDrag.asset;
-    const targetLayer = asset?.layers?.find(entry => entry.uid === row.dataset.layerRow);
-    const rect = row.getBoundingClientRect();
-    const relativeY = (y - rect.top) / Math.max(1, rect.height);
-    layerDrag.position = targetLayer?.type === 'group' && relativeY > .3 && relativeY < .7
-      ? 'inside' : target.position;
-    row.classList.add(`drop-${layerDrag.position}`);
+    const tree = rootNode.querySelector('.texture-layer-tree');
+    if (!tree || !asset) return;
+    const entries = [...tree.querySelectorAll('[data-layer-row],[data-layer-group-end]')];
+    const picked = verticalDropTarget(entries, y);
+    const item = layerDrag.treeItems?.[picked?.index];
+    if (!picked || !item) return;
+    const targetRect = picked.entry.getBoundingClientRect();
+    const treeRect = tree.getBoundingClientRect();
+    const lineX = depth => 11 + depth * 16;
+    let targetUid, position, groupLine, guideY, guideDepth;
+    if (item.groupEnd) {
+      const chain = [...item.ancestors, { uid: item.groupEnd, depth: item.depth }];
+      const lastRect = entries.at(-1)?.getBoundingClientRect();
+      const belowTree = picked.index === entries.length - 1 && y >= lastRect?.bottom;
+      const outside = belowTree ? chain[0] : chain.find(({ depth }) => x <= treeRect.left + lineX(depth) + 4);
+      const destination = outside || chain.at(-1);
+      targetUid = destination.uid;
+      position = outside ? 'after' : 'inside-end';
+      groupLine = destination;
+      guideY = targetRect.top + 7;
+      guideDepth = destination.depth + (outside ? 0 : 1);
+    } else {
+      const ratio = picked.ratio;
+      position = item.layer.type === 'group' && ratio > .27 && ratio < .73
+        ? 'inside' : picked.position;
+      targetUid = item.layer.uid;
+      groupLine = position === 'inside' ? { uid: targetUid, depth: item.depth } : item.ancestors.at(-1);
+      guideY = position === 'before' ? targetRect.top - 1.5 : targetRect.bottom + 1.5;
+      guideDepth = item.depth + (position === 'inside' ? 1 : 0);
+    }
+    if (targetUid === layerDrag.uid || layerDrag.descendantUids?.has(targetUid)) return;
+    layerDrag.targetUid = targetUid;
+    layerDrag.position = position;
+    const guide = tree.querySelector('.texture-layer-drop-guide');
+    if (guide) {
+      guide.hidden = false;
+      guide.style.top = `${guideY - treeRect.top}px`;
+      guide.style.left = `${guideDepth ? lineX(guideDepth) : 4}px`;
+      guide.classList.toggle('is-nested-drop', Boolean(groupLine && guideDepth > groupLine.depth));
+    }
+    if (groupLine) {
+      const rail = [...tree.querySelectorAll('[data-layer-group-line]')]
+        .find(line => line.dataset.layerGroupLine === groupLine.uid);
+      if (rail) {
+        rail.classList.add('drop-highlight');
+        rail.style.setProperty('--drop-highlight-height', `${Math.max(0, Math.min(rail.offsetHeight, guideY - rail.getBoundingClientRect().top))}px`);
+      }
+    }
   }
   root.addEventListener('pointerdown', event => {
     if (event.button !== 0 || event.target.closest('input,button,[data-layer-group-line]')) return;
     const row = event.target.closest('[data-layer-row]');
     if (!row || !root.contains(row)) return;
+    const asset = activeTextureAsset();
     layerDrag = { uid: row.dataset.layerRow, startX: event.clientX, startY: event.clientY,
-      pointerId: event.pointerId, asset: activeTextureAsset(), active: false, targetUid: null, position: null };
+      pointerId: event.pointerId, asset, treeItems: layerTreeItems(asset?.layers || []),
+      descendantUids: layerDescendantUids(asset?.layers || [], row.dataset.layerRow),
+      active: false, targetUid: null, position: null };
   });
   root.addEventListener('dragstart', event => {
     if (event.target.closest('[data-layer-row]')) event.preventDefault();
@@ -291,6 +342,7 @@ function bindLayerDrag(root) {
       const row = root.querySelector(`[data-layer-row="${CSS.escape(drag.uid)}"]`);
       if (!row) { layerDrag = null; return; }
       drag.active = true;
+      root.querySelector('.texture-layer-tree')?.classList.add('is-layer-dragging');
       row.classList.add('is-dragging');
       const ghost = row.cloneNode(true);
       ghost.classList.remove('is-dragging');
@@ -306,16 +358,17 @@ function bindLayerDrag(root) {
     event.preventDefault();
     drag.ghost.style.left = `${event.clientX + 13}px`;
     drag.ghost.style.top = `${event.clientY + 9}px`;
-    updateLayerDropTarget(root, event.clientY);
+    updateLayerDropTarget(root, event.clientY, event.clientX);
   });
   const finish = (event, commit) => {
     const drag = layerDrag;
     if (!drag || event?.pointerId !== undefined && event.pointerId !== drag.pointerId) return;
-    if (commit && drag.active) updateLayerDropTarget(root, event.clientY);
+    if (commit && drag.active) updateLayerDropTarget(root, event.clientY, event.clientX);
     layerDrag = null;
     autoScroll.stop();
     drag.ghost?.remove();
     root.querySelector(`[data-layer-row="${CSS.escape(drag.uid)}"]`)?.classList.remove('is-dragging');
+    root.querySelector('.texture-layer-tree')?.classList.remove('is-layer-dragging');
     clearTarget();
     if (!commit || !drag.active || !drag.targetUid) return;
     const asset = drag.asset;
@@ -337,17 +390,21 @@ function renderTextureFeatureControls() {
   if (!asset) { root.innerHTML = '<span>請先選擇貼圖</span>'; return; }
   const selected = selectedLayerEntry(asset);
   const layerLineX = depth => 11 + depth * 16;
-  const layerLines = (ancestors, own = null, ending = false) => ancestors.map(({ uid, depth }) =>
-    `<span class="texture-layer-tree-line" data-layer-group-line="${escapeAttribute(uid)}" style="left:${layerLineX(depth)}px"></span>`).join('')
-    + (own ? `<span class="texture-layer-tree-line ${ending ? 'ends-here' : 'starts-here'}" data-layer-group-line="${escapeAttribute(own.uid)}" style="left:${layerLineX(own.depth)}px"></span>` : '');
-  const rows = layerTreeItems(asset.layers || []).map(({ layer, depth, ancestors, groupEnd }) => {
-    if (groupEnd) return `<div class="texture-layer-group-end" data-layer-group-end="${escapeAttribute(groupEnd)}" style="--group-line-x:${layerLineX(depth)}px">
-      ${layerLines(ancestors, { uid: groupEnd, depth }, true)}<span class="texture-layer-group-branch" data-layer-group-line="${escapeAttribute(groupEnd)}"></span></div>`;
+  const groupStarts = new Map(), groupRails = [];
+  let treeY = 0;
+  const rows = layerTreeItems(asset.layers || []).map(({ layer, depth, groupEnd }) => {
+    if (groupEnd) {
+      const start = groupStarts.get(groupEnd);
+      if (start) groupRails.push({ uid: groupEnd, depth, top: start.top + 40.5, bottom: treeY + 7 });
+      treeY += 14;
+      return `<div class="texture-layer-group-end" data-layer-group-end="${escapeAttribute(groupEnd)}"></div>`;
+    }
     const group = layer.type === 'group';
+    if (group) groupStarts.set(layer.uid, { top: treeY });
+    treeY += 42;
     const uid = escapeAttribute(layer.uid);
     const visibilityLabel = layer.visible === false ? '顯示圖層' : '隱藏圖層';
     return `<div class="texture-layer-row ${group ? 'is-group' : ''} ${selected?.uid === layer.uid ? 'active' : ''}" style="--layer-depth:${depth}" data-layer-row="${uid}" title="拖動整行排序">
-      ${layerLines(ancestors, group ? { uid: layer.uid, depth } : null)}
       <span class="texture-layer-grip" aria-hidden="true">⠿</span>
       ${group ? `<button type="button" class="texture-layer-disclosure" data-layer-toggle="${uid}" title="${layer.collapsed ? '展開組' : '折疊組'}" aria-label="${layer.collapsed ? '展開組' : '折疊組'}"><svg class="open-icon" data-icon-direction="${layer.collapsed ? 'right' : 'down'}" aria-hidden="true"><use href="#icon-open"></use></svg></button><svg class="texture-layer-folder-icon" aria-hidden="true"><use href="#icon-group"></use></svg><canvas class="texture-layer-thumb" width="27" height="27" aria-hidden="true"></canvas>`
         : '<span class="texture-layer-disclosure-spacer"></span><canvas class="texture-layer-thumb" width="27" height="27" aria-hidden="true"></canvas>'}
@@ -355,9 +412,11 @@ function renderTextureFeatureControls() {
       ${group ? `<button type="button" class="texture-layer-ungroup" data-layer-ungroup="${uid}" title="解散圖層組" aria-label="解散圖層組">×</button>` : ''}
       <button type="button" class="texture-layer-visibility ${layer.visible === false ? 'is-off' : ''}" data-layer-visible="${uid}" aria-label="${visibilityLabel}" title="${visibilityLabel}"><svg class="outliner-state-icon" aria-hidden="true"><use href="#${layer.visible === false ? 'icon-unshow' : 'icon-show'}"></use></svg></button></div>`;
   }).join('');
+  const rails = groupRails.map(({ uid, depth, top, bottom }) => `<span class="texture-layer-group-rail"
+    data-layer-group-line="${escapeAttribute(uid)}" style="left:${layerLineX(depth)}px;top:${top}px;height:${Math.max(0, bottom - top)}px"><span class="texture-layer-group-rail-branch"></span></span>`).join('');
   root.innerHTML = `<label>貼圖模式 <select data-texture-mode><option value="default" ${!asset.mode || asset.mode === 'default' ? 'selected' : ''}>默認</option><option value="tiled" ${asset.mode === 'tiled' ? 'selected' : ''}>平鋪</option><option value="animation" ${asset.mode === 'animation' ? 'selected' : ''}>動畫（佔位）</option></select></label>
     ${asset.mode === 'animation' ? '<span>動畫邏輯待完善，目前顯示原始貼圖。</span>' : ''}
-    <div class="texture-layer-control-strip"><button type="button" data-add-layer>＋ 圖層</button><button type="button" data-add-layer-group>＋ 組</button><button type="button" data-open-layer-editor title="編輯圖層" aria-label="編輯圖層"><svg class="object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button></div>${rows}`;
+    <div class="texture-layer-control-strip"><button type="button" data-add-layer>＋ 圖層</button><button type="button" data-add-layer-group>＋ 組</button><button type="button" data-open-layer-editor title="編輯圖層" aria-label="編輯圖層"><svg class="object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button></div><div class="texture-layer-tree">${rows}${rails}<span class="texture-layer-drop-guide" hidden></span></div>`;
   $$('[data-layer-row]', root).forEach(row => {
     const raster = layerEntryRaster(asset, row.dataset.layerRow);
     const canvas = row.querySelector('.texture-layer-thumb');

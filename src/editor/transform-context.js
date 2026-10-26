@@ -93,12 +93,14 @@ function getSelectionTransformContext() {
   const multiple = nodes.length > 1;
   const commonGroup = multiple ? deepestCommonSelectionGroup() : null;
   const center = multiple ? selectionGeometryCenter() : null;
+  const averagePivot = multiple ? [0, 1, 2].map(axis =>
+    nodes.reduce((sum, node) => sum + getTransformPivot(node)[axis], 0) / nodes.length) : null;
   const context = {
     nodes,
     multiple,
     commonGroup,
     center,
-    pivot: multiple ? (commonGroup ? getTransformPivot(commonGroup) : center) : null
+    pivot: averagePivot
   };
   selectionTransformContextCache = {
     project: state.project,

@@ -148,13 +148,13 @@ export function createLayerGroup(layers, selectedUid, uid, name) {
 export function moveLayerEntry(layers, draggedUid, targetUid, position) {
   const dragged = layers.find(layer => layer.uid === draggedUid);
   const target = layers.find(layer => layer.uid === targetUid);
-  if (!dragged || !target || dragged === target || position === 'inside' && target.type !== 'group') return layers;
+  if (!dragged || !target || dragged === target || (position === 'inside' || position === 'inside-end') && target.type !== 'group') return layers;
   const movedUids = layerDescendantUids(layers, draggedUid);
   movedUids.add(draggedUid);
   if (movedUids.has(targetUid)) return layers;
   const block = layers.filter(layer => movedUids.has(layer.uid));
   const next = layers.filter(layer => !movedUids.has(layer.uid));
-  const parentUid = position === 'inside' ? target.uid : target.parentUid || null;
+  const parentUid = position === 'inside' || position === 'inside-end' ? target.uid : target.parentUid || null;
   const moved = block.map(layer => layer.uid === draggedUid ? { ...layer, parentUid } : layer);
   const targetIndex = next.findIndex(layer => layer.uid === targetUid);
   const targetBlock = layerDescendantUids(next, targetUid);

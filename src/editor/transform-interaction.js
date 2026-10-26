@@ -11,6 +11,7 @@ export function createTransformInteraction({
   captureModifierAnchors, captureTransformTarget, clearSelection,
   discardSubdivisionEdits, finishScenePaintDrag, formatNumber, formatSigned,
   freezeCubeUvs, getAngleSnapStep, getSelectionTransformContext,
+  clearSelectionTransformContext, setNodePivotAtWorldPoint,
   intersectRayPlane, invalidateSelectionRenderGeometry, isBezierElement,
   isEffectivelyLocked, isShapeElement, localDeltaFromWorld, markDirty,
   moveScenePaintDrag, polyhedronEdgeLength, queueSceneBrushPointer,
@@ -35,7 +36,6 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
     : baseSelectionContext;
   const curveNodeContext = activeCurveNodeContext();
   let item = selected();
-  if (state.tool === 'pivot' && selectionContext.multiple) item = selectionContext.commonGroup;
   if (!item || !['move', 'resize', 'rotate', 'pivot'].includes(state.tool)) return;
   if (state.tool === 'rotate' && formatRules(state.project).moddedEntity && item.type === 'cube') {
     toast('模組版實體的 Cube 不能旋轉；請把它放入組後旋轉組');
@@ -64,7 +64,7 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   }
   const itemSubdivisionOwner = subdivisionOwner(item);
   const parentChain = state.project.getGroupChain(itemSubdivisionOwner?.uid || item.uid);
-  const chain = modifierAnchorContext
+  const chain = state.tool === 'pivot' && selectionContext.multiple && !modifierAnchorContext ? [] : modifierAnchorContext
     ? [...parentChain, { pivot: item.type === 'group' || item.type === 'cube' || isShapeElement(item) ? item.pivot : item.origin || item.position || [0, 0, 0], rotation: item.rotation || [0, 0, 0] }]
     : curveNodeContext
     ? [...parentChain, { pivot: item.origin, rotation: item.rotation || [0, 0, 0] }]
@@ -142,6 +142,7 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
       : item.position ? [...item.position] : item.origin ? [...item.origin] : item.pivot ? [...item.pivot] : [0, 0, 0],
     pivot: modifierAnchorContext ? [...modifierAnchorContext.modifier.anchor.position]
       : curveNodeContext ? [...curveNodeContext.node.position]
+      : state.tool === 'pivot' && selectionContext.multiple ? [...selectionContext.pivot]
       : item.pivot ? [...item.pivot] : item.type === 'node' ? [...item.position] : null,
     size: item.size ? [...item.size] : null,
     rotation: [...(modifierAnchorContext ? modifierAnchorContext.modifier.anchor.rotation : curveNodeContext
@@ -495,6 +496,7 @@ function endPointerDrag(event) {
     return;
   }
   if (finishedDrag.type === 'transform' && finishedDrag.snapshotTaken) {
+    if (finishedDrag.tool === 'pivot') clearSelectionTransformContext();
     sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
     if (finishedDrag.modifierAnchorContext) {
       const { owner, modifier } = finishedDrag.modifierAnchorContext;
@@ -599,6 +601,9 @@ function applyTransformDrag(drag, dx, dy, event) {
       drag.modifierAnchorContext.modifier.anchor.position = nextPivot;
     } else if (drag.curveNodeContext) {
       drag.curveNodeContext.node.position = nextPivot.map((value, axis) => drag.curveNodeContext.curve.dimension === 2 && axis === 1 ? 0 : value);
+    } else if (drag.selectionContext.multiple) {
+      drag.selectionContext.nodes.forEach(node => setNodePivotAtWorldPoint(node, nextPivot));
+      drag.selectionContext.pivot = [...nextPivot];
     } else if (item.type === 'node') item.position = nextPivot;
     else setPivotPreservingGeometry(state.project, item, nextPivot);
     drag.tooltipText = `${drag.modifierAnchorContext ? '對稱軸點' : drag.curveNodeContext || item.type === 'node' ? '節點' : '樞軸'} ${nextPivot.map(formatNumber).join(' / ')}`;

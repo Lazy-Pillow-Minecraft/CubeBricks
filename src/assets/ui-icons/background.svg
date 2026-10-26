@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 200 200" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:affinity="https://www.affinity.studio/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+    <path d="M61.083,55.611L61.083,29.329C61.083,24.267 65.187,20.163 70.25,20.163L170.671,20.163C175.733,20.163 179.837,24.267 179.837,29.329L179.837,129.75C179.837,134.813 175.733,138.917 170.671,138.917L144.389,138.917L144.389,120.584L161.504,120.584L161.504,38.496L79.416,38.496L79.416,55.611L61.083,55.611ZM79.416,84.888L79.416,120.584L115.112,120.584L115.112,138.917L70.25,138.917C65.187,138.917 61.083,134.813 61.083,129.75L61.083,84.888L79.416,84.888Z"/>
+    <g transform="matrix(1,0,0,1,9.359381,-5.04316)">
+        <rect x="19.97" y="75.293" width="100.421" height="100.421" style="stroke:black;stroke-width:18.33px;"/>
+    </g>
+</svg>
