@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { paintSelectionAllows, faceRectangleFrame, faceRectanglePlanePoint,
   faceRectangleCoordinates, faceRectangleWorldPoint } from '../src/paint/selection-controller.js';
 import { transformSelectedPixels } from '../src/paint/selection-transform.js';
-import { sceneBrushBranchKey } from '../src/paint/scene-controller.js';
+import { paintDragAcceptsHit, sceneBrushBranchKey } from '../src/paint/scene-controller.js';
+
+assert.equal(paintDragAcceptsHit({ bucketDrag: true }, { uid: 'next', faceName: 'north' }), true,
+  'the 3D bucket may keep filling after crossing onto another face or cube');
+assert.equal(paintDragAcceptsHit({ uid: 'first', faceName: 'north' }, { uid: 'next', faceName: 'north' }), false,
+  'a single-face shape stroke remains restricted to its starting face');
 
 const state = { paintSelection: { active: false, masks: new Map() } };
 assert.equal(paintSelectionAllows(state, 'a', 0, 0, 2, 2), true);

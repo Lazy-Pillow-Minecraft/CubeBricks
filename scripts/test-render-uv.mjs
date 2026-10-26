@@ -20,6 +20,17 @@ import {
   WebGLSceneRenderer
 } from '../src/render/webgl-renderer.js';
 
+{
+  const renderer = { pickCurveNode: (_project, uid, _x, _y, _radius, excluded) => ({ uid, index: excluded === 1 ? 0 : 1 }) };
+  const project = { getNode: uid => uid === 'visible' ? { uid, type: 'bezier3d', visible: true } : null,
+    getGroupChain: () => [] };
+  const pick = WebGLSceneRenderer.prototype.pickUnselectedCurveNode;
+  assert.equal(pick.call(renderer, project, 0, 0, null), null,
+    'nodes of curves without visible selected markers cannot intercept a click');
+  assert.deepEqual(pick.call(renderer, project, 0, 0, 'visible', 1), { uid: 'visible', index: 0 },
+    'only an unselected node of the selected curve is eligible');
+}
+
 assert.equal(cubeLifetimeScale('birth', 0), 0);
 assert.equal(cubeLifetimeScale('birth', 42), 1.05);
 assert.equal(cubeLifetimeScale('birth', 60), 1);

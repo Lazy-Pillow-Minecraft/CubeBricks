@@ -142,6 +142,7 @@
         <span class="tool-status" id="knifeStatus" hidden>選擇切割點</span>
         <div class="paint-tool-options" id="paintToolOptions" hidden>
           <div class="paint-mode-picker" id="paintShapeModeControl" hidden><span>圖形</span><button type="button" id="paintShapeModeButton" aria-expanded="false">直線</button><div class="paint-tool-menu" id="paintShapeMenu" hidden><button type="button" data-paint-shape="line">直線</button><button type="button" data-paint-shape="rectangle">矩形</button><button type="button" data-paint-shape="ellipse">橢圓</button></div></div>
+          <label id="paintShapeFillControl" title="填滿矩形或橢圓內部" hidden><input id="paintShapeFilled" type="checkbox" /><span>填充內部</span></label>
           <div class="paint-mode-picker" id="paintSelectionModeControl" hidden><span>選區</span><button type="button" id="paintSelectionModeButton" aria-expanded="false">拉框</button><div class="paint-tool-menu" id="paintSelectionModeMenu" hidden><button type="button" data-paint-selection-mode="rectangle">拉框</button><button type="button" data-paint-selection-mode="brush">塗抹</button><button type="button" data-paint-selection-mode="lasso">自由圈選</button></div><select id="paintSelectionMode" hidden><option value="rectangle">拉框</option><option value="brush">塗抹</option><option value="lasso">自由圈選</option></select></div>
           <label id="paintSelectionBrushControl" hidden><span>尺寸</span><input id="paintSelectionBrushSize" type="number" min="1" max="128" value="18" /></label>
           <label id="paintSelectionSymmetryControl" hidden title="選區跟隨繪畫對稱"><input id="paintSelectionSymmetry" type="checkbox" /><span>對稱</span></label>
@@ -342,6 +343,9 @@
           <div class="panel-control-strip palette-control-strip">
             <span id="paletteSummary">3 行 · 每行獨立設定</span>
             <button class="add-palette-row" data-action="addPaletteRow">＋ 新增一行</button>
+            <button type="button" class="palette-file-button" id="paletteImportButton" title="追加匯入 .cbcmap 色卡">匯入</button>
+            <button type="button" class="palette-file-button" id="paletteExportButton" title="只導出目前選中的色卡為 .cbcmap；檔案不包含名稱">導出</button>
+            <input type="file" id="paletteImportInput" accept=".cbcmap" hidden />
             <button type="button" class="palette-compact-toggle" id="paletteCompactToggle" aria-pressed="false" title="縮略模式：只保留選色">縮略模式</button>
           </div>
           <div class="dock-content palette-view active" data-dock-view="palette">
@@ -402,7 +406,7 @@
             <div class="panel-heading-actions"></div>
           </div>
           <div class="texture-layer-panel-scroll">
-            <div id="textureFeatureControls"></div>
+            <div id="textureFeatureControls" tabindex="0"></div>
           </div>
         </section>
       </aside>
@@ -545,7 +549,7 @@
 
   <dialog id="textureCreateDialog" class="theme-dialog texture-create-dialog">
     <form method="dialog" id="textureCreateForm">
-      <div class="dialog-heading"><div><span class="eyebrow">NEW TEXTURE</span><h2>新建貼圖</h2></div><button value="cancel" class="close-button">×</button></div>
+      <div class="dialog-heading"><div><span class="eyebrow">NEW TEXTURE</span><h2>新建貼圖</h2></div><button type="button" value="cancel" class="close-button">×</button></div>
       <div class="texture-create-grid">
         <label class="wide"><span>類型</span><select id="textureCreateType"><option value="template">紋理模板</option><option value="solid">純色模板</option><option value="blank">空白貼圖</option></select></label>
         <label class="wide"><span>名稱</span><input id="textureCreateName" type="text" value="texture.png" required /></label>
@@ -623,8 +627,24 @@
       </div>
       <div class="layer-editor-properties">
         <strong id="layerEditorLayerName">未選擇圖層</strong>
+        <label>名稱<input id="layerEditorName" type="text" maxlength="128" autocomplete="off" /></label>
         <label>透明度<div class="layer-editor-opacity"><input id="layerOpacityRange" type="range" min="0" max="100" step="1"><input id="layerOpacityValue" type="number" min="0" max="100" step="1">%</div></label>
         <label>疊加模式<select id="layerBlendMode"></select></label>
+        <label>蒙版來源<select id="layerMaskSource"></select><small>取來源亮度與透明度作蒙版；來源隱藏時仍生效。</small></label>
+        <div id="layerToneMapOptions" class="layer-tone-map-options" hidden>
+          <label>源色卡<select id="layerTonePalette"></select></label>
+          <div id="layerToneDiscrete" class="layer-tone-map-kind" hidden>
+            <label class="layer-tone-check"><input id="layerToneAnchorDiscrete" type="checkbox">指定基礎色與灰度</label>
+            <label>基礎色<select id="layerToneAnchorColor"></select></label>
+          </div>
+          <div id="layerToneContinuous" class="layer-tone-map-kind" hidden>
+            <label>色卡分段數<input id="layerToneSegments" type="number" min="2" max="256" step="1" value="8"></label>
+            <label class="layer-tone-check"><input id="layerToneAnchorContinuous" type="checkbox">指定基礎位置與灰度</label>
+            <label>基礎色卡位置 %<input id="layerToneAnchorPercent" type="number" min="0" max="100" step="0.1" value="50"></label>
+          </div>
+          <label id="layerToneGrayField">基礎灰度 %<input id="layerToneAnchorGray" type="number" min="0" max="100" step="0.1" value="50"></label>
+          <small>左側對應亮部，右側對應暗部。原始像素與透明度不會被修改。</small>
+        </div>
       </div>
       <div class="layer-editor-list"><strong>圖層</strong><div id="layerEditorListHost"></div></div>
     </div>

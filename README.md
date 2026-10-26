@@ -67,7 +67,8 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 ### UV 與貼圖
 
 - Cube 可使用箱型 UV 或逐面 UV，每個面可獨立指定貼圖、旋轉、鏡像與剔除狀態。
-- 貼圖圖層可新增圖片層或組、折疊組、將圖層拖進組內及跨層級重排。選中圖片層時在其上方新增，選中組時在組內追加；組的可見性切換會同步子層，子層仍可單獨改回。齒輪開啟固定高度的圖層編輯子窗口，顯示完整貼圖與所選層／組的方形預覽，可調透明度及疊加模式。繪畫落在實際圖片層，模型顯示分組合成結果；圖層資料隨 `.cbmodel` 保存。
+- 貼圖圖層可新增圖片層或組、折疊組、將圖層拖進組內及跨層級重排。選中圖片層時在其上方新增，選中組時在組內追加；組的可見性切換會同步子層，子層仍可單獨改回。齒輪開啟圖層編輯子窗口，可調名稱、透明度、疊加模式及獨立蒙版來源。蒙版取來源的亮度與透明度，即使來源圖層或組隱藏也會生效；繪畫仍落在實際圖片層，圖層資料隨 `.cbmodel` 保存。
+- 圖層的「色階映射」模式以固定的 0–100% 灰度範圍取樣色卡；離散色卡可指定基礎色與灰度，連續色卡可設定分段數及基礎位置。蒙版可與色階映射或其他疊加模式及透明度並用，不改寫原始圖層像素。
 - 貼圖本身可切換默認、平鋪、動畫三種模式；動畫目前為佔位。面各自保留普通 UV 和平鋪的單片寬高、X／Y 偏移，換貼圖不清除另一套資訊。
 - 拖動列表貼圖時顯示鼠標縮略圖，可直接賦予模型的面；多選時同時賦予所有所選元素的同方向面。平鋪渲染單片快取最高 1024 × 1024px，超出需求的面僅在渲染中拆片，不改動模型、導出結構或模板烘焙。
 - 元素顯示色與一般顏色欄可使用方形、圓形或三角形 HSV 彈窗；BBModel 的 Cube 調色板索引會轉換為對應顯示色，導出時選取最接近的標準色。
@@ -76,13 +77,14 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 導入高解析度 BBModel 貼圖時保留其宣告的邏輯 UV 尺寸；模型圖集會按實際 PNG 像素尺寸換算，貼圖窗口的 UV 框則維持在邏輯座標上。
 - UV 預覽只渲染選中內容，可選自動旋轉、面向配色、面旋轉及鏡像標記；繪畫時同步使用最新畫布，停用時停止渲染排程。
 - 可建立紋理模板、純色模板或空白貼圖。模板生成會按工程基礎吸附分辨率歸一化尺寸，為非零邊長保留至少 1px，並可清理零面積無效面；UV 使用緊密的矩形裝箱排列，畫布可選 2 冪或指定倍數。
-- 繪畫模式可直接在二維貼圖、Cube 與程序化 Shape 表面作畫，提供畫筆、直線、矩形、橢圓、油漆桶、漸變與取色器；除漸變外，繪製工具可切換擦除模式，並各自記憶尺寸與透明度。鎖定透明度與忽視全透明像素是獨立開關；不同面可引用不同貼圖。
+- 繪畫模式可直接在二維貼圖、Cube 與程序化 Shape 表面作畫，提供畫筆、直線、矩形、橢圓、油漆桶、漸變與取色器；矩形和橢圓可選填充內部，油漆桶可在一次拖動中處理多個位置。除漸變外，繪製工具可切換擦除模式，並各自記憶尺寸與透明度。鎖定透明度與忽視全透明像素是獨立開關；不同面可引用不同貼圖。
 - 繪畫時可按住 Alt 臨時切換至取色器，鬆開後立即返回原本工具；臨時切換不會清除尚未完成的漸變選點。
 - 畫筆支援方形／圓形筆尖、抗鋸齒、透明度與三維跨面連續筆畫。筆刷深度會沿 Cube 的實際鄰面及 UV 朝向延伸，疊加繪製只同步處理最前方完全重合的面，不會穿透模型。
 - 繪畫選區可在貼圖或模型面建立拉框、塗抹和自由圈選；Shift 追加、Ctrl 擦除。貼圖窗口中的「像素變換」可拖動選中像素、選擇保留原像素的複製模式，或旋轉 90°；自由旋轉會從起始像素重新取樣，以免連續調角累積破洞和畫質誤差。
 - 漸變工具提供面漸變與體漸變；兩個取樣點只決定方向，顏色會映射至整個面或整個 Cube。雙色模式透過兩個色槽選擇右側選色器的編輯目標，且兩端透明度可獨立調整；也可改用目前選中色卡的多色漸變。
 - 選色器提供方形、圓形與三角形 HSV 操作。三角模式使用獨立色相環與重心色域，明度黑點收斂於單一頂點，顯示與實際取色共用同一套換算；常用的近期顏色顯示在選色器下方。
 - 色卡面板支援逐行選取、插入、刪除與拖動排序；新建色卡保持空白，每一行可獨立使用離散色或連續漸變。漸變節點以彩色圓點及下方非互動豎線標識：只拖圓點，右鍵圓點或聚焦色卡後按 Delete 可刪除；在漸變條空白處按右鍵可插入節點。
+- 色卡會跨次啟動保存，桌面版另在應用資料目錄保存一份。色卡欄可把目前選中的單張色卡導出為 `.cbcmap`（JSON，檔內不含色卡名稱或本地 ID）；匯入會追加色卡，按檔名取得本地名稱，並保留漸變分段與三維色彩曲線。舊版多色卡導出檔仍可匯入。
 - 漸變分段可選「平均分」「自定義」，色彩空間漸變另可選「按曲線長度」。自定義模式可拖動節點調整色段（含兩端節點），其他模式拖動圓點則改變節點順序；切回自定義仍保留原本設定的間隔。色彩空間編輯器的右上角預覽只跟隨視角、不跟隨縮放。
 - 繪畫模式不顯示編輯選中高亮。場景層級保留索引、選取、展開、聚焦及可見／鎖定切換，禁止新建、刪除、拖動重排及幾何操作，也不允許進入 Shape 細分編輯；桌面版會在項目操作記錄中保存繪畫變更。
 - 全部剔除的 Cube 會被移除；單面剔除會同時取消該面的主視圖拾取，但仍可在 UV 預覽中處理。
@@ -172,6 +174,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 面漸變要求兩點位於同一面；體漸變要求兩點位於同一 Cube。兩點只定義方向，漸變會覆蓋完整目標。
 - 雙色漸變先點擊第一色或第二色色槽，再在右側選色器調色；兩端 Alpha 可獨立設定。啟用「使用色卡」後會改用目前選中色卡的全部顏色。
 - 色卡行可獨立選擇離散或漸變模式，並支援選中、插入、刪除及拖動重排顏色。漸變條的圓形節點可選取；其下方豎線只作位置標記，不可拖動。自定義分段可拖動圓點調整間隔，平均分與曲線長度模式拖動圓點可重排節點；右鍵漸變條空白處可新增節點。
+- 在色卡欄先點選一行，再按「導出」即可只保存該行的 `.cbcmap`。按「匯入」會將色卡追加到列表，不覆蓋現有色卡；單張色卡匯入後的名稱取自檔名。
 - 繪畫模式中的場景層級可查找、選取、聚焦及切換元素可見性／鎖定；修改模型幾何需回到編輯模式。畫筆等非漸變工具直接使用右側選色器的當前顏色。桌面版的 `Ctrl+Z`／`Ctrl+Shift+Z` 依當前項目的操作記錄撤銷／重做，包含繪畫與貼圖指派。
 - 使用「繪畫選區」建立範圍後，在工具參數把選區切到「像素變換」：選「移動」可在貼圖窗口拖動範圍內像素；啟用「複製像素」會保留原像素並拖出副本；「↶ 90°／↷ 90°」可逐次轉動。「旋轉」模式拖動時預設按 90° 吸附，勾選「自由旋轉」即可解除。三維視圖用於建立選區，像素變換在二維貼圖窗口進行。
 
@@ -197,6 +200,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 工作記錄會保存貼圖分組、拖貼圖到模型面的批量指派，以及撤銷後實際走過的重做分支。多開桌面程式時，同一工作項目只允許一個視窗寫入；遇到缺失或損壞的操作快照時會停止跨越該記錄，保留目前模型狀態。
 - 打開已保存的工程時，會比對同路徑工作記錄的 UUID 與歷史：一致時沿用，文件或工作副本較新時按歷史關係處理；歷史分歧時由用戶選擇另開或取代工作副本，不會直接改寫原始文件。
 - `.bbmodel`：支援 Blockbench 模型匯入與導出；程序化物件和修改器會在導出時展開為兼容的 Cube／組資料。
+- `.cbcmap`：單張色卡的可攜 JSON，保存顏色、漸變與色彩空間曲線設定，但不保存色卡名稱或本地 ID；應用內的全部色卡另行持久化，不依賴模型工程。
 - 內置工程類型包含通用模型、圖像以及多種 Minecraft Java、Bedrock、模組實體、皮膚與 GeckoLib 類型；尚未完成的編輯器類型會明確標記為佔位。
 
 ### 工作記錄恢復
@@ -349,7 +353,8 @@ The project is currently an evolving prototype focused on an extensible editor a
 ### UV and texturing
 
 - Cubes support box UV and per-face UV. Every face can independently select a texture, rotation, mirroring, and culling state.
-- Texture layers support image layers and collapsible groups, drag-in assignment, and cross-level reordering. Creating a layer beside a selected image places it directly above; selecting a group adds inside it. Group visibility syncs its children, while individual children can be changed afterward. The gear opens a full-height layer editor with square previews of the complete texture and selected layer or group, plus opacity and blend modes. Painting targets an image layer while the model displays the grouped composite; the hierarchy is saved in `.cbmodel` projects.
+- Texture layers support image layers, collapsible groups, drag-in assignment, and cross-level reordering. Creating a layer beside a selected image places it directly above; selecting a group adds inside it. Group visibility syncs its children, while individual children can be changed afterward. The layer editor controls names, opacity, blend modes, and an independent mask source. Masks use the source's brightness and alpha even when that source layer or group is hidden. Painting targets an image layer, and the hierarchy is saved in `.cbmodel` projects.
+- The Tone Map layer mode samples a palette against a fixed 0–100% grayscale range. Discrete palettes may anchor a chosen color to a gray value; continuous palettes offer a segment count and anchor position. A mask works alongside Tone Map or another blend mode and layer opacity without rewriting source pixels.
 - Texture assets switch between default, tiled, and animation modes; animation is currently a placeholder. Faces retain both ordinary UVs and tile dimensions/offsets when textures or modes change.
 - Drag textures from the list with a cursor thumbnail to assign them to model faces. Multi-selection assigns the same face direction across selected elements. Tiled render caches are capped at 1024 × 1024px per piece; larger faces are split only for rendering, without changing model data, export structure, or template baking.
 - Element display colors and ordinary color fields can use square, circular, or triangular HSV popups. BBModel cube palette indices are converted to display colors; export selects the nearest standard palette color.
@@ -358,7 +363,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - High-resolution BBModel imports retain their declared logical UV dimensions. The model atlas maps those units to actual PNG pixels, while the texture panel keeps UV outlines in logical coordinates.
 - UV Preview renders only selected content and can show automatic rotation, face-direction colors, face rotation, and mirror markers. Painting uses the latest live canvas; disabling the panel stops its render scheduling.
 - Texture templates, solid-color templates, and blank textures can be created. Template generation normalizes sizes against the project base snapping resolution, preserves at least one pixel for non-zero edges, can remove zero-area faces, packs UV rectangles tightly, and supports power-of-two or custom-multiple canvases.
-- Paint mode works directly on 2D textures, cubes, and procedural shape surfaces. Brush, line, rectangle, ellipse, and fill each offer an erase mode and remember their own size and opacity. Alpha lock and ignore fully transparent pixels are separate options. Gradient and eyedropper remain available, and each face may reference a different texture.
+- Paint mode works directly on 2D textures, cubes, and procedural shape surfaces. Rectangles and ellipses can fill their interiors, and the fill bucket can process multiple locations during one drag. Brush, line, rectangle, ellipse, and fill each offer an erase mode and remember their own size and opacity. Alpha lock and ignore fully transparent pixels are separate options. Gradient and eyedropper remain available, and each face may reference a different texture.
 - Painting never assigns the active texture to an untextured face implicitly. The 3D viewport reports the missing assignment and leaves model data unchanged until a texture is explicitly attached.
 - Paint Selection supports rectangle, brush, and freehand masks in the texture view or on model faces, with Shift to add and Ctrl to subtract. In the texture view, Pixel Transform moves selected pixels, optionally copies them while retaining the originals, and rotates by 90° steps or freely. Free-angle previews always resample the starting pixels rather than a prior preview.
 - Holding Alt temporarily activates the eyedropper and releasing it restores the previous tool. Temporary switching preserves an unfinished gradient selection.
@@ -366,6 +371,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Face and volume gradients map across the complete face or cube. The two picked points define direction only. In two-color mode, two stop buttons select which endpoint is edited by the right-side picker, and each endpoint has independent alpha; the selected palette can be used for multi-color gradients instead.
 - The color picker offers distinct square, circular, and triangular HSV controls. Triangle mode uses a separate hue ring and barycentric color field whose black value converges at one vertex, with display and sampling sharing the same conversion. Recent colors appear below the picker.
 - Palette rows support selection, insertion, deletion, and drag ordering. New rows start empty, and each row independently supports discrete colors or a continuous gradient. Gradient stops have colored circular heads and non-interactive vertical markers: drag only the head, right-click it or press Delete while the palette is focused to remove it, and right-click an empty part of the gradient bar to insert a stop.
+- Palettes persist across launches, with a separate desktop copy under the app's user-data directory. Export writes only the selected palette as `.cbcmap` JSON, without its local name or ID. Import appends it under a name derived from the filename and preserves gradient spacing and 3D color-space curves. Earlier multi-palette exports remain importable.
 - Gradient spacing supports equal and custom intervals; color-space gradients also support intervals proportional to actual Bezier arc length. Custom spacing is preserved when switching modes. The color-space editor's top-right preview follows orientation but keeps a fixed zoom.
 - Paint mode hides edit-selection highlighting. The hierarchy provides indexing, selection, expansion, focus, and visibility/lock toggles, while creation, deletion, reordering, geometry operations, and shape subdivision editing are disabled. The desktop app records painting changes in the project operation journal.
 - Culling every face removes the cube. A culled individual face is no longer pickable in the main viewport but remains available in UV Preview.
@@ -452,6 +458,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - A face gradient requires both points on one face; a volume gradient requires both points on one cube. The points define direction only, and the gradient covers the complete target.
 - In two-color mode, click the first or second stop button and edit that stop in the right-side picker. Each stop has independent alpha. Enabling **Use Palette** switches to every color in the selected palette row.
 - Palette rows independently support discrete or gradient display and allow color selection, insertion, deletion, and drag reordering. Only the circular head of a gradient stop is interactive; its vertical line is a marker. Drag heads, including the endpoints, to adjust custom spacing, or drag heads in equal/curve-length modes to reorder stops. Right-click empty gradient-bar space to insert a stop.
+- Select a palette row and click **Export** to save only that row as `.cbcmap`. **Import** appends cards from a file without replacing the existing palette list; a single imported card receives a local name from its filename.
 - The hierarchy in Paint mode can find, select, and focus content or toggle an element's visibility and lock state. Return to Edit mode to change model geometry. Non-gradient paint tools use the current color from the right-side picker. In the desktop app, `Ctrl+Z` and `Ctrl+Shift+Z` follow the active project's operation journal, including painting and texture assignment.
 - After creating a Paint Selection, switch its tool option to **Pixel Transform**. Choose **Move** and drag selected pixels in the 2D texture view; toggle **Copy Pixels** first to drag a duplicate. The left/right 90° buttons rotate in fixed steps. **Rotate** mode snaps dragging to 90° unless **Free Rotation** is enabled. Create masks in either view, but transform pixels in the 2D texture view.
 
@@ -477,6 +484,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - The operation journal also preserves texture folders, bulk face assignment by dragging textures onto a model, and the redo branch actually traversed by the user. Only one app window may write a given working project at a time. If an operation snapshot is missing or damaged, navigation stops at that boundary and preserves the current model.
 - Opening a saved project compares its UUID and history with same-path working copies. Matching histories reuse the appropriate working state; diverged histories prompt the user to open separately or replace the working copy without silently overwriting the source file.
 - `.bbmodel`: Blockbench import and export. Procedural objects and modifiers are expanded into compatible cube/group data during export.
+- `.cbcmap`: portable JSON for one palette's colors, gradient spacing, and color-space curve. The file contains no palette name or local ID; the full in-app palette library persists separately from model projects.
 - Built-in project types cover generic models, images, and several Minecraft Java, Bedrock, modded-entity, skin, and GeckoLib workflows. Editors that are not implemented yet are clearly marked as placeholders.
 
 ### Recovering a working journal

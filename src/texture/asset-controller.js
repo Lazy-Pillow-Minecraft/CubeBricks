@@ -3,6 +3,7 @@ import { formatRules } from '../common/core/format-constraints.js';
 import { createListDragAutoScroll } from '../screen/list-drag-scroll.js';
 import { verticalDropTarget } from '../screen/vertical-drop.js';
 import { createLayerEditorDialog } from './layer-editor-dialog.js';
+import { tonePaletteSnapshot } from './tone-palette.js';
 
 const CUBE_FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
 let textureClipboard = null;
@@ -19,6 +20,7 @@ export function createTextureAssetController({
   invalidateAllRenderGeometry, registerGeneratedTexture, renderScene,
   updateTexturePreviewFrame, syncRendererTexture, selectedElementUids,
   activeSnapSubdivisions, renderTexture,
+  paletteRows, samplePaletteGradient,
   noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp
 }) {
 let textureLoadRevision = 0;
@@ -27,7 +29,8 @@ const layerRefreshRevision = new WeakMap();
 let layerDrag = null;
 let layerDragBound = false;
 let layerEditSession = null;
-const layerEditor = createLayerEditorDialog({ $, activeTextureAsset, toast,
+let paletteRefreshTimer = null;
+const layerEditor = createLayerEditorDialog({ $, activeTextureAsset, toast, paletteRows, samplePaletteGradient,
   onPropertyInput(layer, property, next) {
     const asset = activeTextureAsset();
     if (!asset || layer[property] === next) return;
@@ -47,7 +50,33 @@ function finishLayerEdit() {
   const session = layerEditSession;
   if (!session) return;
   layerEditSession = null;
-  refreshLayeredTexture(session.asset).catch(error => toast(error.message));
+  refreshLayeredTexture(session.asset).then(() => {
+    renderTextureFeatureControls();
+    layerEditor.render();
+  }).catch(error => toast(error.message));
+}
+
+function syncToneMappedPalettes() {
+  if (paletteRefreshTimer !== null) clearTimeout(paletteRefreshTimer);
+  paletteRefreshTimer = setTimeout(() => {
+    paletteRefreshTimer = null;
+    for (const asset of state.textureAssets) {
+      let changed = false;
+      for (const layer of asset.layers || []) {
+        if (layer.blendMode !== 'tone_map' || !layer.toneMap?.paletteId) continue;
+        const row = paletteRows.find(entry => entry.id === layer.toneMap.paletteId);
+        const current = tonePaletteSnapshot(row, samplePaletteGradient);
+        if (!current) continue; // Keep the saved colors when a local palette is unavailable.
+        if (layer.toneMap.paletteType === current.paletteType
+          && JSON.stringify(layer.toneMap.paletteSamples) === JSON.stringify(current.paletteSamples)) continue;
+        if (!changed) pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
+        Object.assign(layer.toneMap, { paletteType: current.paletteType, paletteSamples: current.paletteSamples });
+        changed = true;
+      }
+      if (changed) refreshLayeredTexture(asset).catch(error => toast(error.message));
+    }
+    layerEditor.render();
+  }, 80);
 }
 
 function textureUid(asset = {}) {
@@ -206,6 +235,11 @@ function showEditableLayer(asset, fallback = null) {
   textureCtx.imageSmoothingEnabled = false;
   textureCtx.clearRect(0, 0, textureCanvas.width, textureCanvas.height);
   if (editable) textureCtx.drawImage(editable, 0, 0);
+}
+
+function discardMissingLayerMasks(asset) {
+  const remaining = new Set(asset.layers.map(layer => layer.uid));
+  for (const layer of asset.layers) if (layer.maskLayerUid && !remaining.has(layer.maskLayerUid)) layer.maskLayerUid = null;
 }
 
 async function ensureTextureLayers(asset) {
@@ -448,9 +482,11 @@ function renderTextureFeatureControls() {
     if (!group) return;
     for (const child of asset.layers) if (child.parentUid === group.uid) child.parentUid = group.parentUid || null;
     asset.layers = asset.layers.filter(layer => layer.uid !== group.uid);
+    discardMissingLayerMasks(asset);
     if (asset.activeLayerUid === group.uid) asset.activeLayerUid = activeLayer(asset)?.uid || null;
   }).catch(error => toast(error.message))));
   const selectLayer = uid => {
+    root.focus({ preventScroll: true });
     if (asset.activeLayerUid === uid) return;
     finishLayerEdit();
     asset.activeLayerUid = uid;
@@ -487,6 +523,7 @@ function renderTextureFeatureControls() {
   })));
   $$('[data-layer-delete]', root).forEach(button => button.addEventListener('click', () => mutate(() => {
     asset.layers = asset.layers.filter(layer => layer.uid !== button.dataset.layerDelete);
+    discardMissingLayerMasks(asset);
     asset.activeLayerUid = activeLayer(asset)?.uid;
   })));
 
@@ -592,6 +629,32 @@ function removeTexture(asset = activeTextureAsset(), operation = 'core.texture.d
   rebuildTextureAtlas();
   markDirty();
   renderScene();
+  return true;
+}
+
+async function removeActiveLayer() {
+  const asset = activeTextureAsset();
+  const selected = selectedLayerEntry(asset);
+  if (!asset || !selected) return false;
+  pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
+  const removed = selected.type === 'group'
+    ? new Set([selected.uid, ...layerDescendantUids(asset.layers, selected.uid)])
+    : new Set([selected.uid]);
+  asset.layers = asset.layers.filter(layer => !removed.has(layer.uid));
+  discardMissingLayerMasks(asset);
+  if (!asset.layers.some(layer => layer.type !== 'group')) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, asset.uvWidth || textureCanvas.width);
+    canvas.height = Math.max(1, asset.uvHeight || textureCanvas.height);
+    const replacement = { uid: crypto.randomUUID(), name: '底圖', source: canvas.toDataURL('image/png'),
+      visible: true, opacity: 100, blendMode: 'normal' };
+    layerRasterCache.set(replacement.uid, { canvas, savedSource: replacement.source });
+    asset.layers.push(replacement);
+  }
+  asset.activeLayerUid = activeLayer(asset)?.uid || null;
+  await refreshLayeredTexture(asset);
+  renderTextureFeatureControls();
+  layerEditor.render();
   return true;
 }
 
@@ -822,6 +885,7 @@ return {
   get pendingTextureImage() { return pendingTextureImage; },
   set pendingTextureImage(value) { pendingTextureImage = value; },
   textureUid, renderTextureList, addTextureGroup, updateLayerCompositePreview, renderTextureTileControls, refreshDerivedTileEntries, scheduleTextureAnimation, textureAssetForReference, isFaceTiled, remapNumericFaceTextureReferences, loadTextureAssetImage, createSimpleTexture, updateTextureCreateDialog, openTextureCreateDialog, importTexture, loadTextureSource, installProjectTextures, activateProjectTexture, invalidateUvPreviewTextureState,
-  copyTexture, cutTexture, pasteTexture, removeTexture
+  copyTexture, cutTexture, pasteTexture, removeTexture, removeActiveLayer,
+  syncToneMappedPalettes
 };
 }

@@ -7,11 +7,38 @@ export function createTexturePaintPointerController({
   blendRgbaPixel, paintToolOpacity, commitPaintedTextureAsset,
   queuePaintedTextureSync, syncPaintedTextureNow, clearPaintGradientSelection,
   activeTextureAsset, paintPointFromEvent, paintPointInside,
-  textureUvHit, allTextureUvEntriesForAsset, applyTextureBucket,
+  textureUvHit, allTextureUvEntriesForAsset, applyTextureBucket, finishTextureBucketStroke,
   setPaintColor, updateToolOptions, clamp, replayTexturePaintPoints,
   drawPaintShape, drawPaintSegment, finishTexturePaintDrag
 }) {
 let texturePaintDrag = null;
+function queueBucketAt(drag, clientX, clientY) {
+  const point = paintPointFromEvent({ clientX, clientY });
+  if (!paintPointInside(point)) return;
+  const logicalPoint = [point[0] * (drag.asset.uvWidth || textureCanvas.width) / textureCanvas.width,
+    point[1] * (drag.asset.uvHeight || textureCanvas.height) / textureCanvas.height];
+  const hit = textureUvHit(drag.entries, logicalPoint);
+  const scope = state.paintBucketScope;
+  if (['face', 'element'].includes(scope) && !hit) return;
+  const key = scope === 'element' ? `element:${hit.cube.uid}`
+    : scope === 'face' ? `face:${hit.cube.uid}:${hit.faceName}`
+      : `pixel:${point[0]}:${point[1]}`;
+  if (drag.seen.has(key)) return;
+  drag.seen.add(key);
+  drag.queue = drag.queue.then(() => applyTextureBucket(drag.asset, point, hit, drag.history))
+    .catch(error => toast(error.message));
+}
+
+function queueBucketPath(drag, clientX, clientY) {
+  const previous = drag.lastClient;
+  const steps = Math.max(1, Math.min(256, Math.ceil(Math.hypot(clientX - previous[0], clientY - previous[1]) / 4)));
+  for (let index = 1; index <= steps; index++) {
+    const ratio = index / steps;
+    queueBucketAt(drag, previous[0] + (clientX - previous[0]) * ratio,
+      previous[1] + (clientY - previous[1]) * ratio);
+  }
+  drag.lastClient = [clientX, clientY];
+}
 function useTexturePaintGradient(asset, point, hit) {
   if (state.paintGradientMode === 'volume') {
     toast('體漸變需要在三維視圖的同一個 Cube 上選取兩點');
@@ -70,7 +97,14 @@ function startTexturePaintPointer(event) {
     return;
   }
   if (state.tool === 'fill') {
-    applyTextureBucket(asset, point, hit);
+    texturePaintDrag = {
+      pointerId: event.pointerId, tool: 'fill', asset,
+      entries: allTextureUvEntriesForAsset(asset), seen: new Set(), queue: Promise.resolve(),
+      history: { group: crypto.randomUUID(), assets: new Set() },
+      lastClient: [event.clientX, event.clientY]
+    };
+    $('#texturePreview').setPointerCapture(event.pointerId);
+    queueBucketAt(texturePaintDrag, event.clientX, event.clientY);
     return;
   }
   if (state.tool === 'eyedropper') {
@@ -98,6 +132,10 @@ function startTexturePaintPointer(event) {
 
 function moveTexturePaintPointer(event) {
   if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
+  if (texturePaintDrag.tool === 'fill') {
+    queueBucketPath(texturePaintDrag, event.clientX, event.clientY);
+    return true;
+  }
   let point = paintPointFromEvent(event);
   const outside = !paintPointInside(point);
   if (outside && texturePaintDrag.last && !PAINT_SHAPE_TOOLS.includes(texturePaintDrag.tool)) {
@@ -124,10 +162,16 @@ function endTexturePaintPointer(event) {
   if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
   const drag = texturePaintDrag;
   if (drag.ready && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) moveTexturePaintPointer(event);
+  if (drag.tool === 'fill' && Number.isFinite(event.clientX) && Number.isFinite(event.clientY))
+    queueBucketPath(drag, event.clientX, event.clientY);
   texturePaintDrag = null;
   const preview = $('#texturePreview');
   if (preview.hasPointerCapture?.(event.pointerId)) preview.releasePointerCapture(event.pointerId);
   drag.ended = true;
+  if (drag.tool === 'fill') {
+    drag.queue.then(() => finishTextureBucketStroke(drag.history)).catch(error => toast(error.message));
+    return true;
+  }
   // A lost capture ends at the last received sample. Keeping that partial
   // stroke is safer than leaving the canvas and texture asset out of sync.
   if (drag.ready) finishTexturePaintDrag(drag);

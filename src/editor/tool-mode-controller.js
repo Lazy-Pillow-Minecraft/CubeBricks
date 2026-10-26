@@ -153,6 +153,8 @@ function updateToolOptions() {
   $('#knifeStatus').hidden = state.tool !== 'knife';
   $('#paintToolOptions').hidden = !paintTool && state.tool !== 'paintSelection';
   $('#paintShapeModeControl').hidden = !['line', 'rectangle', 'ellipse'].includes(state.tool);
+  $('#paintShapeFillControl').hidden = !['rectangle', 'ellipse'].includes(state.tool);
+  $('#paintShapeFilled').checked = state.paintShapeFilled;
   $('#paintSelectionModeControl').hidden = state.tool !== 'paintSelection';
   $('#paintSelectionBrushControl').hidden = state.tool !== 'paintSelection' || state.paintSelectionMode !== 'brush';
   $('#paintSelectionSymmetryControl').hidden = state.tool !== 'paintSelection';

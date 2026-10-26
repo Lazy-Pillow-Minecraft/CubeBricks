@@ -88,10 +88,13 @@ function onPointerDown(event) {
   const handleOwner = isBezierElement(activeCurve) || activeCurve?.type === 'node' ? activeCurve : null;
   const nodeHit = isBezierElement(activeCurve) && !isEffectivelyLocked(activeCurve.uid)
     ? sceneRenderer.pickCurveNode(state.project, activeCurve.uid, x, y) : null;
-  const unselectedNodeHit = isBezierElement(activeCurve) && !isEffectivelyLocked(activeCurve.uid)
-    ? sceneRenderer.pickCurveNode(state.project, activeCurve.uid, x, y, 14, state.selectedCurveNodeIndex) : null;
+  const unselectedNodeHit = sceneRenderer.pickUnselectedCurveNode(state.project, x, y,
+    isBezierElement(activeCurve) ? activeCurve.uid : null, state.selectedCurveNodeIndex,
+    14, uid => !isEffectivelyLocked(uid));
   const selectCurveNode = hit => {
     event.preventDefault();
+    if (isEffectivelyLocked(hit.uid)) return;
+    if (hit.uid !== activeCurve?.uid) selectItem(hit.uid, { revealInOutliner: true });
     state.selectedModifierUid = null;
     state.selectedCurveNodeIndex = hit.index;
     state.outlinerWindowStart = -1;

@@ -307,7 +307,7 @@ function curveEditorOverlayMarkup(curve) {
     const point = projectViewportPoint(entry.point);
     if (point.behind || point.depth < -1 || point.depth > 1) return '';
     const active = entry.index === state.selectedCurveNodeIndex ? ' active' : '';
-    return `<g class="curve-node-marker${active}" aria-label="曲線節點">
+    return `<g class="curve-node-marker${active}" data-curve-node-index="${entry.index}" aria-label="曲線節點">
       <path class="curve-node-marker-cross" d="M${point.x - 12},${point.y} H${point.x + 12} M${point.x},${point.y - 12} V${point.y + 12}"/>
       <path class="curve-node-marker-ring" d="M${point.x},${point.y - 8} L${point.x + 8},${point.y} L${point.x},${point.y + 8} L${point.x - 8},${point.y} Z"/>
       <circle class="curve-node-marker-core" cx="${point.x}" cy="${point.y}" r="2.8"/>

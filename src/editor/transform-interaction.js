@@ -278,10 +278,22 @@ function onPointerMove(event) {
   if (!state.dragging) {
     const curve = selected();
     const rect = sceneCanvas.getBoundingClientRect();
-    const handle = (isBezierElement(curve) || curve?.type === 'node') && !isEffectivelyLocked(curve.uid)
-      ? sceneRenderer.pickCurveHandle(state.project, curve.uid, event.clientX - rect.left, event.clientY - rect.top, null)
+    const x = event.clientX - rect.left, y = event.clientY - rect.top;
+    const unselectedNode = isBezierElement(curve) && !isEffectivelyLocked(curve.uid)
+      ? sceneRenderer.pickUnselectedCurveNode(state.project, x, y,
+        curve.uid, state.selectedCurveNodeIndex, 14)
       : null;
+    const handle = !unselectedNode && (isBezierElement(curve) || curve?.type === 'node') && !isEffectivelyLocked(curve.uid)
+      ? sceneRenderer.pickCurveHandle(state.project, curve.uid, x, y, null)
+      : null;
+    const node = unselectedNode || (!handle && isBezierElement(curve) && !isEffectivelyLocked(curve.uid)
+      ? sceneRenderer.pickCurveNode(state.project, curve.uid, x, y, 14, null) : null);
+    const nodeSelectable = Boolean(node);
+    sceneCanvas.classList.toggle('is-curve-node-hover', nodeSelectable);
     sceneCanvas.classList.toggle('is-curve-handle-hover', Boolean(handle));
+    $('#transformGizmo').querySelectorAll('.curve-node-marker').forEach(marker => {
+      marker.classList.toggle('hover', nodeSelectable && Number(marker.dataset.curveNodeIndex) === node.index);
+    });
     return;
   }
   const dx = event.clientX - state.dragging.x;
@@ -491,7 +503,7 @@ function endPointerDrag(event) {
   if (finishedDrag.type === 'curve-handle') {
     if (finishedDrag.snapshotTaken) renderInspector();
     $('#transformTooltip').hidden = true;
-    sceneCanvas.classList.remove('is-curve-handle', 'is-curve-handle-hover');
+    sceneCanvas.classList.remove('is-curve-handle', 'is-curve-handle-hover', 'is-curve-node-hover');
     renderScene();
     return;
   }

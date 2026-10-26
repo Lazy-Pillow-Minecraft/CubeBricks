@@ -1916,6 +1916,17 @@ export class WebGLSceneRenderer {
     return closest;
   }
 
+  pickUnselectedCurveNode(project, screenX, screenY, selectedUid = null, selectedIndex = null, radius = 20, canPick = null) {
+    // Only the selected curve has node markers on screen. Invisible markers
+    // must never intercept a click meant for a transform handle or the curve.
+    if (!selectedUid) return null;
+    const curve = project.getNode(selectedUid);
+    if (!['bezier2d', 'bezier3d'].includes(curve?.type) || curve.visible === false
+      || project.getGroupChain(curve.uid).some(group => group.visible === false)
+      || canPick && !canPick(curve.uid)) return null;
+    return this.pickCurveNode(project, curve.uid, screenX, screenY, radius, selectedIndex);
+  }
+
   getCurveHandleWorldPoints(project, uid, nodeIndex = null) {
     const curve = project.getNode(uid);
     if (!curve) return [];

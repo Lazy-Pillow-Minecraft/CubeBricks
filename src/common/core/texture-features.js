@@ -1,4 +1,5 @@
-import { blendLayerImageData, LAYER_BLEND_MODES } from './layer-blend.js';
+import { applyLayerMaskPixels, blendLayerImageData, LAYER_BLEND_MODES } from './layer-blend.js';
+import { mapLayerTonePixels } from './layer-tone-map.js';
 
 export const layerRasterCache = new Map();
 
@@ -185,8 +186,53 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null) {
   canvas.height = Math.max(1, liveCanvas?.height || Math.max(0, ...rasters.map(raster => raster.height)) || asset.uvHeight || 16);
   const context = canvas.getContext('2d');
   const groups = new Set(asset.layers.filter(layer => layer.type === 'group').map(layer => layer.uid));
-  function blend(context, layer, raster) {
+  const entries = new Map(asset.layers.map(layer => [layer.uid, layer]));
+  const blankCanvas = () => {
+    const result = document.createElement('canvas');
+    result.width = canvas.width; result.height = canvas.height;
+    return result;
+  };
+  function maskRaster(uid, trail) {
+    const source = entries.get(uid);
+    if (!source || trail.has(uid)) return null;
+    const output = blankCanvas();
+    const sourceTrail = new Set([...trail, uid]);
+    if (source.type === 'group') {
+      const children = blankCanvas();
+      renderChildren(uid, children.getContext('2d'), new Set([uid]), true, sourceTrail);
+      blend(output.getContext('2d'), source, children, sourceTrail);
+    } else {
+      blend(output.getContext('2d'), source, layerRasterCache.get(uid)?.canvas, sourceTrail);
+    }
+    return output;
+  }
+  function blend(context, layer, raster, trail = new Set()) {
     if (!raster) return;
+    if (layer.maskLayerUid) {
+      const mask = maskRaster(layer.maskLayerUid, new Set([...trail, layer.uid]));
+      if (mask) {
+        const clipped = blankCanvas();
+        const clippedContext = clipped.getContext('2d');
+        clippedContext.drawImage(raster, 0, 0);
+        const pixels = clippedContext.getImageData(0, 0, canvas.width, canvas.height);
+        const maskPixels = mask.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        applyLayerMaskPixels(pixels.data, maskPixels.data);
+        clippedContext.putImageData(pixels, 0, 0);
+        raster = clipped;
+      }
+    }
+    if (layer.blendMode === 'tone_map') {
+      const mapped = document.createElement('canvas');
+      mapped.width = canvas.width; mapped.height = canvas.height;
+      const mappedContext = mapped.getContext('2d');
+      mappedContext.drawImage(raster, 0, 0);
+      const pixels = mappedContext.getImageData(0, 0, mapped.width, mapped.height);
+      mapLayerTonePixels(pixels.data, layer.toneMap);
+      mappedContext.putImageData(pixels, 0, 0);
+      context.globalAlpha = Math.max(0, Math.min(1, Number(layer.opacity ?? 100) / 100));
+      context.drawImage(mapped, 0, 0);
+      return;
+    }
     if (!layer.blendMode || layer.blendMode === 'normal') {
       context.globalAlpha = Math.max(0, Math.min(1, Number(layer.opacity ?? 100) / 100));
       context.drawImage(raster, 0, 0);
@@ -208,17 +254,16 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null) {
     blendLayerImageData(lower.data, upper.data, layer.opacity ?? 100, layer.blendMode);
     context.putImageData(lower, 0, 0);
   }
-  function renderChildren(parentUid, context, ancestors = new Set()) {
+  function renderChildren(parentUid, context, ancestors = new Set(), ignoreVisibility = false, trail = new Set()) {
     for (const layer of asset.layers) {
       if ((groups.has(layer.parentUid) ? layer.parentUid : null) !== parentUid) continue;
       if (layer.type === 'group') {
         if (ancestors.has(layer.uid)) continue;
-        if (layer.visible === false) continue;
-        const nested = document.createElement('canvas');
-        nested.width = canvas.width; nested.height = canvas.height;
-        renderChildren(layer.uid, nested.getContext('2d'), new Set([...ancestors, layer.uid]));
-        blend(context, layer, nested);
-      } else if (layer.visible !== false) blend(context, layer, layerRasterCache.get(layer.uid)?.canvas);
+        if (!ignoreVisibility && layer.visible === false) continue;
+        const nested = blankCanvas();
+        renderChildren(layer.uid, nested.getContext('2d'), new Set([...ancestors, layer.uid]), ignoreVisibility, trail);
+        blend(context, layer, nested, trail);
+      } else if (ignoreVisibility || layer.visible !== false) blend(context, layer, layerRasterCache.get(layer.uid)?.canvas, trail);
     }
   }
   renderChildren(rootUid, context);

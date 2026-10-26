@@ -103,7 +103,8 @@ const palette = createPaletteController({
   renderPaintGradientPreview, setPaintColor,
   updatePaintColorPickerVisual: (...args) => updatePaintColorPickerVisual(...args),
   renderPaintColorPicker: (...args) => renderPaintColorPicker(...args),
-  renderInspector, toast, selected, noteJournalOperation, markDirty, renderAll
+  renderInspector, toast, selected, noteJournalOperation, markDirty, renderAll,
+  onPaletteChange: () => textureAssetController?.syncToneMappedPalettes()
 });
 const { paletteRows, renderPalette, renderPaintColorHistory, recordPaintColorHistory,
   syncPaletteSelectionToPaintColor, samplePaletteGradient, addPaletteRow,
@@ -490,6 +491,7 @@ function drawPaintShape(...args) { return paintStrokeController.drawPaintShape(.
 function paintUvBounds(...args) { return paintStrokeController.paintUvBounds(...args); }
 function allTextureUvEntriesForAsset(...args) { return paintStrokeController.allTextureUvEntriesForAsset(...args); }
 function applyTextureBucket(...args) { return paintStrokeController.applyTextureBucket(...args); }
+function finishTextureBucketStroke(...args) { return paintStrokeController.finishTextureBucketStroke(...args); }
 function pushTexturePaintHistory(...args) { return paintStrokeController.pushTexturePaintHistory(...args); }
 function commitPaintedTextureAsset(...args) { return paintStrokeController.commitPaintedTextureAsset(...args); }
 function replayTexturePaintPoints(...args) { return paintStrokeController.replayTexturePaintPoints(...args); }
@@ -501,7 +503,7 @@ const texturePaintPointerController = createTexturePaintPointerController({
   blendRgbaPixel, paintToolOpacity, commitPaintedTextureAsset,
   queuePaintedTextureSync, syncPaintedTextureNow, clearPaintGradientSelection,
   activeTextureAsset, paintPointFromEvent, paintPointInside,
-  textureUvHit, allTextureUvEntriesForAsset, applyTextureBucket,
+  textureUvHit, allTextureUvEntriesForAsset, applyTextureBucket, finishTextureBucketStroke,
   setPaintColor, updateToolOptions, clamp, replayTexturePaintPoints,
   drawPaintShape, drawPaintSegment, finishTexturePaintDrag
 });
@@ -532,7 +534,7 @@ const scenePaintController = createScenePaintController({
   hexToRgb, paintSymmetryRelatedHits, paintSymmetryFaceKey,
   pushTexturePaintHistory, paintUvBounds, commitPaintedTextureAsset,
   queuePaintedTextureSync, syncPaintedTextureNow, drawPaintSegment,
-  drawPaintShape, paintFaceDepthNeighbors, applyTextureBucket,
+  drawPaintShape, paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
   loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
   activateProjectTexture, sampleReferenceImage: referenceImages.sampleReferenceImage
@@ -615,6 +617,7 @@ const textureAssetController = createTextureAssetController({
   invalidateAllRenderGeometry, registerGeneratedTexture, renderScene,
   updateTexturePreviewFrame, syncRendererTexture, selectedElementUids,
   activeSnapSubdivisions, renderTexture,
+  paletteRows, samplePaletteGradient,
   noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp
 });
 function textureUid(...args) { return textureAssetController.textureUid(...args); }
@@ -640,6 +643,7 @@ function copyTexture(...args) { return textureAssetController.copyTexture(...arg
 function cutTexture(...args) { return textureAssetController.cutTexture(...args); }
 function pasteTexture(...args) { return textureAssetController.pasteTexture(...args); }
 function removeTexture(...args) { return textureAssetController.removeTexture(...args); }
+function removeActiveLayer(...args) { return textureAssetController.removeActiveLayer(...args); }
 
 const toolModeController = createToolModeController({
   state, $, $$, inspectorController, exitSubdivisionEdit, renderOutliner,
@@ -778,7 +782,7 @@ const eventBinder = createEventBinder({
   rebuildTextureAtlas, redo, refreshSelectionUi, refreshUvPreview,
   remapNumericFaceTextureReferences, removeOutlinerDragGhost,
   renderAll, renderInspector, renderOutliner, renderOutlinerWindow,
-  renderPaintGradientPreview, renderScene, renderTextureList,
+  renderPaintGradientPreview, renderScene, renderTextureList, removeTexture, removeActiveLayer,
   renderTextureUvOverlay, renderUvPreview, resetTextureView,
   resolveGizmoHandle, round, saveProject, scheduleLockedHover,
   scheduleOutlinerWindow, scheduleSceneRender, scheduleTextureAnimation,
@@ -929,6 +933,7 @@ if (window.cubeBricksDesktop?.onCloseRequested) {
 }
 renderTexture();
 renderPalette();
+void palette.loadPersistedPalettes();
 renderModelFormatPicker();
 modelFormatPicker.bindProjectHome();
 bindEvents();

@@ -84,6 +84,7 @@ export const state = {
   paintSelection: { active: false, masks: new Map() },
   paintSelectionMode: 'rectangle',
   paintShapeTool: 'line',
+  paintShapeFilled: false,
   paintSelectionTransformMode: 'move',
   paintSelectionFreeRotate: false,
   paintSelectionCopy: false,

@@ -13,6 +13,12 @@ export function sceneBrushBranchKey(sourceHit, targetHit, assetUid) {
   return `${sceneBrushHitKey(sourceHit)}=>${sceneBrushHitKey(targetHit)}::${assetUid}::${(targetHit.symmetryPermutation || [0, 1, 2, 3]).join(',')}`;
 }
 
+export function paintDragAcceptsHit(drag, hit) {
+  if (!drag || drag.multiSurface || drag.bucketDrag) return true;
+  return hit.uid === drag.uid && (hit.cubeUid || hit.uid) === (drag.cubeUid || drag.uid)
+    && hit.faceName === drag.faceName;
+}
+
 export function createScenePaintController({
   state, $, sceneCanvas, sceneRenderer, textureCanvas,
   textureAssetForReference, subdivisionPatch, isFaceTiled,
@@ -20,7 +26,7 @@ export function createScenePaintController({
   hexToRgb, paintSymmetryRelatedHits, paintSymmetryFaceKey,
   pushTexturePaintHistory, paintUvBounds, commitPaintedTextureAsset,
   queuePaintedTextureSync, syncPaintedTextureNow, drawPaintSegment,
-  drawPaintShape, paintFaceDepthNeighbors, applyTextureBucket,
+  drawPaintShape, paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
   loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
   activateProjectTexture, sampleReferenceImage
@@ -417,9 +423,7 @@ function scenePaintHit(clientX, clientY, drag = null) {
     hit = hits[0] || sceneRenderer.pickDetailed(state.project, x, y, true);
   }
   if (!hit?.faceName) return null;
-  if (drag && !drag.multiSurface && (hit.uid !== drag.uid
-    || (hit.cubeUid || hit.uid) !== (drag.cubeUid || drag.uid)
-    || hit.faceName !== drag.faceName)) return null;
+  if (!paintDragAcceptsHit(drag, hit)) return null;
   if (hits.length > 1) hit.coincidentHits = hits;
   return hit;
 }
@@ -560,6 +564,10 @@ function queueSceneBrushPointer(drag, clientX, clientY) {
 function finishScenePaintDrag(drag) {
   if (!drag || drag.finished) return;
   drag.finished = true;
+  if (drag.bucketDrag) {
+    drag.queue.then(() => finishTextureBucketStroke(drag.history)).catch(error => toast(error.message));
+    return;
+  }
   if (drag.multiSurface) {
     if (drag.lastPointerSample && drag.latestClient
       && (drag.lastPointerSample.x !== drag.latestClient[0] || drag.lastPointerSample.y !== drag.latestClient[1])) {
@@ -656,6 +664,17 @@ async function finalizeScenePaintShapeSymmetry(drag) {
 function moveScenePaintDrag(event, drag = state.dragging) {
   if (!drag || drag.type !== 'texture-paint-3d') return false;
   drag.latestClient = [event.clientX, event.clientY];
+  if (drag.bucketDrag) {
+    const previous = drag.lastBucketClient;
+    const steps = Math.max(1, Math.min(256, Math.ceil(Math.hypot(event.clientX - previous[0], event.clientY - previous[1]) / 6)));
+    for (let index = 1; index <= steps; index++) {
+      const ratio = index / steps;
+      queueSceneBucketAt(drag, previous[0] + (event.clientX - previous[0]) * ratio,
+        previous[1] + (event.clientY - previous[1]) * ratio);
+    }
+    drag.lastBucketClient = [event.clientX, event.clientY];
+    return true;
+  }
   if (drag.multiSurface) {
     queueSceneBrushPointer(drag, event.clientX, event.clientY);
     return true;
@@ -672,6 +691,38 @@ function moveScenePaintDrag(event, drag = state.dragging) {
   drag.last = point;
   drag.currentHit = hit;
   return true;
+}
+
+function queueSceneBucketAt(drag, clientX, clientY) {
+  const hit = scenePaintHit(clientX, clientY, drag);
+  if (!hit) return;
+  if (state.paintBucketScope === 'face' || state.paintBucketScope === 'element') {
+    const target = facePaintTarget(hit);
+    if (!target) return;
+    const key = state.paintBucketScope === 'element' ? `element:${target.cube.uid}`
+      : `face:${target.cube.uid}:${target.faceName}`;
+    if (drag.seen.has(key)) return;
+  }
+  drag.queue = drag.queue.then(async () => {
+    for (const paintHit of paintSymmetryRelatedHits(hit)) {
+      const target = facePaintTarget(paintHit);
+      if (!target) continue;
+      const cached = drag.history.canvases?.get(target.asset._uid);
+      const result = cached
+        ? { canvas: cached.canvas, context: cached.canvas.getContext('2d') }
+        : await paintCanvasForAsset(target.asset);
+      const point = result && facePaintUvPoint(paintHit, target, result.canvas);
+      if (!point) continue;
+      const scope = state.paintBucketScope;
+      const key = scope === 'element' ? `element:${target.cube.uid}`
+        : scope === 'face' ? `face:${target.cube.uid}:${target.faceName}`
+          : `pixel:${target.asset._uid}:${point[0]}:${point[1]}`;
+      if (drag.seen.has(key)) continue;
+      drag.seen.add(key);
+      await applyTextureBucket(target.asset, point,
+        { cube: target.cube, faceName: target.faceName }, drag.history);
+    }
+  }).catch(error => toast(error.message));
 }
 
 function startScenePaintPointer(event, x, y) {
@@ -717,28 +768,22 @@ function startScenePaintPointer(event, x, y) {
     return true;
   }
   const target = facePaintTarget(hit);
-  if (!target) {
+  if (!target && state.tool !== 'fill') {
     toast(hit?.faceName ? '這個面尚未分配貼圖，無法繪製' : '請指向一個 Cube 面');
     return true;
   }
   event.preventDefault();
   if (state.tool === 'fill') {
-    (async () => {
-      const related = paintSymmetryRelatedHits(hit);
-      const seen = new Set();
-      for (const paintHit of related) {
-        const paintTarget = facePaintTarget(paintHit);
-        if (!paintTarget) continue;
-        const key = state.paintBucketScope === 'element'
-          ? paintTarget.cube.uid
-          : `${paintTarget.asset._uid}:${paintTarget.cube.uid}:${paintTarget.faceName}:${['color', 'contiguous'].includes(state.paintBucketScope) ? (paintHit.symmetryPermutation || [0, 1, 2, 3]).join(',') : 'face'}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const result = await paintCanvasForAsset(paintTarget.asset);
-        const point = result && facePaintUvPoint(paintHit, paintTarget, result.canvas);
-        if (point) await applyTextureBucket(paintTarget.asset, point, { cube: paintTarget.cube, faceName: paintTarget.faceName });
-      }
-    })();
+    if (hit?.faceName && !target) toast('這個面尚未分配貼圖，無法繪製');
+    sceneCanvas.setPointerCapture(event.pointerId);
+    const drag = {
+      type: 'texture-paint-3d', bucketDrag: true, pointerId: event.pointerId, tool: 'fill',
+      ready: true, latestClient: [event.clientX, event.clientY],
+      lastBucketClient: [event.clientX, event.clientY], seen: new Set(), queue: Promise.resolve(),
+      history: { group: crypto.randomUUID(), assets: new Set() }
+    };
+    state.dragging = drag;
+    queueSceneBucketAt(drag, event.clientX, event.clientY);
     return true;
   }
   if (state.tool === 'eyedropper') {

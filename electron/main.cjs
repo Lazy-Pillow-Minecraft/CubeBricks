@@ -15,6 +15,7 @@ const workspaceCatalogs = new Map();
 const workspaceCatalogWrites = new Map();
 const journalOwnership = new JournalOwnership();
 const workspaceSettingsPath = () => path.join(app.getPath('userData'), 'project-workspace.json');
+const colorMapSettingsPath = () => path.join(app.getPath('userData'), 'palettes.cbcmap');
 const retainedTabsPath = () => path.join(app.getPath('userData'), 'retained-project-tabs.json');
 const coverPath = id => path.join(app.getPath('userData'), 'project-covers', `${safeSessionId(id)}.png`);
 const pendingExternalProjects = [];
@@ -775,6 +776,52 @@ ipcMain.handle('project:export', async (_event, payload) => {
     });
   } else await atomicWrite(filePath, payload.bbmodelContent);
   return { filePath, extension };
+});
+
+function validatedColorMap(content) {
+  if (typeof content !== 'string' || Buffer.byteLength(content, 'utf8') > 2 * 1024 * 1024)
+    throw new Error('色卡檔案不能超過 2 MB');
+  const value = JSON.parse(content);
+  if (value?.format !== 'cubebricks-color-map' || value.version !== 1
+    || !Array.isArray(value.palettes) || value.palettes.length < 1 || value.palettes.length > 256)
+    throw new Error('色卡檔案格式無效');
+  return content;
+}
+let colorMapSaveQueue = Promise.resolve();
+ipcMain.handle('palette:load', async () => {
+  try {
+    const filePath = colorMapSettingsPath();
+    if ((await fs.stat(filePath)).size > 2 * 1024 * 1024) throw new Error('色卡檔案不能超過 2 MB');
+    return await fs.readFile(filePath, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+});
+ipcMain.handle('palette:save', (_event, content) => {
+  const data = validatedColorMap(content);
+  colorMapSaveQueue = colorMapSaveQueue.catch(() => {}).then(() => atomicWrite(colorMapSettingsPath(), data));
+  return colorMapSaveQueue;
+});
+ipcMain.handle('palette:export', async (_event, payload) => {
+  const data = String(payload?.content || '');
+  if (Buffer.byteLength(data, 'utf8') > 2 * 1024 * 1024) throw new Error('色卡檔案不能超過 2 MB');
+  const value = JSON.parse(data);
+  if (value?.format !== 'cubebricks-color-map' || value.version !== 1 || !value.palette
+    || typeof value.palette !== 'object' || Array.isArray(value.palette)
+    || Object.hasOwn(value.palette, 'name') || Object.hasOwn(value.palette, 'id'))
+    throw new Error('單張色卡檔案格式無效');
+  const filename = path.basename(String(payload?.filename || 'color-map.cbcmap'))
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+  const picked = await dialog.showSaveDialog({
+    title: '導出色卡', defaultPath: filename,
+    filters: [{ name: 'CubeBricks 色卡', extensions: ['cbcmap'] }]
+  });
+  if (picked.canceled || !picked.filePath) return null;
+  const filePath = path.extname(picked.filePath).toLowerCase() === '.cbcmap'
+    ? picked.filePath : `${picked.filePath}.cbcmap`;
+  await atomicWrite(filePath, data);
+  return { filePath };
 });
 
 function capturePngBuffer(dataUrl) {

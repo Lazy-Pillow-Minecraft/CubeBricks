@@ -113,7 +113,7 @@ assert.deepEqual(normalizeTextureLayers({ uuid: 'texture', layers: [
   }
 }
 assert.deepEqual(LAYER_BLEND_MODES.map(([key]) => key),
-  ['normal', 'multiply', 'screen', 'add', 'subtract', 'hue', 'value', 'saturation', 'grayscale']);
+  ['normal', 'multiply', 'screen', 'add', 'subtract', 'hue', 'value', 'saturation', 'grayscale', 'tone_map']);
 assert.deepEqual(blendLayerRgb([20, 100, 200], [200, 50, 10], 'multiply').map(Math.round), [16, 20, 8]);
 assert.deepEqual(blendLayerRgb([20, 100, 200], [200, 50, 10], 'screen').map(Math.round), [204, 130, 202]);
 assert.deepEqual(blendLayerRgb([20, 100, 200], [200, 50, 10], 'add'), [220, 150, 210]);

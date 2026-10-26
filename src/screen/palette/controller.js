@@ -1,52 +1,130 @@
 import { ColorSpaceCurveViewport, changeColorSpaceMode, colorAtPosition, colorSpaceArcLengthPositions, colorSpaceGradientCss, constrainColorPosition, createColorSpaceCurve, equalGradientPositions, gradientRatioToUniform, positionForColor, sampleColorSpaceGradient, sampleColorSpacePosition } from '../color-space-gradient.js';
 import { insetControlRatio, insetControlPosition } from '../color-picker/math.js';
 import { pickerSession } from '../color-picker/session.js';
+import { COLOR_MAP_MAX_BYTES, decodeColorMap, decodePaletteFile, encodeColorMap, encodePaletteFile } from './color-map-file.js';
 
 export function createPaletteController({ state, $, $$, clamp, escapeHtml, escapeAttribute, hexToRgb,
   snapshot, renderPaintGradientPreview, setPaintColor, updatePaintColorPickerVisual,
-  renderPaintColorPicker, renderInspector, toast, selected, noteJournalOperation, markDirty, renderAll }) {
+  renderPaintColorPicker, renderInspector, toast, selected, noteJournalOperation, markDirty, renderAll, onPaletteChange }) {
 const paletteRows = [
   { id: crypto.randomUUID(), name: '苔原', gradient: false, marker: .5, colors: ['#172016','#273522','#3a4d2c','#526b35','#708d42','#91ad52','#b4ce68','#d3e18b','#e9efb3','#f5f5da','#c8a85a','#a77a3f','#76502f','#463324'] },
   { id: crypto.randomUUID(), name: '深潭', gradient: false, marker: .5, colors: ['#11191b','#1d2a29','#2b403a','#3b5b4c','#4b7560','#629178','#7aaf91','#9bc9aa','#c3dfc9','#f1f3dd','#8baab2','#587989','#365261','#263640'] },
   { id: crypto.randomUUID(), name: '暖岩', gradient: false, marker: .5, colors: ['#22191b','#402329','#663233','#8b443b','#b65e48','#d9805a','#eca875','#f6d09b','#f4e4c2','#8b705b','#66503e','#48382f','#2f2926','#1c1d19'] }
 ];
 const PALETTE_ROWS_KEY = 'cubebricks.palette-rows.v1';
+const PALETTE_UPDATED_KEY = 'cubebricks.palette-rows-updated.v1';
 const PALETTE_COMPACT_KEY = 'cubebricks.palette-compact.v1';
 let paletteCompact = localStorage.getItem(PALETTE_COMPACT_KEY) === 'true';
-const safePaletteVector = (value, fallback) => Array.from({ length: 3 }, (_, axis) => {
-  const parsed = Number(value?.[axis]);
-  return Number.isFinite(parsed) ? parsed : fallback[axis];
-});
+const storedPaletteTime = Number(localStorage.getItem(PALETTE_UPDATED_KEY));
+let localPaletteUpdatedAt = Number.isFinite(storedPaletteTime) ? storedPaletteTime : 0;
 try {
-  const saved = JSON.parse(localStorage.getItem(PALETTE_ROWS_KEY) || 'null');
-  if (Array.isArray(saved) && saved.length && saved.length <= 256) {
-    const valid = saved.filter(row => row && typeof row.name === 'string' && Array.isArray(row.colors))
-      .map(row => ({
-        id: typeof row.id === 'string' ? row.id : crypto.randomUUID(), name: row.name.slice(0, 100),
-        gradient: Boolean(row.gradient), marker: clamp(Number(row.marker) || 0, 0, 1),
-        colors: row.colors.filter(color => /^#[0-9a-f]{6}$/i.test(color)).slice(0, 256),
-        gradientSegments: ['equal', 'custom', 'curve_length'].includes(row.gradientSegments) ? row.gradientSegments : 'equal',
-        gradientPositions: Array.isArray(row.gradientPositions) ? row.gradientPositions.slice(0, 256).map(value => clamp(Number(value) || 0, 0, 1)) : [],
-        colorSpaceGradient: Boolean(row.colorSpaceGradient),
-        colorSpaceCurve: row.colorSpaceCurve && ['hsv_cube', 'rgb_cube', 'hsv_cylinder'].includes(row.colorSpaceCurve.mode)
-          && Array.isArray(row.colorSpaceCurve.nodes) && row.colorSpaceCurve.nodes.length >= 2
-          ? { mode: row.colorSpaceCurve.mode, revision: 0, nodes: row.colorSpaceCurve.nodes.slice(0, 128).map(entry => {
-            const node = entry && typeof entry === 'object' ? entry : {};
-            return {
-              id: typeof node.id === 'string' ? node.id : crypto.randomUUID(),
-              position: constrainColorPosition(safePaletteVector(node.position, [0, 0, 0]), row.colorSpaceCurve.mode),
-              handleIn: safePaletteVector(node.handleIn, [-.12, 0, 0]),
-              handleOut: safePaletteVector(node.handleOut, [.12, 0, 0]),
-              handlesEnabled: node.handlesEnabled !== false, autoTangent: node.autoTangent !== false,
-              symmetricHandles: node.symmetricHandles !== false
-            };
-          }) } : null
-      }));
-    if (valid.length) paletteRows.splice(0, paletteRows.length, ...valid);
-  }
+  const saved = localStorage.getItem(PALETTE_ROWS_KEY);
+  if (saved) paletteRows.splice(0, paletteRows.length, ...decodeColorMap(saved, { legacy: true }).palettes);
 } catch { /* A damaged optional palette cache must not block startup. */ }
+let lastSavedPalettePayload = JSON.stringify(paletteRows);
+let paletteChangedBeforeDiskLoad = false;
+let diskReady = false;
+let diskSaveTimer = null;
+let diskSaveQueue = Promise.resolve();
+let paletteLoadPromise = null;
+function queueDiskSave() {
+  if (!diskReady || !window.cubeBricksDesktop?.saveColorMap) return;
+  if (diskSaveTimer !== null) clearTimeout(diskSaveTimer);
+  const content = encodeColorMap(paletteRows, localPaletteUpdatedAt);
+  diskSaveTimer = setTimeout(() => {
+    diskSaveTimer = null;
+    diskSaveQueue = diskSaveQueue.catch(() => {}).then(() => window.cubeBricksDesktop.saveColorMap(content))
+      .catch(error => console.warn('色卡保存失敗', error));
+  }, 120);
+}
 function savePaletteRows() {
-  try { localStorage.setItem(PALETTE_ROWS_KEY, JSON.stringify(paletteRows)); } catch { /* Keep editing in memory. */ }
+  const payload = JSON.stringify(paletteRows);
+  if (payload !== lastSavedPalettePayload) {
+    lastSavedPalettePayload = payload;
+    localPaletteUpdatedAt = Math.max(Date.now(), localPaletteUpdatedAt + 1);
+    if (!diskReady) paletteChangedBeforeDiskLoad = true;
+    try {
+      localStorage.setItem(PALETTE_ROWS_KEY, payload);
+      localStorage.setItem(PALETTE_UPDATED_KEY, String(localPaletteUpdatedAt));
+    } catch { /* The desktop file remains another persistence path. */ }
+    queueDiskSave();
+    onPaletteChange?.();
+  }
+}
+function loadPersistedPalettes() {
+  if (!window.cubeBricksDesktop?.loadColorMap) return Promise.resolve();
+  if (!paletteLoadPromise) paletteLoadPromise = (async () => {
+    let loadFailed = false;
+    try {
+      const content = await window.cubeBricksDesktop.loadColorMap();
+      if (content && !paletteChangedBeforeDiskLoad) {
+        const saved = decodeColorMap(content);
+        if (saved.updatedAt >= localPaletteUpdatedAt) {
+          paletteRows.splice(0, paletteRows.length, ...saved.palettes);
+          selectedPaletteRowId = paletteRows[0].id;
+          selectedPaletteColorIndex = null;
+          localPaletteUpdatedAt = saved.updatedAt;
+          lastSavedPalettePayload = JSON.stringify(paletteRows);
+          try {
+            localStorage.setItem(PALETTE_ROWS_KEY, lastSavedPalettePayload);
+            localStorage.setItem(PALETTE_UPDATED_KEY, String(localPaletteUpdatedAt));
+          } catch { /* The desktop file is authoritative. */ }
+          renderPalette();
+          onPaletteChange?.();
+        }
+      }
+    } catch (error) {
+      loadFailed = true;
+      toast(`色卡載入失敗：${error.message}`);
+    } finally {
+      diskReady = true;
+      if (!loadFailed) queueDiskSave();
+    }
+  })();
+  return paletteLoadPromise;
+}
+async function exportColorMap() {
+  try {
+    await loadPersistedPalettes();
+    const selected = paletteRows.find(row => row.id === selectedPaletteRowId);
+    if (!selected) throw new Error('請先選擇色卡');
+    const content = encodePaletteFile(selected);
+    const filename = `${selected.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'color-map'}.cbcmap`;
+    if (window.cubeBricksDesktop?.exportColorMap) {
+      const saved = await window.cubeBricksDesktop.exportColorMap(content, filename);
+      if (saved) toast('色卡已導出');
+      return;
+    }
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) { toast(`導出色卡失敗：${error.message}`); }
+}
+async function importColorMap(file) {
+  if (!file) return;
+  try {
+    await loadPersistedPalettes();
+    if (file.size > COLOR_MAP_MAX_BYTES) throw new Error('色卡檔案不能超過 2 MB');
+    const filename = file.name.replace(/\.cbcmap$/i, '').trim().slice(0, 100) || `匯入色卡 ${paletteRows.length + 1}`;
+    const incoming = decodePaletteFile(await file.text(), filename);
+    if (paletteRows.length + incoming.length > 256) throw new Error('匯入後不能超過 256 行色卡');
+    const names = new Set(paletteRows.map(row => row.name));
+    for (const row of incoming) {
+      const base = row.name;
+      let suffix = 2;
+      while (names.has(row.name)) row.name = `${base} ${suffix++}`;
+      names.add(row.name);
+      row.id = crypto.randomUUID();
+      paletteRows.push(row);
+    }
+    selectedPaletteRowId = incoming[0].id;
+    selectedPaletteColorIndex = null;
+    renderPalette();
+    toast(`已匯入 ${incoming.length} 行色卡`);
+  } catch (error) { toast(`匯入色卡失敗：${error.message}`); }
 }
 function ensureColorSpaceCurve(row) {
   if (!row.colorSpaceCurve) row.colorSpaceCurve = createColorSpaceCurve(row.colors);
@@ -710,6 +788,7 @@ function applyPaletteColor(color, notify = true, recordHistory = true) {
 }
   return {
     paletteRows, renderPalette, renderPaintColorHistory, recordPaintColorHistory,
+    loadPersistedPalettes, exportColorMap, importColorMap,
     syncPaletteSelectionToPaintColor, samplePaletteGradient, addPaletteRow,
     openColorSpaceCurveEditor, addPaintSwatchToSelection, deleteSelectedPaletteColor, applyPaletteColor,
     insertPaletteGradientNode, ensureColorSpaceCurve,

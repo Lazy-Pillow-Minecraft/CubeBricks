@@ -7,8 +7,19 @@ export const LAYER_BLEND_MODES = Object.freeze([
   ['hue', '按色相'],
   ['value', '按明度'],
   ['saturation', '按飽和度'],
-  ['grayscale', '按灰度']
+  ['grayscale', '按灰度'],
+  ['tone_map', '色階映射']
 ]);
+
+// A grayscale mask controls coverage without changing the layer's pixels or
+// its separate blend/opacity settings. Transparent mask pixels hide content.
+export function applyLayerMaskPixels(target, mask) {
+  for (let index = 0; index < target.length; index += 4) {
+    const brightness = (.2126 * mask[index] + .7152 * mask[index + 1] + .0722 * mask[index + 2]) / 255;
+    target[index + 3] = Math.round(target[index + 3] * brightness * mask[index + 3] / 255);
+  }
+  return target;
+}
 
 const limit = value => Math.max(0, Math.min(255, value));
 const luminance = ([r, g, b]) => .2126 * r + .7152 * g + .0722 * b;

@@ -40,7 +40,7 @@ export function createEventBinder({
   rebuildTextureAtlas, redo, refreshSelectionUi, refreshUvPreview,
   remapNumericFaceTextureReferences, removeOutlinerDragGhost,
   renderAll, renderInspector, renderOutliner, renderOutlinerWindow,
-  renderPaintGradientPreview, renderScene, renderTextureList,
+  renderPaintGradientPreview, renderScene, renderTextureList, removeTexture, removeActiveLayer,
   renderTextureUvOverlay, renderUvPreview, resetTextureView,
   resolveGizmoHandle, round, saveProject, scheduleLockedHover,
   scheduleOutlinerWindow, scheduleSceneRender, scheduleTextureAnimation,
@@ -573,6 +573,9 @@ function bindEvents() {
     else if (state.paintToolSettings[state.tool]) state.paintToolSettings[state.tool].size = size;
     event.target.value = String(size);
   });
+  $('#paintShapeFilled').addEventListener('change', event => {
+    state.paintShapeFilled = event.target.checked;
+  });
   $('#paintBrushShape').addEventListener('change', event => {
     state.paintBrushShape = event.target.value === 'circle' ? 'circle' : 'square';
     updateToolOptions();
@@ -763,6 +766,13 @@ function bindEvents() {
   $('#textureTemplatePowerOfTwo').addEventListener('change', updateTextureCreateDialog);
   $('#textureTemplatePaddingEnabled').addEventListener('change', updateTextureCreateDialog);
   $('[data-action="cancelTextureCreate"]').addEventListener('click', () => $('#textureCreateDialog').close());
+  $('#textureCreateDialog').addEventListener('click', event => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
+  });
+  $('#textureCreateDialog .close-button').addEventListener('click', event => {
+    event.preventDefault();
+    $('#textureCreateDialog').close();
+  });
   $('#textureCreateForm').addEventListener('submit', async event => {
     event.preventDefault();
     const type = $('#textureCreateType').value;
@@ -790,6 +800,13 @@ function bindEvents() {
   $('[data-action="playTimeline"]')?.addEventListener('click', playTimeline);
   $('[data-action="stopTimeline"]')?.addEventListener('click', stopTimeline);
   $('[data-action="addPaletteRow"]').addEventListener('click', addPaletteRow);
+  $('#paletteImportButton').addEventListener('click', () => $('#paletteImportInput').click());
+  $('#paletteImportInput').addEventListener('change', event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) void palette.importColorMap(file);
+  });
+  $('#paletteExportButton').addEventListener('click', () => { void palette.exportColorMap(); });
   $('#paletteCompactToggle').addEventListener('click', () => {
     palette.compact = !palette.compact;
     palette.saveCompactPreference();
@@ -967,6 +984,7 @@ function bindEvents() {
     }
     const item = event.target.closest('.texture-item'); if (!item) return;
     setActiveTextureItem(item);
+    textureList.focus({ preventScroll: true });
   });
   textureList.addEventListener('dragstart', event => {
     const item = event.target.closest('.texture-item');
@@ -1053,12 +1071,15 @@ function bindEvents() {
     }
     if (event.button !== 0) return;
     const curve = selected();
-    if (isBezierElement(curve) && curve.visible !== false && !isEffectivelyLocked(curve.uid)) {
+    if (state.mode !== 'paint') {
       const rect = sceneCanvas.getBoundingClientRect();
-      const node = sceneRenderer.pickCurveNode(state.project, curve.uid,
-        event.clientX - rect.left, event.clientY - rect.top, 14, state.selectedCurveNodeIndex);
+      const node = sceneRenderer.pickUnselectedCurveNode(state.project,
+        event.clientX - rect.left, event.clientY - rect.top,
+        isBezierElement(curve) ? curve.uid : null, state.selectedCurveNodeIndex,
+        14, uid => !isEffectivelyLocked(uid));
       if (node) {
         event.preventDefault(); event.stopPropagation();
+        if (node.uid !== curve?.uid) selectItem(node.uid, { revealInOutliner: true });
         state.selectedCurveNodeIndex = node.index;
         state.selectedModifierUid = null;
         state.outlinerWindowStart = -1;
@@ -1145,7 +1166,8 @@ function bindEvents() {
   sceneCanvas.addEventListener('pointermove', onScenePointerMove);
   viewport.addEventListener('pointermove', scheduleLockedHover);
   viewport.addEventListener('pointerleave', () => {
-    sceneCanvas.classList.remove('is-curve-handle-hover');
+    sceneCanvas.classList.remove('is-curve-handle-hover', 'is-curve-node-hover');
+    $('#transformGizmo').querySelectorAll('.curve-node-marker.hover').forEach(marker => marker.classList.remove('hover'));
     clearLockedHoverCapture();
     animateLockedHoverStrength(false);
     if (state.tool !== 'knife' || state.dragging) return;
@@ -1214,6 +1236,17 @@ function bindEvents() {
       if (document.activeElement === palette || palette.contains(document.activeElement)) {
         event.preventDefault();
         if (!event.repeat) deleteSelectedPaletteColor();
+        return;
+      }
+      const focus = document.activeElement;
+      if (focus?.closest?.('#textureFeatureControls, #layerEditorDialog')) {
+        event.preventDefault();
+        if (!event.repeat) removeActiveLayer().catch(error => toast(error.message));
+        return;
+      }
+      if (focus?.closest?.('#textureList')) {
+        event.preventDefault();
+        if (!event.repeat) removeTexture();
         return;
       }
       deleteSelected();

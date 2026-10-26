@@ -333,6 +333,23 @@ function drawPaintShape(drag, to, restoreBase = true) {
   }
   const [startX, startY] = drag.start;
   const [endX, endY] = to;
+  if (state.paintShapeFilled && (drag.tool === 'rectangle' || drag.tool === 'ellipse')) {
+    const minX = Math.max(0, Math.floor(Math.min(startX, endX)), drag.clip?.minU ?? 0);
+    const maxX = Math.min(drag.canvas.width - 1, Math.ceil(Math.max(startX, endX)), (drag.clip?.maxU ?? drag.canvas.width) - 1);
+    const minY = Math.max(0, Math.floor(Math.min(startY, endY)), drag.clip?.minV ?? 0);
+    const maxY = Math.min(drag.canvas.height - 1, Math.ceil(Math.max(startY, endY)), (drag.clip?.maxV ?? drag.canvas.height) - 1);
+    const centerX = (startX + endX) / 2, centerY = (startY + endY) / 2;
+    const radiusX = Math.max(.5, Math.abs(endX - startX) / 2);
+    const radiusY = Math.max(.5, Math.abs(endY - startY) / 2);
+    touchScenePaintSurface(drag);
+    drag.context.save();
+    for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+      if (drag.tool === 'ellipse' && ((x - centerX) / radiusX) ** 2 + ((y - centerY) / radiusY) ** 2 > 1) continue;
+      drawPaintPixel(drag, x, y, 1, drag.tool, paintToolOpacity(drag.tool));
+    }
+    drag.context.restore();
+    flushHolisticPaintSurface(drag);
+  }
   if (drag.tool === 'line') drawPaintSegment(drag, drag.start, to, false);
   else if (drag.tool === 'rectangle') {
     const corners = [[startX, startY], [endX, startY], [endX, endY], [startX, endY], [startX, startY]];
@@ -367,16 +384,20 @@ function paintUvBounds(cube, faceName, canvas) {
   };
 }
 
-function fillPaintRects(result, asset, rectangles) {
+function fillPaintRects(result, asset, rectangles, stroke = null) {
   const { canvas, context } = result;
   const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const painted = stroke?.painted?.get(asset._uid);
   const color = paintColorBytes(), opacity = paintToolOpacity('fill');
   for (const rectangle of rectangles) {
     const minX = clamp(Math.floor(rectangle.minU), 0, canvas.width), maxX = clamp(Math.ceil(rectangle.maxU), 0, canvas.width);
     const minY = clamp(Math.floor(rectangle.minV), 0, canvas.height), maxY = clamp(Math.ceil(rectangle.maxV), 0, canvas.height);
     for (let y = minY; y < maxY; y++) for (let x = minX; x < maxX; x++) {
-      if (paintSelectionAllows(state, asset._uid, x, y, canvas.width, canvas.height))
+      const pixel = y * canvas.width + x;
+      if (paintSelectionAllows(state, asset._uid, x, y, canvas.width, canvas.height) && !painted?.[pixel]) {
+        if (painted) painted[pixel] = 1;
         blendPaintPixel(image.data, (y * canvas.width + x) * 4, color, opacity, 'fill');
+      }
     }
   }
   context.putImageData(image, 0, 0);
@@ -406,17 +427,22 @@ function blendPaintPixel(data, offset, color, opacity, tool = 'fill') {
   data[offset + 3] = Math.round(outputAlpha * 255);
 }
 
-function replacePaintColor(result, point, contiguous, clip = null, assetUid = null) {
+function replacePaintColor(result, point, contiguous, clip = null, assetUid = null, stroke = null) {
   const { canvas, context } = result;
   const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const source = stroke?.originals?.get(assetUid)?.data || image.data;
+  const painted = stroke?.painted?.get(assetUid);
   const startX = clamp(Math.floor(point[0]), 0, canvas.width - 1);
   const startY = clamp(Math.floor(point[1]), 0, canvas.height - 1);
   const startOffset = (startY * canvas.width + startX) * 4;
-  const target = [...image.data.slice(startOffset, startOffset + 4)];
+  // Dragging over a region already filled by this stroke must not rerun a
+  // full-image scan or flood fill for every pointer sample.
+  if (painted?.[startY * canvas.width + startX]) return;
+  const target = [...source.slice(startOffset, startOffset + 4)];
   const matches = pixel => {
     const offset = pixel * 4;
-    return image.data[offset] === target[0] && image.data[offset + 1] === target[1]
-      && image.data[offset + 2] === target[2] && image.data[offset + 3] === target[3];
+    return source[offset] === target[0] && source[offset + 1] === target[1]
+      && source[offset + 2] === target[2] && source[offset + 3] === target[3];
   };
   const insideClip = (x, y) => (!clip || (x >= clip.minU && y >= clip.minV && x < clip.maxU && y < clip.maxV))
     && paintSelectionAllows(state, assetUid, x, y, canvas.width, canvas.height);
@@ -425,7 +451,10 @@ function replacePaintColor(result, point, contiguous, clip = null, assetUid = nu
   if (!contiguous) {
     for (let pixel = 0; pixel < canvas.width * canvas.height; pixel++) {
       const x = pixel % canvas.width, y = Math.floor(pixel / canvas.width);
-      if (insideClip(x, y) && matches(pixel)) blendPaintPixel(image.data, pixel * 4, color, opacity);
+      if (insideClip(x, y) && matches(pixel) && !painted?.[pixel]) {
+        if (painted) painted[pixel] = 1;
+        blendPaintPixel(image.data, pixel * 4, color, opacity);
+      }
     }
   } else {
     const visited = new Uint8Array(canvas.width * canvas.height);
@@ -435,7 +464,10 @@ function replacePaintColor(result, point, contiguous, clip = null, assetUid = nu
       const x = pixel % canvas.width, y = Math.floor(pixel / canvas.width);
       if (visited[pixel] || !insideClip(x, y) || !matches(pixel)) continue;
       visited[pixel] = 1;
-      blendPaintPixel(image.data, pixel * 4, color, opacity);
+      if (!painted?.[pixel]) {
+        if (painted) painted[pixel] = 1;
+        blendPaintPixel(image.data, pixel * 4, color, opacity);
+      }
       if (x > 0) pending.push(pixel - 1);
       if (x + 1 < canvas.width) pending.push(pixel + 1);
       if (y > 0) pending.push(pixel - canvas.width);
@@ -461,23 +493,53 @@ function allTextureUvEntriesForAsset(asset) {
   return entries;
 }
 
-async function paintBucketAsset(asset, point, rectangles = null, contiguous = false, clip = null) {
-  const result = asset._uid === state.activeTextureUid
+function recordBucketHistory(asset, canvas, stroke = null) {
+  if (stroke?.assets.has(asset._uid)) return;
+  pushTexturePaintHistory(asset, canvas, stroke?.group || null);
+  stroke?.assets.add(asset._uid);
+  if (stroke) {
+    stroke.originals ||= new Map();
+    stroke.painted ||= new Map();
+    stroke.canvases ||= new Map();
+    if (['color', 'contiguous'].includes(state.paintBucketScope))
+      stroke.originals.set(asset._uid, canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height));
+    stroke.painted.set(asset._uid, new Uint8Array(canvas.width * canvas.height));
+    stroke.canvases.set(asset._uid, { asset, canvas });
+  }
+}
+
+function finishTextureBucketStroke(stroke) {
+  if (!stroke?.canvases?.size) return;
+  syncPaintedTextureNow();
+  for (const { asset, canvas } of stroke.canvases.values()) commitPaintedTextureAsset(asset, canvas);
+  renderScene();
+}
+
+async function bucketCanvasForAsset(asset, stroke = null) {
+  const cached = stroke?.canvases?.get(asset._uid);
+  if (cached) return { canvas: cached.canvas, context: cached.canvas.getContext('2d') };
+  return asset._uid === state.activeTextureUid
     ? { canvas: textureCanvas, context: textureCtx }
-    : await paintCanvasForAsset(asset);
+    : paintCanvasForAsset(asset);
+}
+
+async function paintBucketAsset(asset, point, rectangles = null, contiguous = false, clip = null, stroke = null) {
+  const result = await bucketCanvasForAsset(asset, stroke);
   if (!result) return false;
-  pushTexturePaintHistory(asset, result.canvas);
-  if (rectangles) fillPaintRects(result, asset, rectangles);
+  recordBucketHistory(asset, result.canvas, stroke);
+  if (rectangles) fillPaintRects(result, asset, rectangles, stroke);
   else {
-    replacePaintColor(result, point, contiguous, clip, asset._uid);
+    replacePaintColor(result, point, contiguous, clip, asset._uid, stroke);
     queuePaintedTextureSync(asset, result.canvas);
   }
-  syncPaintedTextureNow();
-  commitPaintedTextureAsset(asset, result.canvas);
+  if (!stroke) {
+    syncPaintedTextureNow();
+    commitPaintedTextureAsset(asset, result.canvas);
+  }
   return true;
 }
 
-async function paintBucketElement(cube) {
+async function paintBucketElement(cube, stroke = null) {
   const byAsset = new Map();
   for (const faceName of CUBE_FACE_NAMES) {
     const existing = cube.faces?.[faceName];
@@ -490,17 +552,17 @@ async function paintBucketElement(cube) {
   }
   let painted = 0;
   for (const [asset, faceNames] of byAsset) {
-    const result = asset._uid === state.activeTextureUid
-      ? { canvas: textureCanvas, context: textureCtx }
-      : await paintCanvasForAsset(asset);
+    const result = await bucketCanvasForAsset(asset, stroke);
     if (!result) continue;
-    pushTexturePaintHistory(asset, result.canvas);
-    fillPaintRects(result, asset, faceNames.map(faceName => paintUvBounds(cube, faceName, result.canvas)));
-    syncPaintedTextureNow();
-    commitPaintedTextureAsset(asset, result.canvas);
+    recordBucketHistory(asset, result.canvas, stroke);
+    fillPaintRects(result, asset, faceNames.map(faceName => paintUvBounds(cube, faceName, result.canvas)), stroke);
+    if (!stroke) {
+      syncPaintedTextureNow();
+      commitPaintedTextureAsset(asset, result.canvas);
+    }
     painted++;
   }
-  if (painted) {
+  if (painted && !stroke) {
     invalidateAllRenderGeometry();
     markDirty();
     renderScene();
@@ -508,22 +570,22 @@ async function paintBucketElement(cube) {
   return painted > 0;
 }
 
-async function applyTextureBucket(asset, point, hitEntry = null) {
+async function applyTextureBucket(asset, point, hitEntry = null, stroke = null) {
   if (state.paintBucketScope === 'element') {
     if (!hitEntry?.cube) return toast('請指向一個元素的貼圖面');
-    if (!await paintBucketElement(hitEntry.cube)) toast('這個元素沒有可繪畫的貼圖');
+    if (!await paintBucketElement(hitEntry.cube, stroke)) toast('這個元素沒有可繪畫的貼圖');
     return;
   }
   if (state.paintBucketScope === 'face') {
     if (!hitEntry?.cube || !hitEntry.faceName) return toast('請指向一個貼圖面');
-    const result = asset._uid === state.activeTextureUid
-      ? { canvas: textureCanvas, context: textureCtx }
-      : await paintCanvasForAsset(asset);
+    const result = await bucketCanvasForAsset(asset, stroke);
     if (!result) return;
-    pushTexturePaintHistory(asset, result.canvas);
-    fillPaintRects(result, asset, [paintUvBounds(hitEntry.cube, hitEntry.faceName, result.canvas)]);
-    syncPaintedTextureNow();
-    commitPaintedTextureAsset(asset, result.canvas);
+    recordBucketHistory(asset, result.canvas, stroke);
+    fillPaintRects(result, asset, [paintUvBounds(hitEntry.cube, hitEntry.faceName, result.canvas)], stroke);
+    if (!stroke) {
+      syncPaintedTextureNow();
+      commitPaintedTextureAsset(asset, result.canvas);
+    }
     return;
   }
   const singleFaceClip = state.paintBucketSingleFace && hitEntry?.cube && hitEntry.faceName
@@ -533,7 +595,7 @@ async function applyTextureBucket(asset, point, hitEntry = null) {
     })
     : null;
   if (state.paintBucketSingleFace && !singleFaceClip) return toast('單面局限時請先指向一個貼圖面');
-  await paintBucketAsset(asset, point, null, state.paintBucketScope === 'contiguous', singleFaceClip);
+  await paintBucketAsset(asset, point, null, state.paintBucketScope === 'contiguous', singleFaceClip, stroke);
 }
 
 function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null, operationId = null) {
@@ -599,5 +661,5 @@ function finishTexturePaintDrag(drag) {
   const surfaces = drag.touchedSurfaces?.size ? [...drag.touchedSurfaces] : [drag];
   for (const surface of surfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
 }
-return { paintPointFromEvent, paintPointInside, faceUvPixelSlots, paintFaceDepthNeighbors, updateTextureBrushCursor, syncPaintedTextureNow, queuePaintedTextureSync, drawPaintSegment, drawPaintShape, paintUvBounds, allTextureUvEntriesForAsset, applyTextureBucket, pushTexturePaintHistory, commitPaintedTextureAsset, replayTexturePaintPoints, finishTexturePaintDrag };
+return { paintPointFromEvent, paintPointInside, faceUvPixelSlots, paintFaceDepthNeighbors, updateTextureBrushCursor, syncPaintedTextureNow, queuePaintedTextureSync, drawPaintSegment, drawPaintShape, paintUvBounds, allTextureUvEntriesForAsset, applyTextureBucket, finishTextureBucketStroke, pushTexturePaintHistory, commitPaintedTextureAsset, replayTexturePaintPoints, finishTexturePaintDrag };
 }
