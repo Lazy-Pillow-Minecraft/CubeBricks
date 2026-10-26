@@ -134,12 +134,15 @@ function updateReferenceImageLayer() {
     image.height = record.naturalHeight;
     image.classList.toggle('selected', record === selected);
     applyReferenceImageTransform(image, record, key);
+    // DOM order is the visual stacking order. Keep it aligned with the list
+    // after reordering without recreating images or losing decoded pixels.
+    referenceImageLayer.insertBefore(image, referenceImageHint);
   }
   existing.forEach(image => image.remove());
   updateReferenceImageControls();
 }
 
-function sampleReferenceImage(clientX, clientY) {
+function referenceImagePixelAt(clientX, clientY) {
   if (referenceImageLayer.hidden) return null;
   const rect = referenceImageLayer.getBoundingClientRect();
   const screenX = clientX - rect.left;
@@ -167,11 +170,22 @@ function sampleReferenceImage(clientX, clientY) {
       cached = { source: image.src, context };
       sampleCanvases.set(image, cached);
     }
-    const pixel = cached.context.getImageData(x, y, 1, 1).data;
+    let pixel;
+    try { pixel = cached.context.getImageData(x, y, 1, 1).data; }
+    catch { continue; }
     if (!pixel[3]) continue;
-    return `#${[pixel[0], pixel[1], pixel[2]].map(value => value.toString(16).padStart(2, '0')).join('')}`;
+    return { image, pixel };
   }
   return null;
+}
+
+function sampleReferenceImage(clientX, clientY) {
+  const hit = referenceImagePixelAt(clientX, clientY);
+  return hit ? `#${[hit.pixel[0], hit.pixel[1], hit.pixel[2]].map(value => value.toString(16).padStart(2, '0')).join('')}` : null;
+}
+
+function referenceImageAt(clientX, clientY) {
+  return referenceImagePixelAt(clientX, clientY)?.image || null;
 }
 
 function setReferenceImageEditing(value) {
@@ -204,10 +218,10 @@ function resetReferenceImage() {
   updateReferenceImageLayer();
 }
 
-function removeReferenceImage() {
+function removeReferenceImage(uid = null) {
   const key = referenceViewKey();
   const records = referenceImagesForView(key);
-  const record = currentReferenceImage(key);
+  const record = uid ? records.find(entry => entry.uid === uid) : currentReferenceImage(key);
   if (!record) return;
   snapshot('core.reference.remove');
   const index = records.indexOf(record);
@@ -215,6 +229,21 @@ function removeReferenceImage() {
   const next = records[Math.min(index, records.length - 1)] || null;
   state.referenceImageSelection[key] = next?.uid || null;
   if (!next) referenceImageEditing = false;
+  markDirty();
+  updateReferenceImageLayer();
+}
+
+function reorderReferenceImage(uid, position) {
+  const records = referenceImagesForView();
+  const index = records.findIndex(record => record.uid === uid);
+  if (index < 0) return;
+  const next = position === 'up' ? Math.min(records.length - 1, index + 1)
+    : position === 'down' ? Math.max(0, index - 1)
+      : position === 'top' ? records.length - 1 : 0;
+  if (next === index) return;
+  snapshot('core.reference.reorder');
+  records.splice(next, 0, records.splice(index, 1)[0]);
+  state.referenceImageSelection[referenceViewKey()] = uid;
   markDirty();
   updateReferenceImageLayer();
 }
@@ -284,7 +313,11 @@ function beginReferenceImageDrag(event) {
     }
     return;
   }
-  if (!referenceImageEditing || !currentReferenceImage() || ![0, 1].includes(event.button)) return;
+  if (!referenceImageEditing || ![0, 1].includes(event.button)) return;
+  const image = referenceImageAt(event.clientX, event.clientY);
+  if (!image) return;
+  selectReference(image.dataset.referenceUid);
+  if (!currentReferenceImage()) return;
   event.preventDefault();
   event.stopPropagation();
   referenceImageLayer.setPointerCapture(event.pointerId);
@@ -353,13 +386,15 @@ function resetInteraction() {
 }
 
 function selectReference(uid) {
+  if (!referenceImagesForView().some(record => record.uid === uid)) return;
   state.referenceImageSelection[referenceViewKey()] = uid;
   updateReferenceImageLayer();
 }
 
 return { get editing() { return referenceImageEditing; }, get drag() { return referenceImageDrag; },
   get importViewKey() { return referenceImportViewKey; }, resetInteraction, selectReference,
-  referenceViewKey, updateReferenceImageLayer, sampleReferenceImage, setReferenceImageEditing, setReferenceImageMenu,
+  referenceViewKey, referenceImagesForView, referenceImageAt, updateReferenceImageLayer, sampleReferenceImage, setReferenceImageEditing, setReferenceImageMenu,
   beginReferenceImageImport, resetReferenceImage, removeReferenceImage, loadReferenceImageFiles,
+  reorderReferenceImage,
   beginReferenceImageDrag, moveReferenceImageDrag, endReferenceImageDrag, scaleReferenceImage };
 }

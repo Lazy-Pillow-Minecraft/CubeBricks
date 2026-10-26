@@ -6,8 +6,7 @@ export function createListDragAutoScroll(container, isDragging, onScroll = () =>
   const speedAtPointer = () => {
     if (!pointer) return 0;
     const rect = container.getBoundingClientRect();
-    if (pointer.x < rect.left - 24 || pointer.x > rect.right + 24
-      || pointer.y < rect.top - 64 || pointer.y > rect.bottom + 64) return 0;
+    if (pointer.y < rect.top - 64 || pointer.y > rect.bottom + 64) return 0;
     const edge = Math.min(68, Math.max(24, rect.height * .22));
     const top = Math.max(0, Math.min(1.5, (edge - (pointer.y - rect.top)) / edge));
     const bottom = Math.max(0, Math.min(1.5, (edge - (rect.bottom - pointer.y)) / edge));

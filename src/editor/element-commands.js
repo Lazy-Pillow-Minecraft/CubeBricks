@@ -77,16 +77,15 @@ function addLocator() {
   markDirty(); renderAll(); toast('已新增 Locator');
 }
 
-function addBezierElement(dimension) {
+function addBezierElement(dimension, variant = 'standard') {
   if (state.mode === 'paint') return;
   snapshot('core.curve.create');
-  const type = dimension === 2 ? 'bezier2d' : 'bezier3d';
-  const curve = new BezierElement({ origin: [0, 4, 0] }, dimension);
+  const curve = new BezierElement({ origin: [0, 0, 0], rotation: dimension === 2 ? [-90, 0, 0] : [0, 0, 0], variant }, dimension);
   state.project.elements.push(curve);
   insertNewNodeUid(curve.uid);
   selectCreatedNode(curve.uid);
-  state.selectedCurveNodeIndex = 0;
-  markDirty(); renderAll(); toast(`已新增${dimension === 2 ? '二維' : '三維'}貝塞爾元素`);
+  state.selectedCurveNodeIndex = null;
+  markDirty(); renderAll(); toast(`已新增${dimension === 2 ? '二維' : '三維'}${variant === 'envelope' ? '包絡' : ''}貝塞爾元素`);
 }
 
 function addGroup() {
@@ -117,7 +116,7 @@ function addGroup() {
       if (chains.every(chain => chain[index]?.uid === candidate.uid)) commonParent = candidate;
       else break;
     }
-    const order = new Map((state.outlinerRows || []).map((row, index) => [row.node.uid, index]));
+    const order = new Map((state.outlinerRows || []).filter(row => row.node?.uid).map((row, index) => [row.node.uid, index]));
     selectedIds.sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity));
     for (const uidValue of selectedIds) {
       const { items } = nodeContainer(uidValue);
@@ -159,7 +158,7 @@ function deleteSelected(operationId = 'core.element.delete') {
 let elementClipboard = null;
 
 function captureSelectedElements() {
-  const order = new Map((state.outlinerRows || []).map((row, index) => [row.node.uid, index]));
+  const order = new Map((state.outlinerRows || []).filter(row => row.node?.uid).map((row, index) => [row.node.uid, index]));
   const roots = topLevelSelectedUids()
     .sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity));
   if (!roots.length) return null;

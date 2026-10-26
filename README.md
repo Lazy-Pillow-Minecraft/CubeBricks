@@ -67,7 +67,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 ### UV 與貼圖
 
 - Cube 可使用箱型 UV 或逐面 UV，每個面可獨立指定貼圖、旋轉、鏡像與剔除狀態。
-- 貼圖提供基礎圖層：新增、命名、選取、排序、顯示、透明度與刪除；繪畫落在當前圖層，模型顯示合成結果。圖層停靠面板只在繪畫模式顯示，資料仍隨 `.cbmodel` 保存。
+- 貼圖圖層可新增圖片層或組、折疊組、將圖層拖進組內及跨層級重排。選中圖片層時在其上方新增，選中組時在組內追加；組的可見性切換會同步子層，子層仍可單獨改回。齒輪開啟固定高度的圖層編輯子窗口，顯示完整貼圖與所選層／組的方形預覽，可調透明度及疊加模式。繪畫落在實際圖片層，模型顯示分組合成結果；圖層資料隨 `.cbmodel` 保存。
 - 貼圖本身可切換默認、平鋪、動畫三種模式；動畫目前為佔位。面各自保留普通 UV 和平鋪的單片寬高、X／Y 偏移，換貼圖不清除另一套資訊。
 - 拖動列表貼圖時顯示鼠標縮略圖，可直接賦予模型的面；多選時同時賦予所有所選元素的同方向面。平鋪渲染單片快取最高 1024 × 1024px，超出需求的面僅在渲染中拆片，不改動模型、導出結構或模板烘焙。
 - 元素顯示色與一般顏色欄可使用方形、圓形或三角形 HSV 彈窗；BBModel 的 Cube 調色板索引會轉換為對應顯示色，導出時選取最接近的標準色。
@@ -95,7 +95,7 @@ CubeBricks 是一個面向 Minecraft 模型工作流的桌面建模器。它以 
 - 關閉桌面程式時只會詢問本次啟動新建的項目是否保留，預設全部勾選；取消勾選才會刪除其工作目錄。原本存在、這次重新打開的模型會自動保留頁籤。
 - 可配置的工作空間目錄分為 `projects/`（新項目的展開記錄）與 `shapepacks/`（外部 Shape 包）；舊版直接放在根目錄的 `project_*` 會在安全時自動遷移，無法遷移時仍可從舊位置讀取。
 - 工作空間另有 `languagepacks/` 和 `fontpacks/`。設定中的「管理資源包」以同一視窗分別加入、排序、熱重載與移除語言／字體／Shape 包；移除的檔案暫存於 `removed-packs/`。外部 Shape 包含 JavaScript，只安裝可信來源。
-- 內置 Fusion Pixel 與系統字體可直接切換；桌面版可匯入單一 TTF／OTF／WOFF 字體或裝有多份字體的 ZIP。繁中、簡中與英文翻譯已拆為獨立檔案，外部語言包可註冊新的介面語言。格式見 [RESOURCE_PACKS.md](RESOURCE_PACKS.md)。
+- 內置 Fusion Pixel 與系統字體可直接切換；桌面版可匯入單一 TTF／OTF／WOFF 字體或裝有多份字體的 ZIP。介面翻譯使用穩定的 `ui.*` 語意鍵，外部語言包可註冊新語言；舊版繁中文字面鍵仍可相容讀取。詞條表與包格式見 [RESOURCE_PACKS.md](RESOURCE_PACKS.md)。
 - 配置註冊表統一管理介面語言、字體、外觀、視圖、吸附與工作區選項。
 - 模型格式使用可擴展註冊表，格式可提供自己的初始工程資料、吸附基準、貼圖尺寸與能力標記。Java 方塊／物品可在項目信息中選擇三檔旋轉規則：1.9–1.21.5 為 22.5° 倍數單軸、1.21.6–1.21.10 為自由角度單軸、1.21.11+ 不限角度與軸數；該格式使用逐面 UV。模組版實體使用箱型 UV、整數 Cube 尺寸與組旋轉，Cube 自身不旋轉。
 
@@ -349,7 +349,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 ### UV and texturing
 
 - Cubes support box UV and per-face UV. Every face can independently select a texture, rotation, mirroring, and culling state.
-- Basic texture layers support creation, naming, selection, ordering, visibility, opacity, and deletion. Painting targets the active layer, while the model displays the composite. The Layers dock appears only in Paint mode; its data is still saved in `.cbmodel` projects.
+- Texture layers support image layers and collapsible groups, drag-in assignment, and cross-level reordering. Creating a layer beside a selected image places it directly above; selecting a group adds inside it. Group visibility syncs its children, while individual children can be changed afterward. The gear opens a full-height layer editor with square previews of the complete texture and selected layer or group, plus opacity and blend modes. Painting targets an image layer while the model displays the grouped composite; the hierarchy is saved in `.cbmodel` projects.
 - Texture assets switch between default, tiled, and animation modes; animation is currently a placeholder. Faces retain both ordinary UVs and tile dimensions/offsets when textures or modes change.
 - Drag textures from the list with a cursor thumbnail to assign them to model faces. Multi-selection assigns the same face direction across selected elements. Tiled render caches are capped at 1024 × 1024px per piece; larger faces are split only for rendering, without changing model data, export structure, or template baking.
 - Element display colors and ordinary color fields can use square, circular, or triangular HSV popups. BBModel cube palette indices are converted to display colors; export selects the nearest standard palette color.
@@ -377,7 +377,7 @@ The project is currently an evolving prototype focused on an extensible editor a
 - Multiple projects can remain open as tabs that support selection, drag ordering, project-information editing, and closing.
 - On exit, the desktop app lists open projects with every tab checked for retention by default. Unchecking a tab removes its working directory after confirmation; retained tabs reopen at the next launch.
 - The configurable workspace contains `projects/` for working journals, plus separate `shapepacks/`, `languagepacks/`, and `fontpacks/` folders. A shared manager in Settings can install, reorder, hot-reload, and remove these packs; removed files are retained under `removed-packs/`. External Shape packs execute JavaScript, so install only trusted ones. Legacy `project_*` folders migrate when safe.
-- The built-in Fusion Pixel and system fonts are selectable; the desktop app also accepts individual TTF/OTF/WOFF fonts or multi-file ZIP font packs. Built-in English and Simplified Chinese translations now live in separate files, and external language packs can register additional languages. See [RESOURCE_PACKS.md](RESOURCE_PACKS.md).
+- The built-in Fusion Pixel and system fonts are selectable; the desktop app also accepts individual TTF/OTF/WOFF fonts or multi-file ZIP font packs. UI translations use stable semantic `ui.*` IDs, and external language packs can register more languages; older Traditional-Chinese-keyed packs remain readable. See [RESOURCE_PACKS.md](RESOURCE_PACKS.md).
 - A configuration registry manages interface language, font, appearance, viewport, snapping, and workspace settings.
 - Model formats use an extensible registry and may provide their own initial project data, snapping baseline, texture size, and capability flags. Java Block/Item offers three rotation rules in Project Information: 1.9–1.21.5 uses single-axis 22.5° increments; 1.21.6–1.21.10 allows any angle on one axis; 1.21.11+ allows unrestricted angles and axes. It uses per-face UVs. Modded Entity uses box UVs, integer cube dimensions, and group rotation rather than cube rotation.
 

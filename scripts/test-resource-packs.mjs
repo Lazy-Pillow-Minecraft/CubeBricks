@@ -12,7 +12,7 @@ const root = await mkdtemp(path.join(process.cwd(), '.tmp-resource-packs-'));
 try {
   const languageFile = path.join(root, 'sample-language.json');
   await writeFile(languageFile, JSON.stringify({
-    code: 'fr', label: 'Français', translations: { '設定': 'Paramètres' }
+    code: 'fr', label: 'Français', translations: { 'ui.settings': 'Paramètres' }
   }));
   assert.equal(await installPack(root, 'language', languageFile), 'language:sample-language.json');
   const fontZip = path.join(root, 'sample-font.zip');
@@ -32,7 +32,7 @@ try {
   let result = await listResourcePacks(root);
   assert.deepEqual(result.errors, []);
   assert.equal(result.packs.length, 3);
-  assert.equal(result.packs.find(pack => pack.kind === 'language').translations['設定'], 'Paramètres');
+  assert.equal(result.packs.find(pack => pack.kind === 'language').translations['ui.settings'], 'Paramètres');
   assert.equal(result.packs.find(pack => pack.kind === 'font').fonts.length, 1);
   assert.equal(result.packs.find(pack => pack.kind === 'font').fonts[0].source, undefined);
   assert.ok((await readFontPack(root, 'font:sample-font.zip')).fonts[0].source.startsWith('data:font/ttf;base64,'));

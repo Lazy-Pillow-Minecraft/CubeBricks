@@ -146,6 +146,8 @@ function curveNodeInspectorMarkup(item, index) {
     <div class="field-title"><span>節點 ${index + 1}</span><span>${item.dimension === 2 ? '2D' : '3D'}</span></div>
     ${vectorField('位置', `curve-node:${index}:position`, node.position)}
     ${vectorField('旋轉', `curve-node:${index}:rotation`, displayedRotation)}
+    ${item.variant === 'envelope' ? `<div class="option-row"><span>自訂半徑</span><label class="switch"><input type="checkbox" data-curve-node-radius-enabled="${index}" ${node.radius !== null ? 'checked' : ''}/><i></i></label></div>
+    ${node.radius !== null ? `<div class="option-row"><span>節點半徑</span><div class="number-wrap" style="width:68px"><input type="number" min="0" step="0.1" data-curve-node-radius="${index}" value="${round(node.radius)}" /></div></div>` : ''}` : ''}
     <div class="option-row"><span>自動切線</span><label class="switch"><input type="checkbox" data-curve-node-auto="${index}" ${node.autoTangent ? 'checked' : ''}/><i></i></label></div>
     ${item.dimension === 3 ? `<div class="option-row"><span>滾動角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-curve-node-roll="${index}" value="${round(node.roll || 0)}" /></div></div>` : ''}
     <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-curve-node-toggle="${index}" ${node.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
@@ -270,9 +272,18 @@ function operatorPanelMarkup(owner) {
 
 
 
+function renderPaintOperatorInspector() {
+  const root = $('#paintOperatorInspector');
+  const item = selected();
+  root.innerHTML = item ? operatorPanelMarkup(item)
+    : '<div class="field-section"><p class="modifier-empty">選擇一個物件以設定操作器。</p></div>';
+  if (item) bindInspector(root);
+}
+
 function renderInspector() {
   if (state.mode === 'paint') {
     renderPaintColorPicker();
+    renderPaintOperatorInspector();
     return;
   }
   $('#inspectorHeading').textContent = '物件屬性';
@@ -295,8 +306,8 @@ function renderInspector() {
   const typeLabel = editOwner ? 'Shape 細分 Cube' : isShapeElement(item)
     ? shapeRegistry.get(item.shapeType)?.label || `未安裝的 Shape：${item.shapeType}`
     : item.type === 'locator' ? 'Locator'
-    : item.type === 'node' ? '節點' : item.type === 'bezier2d' ? '二維貝塞爾'
-      : item.type === 'bezier3d' ? '三維貝塞爾' : item.type === 'group' ? '組' : '立方體';
+    : item.type === 'node' ? '節點' : item.type === 'bezier2d' ? `二維${item.variant === 'envelope' ? '包絡' : ''}貝塞爾`
+      : item.type === 'bezier3d' ? `三維${item.variant === 'envelope' ? '包絡' : ''}貝塞爾` : item.type === 'group' ? '組' : '立方體';
   const details = item.type === 'cube' ? `
       <div class="field-title"><span>幾何</span><button data-action="resetTransform">重置</button></div>
       ${vectorField('位置', 'position', item.position, items)}
@@ -351,7 +362,11 @@ function renderInspector() {
       <div class="field-title"><span>${item.dimension === 2 ? '二維' : '三維'}貝塞爾</span><span>${item.nodes.length} 節點</span></div>
       ${vectorField('位置', 'origin', item.origin, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
-      ${parameterField('Cube 柱粗細', 'thickness', item.parameters.thickness, .1, items)}
+      ${item.variant === 'envelope'
+        ? `${parameterField('預設半徑', 'radius', item.parameters.radius, .1, items)}
+          <div class="option-row"><span>包絡方向</span><select data-curve-head-direction><option value="start" ${item.parameters.headAtStart !== false ? 'selected' : ''}>起點 → 終點</option><option value="end" ${item.parameters.headAtStart === false ? 'selected' : ''}>終點 → 起點</option></select></div>
+          <div class="option-row"><span>烘焙為嵌套組</span><label class="switch"><input type="checkbox" data-curve-nested-bake ${item.parameters.nestedBake ? 'checked' : ''}/><i></i></label></div>`
+        : parameterField('Cube 柱粗細', 'thickness', item.parameters.thickness, .1, items)}
       <div class="option-row"><span>分段方式</span><select data-curve-segmentation><option value="distance" ${item.parameters.segmentationMode === 'distance' ? 'selected' : ''}>按距離</option><option value="angle" ${item.parameters.segmentationMode === 'angle' ? 'selected' : ''}>按角度</option></select></div>
       ${item.parameters.segmentationMode === 'angle'
         ? parameterField('角度步長', 'angleStep', item.parameters.angleStep, .1, items)
@@ -430,7 +445,7 @@ function parameterField(label, key, value, step, nodes = [selected()]) {
     const first = nodes[0]?.parameters?.[key];
     return Number.isFinite(first) && nodes.every(node => Number.isFinite(node?.parameters?.[key]) && Math.abs(node.parameters[key] - first) < 1e-9) ? first : null;
   })();
-  const minimum = key === 'sides' ? 3 : key === 'innerRadius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1;
+  const minimum = key === 'sides' ? 3 : key === 'innerRadius' || key === 'radius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1;
   return `<div class="option-row"><span>${label}</span><div class="number-wrap" style="width:68px"><input type="number" min="${minimum}" step="${step}" data-parameter="${key}" ${numberInputAttributes(displayed)} /></div></div>`;
 }
 
@@ -478,7 +493,8 @@ function setNodeFlag(node, key, value) {
   }
 }
 
-function bindInspector() {
+function bindInspector(root = null) {
+  const inspector = root || $('#inspector');
   const item = selected();
   if (!item) return;
   const items = inspectorBatchNodes();
@@ -598,7 +614,7 @@ function bindInspector() {
       const key = input.dataset.parameter;
       const nextValue = input.dataset.min !== undefined ? Math.max(Number(input.dataset.min), value)
         : key === 'sides' ? Math.max(3, Math.round(value))
-          : Math.max(key === 'innerRadius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1, value);
+          : Math.max(key === 'innerRadius' || key === 'radius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1, value);
       for (const target of items.filter(node => node.parameters && key in node.parameters)) {
         discardSubdivisionEdits(target);
         target.parameters[key] = nextValue;
@@ -849,6 +865,20 @@ function bindInspector() {
     }
     markDirty(); renderAll('selection');
   });
+  $('[data-curve-head-direction]', inspector)?.addEventListener('change', event => {
+    snapshot('core.curve.head_direction');
+    for (const target of items.filter(node => isBezierElement(node) && node.variant === 'envelope')) {
+      target.parameters.headAtStart = event.target.value !== 'end';
+    }
+    markDirty(); renderInspector();
+  });
+  $('[data-curve-nested-bake]', inspector)?.addEventListener('change', event => {
+    snapshot('core.curve.nested_bake');
+    for (const target of items.filter(node => isBezierElement(node) && node.variant === 'envelope')) {
+      target.parameters.nestedBake = event.target.checked;
+    }
+    markDirty(); renderInspector();
+  });
   $$('[data-select-curve-node]', inspector).forEach(button => button.addEventListener('click', () => {
     state.selectedModifierUid = null;
     state.selectedCurveNodeIndex = Number(button.dataset.selectCurveNode);
@@ -887,6 +917,32 @@ function bindInspector() {
       if (!snapshotTaken) { snapshot('core.curve.roll'); snapshotTaken = true; }
       discardSubdivisionEdits(item);
       node.roll = value;
+      markDirty(); invalidateSelectionRenderGeometry(); renderScene();
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('change', apply);
+    input.addEventListener('blur', () => { snapshotTaken = false; });
+  });
+  $$('[data-curve-node-radius-enabled]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
+    const node = item.nodes?.[Number(toggle.dataset.curveNodeRadiusEnabled)];
+    if (!node || item.variant !== 'envelope') return;
+    snapshot('core.curve.node_radius');
+    discardSubdivisionEdits(item);
+    node.radius = toggle.checked ? Math.max(0, Number(item.parameters.radius) || 0) : null;
+    markDirty(); renderAll('selection');
+  }));
+  $$('[data-curve-node-radius]', inspector).forEach(input => {
+    let snapshotTaken = false;
+    const apply = () => {
+      const node = item.nodes?.[Number(input.dataset.curveNodeRadius)];
+      if (!node || item.variant !== 'envelope' || input.value.trim() === '') return;
+      const radius = Number(input.value);
+      if (!Number.isFinite(radius)) return;
+      const next = Math.max(0, radius);
+      if (node.radius === next) return;
+      if (!snapshotTaken) { snapshot('core.curve.node_radius'); snapshotTaken = true; }
+      discardSubdivisionEdits(item);
+      node.radius = next;
       markDirty(); invalidateSelectionRenderGeometry(); renderScene();
     };
     input.addEventListener('input', apply);

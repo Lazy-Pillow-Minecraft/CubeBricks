@@ -107,6 +107,8 @@ export class WebGLSceneRenderer {
     this.opacityLocation = this.gl.getUniformLocation(this.program, 'uOpacity');
     this.colorOverrideLocation = this.gl.getUniformLocation(this.program, 'uColorOverride');
     this.textureLocation = this.gl.getUniformLocation(this.program, 'uTexture');
+    this.paintPixelGridLocation = this.gl.getUniformLocation(this.program, 'uPaintPixelGrid');
+    this.paintGridSizeLocation = this.gl.getUniformLocation(this.program, 'uPaintGridSize');
     this.selectionMaskLocation = this.gl.getUniformLocation(this.program, 'uSelectionMask');
     this.selectionActiveLocation = this.gl.getUniformLocation(this.program, 'uSelectionActive');
     this.selectionTexelLocation = this.gl.getUniformLocation(this.program, 'uSelectionTexel');
@@ -165,6 +167,7 @@ export class WebGLSceneRenderer {
     this.selectionMaskSize = [1, 1];
     this.textureLayout = null;
     this.textureLayoutKey = '';
+    this.texturePixelSize = [1, 1];
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.selectionMaskTexture);
@@ -240,6 +243,7 @@ export class WebGLSceneRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    this.texturePixelSize = [source.width, source.height];
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -283,6 +287,7 @@ export class WebGLSceneRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    this.texturePixelSize = [source.width, source.height];
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -438,7 +443,9 @@ export class WebGLSceneRenderer {
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
     gl.blendEquation(gl.FUNC_ADD);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // The viewport is transparent outside the model. Preserve the alpha of
+    // opaque geometry behind this faded layer instead of fading the canvas too.
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disable(gl.BLEND);
     gl.depthMask(true);
@@ -1059,7 +1066,7 @@ export class WebGLSceneRenderer {
           cull: project.cullFaces,
           renderMode: 2,
           alphaMode: minecraftRenderType.alphaMode,
-          blend: minecraftRenderType.blend
+          blend: minecraftRenderType.blend || this.paintPixelGrid
         });
         drawFacePass({
           depthWrite: false,
@@ -1092,7 +1099,7 @@ export class WebGLSceneRenderer {
       cull: project.cullFaces,
       renderMode,
       alphaMode: pipeline.alphaMode,
-      blend: pipeline.blend
+      blend: pipeline.blend || (this.paintPixelGrid && renderMode === 2)
     };
     const staticBatches = this.ensureVisibleStaticBatches(dynamicUids, lockedUids);
     this.drawBuffer(this.visibleStaticTriangleBuffer, staticBatches.triangleCount,
@@ -1282,6 +1289,7 @@ export class WebGLSceneRenderer {
     const { gl, canvas } = this;
     this.captureModelOnly = camera.captureModelOnly === true;
     this.previewShade = camera.previewShade !== false;
+    this.paintPixelGrid = camera.mode === 'paint' && camera.paintPixelGrid === true;
     this.paintSelectionActive = camera.mode === 'paint' && camera.paintSelection?.active === true && this.selectionMaskReady;
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1896,9 +1904,10 @@ export class WebGLSceneRenderer {
     }));
   }
 
-  pickCurveNode(project, uid, screenX, screenY, radius = 14) {
+  pickCurveNode(project, uid, screenX, screenY, radius = 14, excludeIndex = null) {
     let closest = null;
     for (const entry of this.getCurveNodeWorldPoints(project, uid)) {
+      if (entry.index === excludeIndex) continue;
       const projected = projectScreenPoint(entry.point, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height);
       if (projected.behind || projected.depth < -1 || projected.depth > 1) continue;
       const distance = Math.hypot(projected.x - screenX, projected.y - screenY);
@@ -2117,6 +2126,9 @@ export class WebGLSceneRenderer {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture || this.texture);
     gl.uniform1i(this.textureLocation, 0);
+    gl.uniform1i(this.paintPixelGridLocation, this.paintPixelGrid && renderMode === 2
+      && primitive === gl.TRIANGLES && (!texture || texture === this.texture) ? 1 : 0);
+    gl.uniform2f(this.paintGridSizeLocation, this.texturePixelSize[0], this.texturePixelSize[1]);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.selectionMaskTexture);
     gl.uniform1i(this.selectionMaskLocation, 1);
@@ -2147,9 +2159,7 @@ export class WebGLSceneRenderer {
     if (blend) {
       gl.enable(gl.BLEND);
       gl.blendEquation(gl.FUNC_ADD);
-      if (this.captureModelOnly)
-        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      else gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     } else gl.disable(gl.BLEND);
     gl.drawArrays(primitive, first, vertexCount);
     gl.frontFace(gl.CCW);
@@ -2537,9 +2547,8 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
   const triangles = [], faceBatches = [];
   for (const [faceName, quadIndices] of Object.entries(FACE_LAYOUTS)) {
     const faceData = cube.faces?.[faceName];
-    // An explicit null texture is the model's culled-face marker. A missing
-    // face/texture field remains renderable; textured mode turns it white in
-    // the shader, while solid mode keeps the element's own display colour.
+    // A face without a texture remains renderable using the same display
+    // colour as solid mode. Only an explicitly culled face is omitted.
     if (isCubeFaceCulled(faceData)) continue;
     const textured = hasAssignedFaceTexture(faceData);
     const indices = FACE_TRIANGLE_SLOTS.map(slot => quadIndices[slot]);
@@ -3073,12 +3082,12 @@ const VERTEX_SHADER = `
       // equal 0.6-power contribution from both directional lights.
       diffuse = min(1.0, (light0 + light1) * 0.6 + 0.4);
     }
-    // Textured mode keeps the source texture chroma. Vertex color is only used
-    // by solid mode; diffuse light remains available when shade is enabled.
+    // Textured faces keep source chroma; untextured faces retain the cube's
+    // solid-mode display colour instead of falling back to white.
     vSelected = step(1.5, aColor.a);
     vColor = uRenderMode == 4 && normalLength > 0.1
       ? vec4(transformedNormal * 0.5 + 0.5, min(aColor.a, 1.0))
-      : uRenderMode == 2
+      : uRenderMode == 2 && aUv.x > -999999.0
         ? vec4(vec3(diffuse), min(aColor.a, 1.0))
         : vec4(aColor.rgb * diffuse, min(aColor.a, 1.0));
     vUv = aUv;
@@ -3090,6 +3099,8 @@ const FRAGMENT_SHADER = `
   varying vec4 vColor;
   varying vec2 vUv;
   uniform sampler2D uTexture;
+  uniform int uPaintPixelGrid;
+  uniform vec2 uPaintGridSize;
   uniform sampler2D uSelectionMask;
   uniform int uSelectionActive;
   uniform vec2 uSelectionTexel;
@@ -3105,16 +3116,22 @@ const FRAGMENT_SHADER = `
   void main() {
     vec4 color = vColor;
     bool hasTexture = vUv.x > -999999.0;
+    bool gridOnly = false;
     if ((uRenderMode == 2 || uRenderMode == 3) && hasTexture) {
       vec4 texel = texture2D(uTexture, vUv);
       if (uRenderMode == 2) color *= texel;
       else color.a *= texel.a;
       if (uAlphaMode == 0) color.a = 1.0;
       if (uAlphaMode == 1) {
-        if (color.a < 0.1) discard;
-        color.a = 1.0;
+        if (color.a < 0.1) {
+          if (uPaintPixelGrid == 1 && uRenderMode == 2) gridOnly = true;
+          else discard;
+        } else color.a = 1.0;
       }
-      if (uAlphaMode == 2 && color.a < 0.1) discard;
+      if (uAlphaMode == 2 && color.a < 0.1) {
+        if (uPaintPixelGrid == 1 && uRenderMode == 2) gridOnly = true;
+        else discard;
+      }
     }
     color.rgb = mix(color.rgb, vec3(1.0), vSelected * 0.13);
     #ifdef SCREEN_SELECTION_DERIVATIVES
@@ -3140,6 +3157,24 @@ const FRAGMENT_SHADER = `
             (screenPoint + vec2(uSelectionPhase, 0.0)) / 8.0).rgb;
         }
       }
+    }
+    if (uPaintPixelGrid == 1 && hasTexture) {
+      vec2 pixelPoint = vUv * uPaintGridSize;
+      vec2 boundary = min(fract(pixelPoint), 1.0 - fract(pixelPoint));
+      #ifdef SCREEN_SELECTION_DERIVATIVES
+      vec2 footprint = max(fwidth(pixelPoint), vec2(0.0001));
+      vec2 visibility = smoothstep(vec2(1.0), vec2(2.0), 1.0 / footprint);
+      vec2 lines = 1.0 - smoothstep(vec2(0.1), vec2(0.65), boundary / footprint);
+      float line = max(lines.x * visibility.x, lines.y * visibility.y);
+      #else
+      float line = 1.0 - smoothstep(0.01, 0.05, min(boundary.x, boundary.y));
+      #endif
+      vec3 ink = dot(color.rgb, vec3(0.299, 0.587, 0.114)) > 0.45 ? vec3(0.0) : vec3(1.0);
+      if (gridOnly) {
+        if (line < 0.001) discard;
+        color.rgb = ink;
+        color.a = line * 0.45;
+      } else color.rgb = mix(color.rgb, ink, line * 0.45);
     }
     if (uColorOverride.a > 0.5) color.rgb = uColorOverride.rgb;
     color.a *= uOpacity;
@@ -3156,6 +3191,8 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
   varying float vSelected;
   varying float vFragDepth;
   uniform sampler2D uTexture;
+  uniform int uPaintPixelGrid;
+  uniform vec2 uPaintGridSize;
   uniform sampler2D uSelectionMask;
   uniform int uSelectionActive;
   uniform vec2 uSelectionTexel;
@@ -3172,16 +3209,22 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
   void main() {
     vec4 color = vColor;
     bool hasTexture = vUv.x > -999999.0;
+    bool gridOnly = false;
     if ((uRenderMode == 2 || uRenderMode == 3) && hasTexture) {
       vec4 texel = texture2D(uTexture, vUv);
       if (uRenderMode == 2) color *= texel;
       else color.a *= texel.a;
       if (uAlphaMode == 0) color.a = 1.0;
       if (uAlphaMode == 1) {
-        if (color.a < 0.1) discard;
-        color.a = 1.0;
+        if (color.a < 0.1) {
+          if (uPaintPixelGrid == 1 && uRenderMode == 2) gridOnly = true;
+          else discard;
+        } else color.a = 1.0;
       }
-      if (uAlphaMode == 2 && color.a < 0.1) discard;
+      if (uAlphaMode == 2 && color.a < 0.1) {
+        if (uPaintPixelGrid == 1 && uRenderMode == 2) gridOnly = true;
+        else discard;
+      }
     }
     color.rgb = mix(color.rgb, vec3(1.0), vSelected * 0.13);
     #ifdef SCREEN_SELECTION_DERIVATIVES
@@ -3207,6 +3250,24 @@ const LOG_DEPTH_FRAGMENT_SHADER = `
             (screenPoint + vec2(uSelectionPhase, 0.0)) / 8.0).rgb;
         }
       }
+    }
+    if (uPaintPixelGrid == 1 && hasTexture) {
+      vec2 pixelPoint = vUv * uPaintGridSize;
+      vec2 boundary = min(fract(pixelPoint), 1.0 - fract(pixelPoint));
+      #ifdef SCREEN_SELECTION_DERIVATIVES
+      vec2 footprint = max(fwidth(pixelPoint), vec2(0.0001));
+      vec2 visibility = smoothstep(vec2(1.0), vec2(2.0), 1.0 / footprint);
+      vec2 lines = 1.0 - smoothstep(vec2(0.1), vec2(0.65), boundary / footprint);
+      float line = max(lines.x * visibility.x, lines.y * visibility.y);
+      #else
+      float line = 1.0 - smoothstep(0.01, 0.05, min(boundary.x, boundary.y));
+      #endif
+      vec3 ink = dot(color.rgb, vec3(0.299, 0.587, 0.114)) > 0.45 ? vec3(0.0) : vec3(1.0);
+      if (gridOnly) {
+        if (line < 0.001) discard;
+        color.rgb = ink;
+        color.a = line * 0.45;
+      } else color.rgb = mix(color.rgb, ink, line * 0.45);
     }
     if (uColorOverride.a > 0.5) color.rgb = uColorOverride.rgb;
     color.a *= uOpacity;

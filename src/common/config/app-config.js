@@ -1,5 +1,6 @@
 import { ConfigRegistry, ConfigScope, ConfigType } from '../core/config-registry.js';
-import { ENGLISH_UI, translateEnglishUiText } from '../i18n/english.js';
+import { translateEnglishUiText } from '../i18n/english.js';
+import { UI_MESSAGES } from '../i18n/messages.js';
 import { toSimplified } from '../i18n/simplified.js';
 
 export const AppLanguage = Object.freeze({
@@ -46,7 +47,19 @@ export const LANGUAGE_OPTIONS = [
   { value: AppLanguage.ENGLISH, label: 'English' }
 ];
 const externalLanguages = new Map();
+const uiSourceKeys = new Map(Object.entries(UI_MESSAGES).map(([key, message]) => [message.zhHant, key]));
 let languagePacksInitialized = false;
+
+export function translateUiKey(key, language = configRegistry.get(ConfigKey.LANGUAGE), values = []) {
+  const message = UI_MESSAGES[key];
+  if (!message) return key;
+  const external = externalLanguages.get(language);
+  const template = external
+    ? external.messages[key] ?? message.zhHant
+    : language === AppLanguage.ENGLISH ? message.en
+      : language === AppLanguage.SIMPLIFIED_CHINESE ? message.zhHans : message.zhHant;
+  return String(template).replace(/\{(\d+)\}/g, (match, index) => values[index] ?? match);
+}
 
 function compileTranslationPattern(source, translation) {
   if (!/\{\d+\}/.test(source)) return null;
@@ -56,7 +69,15 @@ function compileTranslationPattern(source, translation) {
     if (index) { captures.push(index[1]); return '(.+?)'; }
     return part.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&');
   }).join('');
-  return { expression: new RegExp(`^${expression}$`), captures, translation };
+  return { expression: new RegExp(`^${expression}$`), captures, translation, specificity: source.length };
+}
+
+function compileRuntimeTemplatePattern(source, translation) {
+  if (!source?.includes('${')) return null;
+  const parts = source.split(/\$\{[^{}]*\}/);
+  if (parts.length < 2) return null;
+  const escaped = parts.map(part => part.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&'));
+  return { expression: new RegExp(`^${escaped.join('(.*?)')}$`), translation, specificity: parts.join('').length };
 }
 
 const storage = typeof window !== 'undefined' ? window.localStorage : null;
@@ -161,10 +182,16 @@ export function replaceLanguagePacks(packs) {
   LANGUAGE_OPTIONS.splice(3);
   for (const pack of packs) {
     if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/i.test(pack.code) || LANGUAGE_OPTIONS.some(option => option.value === pack.code)) continue;
+    const messages = Object.fromEntries(Object.entries(pack.translations).map(([source, translated]) =>
+      [uiSourceKeys.get(source) || source, translated]));
     externalLanguages.set(pack.code, {
-      messages: pack.translations,
-      patterns: Object.entries(pack.translations).map(([source, translated]) =>
-        compileTranslationPattern(source, translated)).filter(Boolean)
+      messages,
+      patterns: [
+        ...Object.entries(pack.translations).map(([source, translated]) =>
+          compileTranslationPattern(source, translated)).filter(Boolean),
+        ...Object.entries(messages).map(([key, translated]) =>
+          compileRuntimeTemplatePattern(UI_MESSAGES[key]?.zhHant, translated)).filter(Boolean)
+      ].sort((a, b) => b.specificity - a.specificity)
     });
     LANGUAGE_OPTIONS.push({ value: pack.code, label: pack.label });
   }
@@ -186,13 +213,18 @@ export function replaceLanguagePacks(packs) {
 
 export function translateUiText(source, language = configRegistry.get(ConfigKey.LANGUAGE)) {
   const text = String(source ?? '');
+  // Existing DOM labels are still authored in Traditional Chinese. Resolve
+  // them to the stable ID first; new code and language packs use that ID.
+  const key = UI_MESSAGES[text] ? text : uiSourceKeys.get(text);
+  if (key) return translateUiKey(key, language);
   if (externalLanguages.has(language)) {
     const { messages, patterns } = externalLanguages.get(language);
     if (Object.hasOwn(messages, text)) return messages[text];
     for (const pattern of patterns) {
       const match = text.match(pattern.expression);
       if (!match) continue;
-      const replacements = new Map(pattern.captures.map((index, position) => [index, match[position + 1]]));
+      const replacements = new Map((pattern.captures || match.slice(1).map((_, index) => String(index)))
+        .map((index, position) => [index, match[position + 1]]));
       return pattern.translation.replace(/\{(\d+)\}/g, (_, index) => replacements.get(index) ?? '');
     }
     return text;
@@ -200,7 +232,6 @@ export function translateUiText(source, language = configRegistry.get(ConfigKey.
   if (language === AppLanguage.TRADITIONAL_CHINESE) return text;
   if (language === AppLanguage.SIMPLIFIED_CHINESE) return toSimplified(text);
   if (language !== AppLanguage.ENGLISH) return text;
-  if (ENGLISH_UI[text]) return ENGLISH_UI[text];
   return translateEnglishUiText(text, language, translateUiText);
 }
 

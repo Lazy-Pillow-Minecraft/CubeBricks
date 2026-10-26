@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { ConfigRegistry, ConfigScope, ConfigType } from '../src/common/core/config-registry.js';
-import { ConfigKey, configRegistry as appConfigRegistry, migrateConfigDefaults, translateUiText } from '../src/common/config/app-config.js';
+import { ConfigKey, configRegistry as appConfigRegistry, migrateConfigDefaults, replaceLanguagePacks, translateUiKey, translateUiText } from '../src/common/config/app-config.js';
+import { UI_MESSAGES } from '../src/common/i18n/messages.js';
 import { modifierRegistry } from '../src/common/config/modifiers.js';
 
 const memory = new Map();
@@ -66,6 +67,19 @@ assert.equal(translateUiText('拖動輪盤', 'zh-Hans'), '拖动轮盘');
 assert.equal(translateUiText('不會寫入模型工程', 'zh-Hans'), '不会写入模型工程');
 assert.equal(translateUiText('玩家參考紋理：skin.png', 'en'), 'Player reference texture: skin.png');
 assert.equal(translateUiText('物件屬性', 'en'), 'Object properties');
+assert.equal(translateUiKey('ui.object-properties', 'en'), 'Object properties');
+assert.equal(translateUiKey('ui.object-properties', 'zh-Hans'), '对象属性');
+assert.equal(translateUiText('ui.object-properties', 'en'), 'Object properties');
+assert.ok(Object.keys(UI_MESSAGES).every(key => /^ui\.[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key)), 'translation keys are stable semantic IDs');
+replaceLanguagePacks([{ code: 'fr', label: 'Français', translations: {
+  'ui.object-properties': 'Propriétés de l’objet',
+  'ui.preparing-facecount': 'Préparation de {0} faces…'
+} }]);
+assert.equal(translateUiText('物件屬性', 'fr'), 'Propriétés de l’objet');
+assert.equal(translateUiText('正在準備 12 個面…', 'fr'), 'Préparation de 12 faces…');
+replaceLanguagePacks([{ code: 'fr', label: 'Français', translations: { '物件屬性': 'Anciennes propriétés' } }]);
+assert.equal(translateUiKey('ui.object-properties', 'fr'), 'Anciennes propriétés', 'older Chinese-key packs still load');
+replaceLanguagePacks([]);
 assert.equal(translateUiText('3 行 · 每行獨立設定', 'en'), '3 rows · configured independently');
 assert.equal(translateUiText('預覽：豎切', 'en'), 'Preview: vertical cut');
 assert.equal(translateUiText('已豎切 head（X 軸）', 'en'), 'Vertically cut head on the X axis');
@@ -78,6 +92,9 @@ assert.equal(translateUiText('僅在此預覽中讓模型慢速轉動', 'zh-Hans
 
 const translationCatalog = JSON.parse(fs.readFileSync(new URL('../src/common/config/ui-text-catalog.json', import.meta.url), 'utf8'));
 assert.ok(translationCatalog.entries.length > 900, 'UI text extraction includes dynamic modules and settings');
+assert.equal(new Set(translationCatalog.entries.map(entry => entry.key)).size, translationCatalog.entries.length);
+assert.deepEqual(translationCatalog.entries.map(entry => entry.key).sort(), Object.keys(UI_MESSAGES).sort(),
+  'generated messages and the translation catalog use the same stable IDs');
 assert.equal(translationCatalog.entries.filter(entry => !entry.dynamic && entry.englishMissing).length, 0,
   'Every extracted static UI literal has an English translation');
 

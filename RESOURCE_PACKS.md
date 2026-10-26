@@ -14,16 +14,17 @@
   "label": "Français",
   "hotReload": true,
   "translations": {
-    "設定": "Paramètres",
-    "新建": "Nouveau",
-    "保存": "Enregistrer"
+    "ui.settings": "Paramètres",
+    "ui.new": "Nouveau",
+    "ui.save": "Enregistrer",
+    "ui.preparing-facecount": "Préparation de {0} faces…"
   }
 }
 ```
 
-`code` 使用語言標記；`translations` 的鍵是介面原始繁體中文文字，值為目標語言文字。沒有翻譯的文字會維持原文。動態內容可用 `{0}`、`{1}` 佔位，例如 `"多選 {0}": "{0} selected"`。也可以用 ZIP：根目錄放 `language.json`；或放 `package.json`（含 `code`、`label` 和可選的 `translationsFile`），另放 `translations.json`。整包包在一層資料夾內也可以。
+`code` 使用語言標記；`translations` 的鍵使用穩定的 `ui.*` 語意 ID，不再以繁體中文字面作為翻譯鍵。可用的 ID、繁中原文及內置譯文列於 `src/common/config/ui-text-catalog.json`。沒有翻譯的文字會回退繁中；動態詞條的譯文可使用 `{0}`、`{1}` 佔位，例如上面的面數。舊版以繁中原文為鍵的語言包仍可讀取，但新包請只使用 ID。也可以用 ZIP：根目錄放 `language.json`；或放 `package.json`（含 `code`、`label` 和可選的 `translationsFile`），另放 `translations.json`。整包包在一層資料夾內也可以。
 
-內置英語與簡體中文的翻譯資料分別位於 `src/common/i18n/english.js` 和 `src/common/i18n/simplified.js`。
+內置詞條由 `node scripts/extract-ui-text.mjs` 整理為 `src/common/i18n/messages.js`，其 ID 一經分配便保持不變；`english.js` 與 `simplified.js` 另處理執行期組合文字的後備翻譯。程式新增文案可使用 `translateUiKey('ui.settings')` 按 ID 取得譯文。
 
 ## 字體包
 

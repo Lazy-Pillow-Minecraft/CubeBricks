@@ -286,6 +286,7 @@ const selectionController = createSelectionController({
 function revealOutlinerItem(...args) { return selectionController.revealOutlinerItem(...args); }
 function refreshSelectionUi(...args) { return selectionController.refreshSelectionUi(...args); }
 function clearSelection(...args) { return selectionController.clearSelection(...args); }
+function selectAllElements(...args) { return selectionController.selectAllElements(...args); }
 function selectItem(...args) { return selectionController.selectItem(...args); }
 function syncInspectorValues(...args) { return selectionController.syncInspectorValues(...args); }
 function getSelectionExpansion(...args) { return selectionController.getSelectionExpansion(...args); }
@@ -709,6 +710,7 @@ function initializeDockSystem() {
 
 const contextMenuController = createContextMenuController({
   state, $, outliner, inspector, sceneCanvas, sceneRenderer, inspectorController,
+  referenceImages, getDockManager: () => dockManager,
   textureInput, palette, paletteRows, configRegistry,
   captureModel, saveModelCapture, copyModelCapture, clearModelCapture,
   cancelKnifeSelection, updateToolOptions, renderScene, toast,
@@ -766,7 +768,7 @@ const eventBinder = createEventBinder({
   endTemporaryEyedropper, endTexturePointer, exitSubdivisionEdit,
   exportProject, focusSelected, focusSceneOrigin, focusSelectedTextureUvs, getUvPreviewProject,
   importPlayerReferenceTexture, importTexture, inspectorBatchNodes,
-  invalidateSelectionRenderGeometry, isBezierElement,
+  invalidateSelectionRenderGeometry, isBezierElement, isEffectivelyLocked,
   loadProjectContent, markDirty, moveSelectedNodes, newProject,
   nodeAutoUvEnabled, nodeUvNormalizedEnabled, noteJournalOperation,
   onPointerDown, onPointerMove, onScenePointerMove, onTexturePointerMove,
@@ -779,7 +781,7 @@ const eventBinder = createEventBinder({
   renderTextureUvOverlay, renderUvPreview, resetTextureView,
   resolveGizmoHandle, round, saveProject, scheduleLockedHover,
   scheduleOutlinerWindow, scheduleSceneRender, scheduleTextureAnimation,
-  selected, selectItem, selectPaintGradientStop, setActiveTextureItem,
+  selected, selectAllElements, selectItem, selectPaintGradientStop, setActiveTextureItem,
   setConfigFromControl, setDockHotspotFocus, setMode, setNodeFlag,
   setRenderModeMenu, setThemeVar, setTool, setUvCoordinate, snapshot,
   startCameraDrag, startTexturePointer, startTransformDrag, stopTimeline,

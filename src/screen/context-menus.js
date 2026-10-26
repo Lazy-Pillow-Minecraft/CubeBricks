@@ -5,6 +5,7 @@ import { insetControlRatio } from './color-picker/math.js';
 
 export function createContextMenuController({
   state, $, outliner, inspector, sceneCanvas, sceneRenderer, inspectorController,
+  referenceImages, getDockManager,
   textureInput, palette, paletteRows, configRegistry,
   captureModel, saveModelCapture, copyModelCapture, clearModelCapture,
   cancelKnifeSelection, updateToolOptions, renderScene, toast,
@@ -173,6 +174,42 @@ function bindContextMenus() {
     { icon: '▣', label: '離屏渲染', action: () => captureModel('offscreen') }
   ] });
   $('#viewport').addEventListener('contextmenu', event => {
+    if (referenceImages.editing && event.target.closest('#referenceImageLayer')) {
+      const image = referenceImages.referenceImageAt(event.clientX, event.clientY);
+      if (!image) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeContextMenu();
+        referenceImages.setReferenceImageEditing(false);
+        return;
+      }
+      const uid = image.dataset.referenceUid;
+      referenceImages.selectReference(uid);
+      const records = referenceImages.referenceImagesForView();
+      const index = records.findIndex(record => record.uid === uid);
+      showContextMenu(event, { title: records[index]?.name || '參考圖', source: image, items: [
+        { icon: '↑', label: '上移一層', action: () => referenceImages.reorderReferenceImage(uid, 'up') },
+        { icon: '↓', label: '下移一層', action: () => referenceImages.reorderReferenceImage(uid, 'down') },
+        { icon: '⇧', label: '置於頂層', action: () => referenceImages.reorderReferenceImage(uid, 'top') },
+        { icon: '⇩', label: '置於底層', action: () => referenceImages.reorderReferenceImage(uid, 'bottom') },
+        { separator: true },
+        { icon: '×', label: '移除參考圖', danger: true, action: () => referenceImages.removeReferenceImage(uid) }
+      ] });
+      return;
+    }
+    if (state.mode === 'paint') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeContextMenu();
+      const rect = sceneCanvas.getBoundingClientRect();
+      const hit = sceneRenderer.pickDetailed(state.project, event.clientX - rect.left, event.clientY - rect.top,
+        state.geometryOnly, { includeGenerated: !state.modifierResultGhost });
+      if (hit?.uid && state.project.getNode(hit.uid)) {
+        getDockManager()?.expand('outliner');
+        selectItem(hit.uid, { revealInOutliner: true });
+      }
+      return;
+    }
     if (state.tool === 'knife' && state.knifeSelection) {
       event.preventDefault();
       event.stopPropagation();
@@ -203,14 +240,6 @@ function bindContextMenus() {
       return;
     }
     const activeCurve = selected();
-    if (state.mode === 'paint') {
-      showContextMenu(event, { title: state.project.name, items: [
-        { icon: '⌖', label: '聚焦選中物件', action: focusSelected },
-        { icon: '◎', label: '回到場景中心', action: focusSceneOrigin },
-        { separator: true }, captureItem()
-      ] });
-      return;
-    }
     if (isBezierElement(activeCurve) && Number.isInteger(state.selectedCurveNodeIndex)) {
       event.preventDefault();
       event.stopPropagation();

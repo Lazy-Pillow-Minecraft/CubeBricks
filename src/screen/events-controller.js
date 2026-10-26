@@ -1,5 +1,6 @@
 import { ConfigKey, configRegistry } from '../common/config/app-config.js';
 import { createListDragAutoScroll } from './list-drag-scroll.js';
+import { verticalDropTarget } from './vertical-drop.js';
 import { Cube, Group, Shape } from '../model.js';
 import { shapeRegistry } from '../shapes/builtins.js';
 
@@ -30,7 +31,7 @@ export function createEventBinder({
   endTemporaryEyedropper, endTexturePointer, exitSubdivisionEdit,
   exportProject, focusSelected, focusSceneOrigin, focusSelectedTextureUvs, getUvPreviewProject,
   importPlayerReferenceTexture, importTexture, inspectorBatchNodes,
-  invalidateSelectionRenderGeometry, isBezierElement,
+  invalidateSelectionRenderGeometry, isBezierElement, isEffectivelyLocked,
   loadProjectContent, markDirty, moveSelectedNodes, newProject,
   nodeAutoUvEnabled, nodeUvNormalizedEnabled, noteJournalOperation,
   onPointerDown, onPointerMove, onScenePointerMove, onTexturePointerMove,
@@ -43,7 +44,7 @@ export function createEventBinder({
   renderTextureUvOverlay, renderUvPreview, resetTextureView,
   resolveGizmoHandle, round, saveProject, scheduleLockedHover,
   scheduleOutlinerWindow, scheduleSceneRender, scheduleTextureAnimation,
-  selected, selectItem, selectPaintGradientStop, setActiveTextureItem,
+  selected, selectAllElements, selectItem, selectPaintGradientStop, setActiveTextureItem,
   setConfigFromControl, setDockHotspotFocus, setMode, setNodeFlag,
   setRenderModeMenu, setThemeVar, setTool, setUvCoordinate, snapshot,
   startCameraDrag, startTexturePointer, startTransformDrag, stopTimeline,
@@ -113,31 +114,95 @@ function bindEvents() {
   const textureList = $('#textureList');
   const outlinerDragScroll = createListDragAutoScroll(outliner, () => Boolean(state.outlinerDragUids?.length), pointer => {
     renderOutlinerWindow();
-    if (pointer) updateOutlinerDropTarget(pointer.y, document.elementFromPoint(pointer.x, pointer.y));
+    if (pointer) updateOutlinerDropTarget(pointer.y, pointer.x);
   });
   const textureDragScroll = createListDragAutoScroll(textureList, () => Boolean(state.textureDrag), pointer => {
-    if (pointer) updateTextureDropTarget(pointer.y, document.elementFromPoint(pointer.x, pointer.y));
+    if (pointer) updateTextureDropTarget(pointer.y);
   });
   const paletteDragScroll = createListDragAutoScroll($('#paletteRows'), () => Boolean(palette.draggedColor));
-  function updateOutlinerDropTarget(clientY, target) {
-    clearOutlinerDropState({ keepDragging: true });
-    const item = target?.closest('.outliner-item');
-    if (!item || !outliner.contains(item) || item.dataset.curveNodeIndex !== undefined) return;
-    const node = state.project.getNode(item.dataset.uid);
-    const rect = item.getBoundingClientRect();
-    const ratio = (clientY - rect.top) / rect.height;
-    const zone = node?.type === 'group' && ratio > .27 && ratio < .73 ? 'inside' : ratio < .5 ? 'before' : 'after';
-    item.classList.add(`drop-${zone}`);
-    item.dataset.dropZone = zone;
+  function highlightOutlinerGroupLine(groupUid, targetIndex, endpointY) {
+    if (!groupUid) return;
+    const rows = state.outlinerRows || [];
+    const origin = rows.findIndex(row => row.node?.uid === groupUid);
+    if (origin < 0) return;
+    outliner.querySelectorAll('.outliner-tree-line[data-group-line-uid]').forEach(line => {
+      if (line.dataset.groupLineUid !== groupUid) return;
+      const index = Number(line.closest('[data-outliner-row-index]')?.dataset.outlinerRowIndex);
+      if (!Number.isInteger(index) || index < origin || index > targetIndex) return;
+      line.classList.add('drop-highlight');
+      if (index === targetIndex) {
+        const ownFooterBottom = line.classList.contains('ends-here') ? 7 : 0;
+        line.style.setProperty('--highlight-bottom', `${Math.max(0, rows[index].height - endpointY - ownFooterBottom)}px`);
+      }
+    });
   }
-  function updateTextureDropTarget(clientY, target) {
+  function updateOutlinerDropTarget(clientY, clientX) {
+    clearOutlinerDropState({ keepDragging: true });
+    const rows = state.outlinerRows || [];
+    const listBounds = outliner.getBoundingClientRect();
+    const contentY = clientY < listBounds.top ? -1
+      : clientY > listBounds.bottom ? Infinity
+        : clientY - listBounds.top + outliner.scrollTop;
+    const picked = verticalDropTarget(rows, contentY);
+    if (!picked || contentY >= rows.at(-1).top + rows.at(-1).height) {
+      outliner.querySelector('.outliner-root-tail')?.classList.add('drop-root');
+      return { uid: null, zone: 'after' };
+    }
+    let { entry: row, index: rowIndex } = picked;
+    if (row.curveNode) {
+      while (rowIndex > 0 && rows[rowIndex].curveNode) rowIndex--;
+      row = rows[rowIndex];
+    }
+    const footer = outliner.querySelector(`.outliner-group-end[data-outliner-row-index="${rowIndex}"]`);
+    if (row.groupEnd) {
+      const chain = [...row.ancestors, { uid: row.groupUid, depth: row.depth }];
+      const outside = chain.find(({ depth }) => clientX <= listBounds.left + 16 + depth * 13 + 4);
+      const destination = outside || chain.at(-1);
+      const zone = outside ? 'after' : 'inside';
+      if (footer) {
+        footer.dataset.dropUid = destination.uid;
+        footer.dataset.dropZone = zone;
+        footer.style.setProperty('--drop-line-x', `${16 + destination.depth * 13}px`);
+        footer.classList.add(`drop-${zone}`);
+        highlightOutlinerGroupLine(destination.uid, rowIndex, 8);
+      }
+      return { uid: destination.uid, zone };
+    }
+    const item = outliner.querySelector(`.outliner-item[data-outliner-row-index="${rowIndex}"]`);
+    const node = row.node;
+    const ratio = picked.entry === row ? picked.ratio : 1;
+    const zone = node?.type === 'group' && ratio > .27 && ratio < .73 ? 'inside' : ratio < .5 ? 'before' : 'after';
+    const groupLine = zone === 'inside' && node?.type === 'group'
+      ? { uid: node.uid, depth: row?.depth || 0 }
+      : row?.ancestors.at(-1);
+    if (groupLine) {
+      item?.style.setProperty('--drop-line-x', `${16 + groupLine.depth * 13}px`);
+      if (item) highlightOutlinerGroupLine(groupLine.uid, rowIndex, zone === 'before' ? 0 : 31);
+    }
+    item?.classList.add(`drop-${zone}`);
+    if (item) item.dataset.dropZone = zone;
+    return { uid: node.uid, zone };
+  }
+  function updateTextureDropTarget(clientY) {
     textureList.querySelectorAll('.drop-before,.drop-after,.drop-inside').forEach(node => node.classList.remove('drop-before', 'drop-after', 'drop-inside'));
-    const item = target?.closest('.texture-item');
-    const group = !item && target?.closest('.texture-group');
-    if (item && textureList.contains(item) && state.textureDrag?.type === 'asset') {
-      const zone = clientY < item.getBoundingClientRect().top + item.offsetHeight / 2 ? 'before' : 'after';
-      item.classList.add(`drop-${zone}`); item.dataset.dropZone = zone;
-    } else if (group && textureList.contains(group)) group.classList.add('drop-inside');
+    const rows = [...textureList.querySelectorAll(state.textureDrag?.type === 'group'
+      ? '.texture-group-header' : '.texture-item,.texture-group-header')]
+      .filter(node => node.getClientRects().length);
+    const picked = verticalDropTarget(rows, clientY);
+    if (!picked) return null;
+    const item = picked.entry.classList.contains('texture-item') ? picked.entry : null;
+    const group = item ? null : picked.entry.closest('.texture-group');
+    const firstBounds = rows[0].getBoundingClientRect();
+    const lastBounds = rows.at(-1).getBoundingClientRect();
+    const rootEdge = state.textureDrag?.type === 'asset' && group
+      ? clientY < firstBounds.top ? 'start' : clientY >= lastBounds.bottom ? 'end' : null
+      : null;
+    if (item && state.textureDrag?.type === 'asset') {
+      item.classList.add(`drop-${picked.position}`);
+      item.dataset.dropZone = picked.position;
+    } else if (group) group.classList.add(state.textureDrag?.type === 'group' || rootEdge
+      ? `drop-${picked.position}` : 'drop-inside');
+    return { item, group, position: picked.position, rootEdge };
   }
   document.addEventListener('drop', () => {
     outlinerDragScroll.stop(); textureDragScroll.stop(); paletteDragScroll.stop();
@@ -275,6 +340,8 @@ function bindEvents() {
     if (shapeRegistry.has(option.dataset.createShape) && !['bezier2d', 'bezier3d'].includes(option.dataset.createShape)) addShape(option.dataset.createShape);
     if (option.dataset.createShape === 'bezier2d') addBezierElement(2);
     if (option.dataset.createShape === 'bezier3d') addBezierElement(3);
+    if (option.dataset.createShape === 'bezier2d-envelope') addBezierElement(2, 'envelope');
+    if (option.dataset.createShape === 'bezier3d-envelope') addBezierElement(3, 'envelope');
   });
   document.addEventListener('click', closeShapeCreateMenu);
   $('[data-action="addLocator"]').addEventListener('click', addLocator);
@@ -334,6 +401,10 @@ function bindEvents() {
   $('#alphaLockToggle').addEventListener('change', event => configRegistry.set(ConfigKey.ALPHA_LOCK, event.target.checked, { source: 'toolbar' }));
   $('#paintExplodeToggle').addEventListener('change', event => {
     state.paintExplode = event.target.checked;
+    renderScene();
+  });
+  $('#paintPixelGridToggle').addEventListener('change', event => {
+    state.paintPixelGrid = event.target.checked;
     renderScene();
   });
   $('#negativeShapeToggle').addEventListener('change', event => configRegistry.set(ConfigKey.ALLOW_NEGATIVE_SIZE, event.target.checked, { source: 'bottom-options' }));
@@ -703,6 +774,12 @@ function bindEvents() {
   });
   outliner.addEventListener('scroll', scheduleOutlinerWindow, { passive: true });
   outliner.addEventListener('click', event => {
+    const groupLine = event.target.closest('[data-group-line-uid]');
+    if (groupLine) {
+      event.preventDefault();
+      selectItem(groupLine.dataset.groupLineUid, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey });
+      return;
+    }
     const button = event.target.closest('[data-uid]');
     if (!button) { clearSelection(); return; }
     if (button.dataset.curveNodeIndex !== undefined) {
@@ -762,22 +839,18 @@ function bindEvents() {
     if (!drag || (event?.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
     outlinerPointerDrag = null;
     if (!drag.active) return;
-    const target = commit ? document.elementFromPoint(event.clientX, event.clientY) : null;
-    const inside = target && outliner.contains(target);
-    const item = inside ? target.closest('.outliner-item') : null;
-    const targetUid = item?.dataset.curveNodeIndex === undefined ? item?.dataset.uid || null : null;
-    const zone = item?.dataset.dropZone || 'after';
+    const destination = commit ? updateOutlinerDropTarget(event.clientY, event.clientX) : null;
     outlinerDragScroll.stop();
     clearOutlinerDropState();
     removeOutlinerDragGhost();
     state.outlinerDragUids = null;
     suppressOutlinerClick = true;
     setTimeout(() => { suppressOutlinerClick = false; }, 0);
-    if (commit && inside && item?.dataset.curveNodeIndex === undefined) moveSelectedNodes(targetUid, zone);
+    if (destination) moveSelectedNodes(destination.uid, destination.zone);
   };
   outliner.addEventListener('pointerdown', event => {
     if (event.button !== 0 || state.mode === 'paint'
-      || event.target.closest('[data-disclosure], [data-node-toggle]')) return;
+      || event.target.closest('[data-disclosure], [data-node-toggle], [data-group-line-uid]')) return;
     const item = event.target.closest('.outliner-item');
     if (!item || item.dataset.curveNodeIndex !== undefined) return;
     outlinerPointerDrag = { pointerId: event.pointerId, uid: item.dataset.uid,
@@ -810,9 +883,7 @@ function bindEvents() {
     event.preventDefault();
     outlinerDragController.dragGhost.style.left = `${event.clientX + 14}px`;
     outlinerDragController.dragGhost.style.top = `${event.clientY + 12}px`;
-    const target = document.elementFromPoint(event.clientX, event.clientY);
-    if (target && outliner.contains(target)) updateOutlinerDropTarget(event.clientY, target);
-    else clearOutlinerDropState({ keepDragging: true });
+    updateOutlinerDropTarget(event.clientY, event.clientX);
   });
   document.addEventListener('pointerup', event => finishOutlinerPointerDrag(event, true));
   document.addEventListener('pointercancel', event => finishOutlinerPointerDrag(event));
@@ -875,14 +946,15 @@ function bindEvents() {
   textureList.addEventListener('dragover', event => {
     if (!state.textureDrag) return;
     event.preventDefault();
-    updateTextureDropTarget(event.clientY, event.target);
+    updateTextureDropTarget(event.clientY);
   });
   textureList.addEventListener('drop', event => {
     if (!state.textureDrag) return;
     event.preventDefault();
+    const destination = updateTextureDropTarget(event.clientY);
     noteJournalOperation(state.textureDrag.type === 'asset' ? 'core.texture.reorder' : 'core.texture.group');
-    const item = event.target.closest('.texture-item');
-    const groupNode = !item && event.target.closest('.texture-group');
+    const item = destination?.item;
+    const groupNode = destination?.group;
     const previousAssets = [...state.textureAssets];
     if (state.textureDrag.type === 'asset') {
       const asset = state.textureAssets.find(entry => entry._uid === state.textureDrag.id);
@@ -890,15 +962,19 @@ function bindEvents() {
         const target = state.textureAssets.find(entry => entry._uid === item.dataset.textureUid);
         state.textureAssets = state.textureAssets.filter(entry => entry !== asset);
         const targetIndex = state.textureAssets.indexOf(target);
-        state.textureAssets.splice(targetIndex + (item.dataset.dropZone === 'after' ? 1 : 0), 0, asset);
+        state.textureAssets.splice(targetIndex + (destination.position === 'after' ? 1 : 0), 0, asset);
         asset.groupId = target.groupId || null;
+      } else if (asset && destination?.rootEdge) {
+        state.textureAssets = state.textureAssets.filter(entry => entry !== asset);
+        state.textureAssets.splice(destination.rootEdge === 'start' ? 0 : state.textureAssets.length, 0, asset);
+        asset.groupId = null;
       } else if (asset && groupNode) asset.groupId = groupNode.dataset.textureGroup;
       else if (asset) asset.groupId = null;
     } else if (state.textureDrag.type === 'group' && groupNode && groupNode.dataset.textureGroup !== state.textureDrag.id) {
       const moving = state.textureGroups.find(entry => entry.id === state.textureDrag.id);
       const target = state.textureGroups.find(entry => entry.id === groupNode.dataset.textureGroup);
       state.textureGroups = state.textureGroups.filter(entry => entry !== moving);
-      state.textureGroups.splice(state.textureGroups.indexOf(target) + 1, 0, moving);
+      state.textureGroups.splice(state.textureGroups.indexOf(target) + (destination.position === 'after' ? 1 : 0), 0, moving);
     }
     state.textureDrag = null;
     remapNumericFaceTextureReferences(previousAssets);
@@ -932,6 +1008,20 @@ function bindEvents() {
       return;
     }
     if (event.button !== 0) return;
+    const curve = selected();
+    if (isBezierElement(curve) && curve.visible !== false && !isEffectivelyLocked(curve.uid)) {
+      const rect = sceneCanvas.getBoundingClientRect();
+      const node = sceneRenderer.pickCurveNode(state.project, curve.uid,
+        event.clientX - rect.left, event.clientY - rect.top, 14, state.selectedCurveNodeIndex);
+      if (node) {
+        event.preventDefault(); event.stopPropagation();
+        state.selectedCurveNodeIndex = node.index;
+        state.selectedModifierUid = null;
+        state.outlinerWindowStart = -1;
+        renderOutlinerWindow(); renderInspector(); renderScene();
+        return;
+      }
+    }
     const handle = resolveGizmoHandle(event);
     if (!handle) return;
     event.preventDefault(); event.stopPropagation();
@@ -1044,6 +1134,13 @@ function bindEvents() {
       return;
     }
     if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
+    if ((event.ctrlKey || event.metaKey) && key === 'a'
+      && event.target instanceof Element
+      && (viewport.contains(event.target) || outliner.contains(event.target))) {
+      event.preventDefault();
+      selectAllElements();
+      return;
+    }
     const textureListFocused = document.activeElement?.closest?.('#textureList');
     if (textureListFocused && (event.ctrlKey || event.metaKey)) {
       if (key === 'c') { event.preventDefault(); copyTexture(); return; }

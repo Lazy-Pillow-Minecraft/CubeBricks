@@ -39,6 +39,7 @@ export const state = {
   playerReference: configRegistry.get(ConfigKey.SHOW_PLAYER_REFERENCE),
   geometryOnly: configRegistry.get(ConfigKey.SHOW_GEOMETRY_ONLY),
   paintExplode: false,
+  paintPixelGrid: false,
   paintExplodeGap: configRegistry.get(ConfigKey.PAINT_EXPLODE_GAP),
   modifierResultGhost: configRegistry.get(ConfigKey.MODIFIER_RESULT_GHOST),
   settingsSnap: configRegistry.get(ConfigKey.SNAP),

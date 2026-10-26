@@ -359,6 +359,8 @@ export class CurveNode {
     const hasExplicitHandles = Array.isArray(data.handleIn) || Array.isArray(data.handleOut);
     this.autoTangent = booleanProperty(data.autoTangent, !hasExplicitHandles);
     this.roll = planar ? 0 : Number(data.roll) || 0;
+    this.radius = data.radius === null || data.radius === undefined || data.radius === ''
+      ? null : Number.isFinite(Number(data.radius)) ? Math.max(0, Number(data.radius)) : null;
     this.handleIn = vector3(data.handleIn, [-2, 0, 0]);
     this.handleOut = vector3(data.handleOut, [2, 0, 0]);
     if (planar) {
@@ -445,15 +447,23 @@ export class BezierElement {
     this.uid = data.uid || data.uuid || uid(this.type);
     initializeNodeNaming(this, data, this.type);
     this.dimension = dimension;
+    this.variant = data.variant === 'envelope' ? 'envelope' : 'standard';
     this.origin = vector3(data.origin);
-    this.rotation = vector3(data.rotation);
+    this.rotation = vector3(data.rotation, dimension === 2 && !data.nodes?.length ? [-90, 0, 0] : [0, 0, 0]);
     this.uvMode = data.uvMode || 'box';
     this.uvNormalized = booleanProperty(data.uvNormalized ?? data.uv_normalized, true);
     const defaults = dimension === 2
-      ? [{ position: [-4, 0, 0] }, { position: [4, 0, 0] }]
-      : [{ position: [-4, 0, 0] }, { position: [4, 4, 2] }];
+      ? [{ position: [0, 0, 0] }, { position: [0, 0, 8] }]
+      : [{ position: [0, 0, 0] }, { position: [0, 8, 0] }];
     this.nodes = (data.nodes?.length >= 2 ? data.nodes : defaults).map(node => new CurveNode(node, dimension === 2));
     this.parameters = { ...shapeRegistry.get(this.type)?.defaults, ...(data.parameters || {}) };
+    if (this.variant === 'envelope') {
+      const suppliedRadius = Number(this.parameters.radius);
+      this.parameters.radius = Number.isFinite(suppliedRadius) && this.parameters.radius !== null
+        ? Math.max(0, suppliedRadius) : Math.max(0, Number(this.parameters.thickness) || 1) / 2;
+      this.parameters.headAtStart = booleanProperty(this.parameters.headAtStart, true);
+      this.parameters.nestedBake = booleanProperty(this.parameters.nestedBake, true);
+    }
     this.autoUv = booleanProperty(data.autoUv ?? data.autouv, true);
     this.exported = booleanProperty(data.exported ?? data.export, true);
     this.locked = booleanProperty(data.locked, false);
@@ -533,6 +543,32 @@ export class BezierElement {
         dense[index].point.map((value, axis) => value - dense[index - 1].point[axis])));
     }
     const totalLength = cumulative.at(-1);
+    const spanBoundaries = [0];
+    for (let index = 1; index < dense.length; index++) {
+      if (dense[index].segment !== dense[index - 1].segment) spanBoundaries.push(cumulative[index - 1]);
+    }
+    spanBoundaries.push(totalLength);
+    let radiusAtDistance = null;
+    if (this.variant === 'envelope') {
+      radiusAtDistance = distance => {
+        const radius = Number(this.parameters.radius);
+        const fallback = Number.isFinite(radius) ? Math.max(0, radius) : .5;
+        // Resolve each adjacent node independently. An unset radius is the
+        // curve-wide radius at that node, not a gap to bridge between more
+        // distant explicitly-sized nodes.
+        let segment = this.nodes.length - 2;
+        for (let index = 0; index < this.nodes.length - 1; index++) {
+          if (distance <= spanBoundaries[index + 1]) { segment = index; break; }
+        }
+        const startRadius = this.nodes[segment].radius ?? fallback;
+        const endRadius = this.nodes[segment + 1].radius ?? fallback;
+        const span = spanBoundaries[segment + 1] - spanBoundaries[segment];
+        if (span <= 1e-9) return startRadius;
+        const amount = Math.max(0, Math.min(1, (distance - spanBoundaries[segment]) / span));
+        return startRadius * (1 - amount) + endRadius * amount;
+      };
+      dense.forEach((point, index) => { point.radius = radiusAtDistance(cumulative[index]); });
+    }
     const sampleAtDistance = distance => {
       const target = Math.max(0, Math.min(totalLength, distance));
       let high = cumulative.findIndex(value => value >= target);
@@ -546,6 +582,7 @@ export class BezierElement {
         tangent: normalizeVector(dense[low].tangent.map(
           (value, axis) => value + (dense[high].tangent[axis] - value) * amount)),
         roll: interpolateAngleDegrees(dense[low].roll, dense[high].roll, amount),
+        ...(radiusAtDistance ? { radius: radiusAtDistance(target) } : {}),
         segment: amount < .5 ? dense[low].segment : dense[high].segment,
         t: dense[low].t + (dense[high].t - dense[low].t) * amount
       };
@@ -580,11 +617,6 @@ export class BezierElement {
     // Each Bezier span is fitted outwards from its own arc-length midpoint.
     // Keeping explicit nodes as boundaries preserves sharp bends and makes a
     // mirrored span produce mirrored cube placement even with a remainder.
-    const spanBoundaries = [0];
-    for (let index = 1; index < dense.length; index++) {
-      if (dense[index].segment !== dense[index - 1].segment) spanBoundaries.push(cumulative[index - 1]);
-    }
-    spanBoundaries.push(totalLength);
     const distances = [...spanBoundaries];
     for (let span = 0; span < spanBoundaries.length - 1; span++) {
       const startDistance = spanBoundaries[span], endDistance = spanBoundaries[span + 1];
@@ -1079,13 +1111,32 @@ export function bakeProceduralShape(project, shapeUid, generatedCubes = null) {
     visible: owner.visible, modifiers: owner.modifiers, operators: owner.operators,
     children: cubes.map(cube => cube.uid)
   });
+  const nestedGroups = [];
+  if (owner.variant === 'envelope' && owner.parameters?.nestedBake && cubes.length > 1) {
+    const ordered = owner.parameters.headAtStart === false ? [...cubes].reverse() : cubes;
+    let current = group;
+    for (let cubeIndex = 0; cubeIndex < ordered.length; cubeIndex++) {
+      current.children = [ordered[cubeIndex].uid];
+      if (cubeIndex === ordered.length - 1) break;
+      const inner = new Group({
+        uid: uid('group'), name: `${owner.name}_${cubeIndex + 2}`, unnamed: false,
+        pivot: [0, 0, 0], rotation: [0, 0, 0],
+        uvMode: owner.uvMode, uvNormalized: owner.uvNormalized, autoUv: owner.autoUv,
+        exported: owner.exported, locked: owner.locked, shade: owner.shade,
+        visible: owner.visible, children: []
+      });
+      current.children.push(inner.uid);
+      nestedGroups.push(inner);
+      current = inner;
+    }
+  }
   if (formatRules(project).moddedEntity) { group.uvMode = 'box'; group.autoUv = true; }
   siblings.splice(index, 1, group.uid);
   project.elements = project.elements.filter(element => element.uid !== owner.uid);
   project.elements.push(...cubes);
-  project.groups.push(group);
+  project.groups.push(group, ...nestedGroups);
   project.invalidateHierarchyIndex();
-  return { group, cubes };
+  return { group, cubes, nestedGroups };
 }
 
 export function importBlockbench(data) {

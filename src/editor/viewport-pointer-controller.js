@@ -86,6 +86,25 @@ function onPointerDown(event) {
   }
   const activeCurve = selected();
   const handleOwner = isBezierElement(activeCurve) || activeCurve?.type === 'node' ? activeCurve : null;
+  const nodeHit = isBezierElement(activeCurve) && !isEffectivelyLocked(activeCurve.uid)
+    ? sceneRenderer.pickCurveNode(state.project, activeCurve.uid, x, y) : null;
+  const unselectedNodeHit = isBezierElement(activeCurve) && !isEffectivelyLocked(activeCurve.uid)
+    ? sceneRenderer.pickCurveNode(state.project, activeCurve.uid, x, y, 14, state.selectedCurveNodeIndex) : null;
+  const selectCurveNode = hit => {
+    event.preventDefault();
+    state.selectedModifierUid = null;
+    state.selectedCurveNodeIndex = hit.index;
+    state.outlinerWindowStart = -1;
+    renderOutlinerWindow();
+    renderInspector();
+    renderScene();
+  };
+  // An unselected node wins over a nearby handle. Once the node is active,
+  // its handle takes precedence so the handle remains easy to drag.
+  if (unselectedNodeHit) {
+    selectCurveNode(unselectedNodeHit);
+    return;
+  }
   if (handleOwner && !isEffectivelyLocked(handleOwner.uid)) {
     const handleHit = sceneRenderer.pickCurveHandle(state.project, handleOwner.uid, x, y, null);
     if (handleHit) {
@@ -94,15 +113,8 @@ function onPointerDown(event) {
     }
   }
   if (isBezierElement(activeCurve) && !isEffectivelyLocked(activeCurve.uid)) {
-    const nodeHit = sceneRenderer.pickCurveNode(state.project, activeCurve.uid, x, y);
     if (nodeHit) {
-      event.preventDefault();
-      state.selectedModifierUid = null;
-      state.selectedCurveNodeIndex = nodeHit.index;
-      state.outlinerWindowStart = -1;
-      renderOutlinerWindow();
-      renderInspector();
-      renderScene();
+      selectCurveNode(nodeHit);
       return;
     }
     state.selectedCurveNodeIndex = null;

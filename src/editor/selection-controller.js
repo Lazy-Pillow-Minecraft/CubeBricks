@@ -13,11 +13,18 @@ function revealOutlinerItem(uid) {
     hierarchyChanged = true;
   }
   if (hierarchyChanged) renderOutliner();
-  const index = (state.outlinerRows || []).findIndex(row => row.node.uid === uid);
+  let index = (state.outlinerRows || []).findIndex(row => row.node?.uid === uid);
+  if (index < 0) {
+    const search = document.getElementById('outlinerSearch');
+    if (search?.value) {
+      search.value = '';
+      renderOutliner();
+      index = (state.outlinerRows || []).findIndex(row => row.node?.uid === uid);
+    }
+  }
   if (index < 0) return;
-  const rowHeight = 31;
-  const rowTop = index * rowHeight;
-  const rowBottom = rowTop + rowHeight;
+  const rowTop = state.outlinerRows[index].top;
+  const rowBottom = rowTop + state.outlinerRows[index].height;
   const visibleTop = outliner.scrollTop;
   const visibleBottom = visibleTop + outliner.clientHeight;
   let target = null;
@@ -32,9 +39,11 @@ function revealOutlinerItem(uid) {
 }
 
 function refreshSelectionUi() {
+  const outlinerFocused = outliner.contains(document.activeElement) || document.activeElement === outliner;
   state.outlinerWindowStart = -1;
   state.outlinerWindowEnd = -1;
   renderOutlinerWindow();
+  if (outlinerFocused) outliner.focus({ preventScroll: true });
   invalidateSelectionRenderGeometry(false);
   updateToolOptions();
   renderInspector();
@@ -57,6 +66,24 @@ function clearSelection() {
   refreshSelectionUi();
 }
 
+function selectAllElements() {
+  const ownerUid = inspectorController.subdivisionSession?.ownerUid;
+  const uids = state.project.elements
+    .filter(element => ownerUid ? element.subdivisionOwnerUid === ownerUid : !element.subdivisionOwnerUid)
+    .map(element => element.uid);
+  if (!uids.length) return;
+  sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
+  state.selectedUids = new Set(uids);
+  state.selectedUid = uids.at(-1);
+  state.selectedGenerated = null;
+  state.selectionAnchorUid = state.selectedUid;
+  state.selectedCurveNodeIndex = null;
+  state.selectedModifierUid = null;
+  state.vertexSnapSource = null;
+  if (state.tool === 'knife') cancelKnifeSelection(false);
+  refreshSelectionUi();
+}
+
 function selectItem(uid, { revealInOutliner = false, toggle = false, range = false } = {}) {
   const requestedNode = state.project.getNode(uid);
   if (!requestedNode) return;
@@ -69,12 +96,12 @@ function selectItem(uid, { revealInOutliner = false, toggle = false, range = fal
   sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
   if (range && state.selectionAnchorUid) {
     const rows = state.outlinerRows || [];
-    const start = rows.findIndex(row => row.node.uid === state.selectionAnchorUid);
-    const end = rows.findIndex(row => row.node.uid === uid);
+    const start = rows.findIndex(row => row.node?.uid === state.selectionAnchorUid);
+    const end = rows.findIndex(row => row.node?.uid === uid);
     if (start >= 0 && end >= 0) {
       const extended = new Set(state.selectedUids);
       rows.slice(Math.min(start, end), Math.max(start, end) + 1)
-        .filter(row => !row.curveNode)
+        .filter(row => row.node && !row.curveNode)
         .forEach(row => extended.add(row.node.uid));
       state.selectedUids = extended;
     } else state.selectedUids = new Set([...state.selectedUids, uid]);
@@ -194,6 +221,7 @@ return {
   revealOutlinerItem,
   refreshSelectionUi,
   clearSelection,
+  selectAllElements,
   selectItem,
   syncInspectorValues,
   getSelectionExpansion,

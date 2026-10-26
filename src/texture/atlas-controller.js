@@ -1,4 +1,4 @@
-import { compositeLayers, flipbookFrame, imageCanvas, tiledFaceRaster, tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
+import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerEntryRaster, tiledFaceRaster, tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
 import { isCubeFaceCulled } from '../render/webgl-renderer.js';
 
 export function createTextureAtlasController({
@@ -187,7 +187,32 @@ async function rebuildTextureAtlasNow() {
 
 function syncRendererTextureAsset(asset, source, composited = false) {
   if (asset?.layers?.length) {
+    const drawLayerThumbnail = (uid, raster) => {
+      const row = [...document.querySelectorAll('#textureFeatureControls [data-layer-row]')]
+        .find(entry => entry.dataset.layerRow === uid);
+      const thumbnail = row?.querySelector('.texture-layer-thumb');
+      if (!thumbnail || !raster) return;
+      const context = thumbnail.getContext('2d');
+      const scale = Math.min(thumbnail.width / raster.width, thumbnail.height / raster.height);
+      const width = raster.width * scale, height = raster.height * scale;
+      context.clearRect(0, 0, thumbnail.width, thumbnail.height);
+      context.imageSmoothingEnabled = false;
+      context.drawImage(raster, (thumbnail.width - width) / 2, (thumbnail.height - height) / 2, width, height);
+    };
+    if (!composited && asset._uid === state.activeTextureUid && source) {
+      drawLayerThumbnail(activeLayer(asset)?.uid, source);
+    }
     if (!composited) source = compositeLayers(asset, source);
+    if (asset._uid === state.activeTextureUid) {
+      const groups = new Map(asset.layers.filter(layer => layer.type === 'group').map(layer => [layer.uid, layer]));
+      let parentUid = activeLayer(asset)?.parentUid;
+      const seen = new Set();
+      while (groups.has(parentUid) && !seen.has(parentUid)) {
+        seen.add(parentUid);
+        drawLayerThumbnail(parentUid, layerEntryRaster(asset, parentUid));
+        parentUid = groups.get(parentUid).parentUid;
+      }
+    }
     updateLayerCompositePreview(asset, source);
   }
   if (asset && source) animationRasterCache.set(asset._uid, { canvas: imageCanvas(source), source: asset.source });
@@ -228,8 +253,8 @@ function syncRendererTextureAsset(asset, source, composited = false) {
   if (asset && source) refreshDerivedTileEntries(asset, source);
 }
 
-function syncRendererTexture(source) {
-  syncRendererTextureAsset(activeTextureAsset(), source);
+function syncRendererTexture(source, composited = false) {
+  syncRendererTextureAsset(activeTextureAsset(), source, composited);
 }
 
 function renderTexture() {

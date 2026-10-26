@@ -6,8 +6,17 @@ export function createOutlinerDragController({
 }) {
 let outlinerDragGhost = null;
 function clearOutlinerDropState({ keepDragging = false } = {}) {
-  outliner.querySelectorAll('.drop-before, .drop-after, .drop-inside').forEach(item =>
-    item.classList.remove('drop-before', 'drop-after', 'drop-inside'));
+  outliner.querySelectorAll('.drop-before, .drop-after, .drop-inside').forEach(item => {
+    item.classList.remove('drop-before', 'drop-after', 'drop-inside');
+    delete item.dataset.dropZone;
+    delete item.dataset.dropUid;
+    item.style.removeProperty('--drop-line-x');
+  });
+  outliner.querySelector('.outliner-root-tail')?.classList.remove('drop-root');
+  outliner.querySelectorAll('.outliner-tree-line.drop-highlight').forEach(line => {
+    line.classList.remove('drop-highlight');
+    line.style.removeProperty('--highlight-bottom');
+  });
   if (!keepDragging) outliner.querySelectorAll('.is-dragging').forEach(item => item.classList.remove('is-dragging'));
 }
 
@@ -85,7 +94,7 @@ function moveSelectedNodes(targetUid = null, zone = 'after') {
 
   const previousRowPositions = captureOutlinerRowPositions();
   snapshot('core.element.reparent');
-  const order = new Map((state.outlinerRows || []).map((row, index) => [row.node.uid, index]));
+  const order = new Map((state.outlinerRows || []).filter(row => row.node?.uid).map((row, index) => [row.node.uid, index]));
   moving.sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity));
   for (const uidValue of moving) {
     const container = nodeContainer(uidValue).items;

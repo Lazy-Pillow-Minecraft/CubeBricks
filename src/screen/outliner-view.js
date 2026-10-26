@@ -6,6 +6,23 @@ export function createOutlinerViewController({
   isBezierElement, isShapeElement, escapeHtml, escapeAttribute
 }) {
 let outlinerFrame = null;
+const ITEM_HEIGHT = 31;
+const GROUP_END_HEIGHT = 16;
+const END_PADDING = ITEM_HEIGHT * 3;
+const treeLineX = depth => 16 + depth * 13;
+function rowAtOffset(rows, offset) {
+  let low = 0, high = rows.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (rows[middle].top + rows[middle].height <= offset) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+function treeLines(ancestors, ownGroup = null, ending = false) {
+  return ancestors.map(({ uid, depth }) => `<span class="outliner-tree-line" data-group-line-uid="${uid}" style="left:${treeLineX(depth)}px"></span>`).join('')
+    + (ownGroup === null ? '' : `<span class="outliner-tree-line ${ending ? 'ends-here' : 'starts-here'}" data-group-line-uid="${ownGroup.uid}" style="left:${treeLineX(ownGroup.depth)}px"></span>`);
+}
 function updateSelectionLabels() {
   const item = selected();
   const modifierAnchorSelected = [...(item?.modifiers || []), ...(item?.operators || [])].find(modifier => modifier.uid === state.selectedModifierUid);
@@ -36,50 +53,58 @@ function renderOutliner() {
       || `節點 ${index + 1}`.includes(filter));
   };
   const rows = [];
-  const collectNode = (uidValue, depth = 0) => {
+  const collectNode = (uidValue, depth = 0, ancestors = []) => {
     const node = state.project.getNode(uidValue);
     if (!node || !matches(uidValue)) return;
     const group = node.type === 'group';
     const curve = isBezierElement(node);
     const container = group || curve;
     const collapsed = container && state.collapsedGroups.has(node.uid);
-    rows.push({ node, depth, group, curve, container, collapsed });
-    if (group && !collapsed) node.children.forEach(child => collectNode(child, depth + 1));
+    rows.push({ node, depth, group, curve, container, collapsed, ancestors, height: ITEM_HEIGHT });
+    if (group && !collapsed) node.children.forEach(child => collectNode(child, depth + 1,
+      [...ancestors, { uid: node.uid, depth }]));
     if (curve && !collapsed) node.nodes.forEach((curveNode, nodeIndex) => rows.push({
       node: curveNode, depth: depth + 1, group: false, curve: false, container: false, collapsed: false,
-      curveNode: true, curveOwner: node, nodeIndex
+      curveNode: true, curveOwner: node, nodeIndex, ancestors, height: ITEM_HEIGHT
     }));
+    if (group) rows.push({ groupEnd: true, groupUid: node.uid, depth, ancestors, height: GROUP_END_HEIGHT });
   };
   state.project.outliner.forEach(uidValue => collectNode(uidValue));
+  let totalHeight = 0;
+  for (const row of rows) { row.top = totalHeight; totalHeight += row.height; }
   state.outlinerRows = rows;
   state.outlinerWindowStart = -1;
   state.outlinerWindowEnd = -1;
   const scrollTop = outliner.scrollTop;
-  outliner.innerHTML = `<div class="outliner-virtual-spacer" style="height:${rows.length * 31}px"></div><div class="outliner-virtual-window"></div>`;
+  outliner.innerHTML = `<div class="outliner-virtual-spacer" style="height:${totalHeight + END_PADDING}px"></div><div class="outliner-virtual-window"></div><div class="outliner-root-tail" style="top:${totalHeight}px;height:${END_PADDING}px" title="拖到此處放在根層"></div>`;
   outliner.scrollTop = scrollTop;
   renderOutlinerWindow();
 }
 
 function renderOutlinerWindow() {
   const rows = state.outlinerRows || [];
-  const rowHeight = 31;
   const overscan = 6;
-  const start = Math.max(0, Math.floor(outliner.scrollTop / rowHeight) - overscan);
-  const end = Math.min(rows.length, Math.ceil((outliner.scrollTop + outliner.clientHeight) / rowHeight) + overscan);
+  const start = Math.max(0, rowAtOffset(rows, outliner.scrollTop) - overscan);
+  const end = Math.min(rows.length, rowAtOffset(rows, outliner.scrollTop + outliner.clientHeight) + overscan + 1);
   if (start === state.outlinerWindowStart && end === state.outlinerWindowEnd) return;
   state.outlinerWindowStart = start;
   state.outlinerWindowEnd = end;
   const windowNode = $('.outliner-virtual-window', outliner);
   if (!windowNode) return;
-  windowNode.style.transform = `translateY(${start * rowHeight}px)`;
-  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, container, collapsed, curveNode, curveOwner, nodeIndex }) => {
+  windowNode.style.transform = `translateY(${rows[start]?.top || 0}px)`;
+  windowNode.innerHTML = rows.slice(start, end).map(({ node, depth, container, collapsed, curveNode, curveOwner, nodeIndex, groupEnd, groupUid, ancestors }, localIndex) => {
+    if (groupEnd) return `<div class="outliner-group-end" data-outliner-row-index="${start + localIndex}" data-group-end="${groupUid}" style="--group-line-x:${treeLineX(depth)}px" title="點擊線框選中組；拖到線右側放入組內，左側放到外層">
+      ${treeLines(ancestors, { uid: groupUid, depth }, true)}<span class="outliner-group-end-branch" data-group-line-uid="${groupUid}"></span>
+    </div>`;
     if (curveNode) {
       const active = state.selectedUid === curveOwner.uid && state.selectedCurveNodeIndex === nodeIndex;
-      return `<button class="outliner-item curve-node-row ${active ? 'active' : ''}" data-uid="${curveOwner.uid}" data-curve-node-index="${nodeIndex}" draggable="false" style="padding-left:${5 + depth * 13}px">
+      return `<button class="outliner-item curve-node-row ${active ? 'active' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${curveOwner.uid}" data-curve-node-index="${nodeIndex}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-indent:${5 + depth * 13}px">
+        ${treeLines(ancestors)}
         <span></span><span class="kind curve-node-kind">◆</span><span class="item-name">節點 ${nodeIndex + 1}</span><span></span>
       </button>`;
     }
-    return `<button class="outliner-item ${state.mode === 'paint' ? 'paint-flags' : state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''} ${state.outlinerDragUids?.includes(node.uid) ? 'is-dragging' : ''}" data-uid="${node.uid}" draggable="false" style="padding-left:${5 + depth * 13}px">
+    return `<button class="outliner-item ${state.mode === 'paint' ? 'paint-flags' : state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''} ${state.outlinerDragUids?.includes(node.uid) ? 'is-dragging' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${node.uid}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-indent:${5 + depth * 13}px">
+      ${treeLines(ancestors, node.type === 'group' ? { uid: node.uid, depth } : null)}
       ${container ? `<span class="outliner-disclosure-hit" data-disclosure="${node.uid}" title="${collapsed ? '展開' : '折疊'}" draggable="false">${openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure')}</span>` : '<span class="outliner-disclosure-spacer"></span>'}
       <span class="kind">${outlinerKindMarkup(node)}</span>
       <span class="item-name">${escapeHtml(node.name)}</span>${outlinerStateMarkup(node)}

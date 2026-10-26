@@ -139,6 +139,15 @@ class ProjectJournal {
     this.activeManifest = null;
     this.operationIndexHash = null;
     this.recoveryRequired = false;
+    this.recentContents = new Map();
+  }
+  rememberContent(sequence, content) {
+    const document = typeof content === 'string' ? JSON.parse(content) : structuredClone(content);
+    const serialized = JSON.stringify({ ...document, projectUuid: this.projectUuid });
+    this.recentContents.delete(sequence);
+    this.recentContents.set(sequence, serialized);
+    while (this.recentContents.size > 6) this.recentContents.delete(this.recentContents.keys().next().value);
+    return serialized;
   }
   file(relative) {
     const root = path.resolve(this.directory);
@@ -366,6 +375,8 @@ class ProjectJournal {
   }
   async content() {
     const manifest = this.activeManifest;
+    const cached = this.recentContents.get(manifest.sequence);
+    if (cached) return cached;
     const { elements, groups } = await this.readNodes(manifest);
     const textures = [];
     for (const id of manifest.textureIds) {
@@ -374,7 +385,8 @@ class ProjectJournal {
       if (manifest.textureHashVersion === 2 && textureDigest(texture) !== manifest.textureHashes[id]) throw new Error(`貼圖狀態校驗失敗：${id}`);
       textures.push(texture);
     }
-    return pretty({ ...await this.hydrateReferenceImages(manifest.information), projectUuid: this.projectUuid, elements, groups, textures });
+    return this.rememberContent(manifest.sequence,
+      { ...await this.hydrateReferenceImages(manifest.information), projectUuid: this.projectUuid, elements, groups, textures });
   }
   async commit(content, operationId, operationLabel = operationId, operationIndex = []) {
     await this.ensureReady();
@@ -487,6 +499,7 @@ class ProjectJournal {
     await this.writeNodePointers(manifest, affected, old);
     delete this.state.pointerSyncFrom;
     await writeJson(this.file('current_state'), this.state);
+    this.rememberContent(sequence, content);
     return { changed: true, sequence, globalSequence };
   }
   async nextLocalIndex(folder) {

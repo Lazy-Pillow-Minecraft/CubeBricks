@@ -100,6 +100,7 @@ function splitBezierAtSegment(curve, segmentIndex) {
   curve.nodes = originalNodes.slice(0, segmentIndex + 1);
   const second = new BezierElement({
     name: curve.name, unnamed: curve.unnamed,
+    variant: curve.variant,
     origin: [...curve.origin], rotation: [...curve.rotation],
     nodes: originalNodes.slice(segmentIndex + 1).map(node => structuredClone(node)),
     parameters: structuredClone(curve.parameters), autoUv: curve.autoUv,

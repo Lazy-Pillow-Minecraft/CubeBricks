@@ -1,5 +1,8 @@
-import { activeLayer, compositeLayers, imageCanvas, loadRaster, normalizeTextureLayers, prepareLayers, tiledFaceRaster } from '../common/core/texture-features.js';
+import { activeLayer, compositeLayers, createLayerGroup, imageCanvas, insertLayerNearSelection, layerDescendantUids, layerEntryRaster, layerRasterCache, layerTreeItems, loadRaster, normalizeTextureLayers, prepareLayers, reorderLayerStack, selectedLayerEntry, tiledFaceRaster } from '../common/core/texture-features.js';
 import { formatRules } from '../common/core/format-constraints.js';
+import { createListDragAutoScroll } from '../screen/list-drag-scroll.js';
+import { verticalDropTarget } from '../screen/vertical-drop.js';
+import { createLayerEditorDialog } from './layer-editor-dialog.js';
 
 const CUBE_FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
 let textureClipboard = null;
@@ -20,6 +23,32 @@ export function createTextureAssetController({
 }) {
 let textureLoadRevision = 0;
 let pendingTextureImage = null;
+const layerRefreshRevision = new WeakMap();
+let layerDrag = null;
+let layerDragBound = false;
+let layerEditSession = null;
+const layerEditor = createLayerEditorDialog({ $, activeTextureAsset, toast,
+  onPropertyInput(layer, property, next) {
+    const asset = activeTextureAsset();
+    if (!asset || layer[property] === next) return;
+    if (layerEditSession?.asset !== asset) {
+      if (layerEditSession) finishLayerEdit();
+      pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
+      layerEditSession = { asset };
+    }
+    layer[property] = next;
+    layerEditor.render();
+  },
+  onPropertyCommit: finishLayerEdit,
+  onClose: finishLayerEdit
+});
+
+function finishLayerEdit() {
+  const session = layerEditSession;
+  if (!session) return;
+  layerEditSession = null;
+  refreshLayeredTexture(session.asset).catch(error => toast(error.message));
+}
 
 function textureUid(asset = {}) {
   return asset._uid || asset.uuid || asset.id || `texture_${crypto.randomUUID()}`;
@@ -54,6 +83,7 @@ function addTextureGroup() {
   const active = state.textureAssets.find(asset => asset._uid === state.activeTextureUid);
   if (active) active.groupId = group.id;
   renderTextureList();
+  layerEditor.render();
   markDirty();
   toast('已新增貼圖組');
 }
@@ -133,47 +163,211 @@ function scheduleTextureAnimation() {
 }
 
 async function refreshLayeredTexture(asset) {
-  await prepareLayers(asset);
+  const revision = (layerRefreshRevision.get(asset) || 0) + 1;
+  layerRefreshRevision.set(asset, revision);
+  const cached = asset.layers?.every(layer => {
+    if (layer.type === 'group') return true;
+    const raster = layerRasterCache.get(layer.uid);
+    return raster && raster.savedSource === layer.source;
+  });
+  if (!cached) {
+    await prepareLayers(asset);
+    if (layerRefreshRevision.get(asset) !== revision) return;
+  }
   const canvas = compositeLayers(asset);
   if (!canvas) return;
   asset.source = canvas.toDataURL('image/png');
   livePaintTextureSources.delete(asset._uid);
   animationRasterCache.set(asset._uid, { canvas, source: asset.source });
-  updateLayerCompositePreview(asset, canvas);
-  rebuildTextureAtlas();
-  renderTextureList(); activateProjectTexture(state.textureAssets.indexOf(asset));
+  if (asset._uid === state.activeTextureUid) showLayerComposite(asset, canvas);
+  else rebuildTextureAtlas();
+  renderTextureList();
   markDirty();
+}
+
+function showLayerComposite(asset, canvas) {
+  // The preview and GPU receive the already-composited image. Never feed it
+  // back into compositeLayers as the active layer's editable raster.
+  ++textureLoadRevision;
+  showEditableLayer(asset, canvas);
+  textureCanvas.style.visibility = '';
+  updateTexturePreviewFrame(asset.uvWidth || canvas.width, asset.uvHeight || canvas.height);
+  updateLayerCompositePreview(asset, canvas);
+  syncRendererTexture(canvas, true);
+  window.dispatchEvent(new Event('cubebricks:texture-change'));
+  renderScene();
+}
+
+function showEditableLayer(asset, fallback = null) {
+  const editable = layerRasterCache.get(activeLayer(asset)?.uid)?.canvas;
+  if (!editable && !fallback) return;
+  textureCanvas.width = editable?.width || fallback.width;
+  textureCanvas.height = editable?.height || fallback.height;
+  textureCtx.imageSmoothingEnabled = false;
+  textureCtx.clearRect(0, 0, textureCanvas.width, textureCanvas.height);
+  if (editable) textureCtx.drawImage(editable, 0, 0);
+}
+
+async function ensureTextureLayers(asset) {
+  if (asset.layers?.length) return;
+  const raster = await loadRaster(asset.source);
+  asset.uvWidth ||= raster.width; asset.uvHeight ||= raster.height;
+  asset.layers = [{ uid: crypto.randomUUID(), name: '底圖', source: raster.toDataURL('image/png'), visible: true, opacity: 100, blendMode: 'normal' }];
+  asset.activeLayerUid = asset.layers[0].uid;
 }
 
 async function addTextureLayer() {
   const asset = activeTextureAsset();
   if (!asset) return toast('請先建立或導入貼圖');
   pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
-  if (!asset.layers?.length) {
-    const raster = await loadRaster(asset.source);
-    asset.uvWidth ||= raster.width; asset.uvHeight ||= raster.height;
-    asset.layers = [{ uid: crypto.randomUUID(), name: '底圖', source: raster.toDataURL('image/png'), visible: true, opacity: 100 }];
-  }
+  await ensureTextureLayers(asset);
   await prepareLayers(asset);
   const canvas = document.createElement('canvas'); canvas.width = textureCanvas.width; canvas.height = textureCanvas.height;
-  const layer = { uid: crypto.randomUUID(), name: `圖層 ${asset.layers.length + 1}`, source: canvas.toDataURL('image/png'), visible: true, opacity: 100 };
-  asset.layers.push(layer); asset.activeLayerUid = layer.uid;
+  const count = asset.layers.filter(entry => entry.type !== 'group').length + 1;
+  const layer = { uid: crypto.randomUUID(), name: `圖層 ${count}`, source: canvas.toDataURL('image/png'), visible: true, opacity: 100, blendMode: 'normal' };
+  layerRasterCache.set(layer.uid, { canvas, savedSource: layer.source });
+  asset.layers = insertLayerNearSelection(asset.layers, layer, asset.activeLayerUid);
+  asset.activeLayerUid = layer.uid;
   await refreshLayeredTexture(asset);
+  renderTextureFeatureControls();
+}
+
+async function addTextureLayerGroup() {
+  const asset = activeTextureAsset();
+  if (!asset) return toast('請先建立或導入貼圖');
+  pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
+  await ensureTextureLayers(asset);
+  const uid = crypto.randomUUID();
+  const numbers = new Set(asset.layers.filter(layer => layer.type === 'group')
+    .map(layer => Number(String(layer.name || '').match(/^group_(\d+)$/)?.[1])).filter(Number.isFinite));
+  let number = 1;
+  while (numbers.has(number)) number++;
+  asset.layers = createLayerGroup(asset.layers, asset.activeLayerUid, uid, `group_${number}`);
+  asset.activeLayerUid = uid;
+  await refreshLayeredTexture(asset);
+  renderTextureFeatureControls();
+}
+
+function bindLayerDrag(root) {
+  if (layerDragBound) return;
+  layerDragBound = true;
+  const scroll = root.closest('.texture-layer-panel-scroll');
+  const autoScroll = createListDragAutoScroll(scroll, () => Boolean(layerDrag?.active), pointer => {
+    if (pointer) updateLayerDropTarget(root, pointer.y);
+  });
+  const clearTarget = () => root.querySelectorAll('.drop-before,.drop-after,.drop-inside').forEach(row =>
+    row.classList.remove('drop-before', 'drop-after', 'drop-inside'));
+  function updateLayerDropTarget(rootNode, y) {
+    clearTarget();
+    layerDrag.targetUid = null;
+    layerDrag.position = null;
+    const target = verticalDropTarget([...rootNode.querySelectorAll('[data-layer-row]')], y);
+    const row = target?.entry;
+    if (!row || row.dataset.layerRow === layerDrag?.uid) return;
+    layerDrag.targetUid = row.dataset.layerRow;
+    const asset = layerDrag.asset;
+    const targetLayer = asset?.layers?.find(entry => entry.uid === row.dataset.layerRow);
+    const rect = row.getBoundingClientRect();
+    const relativeY = (y - rect.top) / Math.max(1, rect.height);
+    layerDrag.position = targetLayer?.type === 'group' && relativeY > .3 && relativeY < .7
+      ? 'inside' : target.position;
+    row.classList.add(`drop-${layerDrag.position}`);
+  }
+  root.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.target.closest('input,button,[data-layer-group-line]')) return;
+    const row = event.target.closest('[data-layer-row]');
+    if (!row || !root.contains(row)) return;
+    layerDrag = { uid: row.dataset.layerRow, startX: event.clientX, startY: event.clientY,
+      pointerId: event.pointerId, asset: activeTextureAsset(), active: false, targetUid: null, position: null };
+  });
+  root.addEventListener('dragstart', event => {
+    if (event.target.closest('[data-layer-row]')) event.preventDefault();
+  });
+  document.addEventListener('pointermove', event => {
+    const drag = layerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.active) {
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) return;
+      const row = root.querySelector(`[data-layer-row="${CSS.escape(drag.uid)}"]`);
+      if (!row) { layerDrag = null; return; }
+      drag.active = true;
+      row.classList.add('is-dragging');
+      const ghost = row.cloneNode(true);
+      ghost.classList.remove('is-dragging');
+      ghost.classList.add('texture-layer-drag-ghost');
+      const originalThumb = row.querySelector('.texture-layer-thumb');
+      const ghostThumb = ghost.querySelector('.texture-layer-thumb');
+      if (originalThumb && ghostThumb) ghostThumb.getContext('2d').drawImage(originalThumb, 0, 0);
+      ghost.style.width = `${row.getBoundingClientRect().width}px`;
+      document.body.append(ghost);
+      drag.ghost = ghost;
+      autoScroll.start();
+    }
+    event.preventDefault();
+    drag.ghost.style.left = `${event.clientX + 13}px`;
+    drag.ghost.style.top = `${event.clientY + 9}px`;
+    updateLayerDropTarget(root, event.clientY);
+  });
+  const finish = (event, commit) => {
+    const drag = layerDrag;
+    if (!drag || event?.pointerId !== undefined && event.pointerId !== drag.pointerId) return;
+    if (commit && drag.active) updateLayerDropTarget(root, event.clientY);
+    layerDrag = null;
+    autoScroll.stop();
+    drag.ghost?.remove();
+    root.querySelector(`[data-layer-row="${CSS.escape(drag.uid)}"]`)?.classList.remove('is-dragging');
+    clearTarget();
+    if (!commit || !drag.active || !drag.targetUid) return;
+    const asset = drag.asset;
+    if (!asset || asset !== activeTextureAsset()) return;
+    const reordered = reorderLayerStack(asset.layers, drag.uid, drag.targetUid, drag.position);
+    if (reordered === asset.layers) return;
+    pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
+    asset.layers = reordered;
+    refreshLayeredTexture(asset).then(renderTextureFeatureControls).catch(error => toast(error.message));
+  };
+  document.addEventListener('pointerup', event => finish(event, true));
+  document.addEventListener('pointercancel', event => finish(event, false));
+  window.addEventListener('blur', () => finish(null, false));
 }
 
 function renderTextureFeatureControls() {
   const root = $('#textureFeatureControls'), asset = activeTextureAsset();
+  bindLayerDrag(root);
   if (!asset) { root.innerHTML = '<span>請先選擇貼圖</span>'; return; }
-  root.innerHTML = `<button type="button" data-add-layer>＋ 圖層</button>${(asset.layers || []).map((layer, index) => `<div class="texture-layer-row">
-    <input type="checkbox" data-layer-visible="${layer.uid}" ${layer.visible !== false ? 'checked' : ''} title="顯示圖層">
-    <button type="button" data-layer-select="${layer.uid}" class="${activeLayer(asset)?.uid === layer.uid ? 'active' : ''}" title="選擇圖層">◇</button>
-    <input type="text" data-layer-name="${layer.uid}" value="${escapeAttribute(layer.name)}" title="圖層名稱">
-    <input type="number" min="0" max="100" value="${layer.opacity ?? 100}" data-layer-opacity="${layer.uid}" title="透明度 %">
-    <button type="button" data-layer-up="${index}" title="上移" ${index === asset.layers.length - 1 ? 'disabled' : ''}>↑</button>
-    <button type="button" data-layer-down="${index}" title="下移" ${index === 0 ? 'disabled' : ''}>↓</button>
-    <button type="button" data-layer-delete="${layer.uid}" title="刪除圖層" ${asset.layers.length < 2 ? 'disabled' : ''}>×</button></div>`).reverse().join('')}
-    <label>貼圖模式 <select data-texture-mode><option value="default" ${!asset.mode || asset.mode === 'default' ? 'selected' : ''}>默認</option><option value="tiled" ${asset.mode === 'tiled' ? 'selected' : ''}>平鋪</option><option value="animation" ${asset.mode === 'animation' ? 'selected' : ''}>動畫（佔位）</option></select></label>
-    ${asset.mode === 'animation' ? '<span>動畫邏輯待完善，目前顯示原始貼圖。</span>' : ''}`;
+  const selected = selectedLayerEntry(asset);
+  const layerLineX = depth => 11 + depth * 16;
+  const layerLines = (ancestors, own = null, ending = false) => ancestors.map(({ uid, depth }) =>
+    `<span class="texture-layer-tree-line" data-layer-group-line="${escapeAttribute(uid)}" style="left:${layerLineX(depth)}px"></span>`).join('')
+    + (own ? `<span class="texture-layer-tree-line ${ending ? 'ends-here' : 'starts-here'}" data-layer-group-line="${escapeAttribute(own.uid)}" style="left:${layerLineX(own.depth)}px"></span>` : '');
+  const rows = layerTreeItems(asset.layers || []).map(({ layer, depth, ancestors, groupEnd }) => {
+    if (groupEnd) return `<div class="texture-layer-group-end" data-layer-group-end="${escapeAttribute(groupEnd)}" style="--group-line-x:${layerLineX(depth)}px">
+      ${layerLines(ancestors, { uid: groupEnd, depth }, true)}<span class="texture-layer-group-branch" data-layer-group-line="${escapeAttribute(groupEnd)}"></span></div>`;
+    const group = layer.type === 'group';
+    const uid = escapeAttribute(layer.uid);
+    const visibilityLabel = layer.visible === false ? '顯示圖層' : '隱藏圖層';
+    return `<div class="texture-layer-row ${group ? 'is-group' : ''} ${selected?.uid === layer.uid ? 'active' : ''}" style="--layer-depth:${depth}" data-layer-row="${uid}" title="拖動整行排序">
+      ${layerLines(ancestors, group ? { uid: layer.uid, depth } : null)}
+      <span class="texture-layer-grip" aria-hidden="true">⠿</span>
+      ${group ? `<button type="button" class="texture-layer-disclosure" data-layer-toggle="${uid}" title="${layer.collapsed ? '展開組' : '折疊組'}" aria-label="${layer.collapsed ? '展開組' : '折疊組'}"><svg class="open-icon" data-icon-direction="${layer.collapsed ? 'right' : 'down'}" aria-hidden="true"><use href="#icon-open"></use></svg></button><svg class="texture-layer-folder-icon" aria-hidden="true"><use href="#icon-group"></use></svg><canvas class="texture-layer-thumb" width="27" height="27" aria-hidden="true"></canvas>`
+        : '<span class="texture-layer-disclosure-spacer"></span><canvas class="texture-layer-thumb" width="27" height="27" aria-hidden="true"></canvas>'}
+      <span class="texture-layer-name" title="${escapeAttribute(layer.name)}">${escapeHtml(layer.name)}</span>
+      ${group ? `<button type="button" class="texture-layer-ungroup" data-layer-ungroup="${uid}" title="解散圖層組" aria-label="解散圖層組">×</button>` : ''}
+      <button type="button" class="texture-layer-visibility ${layer.visible === false ? 'is-off' : ''}" data-layer-visible="${uid}" aria-label="${visibilityLabel}" title="${visibilityLabel}"><svg class="outliner-state-icon" aria-hidden="true"><use href="#${layer.visible === false ? 'icon-unshow' : 'icon-show'}"></use></svg></button></div>`;
+  }).join('');
+  root.innerHTML = `<label>貼圖模式 <select data-texture-mode><option value="default" ${!asset.mode || asset.mode === 'default' ? 'selected' : ''}>默認</option><option value="tiled" ${asset.mode === 'tiled' ? 'selected' : ''}>平鋪</option><option value="animation" ${asset.mode === 'animation' ? 'selected' : ''}>動畫（佔位）</option></select></label>
+    ${asset.mode === 'animation' ? '<span>動畫邏輯待完善，目前顯示原始貼圖。</span>' : ''}
+    <div class="texture-layer-control-strip"><button type="button" data-add-layer>＋ 圖層</button><button type="button" data-add-layer-group>＋ 組</button><button type="button" data-open-layer-editor title="編輯圖層" aria-label="編輯圖層"><svg class="object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button></div>${rows}`;
+  $$('[data-layer-row]', root).forEach(row => {
+    const raster = layerEntryRaster(asset, row.dataset.layerRow);
+    const canvas = row.querySelector('.texture-layer-thumb');
+    if (!raster || !canvas) return;
+    const context = canvas.getContext('2d');
+    context.imageSmoothingEnabled = false;
+    const scale = Math.min(canvas.width / raster.width, canvas.height / raster.height);
+    const width = raster.width * scale, height = raster.height * scale;
+    context.drawImage(raster, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+  });
   $('[data-texture-mode]', root).addEventListener('change', event => {
     noteJournalOperation('core.texture.mode');
     asset.mode = event.target.value;
@@ -182,13 +376,51 @@ function renderTextureFeatureControls() {
     rebuildTextureAtlas(); renderTextureFeatureControls(); renderTextureTileControls(); markDirty();
   });
   $('[data-add-layer]', root).addEventListener('click', () => addTextureLayer().catch(error => toast(error.message)));
-  $$('[data-layer-select]', root).forEach(button => button.addEventListener('click', () => { noteJournalOperation('core.texture.layer'); asset.activeLayerUid = button.dataset.layerSelect; activateProjectTexture(state.textureAssets.indexOf(asset)); renderTextureFeatureControls(); markDirty(); }));
-  $$('[data-layer-name]', root).forEach(input => input.addEventListener('change', () => {
-    const layer = asset.layers.find(entry => entry.uid === input.dataset.layerName);
-    noteJournalOperation('core.texture.layer'); layer.name = input.value.trim() || layer.name; markDirty();
+  $('[data-add-layer-group]', root).addEventListener('click', () => addTextureLayerGroup().catch(error => toast(error.message)));
+  $('[data-open-layer-editor]', root).addEventListener('click', layerEditor.open);
+  $$('[data-layer-toggle]', root).forEach(button => button.addEventListener('click', () => {
+    const group = asset.layers.find(layer => layer.uid === button.dataset.layerToggle);
+    if (!group) return;
+    group.collapsed = !group.collapsed;
+    renderTextureFeatureControls();
   }));
-  const mutate = async action => { pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer'); action(); await refreshLayeredTexture(asset); };
-  $$('[data-layer-visible]', root).forEach(input => input.addEventListener('change', () => mutate(() => { asset.layers.find(layer => layer.uid === input.dataset.layerVisible).visible = input.checked; })));
+  $$('[data-layer-ungroup]', root).forEach(button => button.addEventListener('click', () => mutate(() => {
+    const group = asset.layers.find(layer => layer.uid === button.dataset.layerUngroup);
+    if (!group) return;
+    for (const child of asset.layers) if (child.parentUid === group.uid) child.parentUid = group.parentUid || null;
+    asset.layers = asset.layers.filter(layer => layer.uid !== group.uid);
+    if (asset.activeLayerUid === group.uid) asset.activeLayerUid = activeLayer(asset)?.uid || null;
+  }).catch(error => toast(error.message))));
+  const selectLayer = uid => {
+    if (asset.activeLayerUid === uid) return;
+    finishLayerEdit();
+    asset.activeLayerUid = uid;
+    showEditableLayer(asset);
+    renderTextureFeatureControls();
+    layerEditor.render();
+  };
+  $$('[data-layer-group-line]', root).forEach(line => line.addEventListener('click', event => {
+    event.stopPropagation();
+    selectLayer(line.dataset.layerGroupLine);
+  }));
+  $$('[data-layer-row]', root).forEach(row => row.addEventListener('click', event => {
+    if (event.target.closest('[data-layer-visible],[data-layer-toggle],[data-layer-ungroup]')) return;
+    selectLayer(row.dataset.layerRow);
+  }));
+  const mutate = async action => {
+    pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
+    action(); await refreshLayeredTexture(asset); renderTextureFeatureControls(); layerEditor.render();
+  };
+  $$('[data-layer-visible]', root).forEach(button => button.addEventListener('click', () => mutate(() => {
+    const layer = asset.layers.find(entry => entry.uid === button.dataset.layerVisible);
+    if (!layer) return;
+    const visible = layer.visible === false;
+    layer.visible = visible;
+    if (layer.type === 'group') {
+      const descendants = layerDescendantUids(asset.layers, layer.uid);
+      for (const child of asset.layers) if (descendants.has(child.uid)) child.visible = visible;
+    }
+  }).catch(error => toast(error.message))));
   $$('[data-layer-opacity]', root).forEach(input => input.addEventListener('change', () => mutate(() => { asset.layers.find(layer => layer.uid === input.dataset.layerOpacity).opacity = clamp(Number(input.value), 0, 100); })));
   $$('[data-layer-up], [data-layer-down]', root).forEach(button => button.addEventListener('click', () => mutate(() => {
     const index = Number(button.dataset.layerUp ?? button.dataset.layerDown), next = index + (button.dataset.layerUp !== undefined ? 1 : -1);
@@ -508,8 +740,8 @@ function activateProjectTexture(index) {
   renderTextureFeatureControls();
   if (asset.layers?.length) prepareLayers(asset).then(() => {
     if (state.activeTextureUid !== asset._uid || activationRevision !== textureLoadRevision) return;
-    loadTextureSource(activeLayer(asset).source, asset.name);
-    updateLayerCompositePreview(asset, compositeLayers(asset));
+    const composite = compositeLayers(asset);
+    if (composite) { showLayerComposite(asset, composite); renderTextureFeatureControls(); }
   }).catch(error => toast(error.message));
   else loadTextureSource(asset.source, asset.name);
   scheduleTextureAnimation();

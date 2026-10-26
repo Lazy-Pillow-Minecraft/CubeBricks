@@ -740,9 +740,9 @@ function applyTransformDrag(drag, dx, dy, event) {
             position[targetAxis] = target.position[targetAxis] - (size[targetAxis] - target.size[targetAxis]) / 2;
           }
         } else if (drag.kind === 'uniform') {
-          const factor = 1 - dy * .01;
+          const distance = snapValue(-dy * fallbackScale, event);
           for (let axis = 0; axis < 3; axis++) {
-            const proposed = snapValue(target.size[axis] * factor, event);
+            const proposed = target.size[axis] + distance;
             size[axis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
             position[axis] = target.position[axis] - (size[axis] - target.size[axis]) / 2;
           }
@@ -764,7 +764,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       } else if (isShapeElement(targetItem)) {
         if (targetItem.shapeType !== 'polygon_prism') {
           const distance = drag.kind === 'uniform'
-            ? target.radius * (Math.max(0, 1 - dy * .01) - 1)
+            ? snapValue(-dy * fallbackScale, event) / 2
             : drag.kind === 'plane-uniform'
               ? getPlaneUniformDistance(drag, dx, dy)
               : drag.kind === 'plane'
@@ -776,9 +776,9 @@ function applyTransformDrag(drag, dx, dy, event) {
           if (drag.axisIndices.includes(1)) targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height + distance * 2, event));
           if (drag.axisIndices.some(index => index !== 1)) targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + distance, event));
         } else if (drag.kind === 'uniform') {
-          const factor = Math.max(0, 1 - dy * .01);
-          targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius * factor, event));
-          targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height * factor, event));
+          const distance = snapValue(-dy * fallbackScale, event);
+          targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + distance / 2, event));
+          targetItem.parameters.height = Math.max(0, snapShapeDimension(targetItem, 'height', target.height + distance, event));
         } else if (drag.kind === 'plane') {
           const radialChanges = [];
           drag.axisIndices.forEach((targetAxis, index) => {
@@ -790,7 +790,7 @@ function applyTransformDrag(drag, dx, dy, event) {
         else targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + (axisDelta ?? dx * fallbackScale), event));
       }
     }
-    drag.tooltipText = drag.kind === 'uniform' ? `等比縮放 ${drag.targets.length} 項` : `縮放 ${drag.targets.length} 項`;
+    drag.tooltipText = drag.kind === 'uniform' ? `等距縮放 ${drag.targets.length} 項` : `縮放 ${drag.targets.length} 項`;
     return;
   }
   if (drag.tool === 'resize') {
@@ -808,15 +808,15 @@ function applyTransformDrag(drag, dx, dy, event) {
         item.position = position;
         drag.tooltipText = `平面等距 ${drag.axisIndices.map(index => `${'XYZ'[index]} ${formatNumber(size[index])}`).join(' / ')} px`;
       } else if (drag.kind === 'uniform') {
-        const factor = 1 - dy * .01;
+        const distance = snapValue(-dy * fallbackScale, event);
         const changes = [];
         for (let axis = 0; axis < 3; axis++) {
-          const proposed = snapValue(drag.size[axis] * factor, event);
+          const proposed = drag.size[axis] + distance;
           size[axis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
           changes[axis] = size[axis] - drag.size[axis];
         }
         item.position = drag.position.map((value, axis) => value - changes[axis] / 2);
-        drag.tooltipText = `等比尺寸 ${size.map(formatNumber).join(' × ')} px`;
+        drag.tooltipText = `等距尺寸 ${size.map(formatNumber).join(' × ')} px`;
       } else if (drag.kind === 'plane') {
         const distances = getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event));
         let position = [...drag.position];
@@ -844,7 +844,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       if (item.shapeType !== 'polygon_prism') {
         const distances = drag.kind === 'plane' ? getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event)) : [];
         const distance = drag.kind === 'uniform'
-          ? drag.radius * (Math.max(0, 1 - dy * .01) - 1)
+          ? snapValue(-dy * fallbackScale, event) / 2
           : drag.kind === 'plane-uniform'
             ? getPlaneUniformDistance(drag, dx, dy)
             : drag.kind === 'plane'
@@ -858,10 +858,10 @@ function applyTransformDrag(drag, dx, dy, event) {
         if (drag.axisIndices.some(index => index !== 1)) item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + distance, event));
         drag.tooltipText = `平面等距 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
       } else if (drag.kind === 'uniform') {
-        const factor = Math.max(0, 1 - dy * .01);
-        item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius * factor, event));
-        item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height * factor, event));
-        drag.tooltipText = `等比尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
+        const distance = snapValue(-dy * fallbackScale, event);
+        item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + distance / 2, event));
+        item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + distance, event));
+        drag.tooltipText = `等距尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
       } else if (drag.kind === 'plane') {
         const distances = getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event));
         const radialChanges = [];

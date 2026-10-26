@@ -118,6 +118,13 @@ const planarCurve = new BezierElement({ nodes: [
   { position: [-4, 9, 0], handleOut: [2, 7, 0] },
   { position: [4, -3, 0], handleIn: [-2, -5, 0] }
 ] }, 2);
+const defaultPlanarCurve = new BezierElement({}, 2);
+assert.deepEqual(defaultPlanarCurve.nodes.map(node => node.position), [[0, 0, 0], [0, 0, 8]],
+  'a new 2D curve starts as an eight-pixel vertical stroke in its local plane');
+assert.deepEqual(defaultPlanarCurve.rotation, [-90, 0, 0],
+  'the local 2D stroke faces the world Y axis without changing legacy curves');
+assert.deepEqual(new BezierElement({}, 3).nodes.map(node => node.position), [[0, 0, 0], [0, 8, 0]],
+  'a new 3D curve starts as an eight-pixel world-Y stroke');
 assert.ok(planarCurve.nodes.every(node => node.position[1] === 0 && node.handleIn[1] === 0 && node.handleOut[1] === 0),
   '2D bezier nodes and handles remain coplanar');
 assert.ok(planarCurve.toCubes().length > 0, '2D bezier fits cube columns along the sampled curve');
@@ -130,6 +137,62 @@ assert.ok(rotatedPlanarCurve.sampleCurve().some(sample => Math.abs(sample.point[
   'node rotation turns its local bezier handle and changes the fitted curve');
 const spatialCurve = new BezierElement({ parameters: { segmentationMode: 'angle', angleStep: 5 } }, 3);
 assert.ok(spatialCurve.toCubes().length > 0, '3D bezier supports angle-based cube fitting');
+const envelopeCurve = new BezierElement({
+  variant: 'envelope', name: 'sleeve',
+  nodes: [
+    { position: [0, 0, 0], handlesEnabled: false, radius: 1 },
+    { position: [4, 0, 0], handlesEnabled: false },
+    { position: [8, 0, 0], handlesEnabled: false, radius: 3 }
+  ],
+  parameters: { radius: .5, segmentLength: 2, headAtStart: true, nestedBake: true }
+}, 3);
+const envelopeSamples = envelopeCurve.sampleCurve();
+const samePathStandard = new BezierElement({ nodes: envelopeCurve.nodes.map(node => structuredClone(node)),
+  parameters: { segmentLength: 2 } }, 3);
+assert.equal(envelopeCurve.toCubes().length, samePathStandard.toCubes().length,
+  'changing node radii does not add cube subdivisions along the curve');
+assert.ok(Math.abs(envelopeSamples.find(sample => Math.abs(sample.point[0] - 4) < 1e-7).radius - .5) < 1e-7,
+  'an unset node resolves to the overall curve radius even between custom-radius nodes');
+assert.ok(envelopeSamples.some(sample => sample.point[0] > 0 && sample.point[0] < 4
+  && sample.radius > .5 && sample.radius < 1),
+  'cubes between custom and default-radius nodes receive intermediate radii');
+assert.ok(envelopeSamples.some(sample => sample.point[0] > 4 && sample.point[0] < 8
+  && sample.radius > .5 && sample.radius < 3),
+  'cubes between default and custom-radius nodes receive intermediate radii');
+const oneSidedEnvelope = new BezierElement({ variant: 'envelope',
+  nodes: [{ position: [0, 0, 0], handlesEnabled: false, radius: 2 },
+    { position: [4, 0, 0], handlesEnabled: false },
+    { position: [8, 0, 0], handlesEnabled: false }],
+  parameters: { radius: .75, segmentLength: 2 }
+}, 2);
+assert.equal(oneSidedEnvelope.sampleCurve().at(-1).radius, .75,
+  'a missing radius on either side falls back to the overall curve radius');
+const oneSidedCubes = oneSidedEnvelope.toCubes();
+assert.ok(oneSidedCubes[0].size[0] > oneSidedCubes[1].size[0],
+  'adjacent cubes taper when only the first node has a custom radius');
+assert.ok(Math.abs(oneSidedCubes.at(-1).size[0] - 1.5) < 1e-7,
+  'adjacent unset nodes retain the overall radius across their whole span');
+assert.ok(envelopeCurve.toCubes()[0].size[0] < envelopeCurve.toCubes().at(-1).size[0],
+  'fitted cube columns follow per-node radii');
+const envelopeRoundTrip = new CubeBricksProject(JSON.parse(new CubeBricksProject({
+  elements: [envelopeCurve], outliner: [envelopeCurve.uid]
+}).serialize())).getNode(envelopeCurve.uid);
+assert.equal(envelopeRoundTrip.variant, 'envelope', 'curve variant survives project serialization');
+assert.equal(envelopeRoundTrip.nodes[1].radius, null, 'unset node radius survives project serialization');
+const envelopeProject = new CubeBricksProject({ elements: [envelopeCurve], outliner: [envelopeCurve.uid] });
+const envelopeBake = bakeProceduralShape(envelopeProject, envelopeCurve.uid);
+assert.equal(envelopeBake.nestedGroups.length, envelopeBake.cubes.length - 1,
+  'optional envelope bake nests one group level per subsequent segment');
+assert.equal(envelopeBake.group.children[0], envelopeBake.cubes[0].uid,
+  'the head segment occupies the outermost group');
+assert.deepEqual(envelopeBake.nestedGroups[0].children[0], envelopeBake.cubes[1].uid,
+  'subsequent segments descend into nested groups');
+const reversedEnvelope = new BezierElement({ ...JSON.parse(JSON.stringify(envelopeCurve)), uid: 'reverse_envelope',
+  parameters: { ...envelopeCurve.parameters, headAtStart: false } }, 3);
+const reversedProject = new CubeBricksProject({ elements: [reversedEnvelope], outliner: [reversedEnvelope.uid] });
+const reversedBake = bakeProceduralShape(reversedProject, reversedEnvelope.uid);
+assert.equal(reversedBake.group.children[0], reversedBake.cubes.at(-1).uid,
+  'tail-first direction reverses the nesting order without changing curve geometry');
 assert.ok(spatialCurve.nodes.every(node => node.autoTangent), 'new bezier nodes start with pen-style automatic tangents');
 const autoMiddleCurve = new BezierElement({ nodes: [
   { position: [0, 0, 0] }, { position: [4, 2, 0] }, { position: [8, 0, 0] }

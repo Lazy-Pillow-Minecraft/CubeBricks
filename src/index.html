@@ -280,7 +280,7 @@
         </div>
         <div class="viewport" id="viewport">
           <div class="reference-image-layer" id="referenceImageLayer" hidden>
-            <span id="referenceImageHint">拖動平移 · 滾輪縮放</span>
+            <span id="referenceImageHint">點圖選取／拖動 · 滾輪縮放 · 右鍵空白退出</span>
           </div>
           <canvas id="sceneCanvas" tabindex="0"></canvas>
           <svg class="paint-selection-gesture" id="paintSelectionGesture" aria-hidden="true" hidden></svg>
@@ -360,6 +360,13 @@
           <div class="panel-control-strip inspector-meta-strip" id="inspectorMetaStrip"><span>UID</span><span class="uid-chip" id="uidChip">—</span></div>
           <div class="inspector" id="inspector"></div>
         </section>
+        <section class="dock-panel panel-section inspector-section" data-panel="paintOperators" hidden>
+          <div class="panel-heading compact panel-drag-handle">
+            <strong>物件屬性</strong>
+            <div class="panel-heading-actions"></div>
+          </div>
+          <div class="inspector" id="paintOperatorInspector"></div>
+        </section>
         <section class="dock-panel panel-section outliner-section" data-panel="outliner">
           <div class="panel-heading panel-drag-handle">
             <strong>場景層級</strong>
@@ -378,6 +385,8 @@
                 <button type="button" data-create-shape="truncated_icosahedron"><svg class="object-icon" aria-hidden="true"><use href="#icon-truncated-icosahedron"></use></svg><span>足球（截角二十面體）</span></button>
                 <button type="button" data-create-shape="bezier2d"><span class="shape-menu-symbol">⌁²</span><span>二維貝塞爾</span></button>
                 <button type="button" data-create-shape="bezier3d"><span class="shape-menu-symbol">⌁³</span><span>三維貝塞爾</span></button>
+                <button type="button" data-create-shape="bezier2d-envelope"><span class="shape-menu-symbol">⌁²</span><span>二維包絡貝塞爾</span></button>
+                <button type="button" data-create-shape="bezier3d-envelope"><span class="shape-menu-symbol">⌁³</span><span>三維包絡貝塞爾</span></button>
               </span>
             </span>
             <button data-action="addLocator" title="新增 Locator"><svg class="panel-action-icon" aria-hidden="true" viewBox="0 0 197.49 189.08"><path d="M98.74,144.52c-38.86,0-72.06-19.5-85.3-46.99-1.11,4.43-1.7,9-1.7,13.69,0,38.28,38.95,69.32,87,69.32s87-31.03,87-69.32c0-4.69-.59-9.26-1.7-13.69-13.24,27.49-46.44,46.99-85.3,46.99Z"/><rect x="81.01" y="56.54" width="35.47" height="96.98"/><rect x="59.53" y="77.83" width="78.43" height="25.75" rx="7.93" ry="7.93"/><path d="M98.74,0c-18.89,0-34.21,15.31-34.21,34.21s15.31,34.21,34.21,34.21,34.21-15.31,34.21-34.21S117.63,0,98.74,0ZM98.74,49.2c-8.28,0-14.99-6.71-14.99-14.99s6.71-14.99,14.99-14.99,14.99,6.71,14.99,14.99-6.71,14.99-14.99,14.99Z"/><path d="M26.73,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66H5.18c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M179.83,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66h-34.03c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M97.08,188.46l-18.84-16.15c-1.8-1.55-.71-4.5,1.67-4.5h37.68c2.38,0,3.47,2.96,1.67,4.5l-18.84,16.15c-.96.82-2.37.82-3.33,0Z"/></svg></button>
@@ -385,7 +394,7 @@
             <button data-action="deleteSelected" title="刪除選中項">×</button>
           </div>
           <label class="search-box"><span>⌕</span><input id="outlinerSearch" placeholder="搜尋物件或 UID" /></label>
-          <div class="outliner" id="outliner"></div>
+          <div class="outliner" id="outliner" tabindex="0" aria-label="場景層級"></div>
         </section>
         <section class="dock-panel panel-section texture-layers-panel" data-panel="layers">
           <div class="panel-heading panel-drag-handle">
@@ -394,7 +403,6 @@
           </div>
           <div class="texture-layer-panel-scroll">
             <div id="textureFeatureControls"></div>
-            <div class="texture-tiling-block"><strong>選中面的平鋪</strong><div id="textureTileControls"></div></div>
           </div>
         </section>
       </aside>
@@ -404,6 +412,7 @@
       <label class="toolbar-check" title="顯示玩家尺寸與姿態參考；只用於預覽，不會寫入模型工程或導出檔。"><input type="checkbox" id="playerReferenceToggle" /><span>♙</span> 玩家參考</label>
       <label class="toolbar-check" title="只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件"><input type="checkbox" id="geometryOnlyToggle" /><span>◇</span> 僅幾何</label>
       <label class="toolbar-check paint-only-option" title="只在繪畫視圖按組展開；不更改模型、樞軸或工程資料"><input type="checkbox" id="paintExplodeToggle" /><span>✣</span> 展開組</label>
+      <label class="toolbar-check paint-only-option" title="在三維可繪製面顯示貼圖像素網格；縮遠時自動淡出，不改變貼圖"><input type="checkbox" id="paintPixelGridToggle" /><span>▦</span> 像素網格</label>
       <label class="toolbar-check edit-only-option" title="允許 Cube 尺寸越過零變成負值"><input type="checkbox" id="negativeShapeToggle" /><span>−</span> 負形</label>
       <label class="toolbar-check paint-only-option" title="繪畫時鎖定透明度"><input type="checkbox" id="alphaLockToggle" /><span>◩</span> 鎖透明</label>
       <label class="toolbar-check paint-only-option" title="繪畫時略過原本完全透明的像素"><input type="checkbox" id="paintIgnoreTransparentToggle" /><span>◌</span> 忽視全透明</label>
@@ -602,6 +611,22 @@
     <div class="color-space-gradient-footer">
       <label>漸變分段類別<select id="colorSpaceGradientSegments"><option value="equal">平均分</option><option value="custom">自定義</option><option value="curve_length">按曲線長度</option></select></label>
       <div id="colorSpaceGradientBarHost"></div>
+    </div>
+  </dialog>
+
+  <dialog id="layerEditorDialog" class="theme-dialog layer-editor-dialog" aria-labelledby="layerEditorTitle">
+    <div class="dialog-heading"><div><span class="eyebrow">TEXTURE LAYERS</span><h2 id="layerEditorTitle">圖層編輯</h2></div><button type="button" class="close-button" id="closeLayerEditor" aria-label="關閉">×</button></div>
+    <div class="layer-editor-layout">
+      <div class="layer-editor-previews">
+        <section><strong>完整貼圖</strong><div class="layer-editor-preview"><canvas id="layerEditorComposite" aria-label="完整貼圖預覽"></canvas></div></section>
+        <section><strong>目前圖層</strong><div class="layer-editor-preview"><canvas id="layerEditorCurrent" aria-label="目前圖層預覽"></canvas></div></section>
+      </div>
+      <div class="layer-editor-properties">
+        <strong id="layerEditorLayerName">未選擇圖層</strong>
+        <label>透明度<div class="layer-editor-opacity"><input id="layerOpacityRange" type="range" min="0" max="100" step="1"><input id="layerOpacityValue" type="number" min="0" max="100" step="1">%</div></label>
+        <label>疊加模式<select id="layerBlendMode"></select></label>
+      </div>
+      <div class="layer-editor-list"><strong>圖層</strong><div id="layerEditorListHost"></div></div>
     </div>
   </dialog>
 

@@ -9,13 +9,25 @@ let mirrorGuideEntryUid = null;
 let mirrorGuideHoldTimer = null;
 let mirrorGuideHideTimer = null;
 
+function visibleMirrorGuidePage() {
+  const paintMode = state.mode === 'paint';
+  const panel = $(`[data-panel="${paintMode ? 'paintOperators' : 'inspector'}"]`);
+  if (!panel || panel.hidden || panel.classList.contains('is-stack-inactive')
+    || panel.classList.contains('is-collapsed')
+    || panel.closest('.is-zone-collapsed')) return null;
+  if (paintMode) return 'operators';
+  return state.inspectorPage === 'operators' || state.inspectorPage === 'modifiers'
+    ? state.inspectorPage : null;
+}
+
 function selectedMirrorGuideGroup() {
+  const page = visibleMirrorGuidePage();
+  if (!page) return null;
   const owner = selected();
-  const entries = [...(owner?.modifiers || []), ...(owner?.operators || [])];
+  const entries = page === 'operators' ? owner?.operators || [] : owner?.modifiers || [];
   const isSymmetry = entry => ['symmetry', 'paint_symmetry'].includes(entry.type) && entry.enabled;
   const modifier = entries.find(entry => entry.uid === state.selectedModifierUid && isSymmetry(entry))
-    || (state.inspectorPage === 'operators' ? owner?.operators?.find(isSymmetry) : null)
-    || owner?.modifiers?.find(isSymmetry);
+    || entries.find(isSymmetry);
   return modifier?.enabled ? { owner, modifier } : null;
 }
 
@@ -134,6 +146,18 @@ function renderMirrorGuide(entry) {
 
 function updateMirrorGuideOverlay() {
   const overlay = $('#mirrorGuideOverlay');
+  if (!visibleMirrorGuidePage()) {
+    clearTimeout(mirrorGuideHoldTimer);
+    clearTimeout(mirrorGuideHideTimer);
+    mirrorGuideHoldTimer = null;
+    mirrorGuideHideTimer = null;
+    mirrorGuideGroupUid = null;
+    mirrorGuideEntryUid = null;
+    overlay.classList.remove('visible');
+    overlay.setAttribute('hidden', '');
+    overlay.innerHTML = '';
+    return;
+  }
   const activeGroup = selectedMirrorGuideGroup();
   if (activeGroup) {
     clearTimeout(mirrorGuideHoldTimer);
