@@ -1,5 +1,7 @@
 # CubeBricks 資源包
 
+[返回 README](README.md) · [附加包索引](docs/ADDON_PACKS.md) · [Shape 包編寫規範](SHAPE_PACKS.md)
+
 桌面版在「設定 → 一般 → 管理資源包」加入、移除、排序與重新載入資源包。介面字體在「設定 → 外觀」選擇，介面語言在「設定 → 一般」選擇。內置 Fusion Pixel、系統字體與三種內置語言無需安裝。
 
 三類包共用管理視窗，但各自存於工作空間的 `shapepacks/`、`languagepacks/`、`fontpacks/`。移除時包會被移到 `removed-packs/`，可手動移回。排序決定同類包的載入順序；語言代碼重複時，靠前的包先註冊。包可在清單中點「↻」熱重載；清單是否顯示此按鈕由包的 `hotReload` 設定決定（預設開啟）。

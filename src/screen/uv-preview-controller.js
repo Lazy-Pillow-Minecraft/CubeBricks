@@ -98,9 +98,22 @@ function getUvPreviewProject() {
 
 function uvPreviewFit(cache) {
   if (cache.fit) return cache.fit;
-  const bounds = sceneRenderer.getSelectionBounds(state.project, state.selectedUids);
-  let center = bounds?.center;
-  let span = bounds ? bounds.max.map((value, axis) => Math.abs(value - bounds.min[axis])) : null;
+  // The scene renderer does not maintain a selection cache in paint mode.
+  // Derive the fit from the actual selected geometry in either mode instead
+  // of falling back to an average of pivots (which can be far from the mesh).
+  const faces = sceneRenderer.getFaceQuadsForUids(new Set(cache.elements.map(element => element.uid)));
+  const points = faces.flatMap(face => face.facePoints || []);
+  let center = null;
+  let span = null;
+  if (points.length) {
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    for (const point of points) for (let axis = 0; axis < 3; axis++) {
+      min[axis] = Math.min(min[axis], point[axis]);
+      max[axis] = Math.max(max[axis], point[axis]);
+    }
+    center = min.map((value, axis) => (value + max[axis]) / 2);
+    span = min.map((value, axis) => max[axis] - value);
+  }
   if (!center || !span) {
     const positions = cache.elements.map(element => element.pivot || element.origin || element.position).filter(Boolean);
     center = positions.length

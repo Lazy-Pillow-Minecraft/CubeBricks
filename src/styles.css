@@ -100,7 +100,7 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .45; }
 .project-home-card small { color: var(--muted); }
 .project-home-empty { color: var(--muted); padding: 24px 0; }
 #paintToolOptions [data-selection-hidden] { display: none; }
-.texture-stage #paintSelectionTextureOverlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; image-rendering: pixelated; }
+.texture-stage #paintSelectionTextureOverlay { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; image-rendering: pixelated; }
 #paintSelectionBorder { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
 .paint-selection-gesture { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .paint-selection-gesture path { fill: none; vector-effect: non-scaling-stroke; }
@@ -399,6 +399,8 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .texture-stage { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; transform-origin: 0 0; image-rendering: pixelated; }
 .checkerboard { position: absolute; inset: 0; pointer-events: none; background: conic-gradient(var(--checker-dark) 25%, var(--checker-light) 0 50%, var(--checker-dark) 0 75%, var(--checker-light) 0) 0 0 / 24px 24px; }
 #textureCanvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; z-index: 1; }
+#textureGradientPreview { position:absolute; inset:0; width:100%; height:100%; image-rendering:pixelated; z-index:2; pointer-events:none; }
+#textureGradientPreview[hidden] { display:none; }
 #textureLayerComposite { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; z-index: 1; pointer-events: none; }
 #textureLayerComposite[hidden] { display: none; }
 .texture-layer-row { position: relative; display: flex; gap: 7px; align-items: center; width: calc(100% - var(--layer-depth) * 16px); height: 39px; margin: 1.5px 0 1.5px calc(var(--layer-depth) * 16px); padding: 3px 5px 3px 22px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); cursor: grab; user-select: none; }

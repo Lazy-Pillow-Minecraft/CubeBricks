@@ -15,7 +15,7 @@ export function decodeColorMap(data, { legacy = false } = {}) {
   const rows = legacy && Array.isArray(parsed)
     ? parsed.filter(row => row && typeof row.name === 'string' && Array.isArray(row.colors))
     : parsed?.format === COLOR_MAP_FORMAT && parsed?.version === COLOR_MAP_VERSION ? parsed.palettes : null;
-  if (!Array.isArray(rows) || rows.length < 1 || rows.length > 256) throw new Error('色卡檔案格式或數量無效');
+  if (!Array.isArray(rows) || rows.length > 256) throw new Error('色卡檔案格式或數量無效');
   const palettes = rows.map(row => {
     if (!row || typeof row.name !== 'string' || !Array.isArray(row.colors)
       || !legacy && (row.colors.length > 256 || row.colors.some(color => !/^#[0-9a-f]{6}$/i.test(color)))) {
@@ -79,5 +79,7 @@ export function decodePaletteFile(data, name) {
     return decodeColorMap({ format: COLOR_MAP_FORMAT, version: COLOR_MAP_VERSION, palettes: [palette] }).palettes;
   }
   // Accept files exported by the earlier multi-card implementation too.
-  return decodeColorMap(parsed).palettes;
+  const palettes = decodeColorMap(parsed).palettes;
+  if (!palettes.length) throw new Error('匯入檔案沒有色卡');
+  return palettes;
 }

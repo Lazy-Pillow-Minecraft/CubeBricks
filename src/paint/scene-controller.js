@@ -178,7 +178,7 @@ function samplePaintGradient(ratio, stops = null) {
   ];
 }
 
-function paintGradientSvgStops(opacity = .72) {
+function paintGradientSvgStops(opacity = paintToolOpacity('gradient')) {
   const stops = activePaintGradientStops();
   return stops.map((stop, index) => {
     const color = `#${stop.color.map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
@@ -205,6 +205,8 @@ function clearPaintGradientSelection() {
   state.paintGradientHover = null;
   const overlay = $('#paintGradientOverlay');
   if (overlay) { overlay.innerHTML = ''; overlay.hidden = true; }
+  const texturePreview = $('#textureGradientPreview');
+  if (texturePreview) texturePreview.hidden = true;
 }
 
 function renderPaintGradientPreview() {
@@ -226,22 +228,36 @@ function renderPaintGradientPreview() {
     : sceneRenderer.getCubeFaceQuads(anchor.hit.uid, anchor.hit.cubeUid || anchor.hit.uid);
   const range = projectedGradientRange(domainFaces.flatMap(entry => entry.facePoints || []), anchor.hit.point, direction);
   if (!range) { overlay.innerHTML = ''; overlay.hidden = true; return; }
-  const start = sceneRenderer.projectPoint(range.start);
-  const end = sceneRenderer.projectPoint(range.end);
-  const face = hover.facePoints.map(point => sceneRenderer.projectPoint(point));
-  if (start.behind || end.behind || face.some(point => point.behind)) return;
+  const projectedStart = sceneRenderer.projectPoint(range.start);
+  const projectedEnd = sceneRenderer.projectPoint(range.end);
+  // A long projection may cross the near plane even while both clicked points
+  // are visible. Keep the preview anchored to the visible points in that case.
+  const start = projectedStart.behind ? sceneRenderer.projectPoint(anchor.hit.point) : projectedStart;
+  const end = projectedEnd.behind ? sceneRenderer.projectPoint(hover.point) : projectedEnd;
   const width = sceneCanvas.clientWidth, height = sceneCanvas.clientHeight;
-  const perimeter = [face[0], face[1], face[3], face[2]];
+  const cameraEye = sceneRenderer.getCameraFrame()?.eye;
+  const paths = domainFaces.filter(face => facePaintTarget(face)).flatMap(face => {
+    const points = face.facePoints;
+    if (!points || points.length !== 4) return [];
+    const u = points[1].map((value, axis) => value - points[0][axis]);
+    const v = points[2].map((value, axis) => value - points[0][axis]);
+    const normal = [v[1] * u[2] - v[2] * u[1], v[2] * u[0] - v[0] * u[2], v[0] * u[1] - v[1] * u[0]];
+    if (cameraEye && dot3(normal, cameraEye.map((value, axis) => value - points[0][axis])) < 0) return [];
+    const projected = points.map(point => sceneRenderer.projectPoint(point));
+    if (projected.some(point => point.behind)) return [];
+    const perimeter = [projected[0], projected[1], projected[3], projected[2]];
+    return [`<path class="gradient-preview-face" d="M${perimeter.map(point => `${point.x},${point.y}`).join(' L')} Z"/>`];
+  });
   overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
   overlay.innerHTML = `<defs><linearGradient id="paintGradientPreviewFill" gradientUnits="userSpaceOnUse" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}">${paintGradientSvgStops()}</linearGradient></defs>
-    ${state.paintGradientMode === 'face' ? `<path class="gradient-preview-face" d="M${perimeter.map(point => `${point.x},${point.y}`).join(' L')} Z"/>` : ''}
+    ${paths.join('')}
     <line class="gradient-preview-line" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}"/>
     <circle class="gradient-preview-point start" cx="${start.x}" cy="${start.y}" r="4"/><circle class="gradient-preview-point" cx="${end.x}" cy="${end.y}" r="4"/>`;
   overlay.hidden = false;
 }
 
 function updatePaintGradientHover(event) {
-  if (!state.paintGradientAnchor || state.tool !== 'gradient') return;
+  if (!state.paintGradientAnchor || state.paintGradientAnchor.fixed || state.tool !== 'gradient') return;
   const rect = sceneCanvas.getBoundingClientRect();
   state.paintGradientHover = sceneRenderer.pickDetailed(state.project,
     event.clientX - rect.left, event.clientY - rect.top, true);
@@ -264,10 +280,13 @@ async function bakePaintGradient(anchorHit, endHit) {
   } else {
     const anchors = paintSymmetryRelatedHits(anchorHit);
     const ends = paintSymmetryRelatedHits(endHit);
+    const cubeKey = hit => `${hit.uid}::${hit.cubeUid || hit.uid}`;
     for (let index = 0; index < anchors.length; index++) {
       const anchor = anchors[index];
-      const end = ends[index] && paintSymmetryFaceKey(ends[index]) === paintSymmetryFaceKey(anchor)
-        ? ends[index] : ends.find(hit => paintSymmetryFaceKey(hit) === paintSymmetryFaceKey(anchor));
+      // Volume gradients deliberately span different faces of the same cube.
+      // Face-key matching here silently discarded every cross-face endpoint.
+      const end = ends[index] && cubeKey(ends[index]) === cubeKey(anchor)
+        ? ends[index] : ends.find(hit => cubeKey(hit) === cubeKey(anchor));
       if (!end) continue;
       const targetCubeUid = anchor.cubeUid || anchor.uid;
       domains.push({
@@ -354,8 +373,10 @@ function useScenePaintGradient(hit) {
     toast(state.paintGradientMode === 'face' ? '面漸變的第二點必須在同一個面' : '體漸變的第二點必須在同一個 Cube');
     return;
   }
-  clearPaintGradientSelection();
-  bakePaintGradient(anchor, hit);
+  state.paintGradientAnchor.fixed = true;
+  state.paintGradientHover = hit;
+  renderPaintGradientPreview();
+  bakePaintGradient(anchor, hit).catch(error => toast(error.message)).finally(clearPaintGradientSelection);
 }
 
 function cloneCanvas(source) {

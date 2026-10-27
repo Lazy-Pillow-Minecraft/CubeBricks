@@ -37,4 +37,8 @@ assert.deepEqual(imported[0].colors, rows[0].colors);
 assert.equal(imported[0].colorSpaceCurve.nodes[0].autoTangent, false);
 assert.equal(decodePaletteFile(encoded, 'ignored').length, 1,
   'the previous multi-card export is still importable');
+assert.deepEqual(decodeColorMap(encodeColorMap([])).palettes, [],
+  'deleting the final card must survive persistence and reload');
+assert.throws(() => decodePaletteFile(encodeColorMap([]), 'empty'), /沒有色卡/,
+  'an empty collection is valid for local storage but not as a palette import');
 console.log('Color map file tests passed.');

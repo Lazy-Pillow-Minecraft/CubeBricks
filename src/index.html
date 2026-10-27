@@ -204,6 +204,7 @@
           <div class="checkerboard"></div>
           <div class="texture-stage" id="textureStage">
             <canvas id="textureCanvas" width="1" height="1"></canvas>
+            <canvas id="textureGradientPreview" width="1" height="1" aria-hidden="true" hidden></canvas>
             <canvas id="paintSelectionTextureOverlay" width="1" height="1" aria-hidden="true"></canvas>
             <canvas id="textureLayerComposite" width="1" height="1" hidden></canvas>
           </div>
@@ -564,6 +565,7 @@
           <label class="config-toggle-label"><span>啟用箱型 UV<small>按 Cube 建立連續六面展開</small></span><input id="textureTemplateBoxUv" type="checkbox" /></label>
           <label class="config-toggle-label"><span>使用 2 冪尺寸<small>默認開啟</small></span><input id="textureTemplatePowerOfTwo" type="checkbox" checked /></label>
           <label class="config-toggle-label"><span>保持多紋理佔用<small>不同來源的面維持獨立佔位</small></span><input id="textureTemplateKeepMulti" type="checkbox" checked /></label>
+          <label class="config-toggle-label"><span>保留圖層結構<small>依新 UV 重排各圖層像素，保留組與混合設定</small></span><input id="textureTemplateKeepLayers" type="checkbox" checked /></label>
           <label class="config-toggle-label"><span>填充間隔<small>UV 面之間保留像素</small></span><input id="textureTemplatePaddingEnabled" type="checkbox" checked /></label>
           <label class="config-number-label"><span>間隔像素</span><input id="textureTemplatePadding" type="number" min="0" max="64" step="1" value="1" /></label>
           <label class="config-number-label"><span>尺寸倍數<small>關閉 2 冪時使用</small></span><input id="textureTemplateMultiple" type="number" min="1" max="1024" step="1" value="4" /></label>

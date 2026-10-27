@@ -12,6 +12,48 @@ export function createTexturePaintPointerController({
   drawPaintShape, drawPaintSegment, finishTexturePaintDrag
 }) {
 let texturePaintDrag = null;
+function updateTextureGradientPreview(event) {
+  const preview = $('#textureGradientPreview');
+  const anchor = state.paintGradientAnchor;
+  if (!preview || state.mode !== 'paint' || state.tool !== 'gradient' || anchor?.surface !== 'texture') return;
+  const asset = activeTextureAsset();
+  const point = paintPointFromEvent(event);
+  if (!asset || asset._uid !== anchor.assetUid || !paintPointInside(point)) { preview.hidden = true; return; }
+  const logical = [point[0] * (asset.uvWidth || textureCanvas.width) / textureCanvas.width,
+    point[1] * (asset.uvHeight || textureCanvas.height) / textureCanvas.height];
+  const hit = allTextureUvEntriesForAsset(asset).find(entry => entry.cube.uid === anchor.cubeUid
+    && entry.faceName === anchor.faceName && logical[0] >= Math.min(entry.uv[0], entry.uv[2])
+    && logical[0] <= Math.max(entry.uv[0], entry.uv[2])
+    && logical[1] >= Math.min(entry.uv[1], entry.uv[3])
+    && logical[1] <= Math.max(entry.uv[1], entry.uv[3]));
+  if (!hit) { preview.hidden = true; return; }
+  const direction = [point[0] - anchor.point[0], point[1] - anchor.point[1]];
+  if (direction[0] ** 2 + direction[1] ** 2 < 1e-8) { preview.hidden = true; return; }
+  const bounds = paintUvBounds(hit.cube, hit.faceName, textureCanvas);
+  const projections = [[bounds.minU, bounds.minV], [bounds.maxU, bounds.minV],
+    [bounds.minU, bounds.maxV], [bounds.maxU, bounds.maxV]]
+    .map(corner => (corner[0] - anchor.point[0]) * direction[0] + (corner[1] - anchor.point[1]) * direction[1]);
+  const minimum = Math.min(...projections), span = Math.max(1e-8, Math.max(...projections) - minimum);
+  preview.width = Math.max(1, bounds.maxU - bounds.minU);
+  preview.height = Math.max(1, bounds.maxV - bounds.minV);
+  preview.style.left = `${bounds.minU / textureCanvas.width * 100}%`;
+  preview.style.top = `${bounds.minV / textureCanvas.height * 100}%`;
+  preview.style.width = `${preview.width / textureCanvas.width * 100}%`;
+  preview.style.height = `${preview.height / textureCanvas.height * 100}%`;
+  const context = preview.getContext('2d');
+  context.drawImage(textureCanvas, bounds.minU, bounds.minV, preview.width, preview.height,
+    0, 0, preview.width, preview.height);
+  const image = context.getImageData(0, 0, preview.width, preview.height);
+  const stops = activePaintGradientStops();
+  for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
+    if (!paintSelectionAllows(state, asset._uid, x, y, textureCanvas.width, textureCanvas.height)) continue;
+    const projection = (x + .5 - anchor.point[0]) * direction[0] + (y + .5 - anchor.point[1]) * direction[1];
+    blendRgbaPixel(image.data, ((y - bounds.minV) * preview.width + x - bounds.minU) * 4,
+      samplePaintGradient((projection - minimum) / span, stops), paintToolOpacity('gradient'));
+  }
+  context.putImageData(image, 0, 0);
+  preview.hidden = false;
+}
 function queueBucketAt(drag, clientX, clientY) {
   const point = paintPointFromEvent({ clientX, clientY });
   if (!paintPointInside(point)) return;
@@ -44,17 +86,24 @@ function useTexturePaintGradient(asset, point, hit) {
     toast('體漸變需要在三維視圖的同一個 Cube 上選取兩點');
     return;
   }
-  if (!hit) return toast('請在一個 UV 面內選擇漸變點');
   const anchor = state.paintGradientAnchor;
   if (!anchor || anchor.surface !== 'texture') {
+    if (!hit) return toast('請在一個 UV 面內選擇漸變點');
     state.paintGradientAnchor = { surface: 'texture', assetUid: asset._uid, point, cubeUid: hit.cube.uid, faceName: hit.faceName };
+    $('#textureGradientPreview').hidden = true;
     toast('選擇面漸變終點');
     return;
   }
-  if (anchor.assetUid !== asset._uid || anchor.cubeUid !== hit.cube.uid || anchor.faceName !== hit.faceName) {
+  const candidate = allTextureUvEntriesForAsset(asset).find(entry => entry.cube.uid === anchor.cubeUid
+    && entry.faceName === anchor.faceName && point[0] >= Math.min(entry.uv[0], entry.uv[2]) * textureCanvas.width / (asset.uvWidth || textureCanvas.width)
+    && point[0] <= Math.max(entry.uv[0], entry.uv[2]) * textureCanvas.width / (asset.uvWidth || textureCanvas.width)
+    && point[1] >= Math.min(entry.uv[1], entry.uv[3]) * textureCanvas.height / (asset.uvHeight || textureCanvas.height)
+    && point[1] <= Math.max(entry.uv[1], entry.uv[3]) * textureCanvas.height / (asset.uvHeight || textureCanvas.height));
+  if (anchor.assetUid !== asset._uid || !candidate) {
     toast('面漸變的第二點必須在同一個 UV 面');
     return;
   }
+  hit = candidate;
   const direction = [point[0] - anchor.point[0], point[1] - anchor.point[1]];
   const lengthSquared = direction[0] ** 2 + direction[1] ** 2;
   if (lengthSquared < 1e-8) return toast('漸變兩點距離太短');
@@ -131,7 +180,8 @@ function startTexturePaintPointer(event) {
 }
 
 function moveTexturePaintPointer(event) {
-  if (!texturePaintDrag || texturePaintDrag.pointerId !== event.pointerId) return false;
+  if (!texturePaintDrag) { updateTextureGradientPreview(event); return false; }
+  if (texturePaintDrag.pointerId !== event.pointerId) return false;
   if (texturePaintDrag.tool === 'fill') {
     queueBucketPath(texturePaintDrag, event.clientX, event.clientY);
     return true;

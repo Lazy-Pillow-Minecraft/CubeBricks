@@ -544,6 +544,7 @@ function bindEvents() {
   texturePreview.addEventListener('pointercancel', endTexturePointer);
   texturePreview.addEventListener('lostpointercapture', endTexturePointer);
   texturePreview.addEventListener('pointerleave', () => {
+    $('#textureGradientPreview').hidden = true;
     if (!getTexturePaintDrag()) $('#textureBrushCursor').hidden = true;
     if (!uvEditorController.textureUvDrag && !getTexturePaintDrag()) texturePreview.style.cursor = '';
   });
@@ -786,6 +787,7 @@ function bindEvents() {
         boxUv: $('#textureTemplateBoxUv').checked,
         powerOfTwo: $('#textureTemplatePowerOfTwo').checked,
         keepMultiTexture: $('#textureTemplateKeepMulti').checked,
+        keepLayers: $('#textureTemplateKeepLayers').checked,
         paddingEnabled: $('#textureTemplatePaddingEnabled').checked,
         padding: Number($('#textureTemplatePadding').value) || 0,
         multiple: Number($('#textureTemplateMultiple').value) || 4
@@ -1178,6 +1180,11 @@ function bindEvents() {
   sceneCanvas.addEventListener('pointercancel', endPointerDrag);
   sceneCanvas.addEventListener('lostpointercapture', endPointerDrag);
   sceneCanvas.addEventListener('auxclick', event => { if (event.button === 1) event.preventDefault(); });
+  window.addEventListener('wheel', event => {
+    if (!event.altKey || !palette.scrollSelectedPaletteColor(event.deltaY)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, { capture: true, passive: false });
   sceneCanvas.addEventListener('wheel', event => { event.preventDefault(); cancelCameraFocus(); state.zoom = Math.max(.002, Math.min(100, state.zoom * (event.deltaY > 0 ? .9 : 1.1))); scheduleSceneRender(); }, { passive: false });
   window.addEventListener('resize', renderScene);
   document.addEventListener('visibilitychange', refreshUvPreview);

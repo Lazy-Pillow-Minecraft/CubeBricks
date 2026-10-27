@@ -1,5 +1,7 @@
 # CubeBricks Shape 包編寫規範
 
+[返回 README](README.md) · [附加包索引](docs/ADDON_PACKS.md) · [架構概述](ARCHITECTURE.md)
+
 桌面版會讀取工作空間的 `shapepacks/`。一個包可以是資料夾，或是同樣結構的 `.zip`；ZIP 可直接以 `package.json` 為根，也可多包一層總資料夾。包顯示名取最外層資料夾／ZIP 的檔名，而不是 `package.json` 裡的名稱。可在「設定 → 一般 → 管理資源包」直接加入 ZIP、調整順序、移除或熱重載；資料夾包仍可手動放入目錄後按重新整理。
 
 ```text

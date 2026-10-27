@@ -37,7 +37,7 @@ function queueDiskSave() {
       .catch(error => console.warn('色卡保存失敗', error));
   }, 120);
 }
-function savePaletteRows() {
+function savePaletteRows(notify = true) {
   const payload = JSON.stringify(paletteRows);
   if (payload !== lastSavedPalettePayload) {
     lastSavedPalettePayload = payload;
@@ -48,7 +48,7 @@ function savePaletteRows() {
       localStorage.setItem(PALETTE_UPDATED_KEY, String(localPaletteUpdatedAt));
     } catch { /* The desktop file remains another persistence path. */ }
     queueDiskSave();
-    onPaletteChange?.();
+    if (notify) onPaletteChange?.();
   }
 }
 function loadPersistedPalettes() {
@@ -61,7 +61,7 @@ function loadPersistedPalettes() {
         const saved = decodeColorMap(content);
         if (saved.updatedAt >= localPaletteUpdatedAt) {
           paletteRows.splice(0, paletteRows.length, ...saved.palettes);
-          selectedPaletteRowId = paletteRows[0].id;
+          selectedPaletteRowId = paletteRows[0]?.id ?? null;
           selectedPaletteColorIndex = null;
           localPaletteUpdatedAt = saved.updatedAt;
           lastSavedPalettePayload = JSON.stringify(paletteRows);
@@ -337,8 +337,8 @@ function insertPaletteGradientNode(row, ratio, color = null, index = null) {
   selectedPaletteColorIndex = insertion;
   renderPalette();
 }
-let selectedPaletteRowId = paletteRows[0].id;
-let selectedPaletteColorIndex = paletteRows[0].colors.indexOf(state.paintColor);
+let selectedPaletteRowId = paletteRows[0]?.id ?? null;
+let selectedPaletteColorIndex = paletteRows[0]?.colors.indexOf(state.paintColor) ?? null;
 let draggedPaletteColor = null;
 const PAINT_COLOR_HISTORY_KEY = 'cubebricks.paint-color-history';
 const PAINT_COLOR_HISTORY_LIMIT = 12;
@@ -369,6 +369,11 @@ function syncPaletteSelectionToPaintColor() {
   const previousRowId = selectedPaletteRowId;
   const previousColorIndex = selectedPaletteColorIndex;
   const preferred = paletteRows.find(row => row.id === selectedPaletteRowId);
+  if (preferred && (preferred.gradient || preferred.colorSpaceGradient)
+    && samplePaletteGradient(preferred, preferred.marker).toLowerCase() === color) {
+    selectedPaletteColorIndex = null;
+    return;
+  }
   const candidates = preferred ? [preferred, ...paletteRows.filter(row => row !== preferred)] : paletteRows;
   const match = candidates.find(row => !row.gradient && !row.colorSpaceGradient && row.colors.some(entry => entry.toLowerCase() === color));
   if (match) {
@@ -385,9 +390,41 @@ function syncPaletteSelectionToPaintColor() {
   }
 }
 
+function scrollSelectedPaletteColor(deltaY) {
+  if (!deltaY || state.mode !== 'paint') return false;
+  const row = paletteRows.find(entry => entry.id === selectedPaletteRowId);
+  if (!row) return false;
+  const color = state.paintColor.toLowerCase();
+  if (row.gradient || row.colorSpaceGradient) {
+    if (samplePaletteGradient(row, row.marker).toLowerCase() !== color) return false;
+    row.marker = clamp(row.marker + Math.sign(deltaY) * .01, 0, 1);
+    $$(`[data-gradient-picker]`).filter(bar => paletteRows[Number(bar.dataset.gradientPicker)] === row)
+      .forEach(bar => { const marker = $('.gradient-marker', bar); if (marker) marker.style.left = insetControlPosition(row.marker); });
+    applyPaletteColor(samplePaletteGradient(row, row.marker), false, false);
+    $$('.gradient-node-head').forEach(head => {
+      if (head.dataset.gradientRowId === row.id) head.classList.remove('selected');
+    });
+    // Changing the sampling marker does not change palette colors and must not
+    // rebuild every tone-mapped texture on each wheel notch.
+    savePaletteRows(false);
+    return true;
+  }
+  const currentIndex = row.colors.findIndex(entry => entry.toLowerCase() === color);
+  if (currentIndex < 0 || !row.colors.length) return false;
+  selectedPaletteColorIndex = (currentIndex + Math.sign(deltaY) + row.colors.length) % row.colors.length;
+  applyPaletteColor(row.colors[selectedPaletteColorIndex], false, false);
+  $$('.swatch-item').forEach(item => item.classList.toggle('selected', item.dataset.paletteRowId === row.id
+    && Number(item.dataset.paletteColorIndex) === selectedPaletteColorIndex));
+  return true;
+}
+
 function renderPalette() {
   const rows = $('#paletteRows');
   const restoreFocus = rows === document.activeElement || rows.contains(document.activeElement);
+  if (!paletteRows.some(row => row.id === selectedPaletteRowId)) {
+    selectedPaletteRowId = paletteRows[0]?.id ?? null;
+    selectedPaletteColorIndex = null;
+  }
   $('#paletteSummary').textContent = `${paletteRows.length} 行 · ${paletteCompact ? '縮略選色' : '每行獨立設定'}`;
   $('#paletteCompactToggle').setAttribute('aria-pressed', String(paletteCompact));
   rows.classList.toggle('palette-compact', paletteCompact);
@@ -417,7 +454,7 @@ function renderPalette() {
         ? row.colors.length || row.colorSpaceGradient ? `<div class="palette-gradient-content"><label class="palette-segments-label">漸變分段類別 <select data-gradient-segments="${index}" aria-label="漸變分段類別"><option value="equal" ${row.gradientSegments !== 'custom' && row.gradientSegments !== 'curve_length' ? 'selected' : ''}>平均分</option><option value="custom" ${row.gradientSegments === 'custom' ? 'selected' : ''}>自定義</option>${row.colorSpaceGradient ? `<option value="curve_length" ${row.gradientSegments === 'curve_length' ? 'selected' : ''}>按曲線長度</option>` : ''}</select></label>${gradientBarHtml(row, `data-gradient-picker="${index}"`)}${row.colorSpaceGradient ? `<button class="edit-space-curve" data-edit-space-curve="${index}" title="編輯三維色彩曲線">曲線 ↗</button>` : ''}</div>`
           : `<div class="palette-empty">空色卡 · 先從選色器加入顏色</div>`
         : `<div class="palette-row" data-palette-row="${row.id}">${row.colors.length ? row.colors.map((color, colorIndex) => `<span class="swatch-item ${selectedPaletteRowId === row.id && selectedPaletteColorIndex === colorIndex ? 'selected' : ''}" draggable="true" data-palette-row-id="${row.id}" data-palette-color-index="${colorIndex}"><button class="swatch" data-color="${color}" style="background:${color}" title="${color}"></button></span>`).join('') : `<span class="palette-empty">空色卡 · 從選色器加入顏色</span>`}</div>`}
-    </div>`).join('');
+    </div>`).join('') || '<span class="palette-empty">尚無色卡 · 可新增或匯入</span>';
 
   $$('.palette-row-card').forEach(card => card.addEventListener('pointerdown', () => {
     selectedPaletteRowId = card.dataset.paletteId;
@@ -498,9 +535,8 @@ function renderPalette() {
     openColorSpaceCurveEditor(paletteRows[Number(button.dataset.editSpaceCurve)]);
   }));
   $$('[data-delete-row]').forEach(button => button.addEventListener('click', () => {
-    if (paletteRows.length === 1) return toast('至少保留一行色卡');
     const removed = paletteRows.splice(Number(button.dataset.deleteRow), 1)[0];
-    if (removed.id === selectedPaletteRowId) { selectedPaletteRowId = paletteRows[0].id; selectedPaletteColorIndex = null; }
+    if (removed.id === selectedPaletteRowId) { selectedPaletteRowId = paletteRows[0]?.id ?? null; selectedPaletteColorIndex = null; }
     renderPalette();
   }));
   $$('[data-gradient-picker]', rows).forEach(picker => bindGradientBar(picker, paletteRows[Number(picker.dataset.gradientPicker)], {
@@ -789,7 +825,7 @@ function applyPaletteColor(color, notify = true, recordHistory = true) {
   return {
     paletteRows, renderPalette, renderPaintColorHistory, recordPaintColorHistory,
     loadPersistedPalettes, exportColorMap, importColorMap,
-    syncPaletteSelectionToPaintColor, samplePaletteGradient, addPaletteRow,
+    syncPaletteSelectionToPaintColor, samplePaletteGradient, scrollSelectedPaletteColor, addPaletteRow,
     openColorSpaceCurveEditor, addPaintSwatchToSelection, deleteSelectedPaletteColor, applyPaletteColor,
     insertPaletteGradientNode, ensureColorSpaceCurve,
     get selectedRowId() { return selectedPaletteRowId; },

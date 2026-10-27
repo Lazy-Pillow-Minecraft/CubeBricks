@@ -1,5 +1,6 @@
 import { getBlockbenchBoxUv, isCubeFaceCulled } from '../render/webgl-renderer.js';
-import { imageCanvas, tiledFaceRaster, faceTileSize } from '../common/core/texture-features.js';
+import { compositeLayers, imageCanvas, layerRasterCache, loadRaster, normalizeTextureLayers,
+  tiledFaceRaster, faceTileSize } from '../common/core/texture-features.js';
 import { formatRules } from '../common/core/format-constraints.js';
 import { minimumTemplatePackingSide, packTemplateRectangles } from '../utils/template-packer.js';
 
@@ -109,14 +110,14 @@ function alignedTextureSide(side, powerOfTwo, multiple) {
   return Math.ceil(size / unit) * unit;
 }
 
-function drawTemplateFace(ctx, entry, destination, sourceImages) {
+function drawFaceImage(ctx, entry, destination, image) {
   const { width, height, sourceUv, sourceAsset, faceName } = entry;
-  if (width <= 0 || height <= 0) return;
-  const image = sourceAsset ? sourceImages.get(sourceAsset._uid) : null;
-  if (image && sourceAsset.mode === 'tiled') {
-    const raster = tiledFaceRaster(entry.target.cube, faceName, imageCanvas(image), null, [width, height]);
+  if (width <= 0 || height <= 0 || !image) return false;
+  if (sourceAsset?.mode === 'tiled') {
+    const raster = tiledFaceRaster(entry.target.cube, faceName,
+      typeof image.getContext === 'function' ? image : imageCanvas(image), null, [width, height]);
     ctx.drawImage(raster, destination.x, destination.y);
-    return;
+    return true;
   }
   if (image && sourceUv) {
     const left = Math.min(sourceUv[0], sourceUv[2]);
@@ -125,9 +126,16 @@ function drawTemplateFace(ctx, entry, destination, sourceImages) {
     const sourceHeight = Math.abs(sourceUv[3] - sourceUv[1]);
     if (sourceWidth > 0 && sourceHeight > 0) {
       ctx.drawImage(image, left, top, sourceWidth, sourceHeight, destination.x, destination.y, width, height);
-      return;
+      return true;
     }
   }
+  return false;
+}
+
+function drawTemplateFace(ctx, entry, destination, sourceImages) {
+  const { width, height, sourceAsset, faceName } = entry;
+  if (width <= 0 || height <= 0) return;
+  if (drawFaceImage(ctx, entry, destination, sourceAsset ? sourceImages.get(sourceAsset._uid) : null)) return;
   const faceColors = TEMPLATE_FACE_COLORS[faceName] || { fill: '#b7b7b7', outline: '#9f9f9f' };
   ctx.fillStyle = faceColors.fill;
   ctx.fillRect(destination.x, destination.y, width, height);
@@ -162,12 +170,13 @@ function syncGeneratedTemplateEdits(targets) {
   if (getSubdivisionSession()) syncSubdivisionEdits();
 }
 
-function registerGeneratedTexture(canvas, name, kind) {
+function registerGeneratedTexture(canvas, name, kind, layers = null, activeLayerUid = null) {
   const id = `texture_${crypto.randomUUID()}`;
   const asset = {
     _uid: id, uuid: id, id, name: name.toLowerCase().endsWith('.png') ? name : `${name}.png`,
     source: canvas.toDataURL('image/png'), uvWidth: canvas.width, uvHeight: canvas.height,
-    kind, groupId: null, useAsDefault: state.textureAssets.length === 0
+    kind, groupId: null, useAsDefault: state.textureAssets.length === 0,
+    ...(layers ? { layers, activeLayerUid } : {})
   };
   state.textureAssets.push(asset);
   state.activeTextureUid = asset._uid;
@@ -177,6 +186,50 @@ function registerGeneratedTexture(canvas, name, kind) {
   activateProjectTexture(state.textureAssets.length - 1);
   markDirty();
   return asset;
+}
+
+async function createTemplateLayerOutputs(sourceAssets, sourceImages, side) {
+  const usable = [...sourceAssets].filter(asset => sourceImages.get(asset._uid) || normalizeTextureLayers(asset));
+  const multipleSources = usable.length > 1;
+  const outputs = new Map();
+  const layers = [];
+  let activeLayerUid = null;
+  for (const asset of usable) {
+    const normalized = normalizeTextureLayers(asset);
+    const sourceLayers = normalized || [{
+      uid: `${asset._uid}_base`, name: '底圖', source: asset.source,
+      visible: true, opacity: 100, blendMode: 'normal'
+    }];
+    const uidMap = new Map(sourceLayers.map(layer => [layer.uid, crypto.randomUUID()]));
+    const sourceGroupUid = multipleSources ? crypto.randomUUID() : null;
+    if (sourceGroupUid) layers.push({ uid: sourceGroupUid, type: 'group', name: asset.name,
+      parentUid: null, visible: true, collapsed: false, opacity: 100, blendMode: 'normal' });
+    const rasters = [];
+    for (const layer of sourceLayers) {
+      const uid = uidMap.get(layer.uid);
+      const parentUid = uidMap.get(layer.parentUid) || sourceGroupUid;
+      const copy = { ...layer, uid, parentUid,
+        maskLayerUid: uidMap.get(layer.maskLayerUid) || null };
+      if (copy.uuid) copy.uuid = uid;
+      if (layer.type === 'group') {
+        layers.push(copy);
+        continue;
+      }
+      const cached = layerRasterCache.get(layer.uid);
+      const raster = cached?.savedSource === layer.source ? cached.canvas
+        : normalized ? await loadRaster(layer.source) : sourceImages.get(asset._uid);
+      const canvas = document.createElement('canvas');
+      canvas.width = side; canvas.height = side;
+      const context = canvas.getContext('2d');
+      context.imageSmoothingEnabled = false;
+      copy.source = '';
+      layers.push(copy);
+      rasters.push({ layer: copy, raster, canvas, context });
+      if (asset.activeLayerUid === layer.uid) activeLayerUid = uid;
+    }
+    outputs.set(asset._uid, rasters);
+  }
+  return { layers, outputs, activeLayerUid };
 }
 
 async function createTextureTemplate(options) {
@@ -288,13 +341,35 @@ async function createTextureTemplate(options) {
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, side, side);
+  const preserved = options.keepLayers ? await createTemplateLayerOutputs(sourceAssets, sourceImages, side) : null;
+  const outputCanvases = preserved ? new Map([...preserved.outputs.values()].flat().map(entry => [entry.layer.uid, entry.canvas])) : null;
+  let fallbackLayer = null;
+  const drawFallbackFace = (assignment, destination) => {
+    if (!fallbackLayer) {
+      const fallbackCanvas = document.createElement('canvas');
+      fallbackCanvas.width = side; fallbackCanvas.height = side;
+      const fallbackContext = fallbackCanvas.getContext('2d');
+      fallbackContext.imageSmoothingEnabled = false;
+      fallbackLayer = { canvas: fallbackCanvas, context: fallbackContext };
+    }
+    drawTemplateFace(fallbackLayer.context, assignment, destination, sourceImages);
+  };
   for (const assignment of assignments) {
     const placement = packed.placements.get(assignment.entry);
     if (placement) {
       const destination = assignment.offset
         ? { x: placement.x + assignment.offset.x, y: placement.y + assignment.offset.y }
         : { x: placement.x, y: placement.y };
-      drawTemplateFace(ctx, { ...assignment, faceName: assignment.faceName }, destination, sourceImages);
+      if (preserved) {
+        const sourceLayers = preserved.outputs.get(assignment.sourceAsset?._uid);
+        if (sourceLayers?.length) {
+          let drawn = false;
+          for (const { context, raster } of sourceLayers) {
+            if (drawFaceImage(context, assignment, destination, raster)) drawn = true;
+          }
+          if (!drawn) drawFallbackFace(assignment, destination);
+        } else drawFallbackFace(assignment, destination);
+      } else drawTemplateFace(ctx, assignment, destination, sourceImages);
       const cube = assignment.target.cube;
       cube.faces ||= {};
       const previous = cube.faces[assignment.faceName] || {};
@@ -302,7 +377,28 @@ async function createTextureTemplate(options) {
     }
     await progress.advance('正在繪製並分配 UV…');
   }
-  const asset = registerGeneratedTexture(canvas, options.name, 'TEMPLATE');
+  if (preserved) {
+    await progress.prepare('正在保存重排後的圖層…');
+    if (fallbackLayer) {
+      const uid = crypto.randomUUID();
+      preserved.layers.unshift({ uid, name: '模板底圖', parentUid: null, source: '',
+        visible: true, opacity: 100, blendMode: 'normal' });
+      fallbackLayer.layerUid = uid;
+    }
+    for (const layer of preserved.layers) {
+      if (layer.type === 'group') continue;
+      const output = layer.uid === fallbackLayer?.layerUid ? fallbackLayer.canvas : outputCanvases.get(layer.uid);
+      if (!output) continue;
+      layer.source = output.toDataURL('image/png');
+      layerRasterCache.set(layer.uid, { canvas: output, savedSource: layer.source });
+    }
+    preserved.activeLayerUid ||= preserved.layers.find(layer => layer.type !== 'group')?.uid || null;
+    const merged = compositeLayers({ layers: preserved.layers, activeLayerUid: preserved.activeLayerUid,
+      uvWidth: side, uvHeight: side });
+    if (merged) ctx.drawImage(merged, 0, 0);
+  }
+  const asset = registerGeneratedTexture(canvas, options.name, 'TEMPLATE',
+    preserved?.layers || null, preserved?.activeLayerUid || null);
   state.project.uvMode = options.boxUv ? 'box' : 'face';
   for (const target of targets) {
     target.cube.uvMode = options.boxUv ? 'box' : 'face';

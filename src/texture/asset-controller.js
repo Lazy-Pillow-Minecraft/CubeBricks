@@ -730,10 +730,11 @@ function openTextureCreateDialog() {
   $('#textureCreateWidth').value = String(state.project.textureSize?.[0] || 64);
   $('#textureCreateHeight').value = String(state.project.textureSize?.[1] || 64);
   const rules = formatRules(state.project);
-  $('#textureTemplateBoxUv').checked = rules.moddedEntity || rules.allowBoxUv && state.project.uvMode === 'box';
+  $('#textureTemplateBoxUv').checked = Boolean(rules.moddedEntity);
   $('#textureTemplateBoxUv').disabled = !rules.allowBoxUv || !rules.allowFaceUv;
   $('#textureTemplateBoxUv').closest('label').hidden = !rules.allowBoxUv || !rules.allowFaceUv;
   $('#textureTemplateSelectedOnly').checked = false;
+  $('#textureTemplateKeepLayers').checked = true;
   $('#textureTemplateSelectedOnly').disabled = selectedElementUids().length === 0;
   const subdivisions = activeSnapSubdivisions();
   $('#textureTemplateSummary').textContent = `目前按項目基礎吸附 ${formatNumber(subdivisions)} 計算：UV 像素 = round(Cube 尺寸 × ${formatNumber(subdivisions)} ÷ 16)，非零邊長最少 1px，再由大到小自左上角打包。`;
