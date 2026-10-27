@@ -174,6 +174,11 @@ function bindContextMenus() {
     { icon: '▣', label: '離屏渲染', action: () => captureModel('offscreen') }
   ] });
   $('#viewport').addEventListener('contextmenu', event => {
+    if (state.mode === 'display') {
+      event.preventDefault();
+      closeContextMenu();
+      return;
+    }
     if (referenceImages.editing && event.target.closest('#referenceImageLayer')) {
       const image = referenceImages.referenceImageAt(event.clientX, event.clientY);
       if (!image) {

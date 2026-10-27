@@ -40,6 +40,7 @@ function onPointerDown(event) {
     startCameraDrag(event, sceneCanvas);
     return;
   }
+  if (state.mode === 'display') return;
   if (event.button !== 0) return;
   if (state.mode === 'paint' && PAINT_TOOLS.includes(state.tool)) {
     startScenePaintPointer(event, x, y);

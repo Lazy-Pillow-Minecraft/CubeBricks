@@ -6,8 +6,10 @@
 
 1. Choose a project format from the model-type list on the start page or from **New** in the top bar. The format supplies initial snapping and UV capabilities. Java Block/Item version restrictions can be changed in Project Information.
 2. Use the top tabs to switch between open projects or drag them to reorder. Right-click a tab to edit project information; middle-click it or use its hover-only close icon to close it.
-3. `Ctrl+S` saves and `Ctrl+Shift+S` saves as a new file. Export uses the selected or typed extension to choose `.cbmodel` or `.bbmodel`.
-4. On desktop exit, the retention prompt lists only projects created during this app launch. Unchecking one deletes its expanded working directory. Previously existing projects reopened during this launch are not in that deletion list.
+3. `Ctrl+S` or **Save** in the top bar retains the project's working folder without generating a `.cbmodel` or opening a file dialog. `Ctrl+Shift+S` and **Export** create a file; the chosen or typed extension selects `.cbmodel` or `.bbmodel`.
+4. On desktop exit, the retention prompt lists only projects created during this launch that have not yet been saved this way. Unchecking one deletes its expanded working directory. Retained working folders and previously existing projects are omitted from the prompt.
+
+Java Block/Item projects force back-face culling and per-face UVs. Their three version classes allow, respectively, 22.5° steps on one axis, arbitrary angles on one axis, or unrestricted rotation axes. The viewport guide marks the −16 to 32 `from/to` coordinate range; the ground reference grid shifts +8 on X/Z while the red and blue axes still start at the origin and extend farther. Animation mode is unavailable for this format, and Display Settings is currently only a placeholder. The Bedrock Block guide moves with the model to indicate its 30 px size constraint; a drag or numeric change that worsens an out-of-range model is rejected. The guides share the main ground-grid line color and depth behavior.
 
 ## 2. Camera and selection
 
@@ -52,6 +54,8 @@ Use the controls above the scene hierarchy to create cubes, groups, locators, an
 3. With the texture view focused, `R` focuses selected UVs and `Shift+R` resets the texture view. UV data outside the image bounds is preserved for compatibility with unusual models, although ordinary dragging does not deliberately move it farther out.
 4. **New Texture → Texture Template** repacks UVs from the current cube faces. Options include selected elements only, zero-area face cleanup, box UVs, canvas-size alignment, padding, and separate occupancy for multiple textures.
 5. **Preserve Layer Structure** is on by default. Each source texture's layers are remapped separately into the new UV layout, retaining groups, visibility, blend modes, and mask links. Multiple source textures become separate groups; faces with no texture go into a template base layer. Turn it off to output one flattened image. Box UVs default to off except where required by the model format.
+
+The **Tiled** and **Flipbook** entries in the texture-mode dropdown are marked **Coming Soon** and cannot currently be selected. Ordinary textures remain available.
 
 ## 5. Painting
 

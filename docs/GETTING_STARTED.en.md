@@ -41,3 +41,7 @@ See [`package.json`](../package.json) for the remaining test scripts.
 ## Build a single-file Windows executable
 
 Double-click `build-portable.bat` in the repository root, or run `npm run dist:portable`. The build script checks the source and runs the test suite before producing `dist/CubeBricks-<version>-portable.exe`. The first build may need to download Electron packaging resources. This output is different from the small launcher committed at the repository root.
+
+## Build a Windows installer
+
+Double-click `build-installer.bat` in the repository root, or run `npm run dist:installer`. The script generates dark-brown and gold CubeBricks installer artwork and produces `dist/CubeBricks-<version>-setup.exe`. The wizard carries the existing app icon and title, offers an installation-directory choice, and creates desktop and Start Menu shortcuts. This installer is separate from the single-file portable build. A first build may need to download packaging resources; the output is not code-signed.

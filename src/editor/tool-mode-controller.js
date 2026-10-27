@@ -31,6 +31,8 @@ function applyModePanelVisibility() {
 }
 
 function setMode(mode) {
+  if (mode === 'display' && state.project.formatId !== 'java_block_item') mode = 'edit';
+  if (mode === 'animate' && state.project.formatId === 'java_block_item') mode = 'display';
   if (mode === 'uv' && !state.separateUvMode) mode = 'edit';
   if (mode === 'paint' && inspectorController.subdivisionSession) exitSubdivisionEdit(false);
   if (mode === 'paint' && state.mode !== 'paint') {
@@ -41,6 +43,8 @@ function setMode(mode) {
     renderModeBeforePaint = null;
   }
   state.mode = mode;
+  $('#displaySettingsPlaceholder').hidden = mode !== 'display';
+  $('#animationEditorPlaceholder').hidden = mode !== 'animate';
   $('#paintShapeMenu').hidden = true;
   $('#paintShapeModeButton').setAttribute('aria-expanded', 'false');
   $('#paintSelectionModeMenu').hidden = true;
@@ -58,12 +62,12 @@ function setMode(mode) {
   $$('.mode-tab').forEach(button => button.classList.toggle('active', button.dataset.mode === mode));
   updateToolVisibility();
   if (!toolSupportsMode(state.tool, mode)) setTool(mode === 'paint' ? 'brush' : mode === 'uv' ? 'faceSelect' : 'move');
-  $('#viewLabel').textContent = mode === 'paint' ? '三維繪畫' : mode === 'uv' ? 'UV 編輯' : mode === 'animate' ? '動畫預覽' : '實體著色';
+  $('#viewLabel').textContent = mode === 'paint' ? '三維繪畫' : mode === 'uv' ? 'UV 編輯' : mode === 'animate' ? '動畫編輯' : mode === 'display' ? '顯示設置' : '實體著色';
   if (mode === 'paint') activateDock('palette');
   if (mode === 'animate') activateDock('timeline');
   renderInspector();
   renderScene();
-  toast({ edit: '編輯模式', uv: 'UV 編輯模式', paint: '繪畫模式', animate: '動畫模式' }[mode]);
+  toast({ edit: '編輯模式', uv: 'UV 編輯模式', paint: '繪畫模式', animate: '動畫編輯（開發中）', display: '顯示設置（開發中）' }[mode]);
 }
 
 function updateToolVisibility() {
@@ -137,7 +141,7 @@ function updateToolOptions() {
   $('#paintSelectionModeButton').textContent = selectionNames[state.paintSelectionMode] || selectionNames.rectangle;
   $('#paintSelectionModeButton').dataset.selectionShape = state.paintSelectionMode;
   $$('[data-paint-selection-mode]').forEach(button => button.classList.toggle('active', button.dataset.paintSelectionMode === state.paintSelectionMode));
-  lane.hidden = !labels[state.tool];
+  lane.hidden = state.mode === 'display' || !labels[state.tool];
   $('#transformSpaceControl').hidden = !['move', 'rotate', 'pivot'].includes(state.tool);
   $('#pivotCenterControl').hidden = state.tool !== 'pivot';
   $('#rotationModeControl').hidden = state.tool !== 'rotate' || state.transformSpace !== 'self';
@@ -197,7 +201,7 @@ function updateToolOptions() {
   $('#paintGradientEndControl').disabled = state.paintGradientPalette;
   $('#paintGradientStartAlpha').disabled = state.paintGradientPalette;
   $('#paintGradientEndAlpha').disabled = state.paintGradientPalette;
-  $('#snapButton').hidden = paintTool || state.tool === 'paintSelection';
+  $('#snapButton').hidden = state.mode === 'display' || paintTool || state.tool === 'paintSelection';
   const knifePreview = getKnifePreviewLabel();
   $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
   if (!lane.hidden) $('#toolContext').textContent = labels[state.tool];

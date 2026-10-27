@@ -119,7 +119,7 @@ function updateProjectStateLabel() {
     document.title = 'CubeBricks';
     return;
   }
-  const fileName = state.filePath ? state.filePath.split(/[\\/]/).pop() : `${state.project.name}.cbmodel`;
+  const fileName = state.filePath ? state.filePath.split(/[\\/]/).pop() : state.project.name;
   const label = `${state.dirty ? '● ' : ''}${fileName}`;
   const title = `${state.dirty ? '● ' : ''}${projectTabLabel(projectTabById(activeProjectTabId) || { session: captureProjectSession() })} — CubeBricks`;
   if (projectState.textContent !== label) projectState.textContent = label;
@@ -163,6 +163,7 @@ function addProjectTab(project, options = {}) {
     id: `project_${crypto.randomUUID()}`,
     displayName: options.displayName || null,
     createdThisLaunch: !options.imported && !options.journalId,
+    persistedWorkingCopy: Boolean(options.journalId && !options.filePath),
     session: createProjectSession(project, options)
   };
   projectTabs.push(tab);
@@ -194,9 +195,9 @@ async function closeProjectTab(tabId) {
   const index = projectTabs.findIndex(tab => tab.id === tabId);
   if (index < 0) return;
   const tab = projectTabs[index];
-  if (tab.session.dirty && !await showAppConfirm(`「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？`,
+  if (tab.session.dirty && !tab.persistedWorkingCopy && !await showAppConfirm(`「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？`,
     { title: '關閉項目', detail: '未保存的修改將不再保留於此分頁。', buttons: ['關閉', '取消'] })) return;
-  const discard = tab.session.dirty || !tab.session.filePath;
+  const discard = !tab.persistedWorkingCopy && (tab.session.dirty || !tab.session.filePath);
   if (!discard && tabId === activeProjectTabId) onProjectClosing?.(tab);
   const pending = discard ? discardProjectTabJournal(tab) : (async () => {
     await flushProjectJournal(tab);

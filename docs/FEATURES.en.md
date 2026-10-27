@@ -21,7 +21,7 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 
 ## UVs, textures, and layers
 
-- Cubes may use per-face or box UVs. In per-face mode, faces can independently choose a texture, rotate or mirror UVs, be culled, and have UV coordinates edited. Texture modes include ordinary and tiled textures; animation mode is still a placeholder.
+- Cubes may use per-face or box UVs. In per-face mode, faces can independently choose a texture, rotate or mirror UVs, be culled, and have UV coordinates edited. The texture-mode dropdown currently allows only ordinary textures; Tiled and Flipbook appear as disabled “Coming Soon” choices. Existing data remains readable.
 - Texture layers support image layers and groups, reordering, visibility, opacity, blend modes, tone mapping, and independent mask sources. A dedicated layer editor shows the full texture beside the selected layer.
 - New textures can be generated as texture templates, solid-color templates, or blank images. Template generation uses the project's base snap resolution for UV allocation, assigns at least 1 px to nonzero edges, can cull zero-area faces, and offers box UVs, padding, power-of-two dimensions, or custom size multiples.
 - **Preserve layer structure** is enabled by default for texture templates. It remaps each source layer's pixels into the newly assigned UVs while retaining groups, order, visibility, blend settings, and mask relationships. Multiple source textures become separate groups. Turning the option off uses the previous flattened-image workflow. Box UVs default to off where per-face UVs are allowed; formats that require box UVs still enforce that rule.
@@ -37,5 +37,6 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 ## Projects and extension points
 
 - `.cbmodel` saves model data, textures, and optional operation history. `.bbmodel` supports Blockbench interchange. The working directory keeps a recoverable operation journal; archive export can include or omit history.
-- A registry defines model formats. Java Block/Item has three version-specific rotation rules. Modded Entity requires box UVs, integer cube dimensions, and group rotation rather than cube rotation.
+- A registry defines model formats. Java Block/Item has three version-specific rotation rules, forced back-face culling, and element-coordinate bounds. Bedrock Block has a dynamic 30 px size constraint. Both show a complete boundary guide in the viewport. Modded Entity requires box UVs, integer cube dimensions, and group rotation rather than cube rotation.
+- Java Block/Item has no Animation mode; its Display Settings page is currently a placeholder. Animation Editing in other formats also shows a placeholder while the full workflow is unfinished.
 - External [Shape packs](../SHAPE_PACKS.en.md) and [language/font packs](../RESOURCE_PACKS.en.md) load through the pack manager. External modifier or operator packs are not available yet.

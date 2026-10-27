@@ -756,6 +756,7 @@ function bindEvents() {
     renderScene();
   });
   $('#cullFaces').addEventListener('change', event => {
+    if (state.project.formatId === 'java_block_item') { event.target.checked = true; return; }
     snapshot('core.project.face_culling');
     state.project.cullFaces = event.target.checked;
     markDirty();
@@ -1203,10 +1204,11 @@ function bindEvents() {
     }
     if ((event.ctrlKey || event.metaKey) && key === 's') {
       event.preventDefault();
-      saveProject(event.shiftKey);
+      event.shiftKey ? exportProject() : saveProject();
       return;
     }
     if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
+    if (state.mode === 'display') return;
     if ((event.ctrlKey || event.metaKey) && key === 'a'
       && event.target instanceof Element
       && (viewport.contains(event.target) || outliner.contains(event.target))) {

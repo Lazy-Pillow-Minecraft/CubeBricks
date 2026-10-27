@@ -78,7 +78,7 @@ function getUvPreviewProject() {
     outliner: elements.map(element => element.uid),
     textureSize: state.project.textureSize,
     renderType: state.uvPreviewFaceColors ? 'solid' : state.project.renderType,
-    cullFaces: state.project.cullFaces,
+    cullFaces: state.project.cullFaces || state.project.formatId === 'java_block_item',
     getNode: uidValue => previewNodes.get(uidValue) || null,
     getGroupChain: uidValue => state.project.getGroupChain(uidValue)
       .map(group => previewGroups.get(group.uid) || group),
@@ -444,7 +444,7 @@ function renderUvPreview() {
   }
   cache.project.textureSize = state.project.textureSize;
   cache.project.renderType = state.project.renderType;
-  cache.project.cullFaces = state.project.cullFaces;
+  cache.project.cullFaces = state.project.cullFaces || state.project.formatId === 'java_block_item';
   const fit = uvPreviewFit(cache);
   const textureWidth = Math.max(1, Number(state.project.textureSize?.[0]) || 1);
   const textureHeight = Math.max(1, Number(state.project.textureSize?.[1]) || 1);

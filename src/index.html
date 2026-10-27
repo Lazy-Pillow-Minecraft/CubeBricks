@@ -62,6 +62,10 @@
       <div class="brand">
         <img class="brand-mark" src="./assets/brand-icon.png" alt="" aria-hidden="true" />
         <span>CubeBricks</span>
+        <div class="title-actions">
+          <button class="icon-button" data-action="theme" title="設定"><svg class="title-action-icon object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button>
+          <button class="primary-button" data-action="export">導出</button>
+        </div>
         <span class="project-state" id="projectState">未保存</span>
       </div>
       <nav class="main-menu" aria-label="主選單">
@@ -71,9 +75,10 @@
         <button data-action="undo">撤銷</button>
         <button data-action="redo">重做</button>
       </nav>
-      <div class="title-actions">
-        <button class="icon-button" data-action="theme" title="設定"><svg class="title-action-icon object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button>
-        <button class="primary-button" data-action="export">導出</button>
+      <div class="window-controls" id="windowControls" aria-label="視窗控制" hidden>
+        <button type="button" data-window-control="minimize" title="最小化" aria-label="最小化"><span class="window-minimize-icon" aria-hidden="true"></span></button>
+        <button type="button" data-window-control="maximize" title="最大化" aria-label="最大化"><span class="window-maximize-icon" aria-hidden="true"></span></button>
+        <button type="button" data-window-control="close" title="關閉" aria-label="關閉" class="window-close"><span aria-hidden="true">×</span></button>
       </div>
     </header>
 
@@ -285,6 +290,8 @@
             <span id="referenceImageHint">點圖選取／拖動 · 滾輪縮放 · 右鍵空白退出</span>
           </div>
           <canvas id="sceneCanvas" tabindex="0"></canvas>
+          <div class="display-settings-placeholder" id="displaySettingsPlaceholder" hidden>顯示設置 · 即將推出</div>
+          <div class="display-settings-placeholder" id="animationEditorPlaceholder" hidden>動畫編輯 · 即將推出</div>
           <svg class="paint-selection-gesture" id="paintSelectionGesture" aria-hidden="true" hidden></svg>
           <div class="selection-marquee" id="selectionMarquee" aria-hidden="true" hidden></div>
           <svg class="paint-gradient-overlay" id="paintGradientOverlay" aria-label="漸變預覽" aria-hidden="true" hidden></svg>

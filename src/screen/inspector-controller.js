@@ -1,5 +1,5 @@
 import { Shape, addModifier, addOperator, bakeModifier, setPivotPreservingGeometry, setNodeName, setNodeUnnamed } from '../model.js';
-import { formatRules, constrainNode } from '../common/core/format-constraints.js';
+import { formatRules, constrainNode, captureFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { modifierRegistry } from '../common/config/modifiers.js';
 import { operatorRegistry } from '../common/config/operators.js';
 import { shapeRegistry } from '../shapes/builtins.js';
@@ -514,6 +514,8 @@ function bindInspector(root = null) {
         : key === 'uvMode' || key === 'uvNormalized' ? items.filter(isUvCapable)
         : key === 'color' ? items.filter(node => typeof node.color === 'string')
         : items.filter(node => key in node);
+      const before = key === 'inflate' && (formatRules(state.project).bedrockBlock || formatRules(state.project).javaBlock)
+        ? captureFormatGeometry(targets) : null;
       for (const target of targets) {
         if (key === 'name') setNodeName(state.project, target, value);
         else if (key === 'unnamed') setNodeUnnamed(state.project, target, value);
@@ -525,6 +527,7 @@ function bindInspector(root = null) {
           }
         }
       }
+      if (before) keepFormatEditWithinLimit(state.project, before);
       if (key === 'locked') sceneRenderer.invalidateLockState();
       markDirty();
       renderAll('selection');
@@ -544,6 +547,7 @@ function bindInspector(root = null) {
       delete input.dataset.mixed;
       const field = input.dataset.vector;
       const axis = Number(input.dataset.axis);
+      const before = formatRules(state.project).bedrockBlock || formatRules(state.project).javaBlock ? captureFormatGeometry(items) : null;
       if (field.startsWith('curve-node:') && isBezierElement(item)) {
         const [, indexText, property] = field.split(':');
         const node = item.nodes[Number(indexText)];
@@ -564,6 +568,7 @@ function bindInspector(root = null) {
         }
         if (property === 'rotation') node.autoTangent = false;
         if (lockedPlanarAxis) input.value = '0';
+        if (before) keepFormatEditWithinLimit(state.project, before);
         markDirty(); invalidateSelectionRenderGeometry(); renderScene();
         return;
       }
@@ -594,8 +599,9 @@ function bindInspector(root = null) {
             translateModifierAnchors(target, [0, 1, 2].map(index => index === axis ? delta : 0));
           }
         }
-        if (field === 'rotation' || field === 'size') constrainNode(target, rules);
+        if (field === 'rotation' || field === 'size' || field === 'position') constrainNode(target, rules);
       }
+      if (before) keepFormatEditWithinLimit(state.project, before);
       const displayedValue = item.type === 'cube' && field === 'size' && !state.allowNegativeSize ? Math.max(0, value) : value;
       if (displayedValue !== value) input.value = String(displayedValue);
       markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(); renderScene();
@@ -615,10 +621,12 @@ function bindInspector(root = null) {
       const nextValue = input.dataset.min !== undefined ? Math.max(Number(input.dataset.min), value)
         : key === 'sides' ? Math.max(3, Math.round(value))
           : Math.max(key === 'innerRadius' || key === 'radius' ? 0 : key === 'cubeSize' || key === 'segmentLength' ? .0625 : .1, value);
+      const before = formatRules(state.project).bedrockBlock || formatRules(state.project).javaBlock ? captureFormatGeometry(items) : null;
       for (const target of items.filter(node => node.parameters && key in node.parameters)) {
         discardSubdivisionEdits(target);
         target.parameters[key] = nextValue;
       }
+      if (before) keepFormatEditWithinLimit(state.project, before);
       markDirty(); invalidateSelectionRenderGeometry(); syncInspectorValues(); renderScene();
     };
     input.addEventListener('input', apply);

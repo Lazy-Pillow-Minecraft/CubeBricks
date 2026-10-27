@@ -1,5 +1,13 @@
 // Fallback patterns for runtime-composed UI messages. Static messages use stable IDs in messages.js.
 export function translateEnglishUiText(text, language, translateUiText) {
+  const upcoming = {
+    '動畫編輯': 'Animation Editing',
+    '動畫編輯（開發中）': 'Animation Editing (in development)',
+    '動畫編輯 · 即將推出': 'Animation Editing · Coming Soon',
+    '平鋪（即將推出）': 'Tiled (Coming Soon)',
+    '手翻書（即將推出）': 'Flipbook (Coming Soon)'
+  };
+  if (upcoming[text]) return upcoming[text];
   let match = text.match(/^(\d+) 行 · 每行獨立設定$/);
   if (match) return `${match[1]} rows · configured independently`;
   match = text.match(/^色彩空間漸變 · (.+)$/);

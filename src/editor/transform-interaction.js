@@ -1,5 +1,5 @@
 import { Cube, Group, setPivotPreservingGeometry } from '../model.js';
-import { constrainNode, formatRules } from '../common/core/format-constraints.js';
+import { constrainNode, formatRules, captureFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { paintSymmetryRelationCache } from '../paint/symmetry-relations.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { inverseRotateVector, quaternionFromAxisAngle, quaternionFromEuler, quaternionMultiply, eulerFromQuaternion } from '../utils/math/rotation.js';
@@ -398,12 +398,15 @@ function applyPendingTransform(drag) {
   const pending = drag?.pendingTransform;
   if (!pending) return false;
   drag.pendingTransform = null;
+  const before = (formatRules(state.project).bedrockBlock || formatRules(state.project).javaBlock)
+    ? captureFormatGeometry([drag.item, ...(drag.targets || []).map(target => target.node)]) : null;
   applyTransformDrag(drag, pending.dx, pending.dy, pending.event);
   const rules = formatRules(state.project);
   if (rules.javaBlock || rules.moddedEntity) {
     constrainNode(drag.item, rules);
     for (const target of drag.targets || []) constrainNode(target.node, rules);
   }
+  if (before) keepFormatEditWithinLimit(state.project, before);
   updateTransformTooltip(pending.event, drag);
   if (!drag.batchPreview) invalidateSelectionRenderGeometry();
   if (drag.modifierAnchorContext) sceneRenderer.invalidateMirrorGeometry();
@@ -418,6 +421,8 @@ function commitBatchTransform(drag) {
     sceneRenderer.clearSelectionPreviewTransform();
     return false;
   }
+  const before = (formatRules(state.project).bedrockBlock || formatRules(state.project).javaBlock)
+    ? captureFormatGeometry(drag.targets.map(target => target.node)) : null;
   if (preview.type === 'move') {
     for (const target of drag.targets) {
       translateCapturedTarget(target, localDeltaFromWorld(target, preview.worldDelta));
@@ -432,6 +437,7 @@ function commitBatchTransform(drag) {
     }
   }
   sceneRenderer.clearSelectionPreviewTransform();
+  if (before) keepFormatEditWithinLimit(state.project, before);
   invalidateSelectionRenderGeometry();
   return true;
 }

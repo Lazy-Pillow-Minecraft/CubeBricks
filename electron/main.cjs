@@ -342,10 +342,7 @@ const createWindow = () => {
     minHeight: 700,
     icon: appIcon,
     backgroundColor: '#11130f',
-    titleBarStyle: 'hiddenInset',
-    titleBarOverlay: process.platform === 'win32' ? {
-      color: '#151812', symbolColor: '#dfe9d4', height: 38
-    } : false,
+    ...(process.platform === 'win32' ? { frame: false, thickFrame: true } : { titleBarStyle: 'hiddenInset' }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -355,6 +352,12 @@ const createWindow = () => {
   });
 
   win.removeMenu();
+  const sendWindowState = () => {
+    if (!win.isDestroyed()) win.webContents.send('app:window-state', { maximized: win.isMaximized() });
+  };
+  win.on('maximize', sendWindowState);
+  win.on('unmaximize', sendWindowState);
+  win.on('ready-to-show', sendWindowState);
   let closeApproved = false;
   win.on('close', event => {
     if (closeApproved) return;
@@ -365,6 +368,17 @@ const createWindow = () => {
   win.approveProjectClose = () => { closeApproved = true; win.close(); };
   win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
 };
+
+ipcMain.handle('app:window-control', (event, action) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return null;
+  if (action === 'minimize') win.minimize();
+  else if (action === 'maximize') {
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  } else if (action === 'close') win.close();
+  return { maximized: win.isMaximized() };
+});
 
 ipcMain.handle('app:retained-tabs', async () => {
   try {

@@ -448,7 +448,7 @@ function renderTextureFeatureControls() {
   }).join('');
   const rails = groupRails.map(({ uid, depth, top, bottom }) => `<span class="texture-layer-group-rail"
     data-layer-group-line="${escapeAttribute(uid)}" style="left:${layerLineX(depth)}px;top:${top}px;height:${Math.max(0, bottom - top)}px"><span class="texture-layer-group-rail-branch"></span></span>`).join('');
-  root.innerHTML = `<label>貼圖模式 <select data-texture-mode><option value="default" ${!asset.mode || asset.mode === 'default' ? 'selected' : ''}>默認</option><option value="tiled" ${asset.mode === 'tiled' ? 'selected' : ''}>平鋪</option><option value="animation" ${asset.mode === 'animation' ? 'selected' : ''}>動畫（佔位）</option></select></label>
+  root.innerHTML = `<label>貼圖模式 <select data-texture-mode><option value="default" ${!asset.mode || asset.mode === 'default' ? 'selected' : ''}>默認</option><option value="tiled" disabled ${asset.mode === 'tiled' ? 'selected' : ''}>平鋪（即將推出）</option><option value="animation" disabled ${asset.mode === 'animation' ? 'selected' : ''}>手翻書（即將推出）</option></select></label>
     ${asset.mode === 'animation' ? '<span>動畫邏輯待完善，目前顯示原始貼圖。</span>' : ''}
     <div class="texture-layer-control-strip"><button type="button" data-add-layer>＋ 圖層</button><button type="button" data-add-layer-group>＋ 組</button><button type="button" data-open-layer-editor title="編輯圖層" aria-label="編輯圖層"><svg class="object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button></div><div class="texture-layer-tree">${rows}${rails}<span class="texture-layer-drop-guide" hidden></span></div>`;
   $$('[data-layer-row]', root).forEach(row => {
@@ -462,6 +462,11 @@ function renderTextureFeatureControls() {
     context.drawImage(raster, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
   });
   $('[data-texture-mode]', root).addEventListener('change', event => {
+    if (event.target.value !== 'default') {
+      event.target.value = asset.mode || 'default';
+      return;
+    }
+    if (!asset.mode || asset.mode === 'default') return;
     noteJournalOperation('core.texture.mode');
     asset.mode = event.target.value;
     uvEditorController.textureUvEntryCache = null;

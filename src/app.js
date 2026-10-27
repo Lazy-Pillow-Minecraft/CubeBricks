@@ -210,6 +210,7 @@ const workspaceCoordinator = createWorkspaceCoordinator({
   renderTextureList, renderTexture, activateProjectTexture,
   rebuildTextureAtlas, updateSnapButton, updateRenderModeControl,
   updateToolOptions, renderOutliner, renderInspector, renderScene,
+  setMode,
   updateTextureStageTransform, updateSelectionLabels,
   getUvPreviewController: () => uvPreviewController, getUvEditorController: () => uvEditorController, getTransformContext: () => transformContext,
   scheduleAllPaintSymmetryBuilds, syncSubdivisionEdits
@@ -924,6 +925,22 @@ modelFormatRegistry.subscribe(() => {
   updateSelectionLabels();
 });
 loadTheme();
+if (window.cubeBricksDesktop?.platform === 'win32' && window.cubeBricksDesktop.windowControl) {
+  const controls = $('#windowControls');
+  controls.hidden = false;
+  const updateWindowState = ({ maximized } = {}) => {
+    controls.classList.toggle('is-maximized', Boolean(maximized));
+    const button = controls.querySelector('[data-window-control="maximize"]');
+    button.title = maximized ? '還原視窗' : '最大化';
+    button.setAttribute('aria-label', button.title);
+  };
+  controls.addEventListener('click', event => {
+    const action = event.target.closest('[data-window-control]')?.dataset.windowControl;
+    if (action) void window.cubeBricksDesktop.windowControl(action).then(updateWindowState);
+  });
+  window.cubeBricksDesktop.onWindowState?.(updateWindowState);
+  void window.cubeBricksDesktop.windowControl('state').then(updateWindowState);
+}
 sceneRenderer.setSelectionOutline(getComputedStyle(document.documentElement).getPropertyValue('--selection-outline').trim());
 initializeProjectTabs();
 if (window.cubeBricksDesktop?.onCloseRequested) {

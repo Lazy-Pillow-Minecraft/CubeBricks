@@ -23,6 +23,7 @@ export function createWorkspaceCoordinator({
   renderTextureList, renderTexture, activateProjectTexture,
   rebuildTextureAtlas, updateSnapButton, updateRenderModeControl,
   updateToolOptions, renderOutliner, renderInspector, renderScene,
+  setMode,
   updateTextureStageTransform, updateSelectionLabels,
   getUvPreviewController, getUvEditorController, getTransformContext,
   scheduleAllPaintSymmetryBuilds, syncSubdivisionEdits
@@ -63,8 +64,17 @@ function toast(message) {
 function renderAll(geometryScope = 'all') {
   if (geometryScope === 'selection') invalidateSelectionRenderGeometry();
   else invalidateAllRenderGeometry();
+  const javaBlock = state.project.formatId === 'java_block_item';
+  const modeButton = document.querySelector('.mode-tab[data-mode="animate"], .mode-tab[data-mode="display"]');
+  if (modeButton && modeButton.dataset.mode !== (javaBlock ? 'display' : 'animate')) {
+    modeButton.dataset.mode = javaBlock ? 'display' : 'animate';
+    modeButton.innerHTML = javaBlock ? '<span>▣</span> 顯示設置' : '<span>⌁</span> 動畫';
+  }
+  $('#cullFaces').closest('.cull-toggle').hidden = javaBlock;
+  if (javaBlock && state.mode === 'animate') setMode('display');
+  else if (!javaBlock && state.mode === 'display') setMode('edit');
   $('#minecraftRenderType').value = state.project.renderType;
-  $('#cullFaces').checked = state.project.cullFaces;
+  $('#cullFaces').checked = javaBlock || state.project.cullFaces;
   updateSnapButton();
   updateRenderModeControl();
   updateToolOptions();

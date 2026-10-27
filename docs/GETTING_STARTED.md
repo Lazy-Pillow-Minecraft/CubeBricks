@@ -41,3 +41,7 @@ npm run test:journal
 ## 打包 Windows 单文件版
 
 双击根目录的 `build-portable.bat`，或执行 `npm run dist:portable`。构建脚本会先检查源代码并运行测试，成功后在 `dist/` 生成 `CubeBricks-<version>-portable.exe`。首次构建可能需要下载 Electron 打包资源；这个产物和仓库根目录的轻量启动器不是同一个文件。
+
+## 打包 Windows 安装版
+
+双击根目录的 `build-installer.bat`，或执行 `npm run dist:installer`。脚本会生成深棕／金色的 CubeBricks 安装器图像，并在 `dist/` 生成 `CubeBricks-<version>-setup.exe`。安装向导使用现有软件图标与标题，可选择安装目录，并建立桌面及开始菜单快捷方式。这是安装版，不是 `build-portable.bat` 的单文件便携版。首次构建可能需要下载打包资源；产物未进行代码签名。

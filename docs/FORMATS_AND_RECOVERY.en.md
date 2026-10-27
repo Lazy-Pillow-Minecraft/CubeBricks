@@ -10,7 +10,15 @@
 | `.bbmodel` | Blockbench interchange. Export expands shapes and modifiers into compatible cubes and groups; native procedural shape parameters are not preserved as shapes in this format. |
 | `.cbcmap` | Portable JSON for one palette's colors, gradient spacing, and color-space curve. It does not contain the palette's local name or ID. |
 
+## Modeling-format boundaries
+
+Java Block/Item projects force back-face culling and per-face UVs. The version classes are 1.9–1.21.5 (one rotation axis, 22.5° steps within ±45°), 1.21.6–1.21.10 (one axis, unrestricted angle), and 1.21.11+ (unrestricted axes and angles). Raw element `from/to` coordinates must stay within −16 to 32 on each axis; the rotated visual bounding box does not replace that check. The ground reference grid shifts +8, 0, +8 relative to the modeling origin, while the red and blue axes still start at the origin.
+
+Bedrock Block checks the actual model bounds against a dynamic 30 px size limit, rather than applying one fixed box to each cube. Its boundary guide moves with the model, which must retain a valid overlap with the central base region. Both formats show a complete twelve-edge guide using the same color and depth behavior as the main ground-grid lines. These guides are visual references, not model geometry. An edit that worsens an existing boundary violation is rejected.
+
 The newer `.cbmodel` archive combines operation JSON into Brotli-compressed blocks, deduplicates image data by content, and verifies files after extraction. Older ZIP-based projects remain readable. Separately, the desktop working directory stores a project-scoped operation sequence and element history. The default history limit is 200 operations and can be overridden per project. Exporting without history does not erase the local working journal.
+
+**Save** in the top bar confirms and retains the expanded working directory; closing the window will no longer ask whether to keep that project. To share or separately back up a model, use **Export** to create a `.cbmodel` or `.bbmodel` file. Saving the working folder is not the same as creating a standalone model file.
 
 ## Opening and recovery
 

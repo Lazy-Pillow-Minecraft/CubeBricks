@@ -160,21 +160,22 @@ async function offerProjectRecovery() {
   } catch (error) { toast(`工作項目恢復失敗：${error.message}`); }
 }
 
-async function saveProject(saveAs = false) {
+async function saveProject() {
   try {
     const activeTab = projectTabById(projectTabsController.activeId);
+    if (!activeTab) return;
+    if (!window.cubeBricksDesktop?.commitProjectJournal) {
+      toast('瀏覽器預覽無法保留工作目錄，請使用導出');
+      return;
+    }
+    await activeTab.journalReady;
     await flushProjectJournal(activeTab);
     await activeTab?.journalWrites;
-    const content = serializeCbmodel(await serializableTextureAssets());
-    if (window.cubeBricksDesktop) {
-      const result = await window.cubeBricksDesktop.saveProject({ filePath: saveAs ? null : state.filePath, name: state.project.name, content, journalId: activeTab?.journalId,
-        historyLimit: state.project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT) });
-      if (!result) return;
-      state.filePath = result.filePath;
-      const tab = projectTabById(projectTabsController.activeId);
-      if (tab) tab.displayName = null;
-    } else download(content, `${state.project.name}.cbmodel`, 'application/json');
-    markDirty(false); toast('項目已保存');
+    if (activeTab.journalPending) throw new Error('工作記錄尚未寫入，請稍後重試');
+    activeTab.persistedWorkingCopy = true;
+    activeTab.createdThisLaunch = false;
+    markDirty(false);
+    toast('工作項目已保留在項目資料夾');
   } catch (error) { toast(`保存失敗：${error.message}`); }
 }
 

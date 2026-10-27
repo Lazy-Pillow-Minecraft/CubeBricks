@@ -1,6 +1,6 @@
 import { buildModifierRenderInstances } from '../model.js';
 import { tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
-import { constrainCube, formatRules } from '../common/core/format-constraints.js';
+import { constrainCube, formatRules, projectSizeBounds, bedrockLimitBox, javaBlockSizeIsValid } from '../common/core/format-constraints.js';
 import { buildPaintExplodeOffsets, applyPaintExplodeOffsets } from './paint-explode.js';
 import { SELECTION_STRIPE_SIZE, SELECTION_STRIPE_PIXELS, selectionStripePhase } from '../utils/selection-stripes.js';
 
@@ -10,12 +10,14 @@ const LOCATOR_ICON_PIXELS = 17;
 const LOCATOR_NEAR_DISTANCE = 72;
 const LOCATOR_MAX_PIXELS = 96;
 const CUBE_LIFETIME_ANIMATION_MS = 60;
+const GRID_MAJOR_COLOR = Object.freeze([.43, .34, .5, .38]);
 export function cubeLifetimeScale(kind, elapsed, duration = CUBE_LIFETIME_ANIMATION_MS) {
   const progress = clamp(elapsed / duration, 0, 1);
   const t = kind === 'birth' ? progress : 1 - progress;
   return t < .7 ? 1.05 * t / .7 : 1.05 - .05 * (t - .7) / .3;
 }
 const IDENTITY_MATRIX = Object.freeze([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+const cullsBackfaces = project => project.cullFaces || formatRules(project).forceCullFaces;
 
 // Minecraft-like pass order: opaque geometry writes depth first, then overlays.
 // Cutout/translucent passes are reserved here so textures can join the same pipeline.
@@ -493,7 +495,7 @@ export class WebGLSceneRenderer {
     // Existing geometry and the ground grid only populate depth, so they can
     // occlude the result while remaining visible through its final 75% fade.
     gl.colorMask(false, false, false, false);
-    this.drawGrid(camera, viewProjection);
+    this.drawGrid(project, camera, viewProjection);
     this.drawPlayerReference(camera, viewProjection);
     this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids,
       viewProjection, this.lastCameraState);
@@ -508,7 +510,7 @@ export class WebGLSceneRenderer {
     const primitive = wireframe ? gl.LINES : gl.TRIANGLES;
     const options = wireframe
       ? { depthWrite: true, cull: false, renderMode: 0, blend: false }
-      : { depthWrite: true, cull: project.cullFaces, renderMode: getSurfaceRenderMode(camera.renderMode),
+      : { depthWrite: true, cull: cullsBackfaces(project), renderMode: getSurfaceRenderMode(camera.renderMode),
           alphaMode: pipeline.alphaMode, blend: false };
     this.drawMirrorInstances(dynamicUids, lockedUids, primitive, viewProjection, options, { ghostOnly: true });
     if (lockedUids.size) this.drawMirrorInstances(dynamicUids, lockedUids, primitive,
@@ -652,7 +654,7 @@ export class WebGLSceneRenderer {
         primitive === this.gl.LINES ? transition.wireCount : transition.triangleCount,
         primitive, viewProjection, primitive === this.gl.LINES
           ? { modelTransform: matrix, cull: false, renderMode: 0, depthWrite: true }
-          : { modelTransform: matrix, cull: project.cullFaces,
+          : { modelTransform: matrix, cull: cullsBackfaces(project),
               renderMode: getSurfaceRenderMode(camera.renderMode),
               alphaMode: pipeline.alphaMode, blend: pipeline.blend,
               depthWrite: pipeline.depthWrite });
@@ -877,13 +879,13 @@ export class WebGLSceneRenderer {
     for (let index = 0; index < batches.counts.length; index++) {
       const options = camera.renderMode === 'wireframe'
         ? { depthWrite: true, cull: false, renderMode: 0, opacity: 1, blend: false }
-        : { depthWrite: true, cull: project.cullFaces, renderMode, alphaMode: pipeline.alphaMode,
+        : { depthWrite: true, cull: cullsBackfaces(project), renderMode, alphaMode: pipeline.alphaMode,
             opacity: 1, blend: false };
       this.drawBuffer(this.lockedBatchBuffers[index], batches.counts[index], batches.primitive, viewProjection, options);
     }
     const mirrorOptions = camera.renderMode === 'wireframe'
       ? { depthWrite: true, cull: false, renderMode: 0, opacity: 1, blend: false }
-      : { depthWrite: true, cull: project.cullFaces, renderMode, alphaMode: pipeline.alphaMode,
+      : { depthWrite: true, cull: cullsBackfaces(project), renderMode, alphaMode: pipeline.alphaMode,
           opacity: 1, blend: false };
     this.drawMirrorInstances(dynamicUids, lockedUids, batches.primitive, viewProjection, mirrorOptions,
       { lockedOnly: true });
@@ -909,7 +911,7 @@ export class WebGLSceneRenderer {
     // resulting transparent texture can then be recomposited for pointer
     // movement without redrawing any model geometry.
     gl.colorMask(false, false, false, false);
-    this.drawGrid(camera, viewProjection);
+    this.drawGrid(project, camera, viewProjection);
     this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids,
       viewProjection, this.lastCameraState);
     gl.colorMask(true, true, true, true);
@@ -1063,7 +1065,7 @@ export class WebGLSceneRenderer {
         // translucent pass. Face distinction must never replace the texture.
         drawFacePass({
           depthWrite: minecraftRenderType.depthWrite,
-          cull: project.cullFaces,
+          cull: cullsBackfaces(project),
           renderMode: 2,
           alphaMode: minecraftRenderType.alphaMode,
           blend: minecraftRenderType.blend || this.paintPixelGrid
@@ -1081,7 +1083,7 @@ export class WebGLSceneRenderer {
       } else {
         drawFacePass({
           depthWrite: minecraftRenderType.depthWrite,
-          cull: project.cullFaces,
+          cull: cullsBackfaces(project),
           renderMode: 2,
           alphaMode: minecraftRenderType.alphaMode,
           blend: minecraftRenderType.blend
@@ -1096,7 +1098,7 @@ export class WebGLSceneRenderer {
       : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
     const options = {
       depthWrite: pipeline.depthWrite,
-      cull: project.cullFaces,
+      cull: cullsBackfaces(project),
       renderMode,
       alphaMode: pipeline.alphaMode,
       blend: pipeline.blend || (this.paintPixelGrid && renderMode === 2)
@@ -1111,10 +1113,10 @@ export class WebGLSceneRenderer {
     this.drawCubeTransitions(project, camera, viewProjection, gl.TRIANGLES);
   }
 
-  drawGrid(camera, viewProjection) {
+  drawGrid(project, camera, viewProjection) {
     if (!camera.grid) return;
     const { gl } = this;
-    const grid = gridGeometry(camera.snap);
+    const grid = gridGeometry(camera.snap, formatRules(project).javaBlock);
     this.drawVertices(grid.fine, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
     this.drawVertices(grid.major, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
     this.drawVertices(grid.direction, gl.LINES, viewProjection, { depthWrite: true, cull: false, renderMode: 0 });
@@ -1123,7 +1125,7 @@ export class WebGLSceneRenderer {
   drawSelectionOcclusionDepth(project, camera, dynamicUids, lockedUids, viewProjection, includeSurfaceDepth) {
     if (camera.renderMode === 'wireframe') return;
     const { gl } = this;
-    const options = { depthWrite: true, cull: project.cullFaces, renderMode: 2, alphaMode: 0, blend: false };
+    const options = { depthWrite: true, cull: cullsBackfaces(project), renderMode: 2, alphaMode: 0, blend: false };
     gl.colorMask(false, false, false, false);
     if (includeSurfaceDepth) {
       const staticBatches = this.ensureVisibleStaticBatches(dynamicUids, lockedUids);
@@ -1170,7 +1172,7 @@ export class WebGLSceneRenderer {
         const primitive = wireframe ? gl.LINES : gl.TRIANGLES;
         const options = wireframe
           ? { depthWrite: true, cull: false, renderMode: 0, blend: false }
-          : { depthWrite: true, cull: project.cullFaces, renderMode: getSurfaceRenderMode(camera.renderMode),
+          : { depthWrite: true, cull: cullsBackfaces(project), renderMode: getSurfaceRenderMode(camera.renderMode),
               alphaMode: pipeline.alphaMode, blend: false };
         this.drawMirrorInstances(dynamicUids, lockedUids, primitive, viewProjection, options, { ghostOnly: true });
         if (lockedUids.size) this.drawMirrorInstances(dynamicUids, lockedUids, primitive,
@@ -1234,11 +1236,28 @@ export class WebGLSceneRenderer {
       this.drawVertices(overlay, gl.LINES, viewProjection, { depthWrite: false, cull: false, renderMode: 0 });
     }
     this.drawGeneratedSelection(camera.selectedGenerated, viewProjection);
+    this.drawFormatLimitGuide(project, camera, viewProjection);
     const selectedFaceFillCount = this.ensureFaceSelectionFill(camera.selectedUvFaces);
     this.drawBuffer(this.faceSelectionBuffer, selectedFaceFillCount, gl.TRIANGLES, viewProjection, {
       depthWrite: false, depthTest: true, cull: false, renderMode: 0, blend: true,
       modelTransform: this.selectionPreviewTransform
     });
+  }
+
+  drawFormatLimitGuide(project, camera, viewProjection) {
+    if (camera.mode === 'paint' || camera.geometryOnly) return;
+    const rules = formatRules(project);
+    if (!rules.javaBlock && !rules.bedrockBlock) return;
+    const revision = `${this.geometryRevision}:${this.selectionRevision}:${this.mirrorRevision}`;
+    if (this.formatLimitGuideCache?.project !== project || this.formatLimitGuideCache.revision !== revision) {
+      const box = rules.javaBlock
+        ? { min: [-16, -16, -16], max: [32, 32, 32], valid: javaBlockSizeIsValid(project) }
+        : bedrockLimitBox(projectSizeBounds(project));
+      this.formatLimitGuideCache = { project, revision, box };
+    }
+    const { box } = this.formatLimitGuideCache;
+    this.drawVertices(boundsWireGeometry([box.min, box.max], GRID_MAJOR_COLOR), this.gl.LINES, viewProjection,
+      { depthWrite: true, cull: false, renderMode: 0 });
   }
 
   drawGeneratedSelection(selection, viewProjection) {
@@ -1478,7 +1497,7 @@ export class WebGLSceneRenderer {
       this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
       gl.colorMask(true, true, true, true);
       this.presentAntialiased(pixelWidth, pixelHeight, renderWidth, renderHeight);
-      this.drawGrid(camera, viewProjection);
+      this.drawGrid(project, camera, viewProjection);
       this.drawModifierGhostOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
         viewProjection, null, pixelWidth, pixelHeight);
       this.drawLockedOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
@@ -1489,7 +1508,7 @@ export class WebGLSceneRenderer {
           minecraftRenderType.pass !== RenderPass.SOLID);
       this.drawEditorLines(project, camera, dynamicUids, lockedUids, ownerPoints, viewProjection);
     } else {
-      this.drawGrid(camera, viewProjection);
+      this.drawGrid(project, camera, viewProjection);
       this.drawPlayerReference(camera, viewProjection);
       this.drawSurfaceGeometry(project, camera, minecraftRenderType, dynamicUids, lockedUids, viewProjection, cameraState);
       this.drawModifierGhostOverlay(project, camera, minecraftRenderType, dynamicUids, lockedUids,
@@ -2396,7 +2415,7 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
     const cubes = subdivisionOwner
       ? [{ cube: element, offset: subdivisionOwner.origin || [0, 0, 0], ownerRotation: subdivisionOwner.rotation || [0, 0, 0], ownerOrigin: subdivisionOwner.pivot || subdivisionOwner.origin || [0, 0, 0], groupChain, textureSize: project.textureSize, shade: element.shade !== false && subdivisionOwner.shade !== false }]
       : typeof element.toCubes === 'function'
-      ? element.toCubes().map((cube, cubeIndex) => ({ cube: renderFormatRules.javaBlock || renderFormatRules.moddedEntity ? constrainCube(cube, renderFormatRules) : cube, cubeIndex, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.pivot || element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
+      ? element.toCubes().map((cube, cubeIndex) => ({ cube: renderFormatRules.moddedEntity ? constrainCube(cube, renderFormatRules) : cube, cubeIndex, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.pivot || element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
       : [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
 
     if (!element.visible) {
@@ -2628,42 +2647,43 @@ export function getEffectiveInflate(cube, groupChain = []) {
     + groupChain.reduce((total, group) => total + (Number(group?.inflate) || 0), 0);
 }
 
-function gridGeometry(subdivisions = 16) {
+function gridGeometry(subdivisions = 16, javaBlock = false) {
   const fine = [], major = [], direction = [];
   const floorY = -.025;
-  const majorColor = [.43, .34, .5, .38];
+  const shift = javaBlock ? 8 : 0;
+  const majorColor = GRID_MAJOR_COLOR;
   const fineColor = [.46, .37, .54, .28];
   for (const coordinate of [-24, -8, 8, 24]) {
-    pushVertex(major, [coordinate, floorY, -24], majorColor); pushVertex(major, [coordinate, floorY, 24], majorColor);
-    pushVertex(major, [-24, floorY, coordinate], majorColor); pushVertex(major, [24, floorY, coordinate], majorColor);
+    pushVertex(major, [coordinate + shift, floorY, -24 + shift], majorColor); pushVertex(major, [coordinate + shift, floorY, 24 + shift], majorColor);
+    pushVertex(major, [-24 + shift, floorY, coordinate + shift], majorColor); pushVertex(major, [24 + shift, floorY, coordinate + shift], majorColor);
   }
 
   const count = Math.max(1, Math.min(512, Number(subdivisions) || 16));
   const step = 16 / count;
   for (let index = 1; index < count; index++) {
-    const coordinate = -8 + index * step;
+    const coordinate = -8 + shift + index * step;
     if (Math.abs(coordinate) < .00001) continue;
-    pushVertex(fine, [coordinate, floorY, -8], fineColor); pushVertex(fine, [coordinate, floorY, 8], fineColor);
-    pushVertex(fine, [-8, floorY, coordinate], fineColor); pushVertex(fine, [8, floorY, coordinate], fineColor);
+    pushVertex(fine, [coordinate, floorY, -8 + shift], fineColor); pushVertex(fine, [coordinate, floorY, 8 + shift], fineColor);
+    pushVertex(fine, [-8 + shift, floorY, coordinate], fineColor); pushVertex(fine, [8 + shift, floorY, coordinate], fineColor);
   }
-  pushVertex(fine, [0, floorY, -8], fineColor); pushVertex(fine, [0, floorY, 0], fineColor);
-  pushVertex(fine, [-8, floorY, 0], fineColor); pushVertex(fine, [0, floorY, 0], fineColor);
+  pushVertex(fine, [shift, floorY, -8 + shift], fineColor); pushVertex(fine, [shift, floorY, shift], fineColor);
+  pushVertex(fine, [-8 + shift, floorY, shift], fineColor); pushVertex(fine, [shift, floorY, shift], fineColor);
 
   const addLine = (a, b, color) => { pushVertex(direction, a, color); pushVertex(direction, b, color); };
   const red = [.96, .18, .28, .9], blue = [.18, .42, 1, .9], marker = [.55, .43, .65, .72];
-  addLine([0, floorY + .004, 0], [8, floorY + .004, 0], red);
-  addLine([0, floorY + .004, 0], [0, floorY + .004, 8], blue);
+  addLine([0, floorY + .004, 0], [javaBlock ? 16 : 8, floorY + .004, 0], red);
+  addLine([0, floorY + .004, 0], [0, floorY + .004, javaBlock ? 16 : 8], blue);
   const y = floorY + .006;
   // Minecraft north is negative Z. Keep the N and arrow centred above the central cell.
-  addLine([-.45, y, -8.65], [-.45, y, -9.75], marker);
-  addLine([-.45, y, -9.75], [.45, y, -8.65], marker);
-  addLine([.45, y, -8.65], [.45, y, -9.75], marker);
-  addLine([-.42, y, -10.15], [0, y, -10.57], marker);
-  addLine([0, y, -10.57], [.42, y, -10.15], marker);
+  addLine([shift - .45, y, shift - 8.65], [shift - .45, y, shift - 9.75], marker);
+  addLine([shift - .45, y, shift - 9.75], [shift + .45, y, shift - 8.65], marker);
+  addLine([shift + .45, y, shift - 8.65], [shift + .45, y, shift - 9.75], marker);
+  addLine([shift - .42, y, shift - 10.15], [shift, y, shift - 10.57], marker);
+  addLine([shift, y, shift - 10.57], [shift + .42, y, shift - 10.15], marker);
   return { fine, major, direction };
 }
 
-function boundsWireGeometry(points) {
+function boundsWireGeometry(points, color = [.82, 1, .48, .68]) {
   if (!points.length) return [];
   const min = [0, 1, 2].map(axis => Math.min(...points.map(point => point[axis])));
   const max = [0, 1, 2].map(axis => Math.max(...points.map(point => point[axis])));
@@ -2672,7 +2692,7 @@ function boundsWireGeometry(points) {
     [min[0],min[1],max[2]], [max[0],min[1],max[2]], [max[0],max[1],max[2]], [min[0],max[1],max[2]]
   ];
   const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-  const vertices = [], color = [.82, 1, .48, .68];
+  const vertices = [];
   for (const [a, b] of edges) { pushVertex(vertices, corners[a], color); pushVertex(vertices, corners[b], color); }
   return vertices;
 }
