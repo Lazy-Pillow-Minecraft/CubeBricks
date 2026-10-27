@@ -1,41 +1,41 @@
-# CubeBricks Shape 包編寫規範
+# CubeBricks Shape 包编写规范
 
-[返回 README](README.md) · [附加包索引](docs/ADDON_PACKS.md) · [架構概述](ARCHITECTURE.md)
+[English](SHAPE_PACKS.en.md) · [返回 README](README.md) · [附加包索引](docs/ADDON_PACKS.md) · [架构概述](ARCHITECTURE.md)
 
-桌面版會讀取工作空間的 `shapepacks/`。一個包可以是資料夾，或是同樣結構的 `.zip`；ZIP 可直接以 `package.json` 為根，也可多包一層總資料夾。包顯示名取最外層資料夾／ZIP 的檔名，而不是 `package.json` 裡的名稱。可在「設定 → 一般 → 管理資源包」直接加入 ZIP、調整順序、移除或熱重載；資料夾包仍可手動放入目錄後按重新整理。
+桌面版会读取工作空间的 `shapepacks/`。一个包可以是文件夹，或是同样结构的 `.zip`；ZIP 可直接以 `package.json` 为根，也可多包一层总文件夹。包显示名取最外层文件夹／ZIP 的文件名，而不是 `package.json` 里的名称。可在「设置 → 一般 → 管理资源包」直接加入 ZIP、调整顺序、移除或热重载；文件夹包仍可手动放入目录后刷新。
 
 ```text
-<工作空間>/
-  projects/                 新項目的展開式操作記錄
+<工作空间>/
+  projects/                 新项目的展开式操作记录
   shapepacks/
-    MyShapes/               包名為 MyShapes
+    MyShapes/               包名为 MyShapes
       package.json
       shapes/
         arch.js
-        arch.svg             可選；沒有時使用內建 Shape 圖標
+        arch.svg             可选；没有时使用内置 Shape 图标
     AnotherPack.zip
 ```
 
-`package.json` 是包清單，`version` 保存包版本，`shapes` 逐一指出腳本和圖標。`hotReload: false` 可隱藏該包的熱重載按鈕；省略時預設允許。不同包的 Shape ID 仍須全局唯一，不能佔用內建 ID。
+`package.json` 是包配置清单，`version` 保存包版本，`shapes` 逐一指出脚本和图标。`hotReload: false` 可隐藏该包的热重载按钮；省略时默认允许。不同包的 Shape ID 仍须全局唯一，不能占用内置 ID。
 
 ```json
 {
   "version": "1.0.0",
   "shapes": [
-    { "id": "sample_arch", "label": "拱門", "file": "arch.js", "icon": "arch.svg" }
+    { "id": "sample_arch", "label": "拱门", "file": "arch.js", "icon": "arch.svg" }
   ]
 }
 ```
 
-`file` 和 `icon` 只能是 `shapes/` 內的單一文件名。圖標可用 SVG、PNG 或 WebP；省略 `icon` 時使用內建 Shape 通用圖標。包內 JS 必須是自包含的 ES module，使用 `export default`，目前不支援相對 `import`；編輯器的共用工具透過 `generate` 的 `utils` 參數提供。每個腳本不超過 128 KiB、整個 ZIP 不超過 16 MiB；單次生成最多 10,000 個 Cube。
+`file` 和 `icon` 只能是 `shapes/` 内的单一文件名。图标可用 SVG、PNG 或 WebP；省略 `icon` 时使用内置 Shape 通用图标。包内 JS 必须是自包含的 ES module，使用 `export default`，当前不支持相对 `import`；编辑器的共用工具通过 `generate` 的 `utils` 参数提供。每个脚本不超过 128 KiB、整个 ZIP 不超过 16 MiB；单次生成最多 10,000 个 Cube。
 
 ```js
 export default {
-  id: 'sample_arch',                 // 必須和 package.json 一致；存進工程的永久類型 ID
-  label: '拱門',                      // 包清單中的 label 用於界面顯示
+  id: 'sample_arch',                 // 必须和 package.json 一致；存进工程的永久类型 ID
+  label: '拱门',                      // 包清单中的 label 用于界面显示
   defaults: { width: 8, height: 8 }, // 新 Shape 的初始 parameters
   fields: [
-    { key: 'width', label: '寬度', min: 0.1, step: 0.1 },
+    { key: 'width', label: '宽度', min: 0.1, step: 0.1 },
     { key: 'height', label: '高度', min: 0.1, step: 0.1 }
   ],
   generate(shape, { Cube, utils }) {
@@ -60,12 +60,12 @@ export default {
 };
 ```
 
-`generate(shape, api)` 必須同步返回 Cube 陣列；也可返回傳入 `new Cube(...)` 的普通資料物件。生成的 Cube 使用 Shape 的局部座標，編輯器在後續統一套用 Shape 自身的 `origin`、`pivot`、`rotation`、父組變換、細分覆寫與修改器。不要在 `generate` 內自行重複加上 `origin`。`shape.parameters` 保存可編輯參數；目前通用屬性面板自動呈現 `fields` 中的數值欄位。參數、細分覆寫及 Shape ID 隨 `.cbmodel` 保存；未安裝對應包時保留資料但不生成幾何，重新安裝後恢復。
+`generate(shape, api)` 必须同步返回 Cube 数组；也可返回传入 `new Cube(...)` 的普通数据对象。生成的 Cube 使用 Shape 的局部坐标，编辑器在后续统一套用 Shape 自身的 `origin`、`pivot`、`rotation`、父组变换、细分覆盖与修改器。不要在 `generate` 内自行重复加上 `origin`。`shape.parameters` 保存可编辑参数；当前通用属性面板自动呈现 `fields` 中的数值栏位。参数、细分覆盖及 Shape ID 随 `.cbmodel` 保存；未安装对应包时保留数据但不生成几何，重新安装后恢复。
 
-`utils` 暴露目前 `src/utils/` 的全部公共模組：`utils.math.vector3`、`utils.math.rotation`、`utils.shape.polyhedronGeometry`、`utils.shape.bezierGeometry`、`utils.templatePacker`。使用命名空間可避免不同模組的同名函式衝突；新增公共工具時同步更新 `src/utils/index.js`。工具只提供計算，不會替包腳本繞過 Cube 數量和格式約束。
+`utils` 暴露当前 `src/utils/` 的全部公共模块：`utils.math.vector3`、`utils.math.rotation`、`utils.shape.polyhedronGeometry`、`utils.shape.bezierGeometry`、`utils.templatePacker`。使用命名空间可避免不同模块的同名函数冲突；新增公共工具时同步更新 `src/utils/index.js`。工具只提供计算，不会替包脚本绕过 Cube 数量和格式约束。
 
-內建 Shape 也按同一註冊介面拆分在 `src/shapes/`；多邊形、正十二面體、足球和兩種貝塞爾各有自己的定義文件，共用幾何計算放在 `src/utils/shape/`。
+内置 Shape 也按同一注册界面拆分在 `src/shapes/`；多边形、正十二面体、足球和两种贝塞尔各有自己的定义文件，共用几何计算放在 `src/utils/shape/`。
 
 ## 安全提示
 
-Shape 腳本會在編輯器進程執行，等同安裝程式擴充。只把自己編寫或信任來源的包放進 `shapepacks/`；ZIP 格式只是分發封裝，不是安全沙盒。載入錯誤會顯示提示並記錄在主控台，不會刪除工程中的 Shape 資料。
+Shape 脚本会在编辑器进程执行，等同安装程序扩展。只把自己编写或信任来源的包放进 `shapepacks/`；ZIP 格式只是分发封装，不是安全沙盒。加载错误会显示提示并记录在控制台，不会删除工程中的 Shape 数据。

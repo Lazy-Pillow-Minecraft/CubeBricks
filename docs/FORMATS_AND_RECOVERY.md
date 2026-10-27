@@ -1,25 +1,21 @@
-# 文件格式與工作記錄 / Formats and Recovery
+# 文件格式与工作记录 / Formats and Recovery
 
-[返回 README](../README.md) · [操作教程](USER_GUIDE.md) · [架構概述](../ARCHITECTURE.md)
+[English](FORMATS_AND_RECOVERY.en.md) · [返回 README](../README.md) · [操作教程](USER_GUIDE.md) · [架构概述](../ARCHITECTURE.md)
 
-## 模型與色卡格式
+## 模型与色卡格式
 
 | 格式 | 用途 |
 | --- | --- |
-| `.cbmodel` | CubeBricks 的完整工程封存。保存模型、貼圖與可選的操作歷史；導出時可選擇只保留當前完整狀態。 |
-| `.bbmodel` | 與 Blockbench 交換模型。Shape 和修改器在導出時展開為相容的 Cube／組；原本的程序化參數不會以原生 Shape 形式留在 `.bbmodel`。 |
-| `.cbcmap` | 單張色卡的可攜式 JSON，包含顏色、漸變分段和色彩空間曲線，不包含本地名稱或 ID。 |
+| `.cbmodel` | CubeBricks 的完整工程封存。保存模型、贴图与可选的操作历史；导出时可选择只保留当前完整状态。 |
+| `.bbmodel` | 与 Blockbench 交换模型。Shape 和修改器在导出时展开为兼容的 Cube／组；原本的程序化参数不会以原生 Shape 形式留在 `.bbmodel`。 |
+| `.cbcmap` | 单张色卡的便携式 JSON，包含颜色、渐变分段和色彩空间曲线，不包含本地名称或 ID。 |
 
-`.cbmodel` 的新封存會把操作 JSON 整合為 Brotli 壓縮資料塊，按內容去重圖片資料並驗證解封後的檔案；舊 ZIP 版本仍可讀取。桌面工作目錄另外保存項目範圍的操作序列和元素歷史；預設最多保留 200 個歷史操作，可按項目覆寫。導出時不保留歷史不會清空本地工作日誌。
+新版 `.cbmodel` 封存会把操作 JSON 整合为 Brotli 压缩数据块，按内容去重图片数据并验证解压后的文件；旧 ZIP 版本仍可读取。桌面工作目录另外保存项目范围的操作序列和元素历史；默认最多保留 200 个历史操作，可按项目单独设置。导出时不保留历史不会清空本地工作日志。
 
-## 開啟與恢復
+## 开启与恢复
 
-打開已保存的項目時，程式依項目 UUID 與歷史比對同路徑工作副本。相符或同一歷史上的落後副本可重用；內容分歧時詢問另開或替換工作副本，不會直接無提示覆蓋來源。
+打开已保存的项目时，程序根据项目 UUID 与历史记录比对同路径工作副本。相符或处在同一历史链上的落后副本可重用；内容分歧时询问另开或替换工作副本，不会无提示地覆盖来源。
 
-若恢復提示項目狀態文件損壞且找不到上一個完成狀態，表示 `current_state` 和 `current_state.previous` 都不足以提供可靠恢復點；不代表已保存的 `.cbmodel` 或 `.bbmodel` 必然損壞。請先備份完整工作目錄，再嘗試正常打開已保存的工程。不要只刪除單個交易、元素或貼圖文件，因為它們可能仍被操作索引引用。重複點「恢復」不能保證找回未保存內容。
+若恢复提示项目状态文件损坏且找不到上一个完成状态，表示 `current_state` 和 `current_state.previous` 都不足以提供可靠恢复点；不代表已保存的 `.cbmodel` 或 `.bbmodel` 必然损坏。请先备份完整工作目录，再尝试正常打开已保存的工程。不要只删除单个交易、元素或贴图文件，因为它们可能仍被操作索引引用。重复点「恢复」不能保证找回未保存内容。
 
-同一工作項目只允許一個程式窗口寫入。撤銷／重做只沿實際使用的歷史分支導航；若某一步快照缺失或損壞，會停在該邊界並保留當前模型，而不是用不完整資料覆寫現狀。
-
-## English
-
-`.cbmodel` is CubeBricks' project archive, optionally including history. `.bbmodel` is for Blockbench interchange and bakes procedural results into compatible groups and cubes. `.cbcmap` exports one palette without a local name or ID. The desktop working journal is separate from a saved archive. If recovery reports corrupt state without a completed predecessor, back up the whole working directory and try opening the last saved model; do not delete individual journal files in isolation.
+同一工作项目只允许一个程序窗口写入。撤销／重做只沿实际使用的历史分支导航；若某一步快照缺失或损坏，会停在该边界并保留当前模型，而不是用不完整数据覆盖现状。

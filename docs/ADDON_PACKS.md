@@ -1,17 +1,13 @@
 # 附加包索引 / Add-on Packs
 
-[返回 README](../README.md) · [架構概述](../ARCHITECTURE.md)
+[English](ADDON_PACKS.en.md) · [返回 README](../README.md) · [架构概述](../ARCHITECTURE.md)
 
-CubeBricks 的資源包管理器位於「設定 → 一般 → 管理資源包」。Shape、語言與字體包共用管理窗口，但分別儲存在工作空間的 `shapepacks/`、`languagepacks/`、`fontpacks/`。可在窗口中加入、排序、移除和按包配置熱重載；移除的文件暫存於 `removed-packs/`。
+CubeBricks 的资源包管理器位于「设置 → 一般 → 管理资源包」。Shape、语言与字体包共用管理窗口，但分别储存在工作空间的 `shapepacks/`、`languagepacks/`、`fontpacks/`。可在窗口中加入、排序、移除和按包配置热重载；移除的文件暂存于 `removed-packs/`。
 
-| 要編寫的內容 | 完整規範 |
+| 要编写的内容 | 完整规范 |
 | --- | --- |
-| 自訂 Shape：清單、`shapes/*.js`、圖標、`generate` API、`utils` | [Shape 包編寫規範](../SHAPE_PACKS.md) |
-| 新介面語言：`ui.*` 翻譯鍵、JSON/ZIP 結構 | [語言包規範](../RESOURCE_PACKS.md#語言包) |
-| 自訂字體：單個字體或多文件 ZIP | [字體包規範](../RESOURCE_PACKS.md#字體包) |
+| 自定义 Shape：清单、`shapes/*.js`、图标、`generate` API、`utils` | [Shape 包编写规范](../SHAPE_PACKS.md) |
+| 新界面语言：`ui.*` 翻译键、JSON/ZIP 结构 | [语言包规范](../RESOURCE_PACKS.md#语言包) |
+| 自定义字体：单个字体或多文件 ZIP | [字体包规范](../RESOURCE_PACKS.md#字体包) |
 
-Shape 包會在編輯器內執行 JavaScript。ZIP 只是封裝，不是沙盒；只安裝可信來源。修改器和操作器目前有內部註冊表，但此處的外部包入口尚未開放，請不要把它們當作已支持的包類型。
-
-## English
-
-The pack manager lives under Settings → General. Shape, language, and font packs have separate workspace folders. Use the linked specifications above for package layout and APIs. Shape packs execute JavaScript inside the editor, so install only trusted code. External modifier/operator packs are not supported yet.
+Shape 包会在编辑器内执行 JavaScript。ZIP 只是封装，不是沙盒；只安装可信来源。修改器和操作器当前有内部注册表，但此处的外部包入口尚未开放，请不要把它们当作已支持的包类型。
