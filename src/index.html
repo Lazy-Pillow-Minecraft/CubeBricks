@@ -115,7 +115,6 @@
           <button type="button" data-transform-space="parent" title="父級坐標系">父級</button>
           <button type="button" data-transform-space="self" title="自身坐標系">自身</button>
         </div>
-        <div class="toolbar-segment" id="pivotCenterControl" hidden><button type="button" id="pivotCenterButton" title="將所選物件的樞軸點移到整體幾何中心">樞軸點居中</button></div>
         <div class="toolbar-segment" id="rotationModeControl" role="group" aria-label="自身旋轉模式" hidden>
           <button type="button" data-rotation-mode="pose" title="姿態模式：沿物件目前姿態的局部軸旋轉">姿態</button>
           <button type="button" data-rotation-mode="euler" title="歐拉角模式：按 Z → Y → X 層級直接調整歐拉角">歐拉角</button>
@@ -485,6 +484,7 @@
               <label class="config-select-label"><span>介面語言<small>application.language</small></span><select id="languageSelect" aria-label="介面語言"><option value="zh-Hant">繁體中文</option><option value="zh-Hans">简体中文</option><option value="en">English</option></select></label>
               <div class="player-reference-texture-setting"><div><strong>資源包</strong><small>字體、語言與 Shape 包共用管理視窗；包內容分開載入</small></div><div class="player-reference-texture-actions"><button type="button" id="openPacksButton">管理資源包</button></div></div>
               <label class="config-toggle-label"><span>獨立 UV 編輯模式<small>editor.separate-uv-mode</small></span><input type="checkbox" data-config-key="editor.separate-uv-mode" /></label>
+              <label class="config-toggle-label"><span>Blockbench 風格操作<small>左鍵拖動旋轉、右鍵拖動平移；Shift + 左鍵框選</small></span><input type="checkbox" data-config-key="editor.blockbench-controls" /></label>
               <label class="config-number-label"><span>預設操作歷史上限<small>application.history-limit · 0–10000 筆</small></span><input type="number" min="0" max="10000" step="1" data-config-key="application.history-limit" /></label>
               <label class="config-toggle-label"><span>對稱編輯<small>editor.symmetry</small></span><input type="checkbox" data-config-key="editor.symmetry" /></label>
               <label class="config-toggle-label"><span>鎖定透明度<small>paint.alpha-lock</small></span><input type="checkbox" data-config-key="paint.alpha-lock" /></label>

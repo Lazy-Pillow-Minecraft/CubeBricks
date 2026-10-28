@@ -14,6 +14,7 @@ export const ConfigKey = Object.freeze({
   FONT: 'application.font',
   HISTORY_LIMIT: 'application.history-limit',
   SEPARATE_UV_MODE: 'editor.separate-uv-mode',
+  BLOCKBENCH_CONTROLS: 'editor.blockbench-controls',
   SNAP: 'editor.snap-subdivisions',
   ALLOW_NEGATIVE_SIZE: 'editor.allow-negative-size',
   PAINT_EXPLODE_GAP: 'paint.explode-gap',
@@ -126,6 +127,7 @@ configRegistry.registerMany([
     validate: value => Number.isInteger(value) && value >= 0 && value <= 10000,
     description: 'Default maximum number of persisted undo operations per project.' },
   { id: ConfigKey.SEPARATE_UV_MODE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Separate UV editing from model editing into its own workspace mode.' },
+  { id: ConfigKey.BLOCKBENCH_CONTROLS, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Use left drag to orbit, right drag to pan, and Shift+left drag to box-select in the modeling viewport.' },
   {
     id: ConfigKey.SNAP,
     type: ConfigType.NUMBER,

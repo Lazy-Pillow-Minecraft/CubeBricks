@@ -108,6 +108,8 @@ modelFormatRegistry.registerMany([
     icon: 'skin',
     blockbenchFormat: 'skin',
     aliases: ['minecraft_skin'],
+    status: 'placeholder',
+    placeholderReason: '皮膚模型目前暫停新建',
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 64], renderType: 'cutout', cullFaces: false },
     capabilities: { ...cubeCapabilities }
@@ -120,6 +122,8 @@ modelFormatRegistry.registerMany([
     icon: 'geckolib',
     blockbenchFormat: 'geckolib_model',
     aliases: ['geckolib', 'geckolib_animated_model'],
+    status: 'placeholder',
+    placeholderReason: 'GeckoLib 模型目前暫停新建',
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 64], renderType: 'cutout', cullFaces: false },
     capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true }

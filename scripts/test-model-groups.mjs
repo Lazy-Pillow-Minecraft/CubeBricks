@@ -8,7 +8,8 @@ import { constrainCube, formatRules } from '../src/common/core/format-constraint
 
 assert.equal(modelFormatRegistry.list().length, 8, 'built-in model formats are registered');
 assert.deepEqual(modelFormatRegistry.list().filter(format => format.status === 'placeholder').map(format => format.id),
-  [ModelFormatId.GENERIC, ModelFormatId.IMAGE], 'generic mesh and image editors remain explicit placeholders');
+  [ModelFormatId.GENERIC, ModelFormatId.IMAGE, ModelFormatId.MINECRAFT_SKIN, ModelFormatId.GECKOLIB],
+  'unavailable model creation formats remain explicit placeholders');
 assert.equal(modelFormatRegistry.resolve('java_block').id, ModelFormatId.JAVA_BLOCK_ITEM);
 assert.equal(modelFormatRegistry.resolve('geckolib_model').id, ModelFormatId.GECKOLIB);
 const javaInitial = createModelProjectData(ModelFormatId.JAVA_BLOCK_ITEM);

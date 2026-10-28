@@ -13,7 +13,7 @@ export function createInspectorController({
   snapshot, markDirty, invalidateSelectionRenderGeometry, renderScene,
   syncInspectorValues, translateModifierAnchors, setCurveHandle,
   bakeCurveNodeTangent, updateSelectionLabels, setMode, schedulePaintSymmetryBuild,
-  deleteSelected, isUvCapable
+  deleteSelected, isUvCapable, centerSelectedPivots
 }) {
 let subdivisionSession = null;
 
@@ -432,7 +432,7 @@ function vectorField(label, field, values, nodes = [selected()]) {
   const rules = formatRules(state.project);
   const step = field === 'size' && rules.integerCubeSize ? '1' : field === 'rotation' && rules.rotationStep ? String(rules.rotationStep) : '0.0001';
   const disabled = field === 'rotation' && rules.moddedEntity && nodes[0]?.type === 'cube' ? 'disabled title="Cube 不能旋轉；請旋轉其所屬的組"' : '';
-  return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="${step}" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} ${disabled} /></label>`).join('')}</div>`;
+  return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="${step}" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} ${disabled} /></label>`).join('')}${field === 'pivot' ? '<button type="button" class="pivot-center-field-button" data-action="centerPivot" title="將所選物件的樞軸點移到整體幾何中心">居中</button>' : ''}</div>`;
 }
 
 function scalarField(label, field, value, nodes = [selected()]) {
@@ -966,6 +966,7 @@ function bindInspector(root = null) {
     markDirty(); renderAll('selection');
   }));
   $('[data-action="deleteSelected"]', inspector)?.addEventListener('click', deleteSelected);
+  $('[data-action="centerPivot"]', inspector)?.addEventListener('click', centerSelectedPivots);
   $('[data-action="enterSubdivisionEdit"]', inspector)?.addEventListener('click', () => enterSubdivisionEdit(item));
   $('[data-action="exitSubdivisionEdit"]', inspector)?.addEventListener('click', () => exitSubdivisionEdit());
   $('[data-action="resetTransform"]', inspector)?.addEventListener('click', () => {

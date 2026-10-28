@@ -36,8 +36,8 @@ function startCurveHandleDrag(event, curve, hit) {
 function onPointerDown(event) {
   const rect = sceneCanvas.getBoundingClientRect();
   const x = event.clientX - rect.left, y = event.clientY - rect.top;
-  if (event.button === 1) {
-    startCameraDrag(event, sceneCanvas);
+  if (event.button === 1 || (state.blockbenchControls && event.button === 2)) {
+    startCameraDrag(event, sceneCanvas, event.button === 2 ? 'pan' : null);
     return;
   }
   if (state.mode === 'display') return;
@@ -134,7 +134,9 @@ function onPointerDown(event) {
     currentX: x, currentY: y, moved: false, hitUid,
     generatedHit: selectionHit?.generated ? selectionHit : null,
     selection: new Set(state.selectedUids),
-    mode: viewportSelectionMode(event), suppressBlankDeselect
+    mode: viewportSelectionMode(event), suppressBlankDeselect,
+    blockbenchOrbit: state.blockbenchControls && !event.shiftKey,
+    orbitYaw: state.yaw, orbitPitch: state.pitch
   };
 }
 
@@ -181,19 +183,26 @@ function applyViewportBoxSelection(hitUids, drag) {
   if (state.selectedUid) revealOutlinerItem(state.selectedUid);
 }
 
-function startCameraDrag(event, captureTarget) {
+function startCameraDrag(event, captureTarget, forcedMode = null) {
   event.preventDefault();
   cancelCameraFocus();
   if (Number.isFinite(event.pointerId)) captureTarget.setPointerCapture(event.pointerId);
   bakeCameraPan();
   const frame = sceneRenderer.getCameraFrame();
-  state.dragging = event.shiftKey || state.axisView
+  const pan = forcedMode === 'pan' || state.axisView || (forcedMode !== 'orbit' && event.shiftKey);
+  state.dragging = pan
     ? {
         type: 'pan', pointerId: event.pointerId, x: event.clientX, y: event.clientY,
         target: [...state.target], right: [...frame.right], up: [...frame.up], worldPerPixel: frame.worldPerPixel
       }
     : { type: 'orbit', pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: state.yaw, pitch: state.pitch };
-  sceneCanvas.classList.add(event.shiftKey || state.axisView ? 'is-panning' : 'is-orbiting');
+  state.dragging.cameraButton = event.button;
+  state.dragging.pressX = event.clientX;
+  state.dragging.pressY = event.clientY;
+  state.dragging.lastX = event.clientX;
+  state.dragging.lastY = event.clientY;
+  state.dragging.moved = false;
+  sceneCanvas.classList.add(pan ? 'is-panning' : 'is-orbiting');
 }
 
 return {

@@ -143,7 +143,6 @@ function updateToolOptions() {
   $$('[data-paint-selection-mode]').forEach(button => button.classList.toggle('active', button.dataset.paintSelectionMode === state.paintSelectionMode));
   lane.hidden = state.mode === 'display' || !labels[state.tool];
   $('#transformSpaceControl').hidden = !['move', 'rotate', 'pivot'].includes(state.tool);
-  $('#pivotCenterControl').hidden = state.tool !== 'pivot';
   $('#rotationModeControl').hidden = state.tool !== 'rotate' || state.transformSpace !== 'self';
   $('#multiTransformModeControl').hidden = selectedTopLevelNodes().length < 2 || !['move', 'rotate'].includes(state.tool);
   $('#scaleHandleModeControl').hidden = state.tool !== 'resize';

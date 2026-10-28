@@ -5,10 +5,84 @@ export function translateEnglishUiText(text, language, translateUiText) {
     '動畫編輯（開發中）': 'Animation Editing (in development)',
     '動畫編輯 · 即將推出': 'Animation Editing · Coming Soon',
     '平鋪（即將推出）': 'Tiled (Coming Soon)',
-    '手翻書（即將推出）': 'Flipbook (Coming Soon)'
+    '手翻書（即將推出）': 'Flipbook (Coming Soon)',
+    '色卡檔案不能超過 2 MB': 'Color-map files cannot exceed 2 MB',
+    '匯入後不能超過 256 行色卡': 'The imported palette cannot exceed 256 rows',
+    'Blockbench 風格操作': 'Blockbench-style controls',
+    '只導出目前選中的色卡為 .cbcmap；檔案不包含名稱': 'Export only the selected palette as .cbcmap; the file does not include its name',
+    '追加匯入 .cbcmap 色卡': 'Append a .cbcmap palette',
+    'GeckoLib 模型目前暫停新建': 'Creating GeckoLib models is temporarily unavailable',
+    '工作記錄尚未寫入，請稍後重試': 'The work journal has not been written yet; try again shortly',
+    '色卡保存失敗': 'Could not save the palette',
+    '色卡檔案格式或數量無效': 'Invalid color-map format or number of palettes',
+    '色階映射': 'Gradient mapping',
+    '取來源亮度與透明度作蒙版；來源隱藏時仍生效。': 'Use source brightness and alpha as the mask; it remains active when the source is hidden.',
+    '保留圖層結構': 'Preserve layer structure',
+    '指定基礎色與灰度': 'Set base color and gray level',
+    '指定基礎位置與灰度': 'Set base position and gray level',
+    '基礎灰度 %': 'Base gray level %',
+    '基礎色': 'Base color',
+    '基礎色卡位置 %': 'Base palette position %',
+    '工作項目已保留在項目資料夾': 'Work project retained in the project folder',
+    '視窗控制': 'Window controls',
+    '最大化': 'Maximize',
+    '最小化': 'Minimize',
+    '無蒙版': 'No mask',
+    '匯入': 'Import',
+    '匯入檔案沒有色卡': 'The imported file contains no palettes',
+    '填充內部': 'Fill interior',
+    '填滿矩形或橢圓內部': 'Fill the inside of a rectangle or ellipse',
+    '源色卡': 'Source palette',
+    '圖形': 'Shape',
+    '已移除的色卡（使用保存的顏色）': 'Removed palette (using saved colors)',
+    '圖形繪製': 'Shape drawing',
+    '圖形繪製（目前：直線）': 'Shape drawing (current: line)',
+    '蒙版來源': 'Mask source',
+    '模板底圖': 'Template base layer',
+    '請先建立有顏色的色卡': 'Create a palette with colors first',
+    '請先選擇色卡': 'Select a palette first',
+    '還原視窗': 'Restore window',
+    '瀏覽器預覽無法保留工作目錄，請使用導出': 'Browser preview cannot retain the work folder; use Export',
+    '顯示設置': 'Display settings',
+    '顯示設置 · 即將推出': 'Display settings · Coming Soon',
+    '左側對應亮部，右側對應暗部。原始像素與透明度不會被修改。': 'The left maps to highlights and the right to shadows. Original pixels and alpha remain unchanged.',
+    '顯示設置（開發中）': 'Display settings (in development)',
+    '正在保存重排後的圖層…': 'Saving the rearranged layers…',
+    '皮膚模型目前暫停新建': 'Creating skin models is temporarily unavailable',
+    '色卡已導出': 'Palette exported',
+    '色卡分段數': 'Palette steps',
+    '色卡名稱或顏色資料無效': 'Invalid palette name or color data',
+    '左鍵拖動旋轉、右鍵拖動平移；Shift + 左鍵框選': 'Left-drag to orbit, right-drag to pan; Shift + left-drag to box-select',
+    '依新 UV 重排各圖層像素，保留組與混合設定': 'Rearrange each layer for the new UVs while preserving groups and blend settings'
   };
   if (upcoming[text]) return upcoming[text];
-  let match = text.match(/^(\d+) 行 · 每行獨立設定$/);
+  let match = text.match(/^背景：(純黑|目前背景|棋盤格)$/);
+  if (match) return `Background: ${translateUiText(match[1], language)}`;
+  match = text.match(/^不支援拖入 (.+)$/);
+  if (match) return `Unsupported drop: ${match[1]}`;
+  match = text.match(/^無法取得 (.+) 的本機路徑$/);
+  if (match) return `Could not find the local path for ${match[1]}`;
+  match = text.match(/^已匯入 (\d+) 行色卡$/);
+  if (match) return `Imported ${match[1]} palette rows`;
+  match = text.match(/^尚未加入(.+)$/);
+  if (match) return `No ${translateUiText(match[1], language)} packs added yet`;
+  match = text.match(/^移除「(.+)」？$/);
+  if (match) return `Remove “${match[1]}”?`;
+  match = text.match(/^匯入色卡 (\d+)$/);
+  if (match) return `Imported palette ${match[1]}`;
+  match = text.match(/^歷史裁剪未完成：(.+)$/);
+  if (match) return `History compaction incomplete: ${match[1]}`;
+  match = text.match(/^圖形繪製（目前：(.+)）$/);
+  if (match) return `Shape drawing (current: ${translateUiText(match[1], language)})`;
+  match = text.match(/^複製像素：(開|關)$/);
+  if (match) return `Copy pixels: ${match[1] === '開' ? 'On' : 'Off'}`;
+  match = text.match(/^(二維|三維)(包絡)?貝塞爾$/);
+  if (match) return `${match[1] === '二維' ? '2D' : '3D'} ${match[2] ? 'envelope ' : ''}Bezier`;
+  match = text.match(/^等距縮放 (\d+) 項$/);
+  if (match) return `Uniform scale · ${match[1]} items`;
+  match = text.match(/^等距尺寸 (.+)$/);
+  if (match) return `Uniform size ${translateUiText(match[1], language)}`;
+  match = text.match(/^(\d+) 行 · 每行獨立設定$/);
   if (match) return `${match[1]} rows · configured independently`;
   match = text.match(/^色彩空間漸變 · (.+)$/);
   if (match) return `Color-space gradient · ${match[1]}`;

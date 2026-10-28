@@ -162,6 +162,8 @@ function updateAxisWidget() {
   }
   $('#viewHint').innerHTML = state.axisView
     ? '<kbd>中鍵</kbd> 平移 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>拖動輪盤</kbd> 一般視圖'
+    : state.blockbenchControls && state.mode !== 'paint'
+      ? '<kbd>左鍵拖動</kbd> 旋轉 <kbd>右鍵拖動</kbd> 平移 <kbd>Shift + 左鍵</kbd> 框選 <kbd>中鍵</kbd> 旋轉／平移'
     : '<kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心';
   updateProjectionControls();
 }

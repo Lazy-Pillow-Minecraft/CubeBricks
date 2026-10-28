@@ -66,7 +66,7 @@
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/installerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",
-      "artifactName": "CubeBricks-${version}-setup.${ext}"
+      "artifactName": "CubeBricks-v${version}-win-${arch}-setup.${ext}"
     },
     "mac": {
       "icon": "src/assets/shortcut-icon.png"

@@ -9,6 +9,14 @@ if (process.platform !== 'win32') {
 }
 
 const projectRoot = path.resolve(__dirname, '..');
+const baseVersion = require(path.join(projectRoot, 'package.json')).version;
+const installerVersion = process.env.CUBEBRICKS_INSTALLER_VERSION || `${baseVersion}-beta`;
+const versionCheck = spawnSync(process.execPath, [path.join(__dirname, 'installer-version.cjs'), installerVersion], {
+  cwd: projectRoot, stdio: 'inherit'
+});
+if (versionCheck.error || versionCheck.status !== 0) {
+  process.exit(versionCheck.status || 1);
+}
 const art = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
   path.join(__dirname, 'generate-installer-art.ps1')], { cwd: projectRoot, stdio: 'inherit' });
 if (art.error || art.status !== 0) {
@@ -52,7 +60,8 @@ function cleanup() {
 }
 
 const builder = path.join(projectRoot, 'node_modules', 'electron-builder', 'cli.js');
-const child = spawn(process.execPath, [builder, '--win', 'nsis', '--x64', '--config.win.signExecutable=false'], {
+const child = spawn(process.execPath, [builder, '--win', 'nsis', '--x64', '--config.win.signExecutable=false',
+  `--config.extraMetadata.version=${installerVersion}`], {
   cwd: projectRoot, env: environment, stdio: 'inherit'
 });
 child.on('error', error => { console.error(error); cleanup(); process.exitCode = 1; });

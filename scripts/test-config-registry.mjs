@@ -43,6 +43,7 @@ assert.equal(appConfigRegistry.getDefinition(ConfigKey.SHOW_PLAYER_REFERENCE).de
 assert.deepEqual(appConfigRegistry.getDefinition(ConfigKey.PLAYER_REFERENCE_TEXTURE).defaultValue,
   { name: '內置玩家紋理', source: '' });
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.SEPARATE_UV_MODE).defaultValue, false);
+assert.equal(appConfigRegistry.getDefinition(ConfigKey.BLOCKBENCH_CONTROLS).defaultValue, false);
 assert.equal(modifierRegistry.supports('symmetry', 'group'), true);
 assert.equal(modifierRegistry.supports('symmetry', 'cube'), true);
 assert.equal(modifierRegistry.supports('symmetry', 'node'), false);
@@ -88,6 +89,11 @@ assert.equal(translateUiText('UV 預覽', 'en'), 'UV Preview');
 assert.equal(translateUiText('「demo」尚未保存，仍要關閉嗎？', 'en'), '“demo” has not been saved. Close it anyway?');
 assert.equal(translateUiText('無貼圖 · 16 × 16', 'en'), 'No texture · 16 × 16');
 assert.equal(translateUiText('乘數', 'en'), 'Multiplier');
+assert.equal(translateUiText('Blockbench 風格操作', 'zh-Hans'), 'Blockbench 风格操作');
+assert.equal(translateUiText('Blockbench 風格操作', 'en'), 'Blockbench-style controls');
+assert.equal(translateUiText('背景：棋盤格', 'en'), 'Background: Checkerboard');
+assert.equal(translateUiText('複製像素：開', 'en'), 'Copy pixels: on');
+assert.equal(translateUiText('二維包絡貝塞爾', 'en'), '2D enveloped Bézier');
 assert.equal(translateUiText('僅在此預覽中讓模型慢速轉動', 'zh-Hans'), '仅在此预览中让模型慢速转动');
 
 const translationCatalog = JSON.parse(fs.readFileSync(new URL('../src/common/config/ui-text-catalog.json', import.meta.url), 'utf8'));

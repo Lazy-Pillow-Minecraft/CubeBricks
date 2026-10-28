@@ -169,10 +169,33 @@ function showElementContextMenu(event, uidValue, source = null) {
 }
 
 function bindContextMenus() {
+  $('#viewport').addEventListener('contextmenu', event => {
+    if (state.blockbenchControls && event.isTrusted && event.target.closest('#sceneCanvas, #transformGizmo')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
   const captureItem = () => ({ icon: '▣', label: '截屏模型', children: [
     { icon: '▢', label: '屏幕截圖', action: () => captureModel('screen') },
     { icon: '▣', label: '離屏渲染', action: () => captureModel('offscreen') }
   ] });
+  const viewportBackgroundItems = (paint = false) => [
+    { icon: '⌖', label: '聚焦選中物件', action: focusSelected },
+    { icon: '◎', label: '回到場景中心', action: focusSceneOrigin },
+    ...(!paint ? [
+      { separator: true },
+      { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
+      ...(selectedNodeUids().length ? [{ icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) }] : [])
+    ] : []),
+    { separator: true },
+    captureItem(),
+    { icon: '#', label: state.grid ? '隱藏參考網格' : '顯示參考網格', action: () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-context-menu' }) },
+    { icon: '◐', label: '切換背景（純黑／目前／棋盤格）', action: () => {
+      const modes = ['black', 'current', 'grid'];
+      configRegistry.set(ConfigKey.BACKGROUND_MODE, modes[(modes.indexOf(state.backgroundMode) + 1) % modes.length], { source: 'viewport-context-menu' });
+    } },
+    { icon: '▧', label: state.wire ? '隱藏邊界線框' : '顯示邊界線框', action: () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-context-menu' }) }
+  ];
   $('#viewport').addEventListener('contextmenu', event => {
     if (state.mode === 'display') {
       event.preventDefault();
@@ -212,6 +235,8 @@ function bindContextMenus() {
       if (hit?.uid && state.project.getNode(hit.uid)) {
         getDockManager()?.expand('outliner');
         selectItem(hit.uid, { revealInOutliner: true });
+      } else {
+        showContextMenu(event, { title: selected()?.name || state.project.name, items: viewportBackgroundItems(true) });
       }
       return;
     }
@@ -253,21 +278,7 @@ function bindContextMenus() {
     }
     showContextMenu(event, {
       title: selected()?.name || state.project.name,
-      items: [
-        { icon: '⌖', label: '聚焦選中物件', action: focusSelected },
-        { icon: '◎', label: '回到場景中心', action: focusSceneOrigin },
-        { separator: true },
-        { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
-        ...(selectedNodeUids().length ? [{ icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) }] : []),
-        { separator: true },
-        captureItem(),
-        { icon: '#', label: state.grid ? '隱藏參考網格' : '顯示參考網格', action: () => configRegistry.set(ConfigKey.SHOW_GRID, !state.grid, { source: 'viewport-context-menu' }) },
-        { icon: '◐', label: '切換背景（純黑／目前／棋盤格）', action: () => {
-          const modes = ['black', 'current', 'grid'];
-          configRegistry.set(ConfigKey.BACKGROUND_MODE, modes[(modes.indexOf(state.backgroundMode) + 1) % modes.length], { source: 'viewport-context-menu' });
-        } },
-        { icon: '▧', label: state.wire ? '隱藏邊界線框' : '顯示邊界線框', action: () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-context-menu' }) }
-      ]
+      items: viewportBackgroundItems()
     });
   });
   outliner.addEventListener('contextmenu', event => {

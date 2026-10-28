@@ -6,6 +6,8 @@
 
 CubeBricks 是面向 Minecraft 模型工作流的桌面建模器，以 Cube、程序化 Shape 和 Bezier 曲线为基础，整合场景层级、UV、图层贴图、绘画、修改器与 Blockbench 模型交换。Java 方块／物品及基岩版方块提供各自的格式约束与视图范围提示。当前仍处于原型开发阶段，部分格式与动画能力尚在完善。
 
+UV 编辑默认并入编辑模式，亦可在设置中开启独立模式；可选 Blockbench 风格鼠标操作。Minecraft 皮肤和 GeckoLib 暂停新建，已有模型仍可识别。
+
 当前没有独立下载页。Windows 使用者可拉取本仓库，安装依赖一次后，直接双击根目录的 **`CubeBricksStart.exe`** 启动；也可双击 `build-installer.bat` 自行生成带图标和安装向导的安装包：
 
 ```powershell
@@ -32,6 +34,8 @@ npm install
 ## English
 
 CubeBricks is a desktop editor for Minecraft model workflows. It combines cubes, procedural shapes, Bezier curves, hierarchy editing, UVs, layered textures, painting, modifiers, and Blockbench interchange. Java Block/Item and Bedrock Block projects have format-specific constraints and viewport boundary guides. It is still a prototype; some format and animation features are unfinished.
+
+UV editing is part of Edit mode by default but can be split into a separate mode in Settings. Blockbench-style mouse controls are optional. New Minecraft Skin and GeckoLib projects are temporarily disabled; existing models remain recognizable.
 
 There is no separate download page yet. On Windows, clone this repository, run `npm install` once, then double-click **`CubeBricksStart.exe`** in the repository root. This lightweight launcher uses the local Electron dependency; it is not the standalone portable build. To create an installer, double-click `build-installer.bat`.
 

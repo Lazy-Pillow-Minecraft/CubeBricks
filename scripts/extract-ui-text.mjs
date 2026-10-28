@@ -4,6 +4,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { translateUiText } from '../src/common/config/app-config.js';
+import { toSimplified } from '../src/common/i18n/simplified.js';
+import { translateEnglishUiText } from '../src/common/i18n/english.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = path.join(root, 'src');
@@ -58,10 +60,10 @@ function assignKey(en) {
 }
 const entries = [...locations].sort(([a], [b]) => a.localeCompare(b, 'zh-Hant')).map(([zhHant, used]) => {
   const old = previousBySource.get(zhHant);
-  const en = old?.en || translateUiText(zhHant, 'en');
+  const en = old?.en && old.en !== zhHant ? old.en : translateEnglishUiText(zhHant, 'en', translateUiText);
   return {
     key: old?.key || assignKey(en), zhHant,
-    zhHans: old?.zhHans === old?.zhHant ? translateUiText(zhHant, 'zh-Hans') : old?.zhHans || translateUiText(zhHant, 'zh-Hans'),
+    zhHans: toSimplified(old?.zhHans || zhHant),
     en, dynamic: zhHant.includes('${'), englishMissing: en === zhHant,
     locations: [...used].sort()
   };
@@ -69,7 +71,7 @@ const entries = [...locations].sort(([a], [b]) => a.localeCompare(b, 'zh-Hant'))
 for (const old of previous.entries) {
   if (!old.locations?.length && !locations.has(old.zhHant)) entries.push({
     ...old,
-    zhHans: old.zhHans === old.zhHant ? translateUiText(old.zhHant, 'zh-Hans') : old.zhHans
+    zhHans: toSimplified(old.zhHans || old.zhHant)
   });
 }
 entries.sort((a, b) => a.key.localeCompare(b.key));

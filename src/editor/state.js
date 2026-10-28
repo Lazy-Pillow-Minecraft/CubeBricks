@@ -14,6 +14,7 @@ export const state = {
   collapsedOperators: new Set(),
   mode: 'edit',
   separateUvMode: configRegistry.get(ConfigKey.SEPARATE_UV_MODE),
+  blockbenchControls: configRegistry.get(ConfigKey.BLOCKBENCH_CONTROLS),
   tool: 'move',
   filePath: null,
   dirty: false,

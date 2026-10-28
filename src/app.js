@@ -261,7 +261,7 @@ const inspectorController = createInspectorController({
   snapshot, markDirty, invalidateSelectionRenderGeometry, renderScene,
   syncInspectorValues, translateModifierAnchors, setCurveHandle,
   bakeCurveNodeTangent, updateSelectionLabels, setMode, schedulePaintSymmetryBuild,
-  deleteSelected, isUvCapable
+  deleteSelected, isUvCapable, centerSelectedPivots
 });
 function inspectorBatchNodes(...args) { return inspectorController.inspectorBatchNodes(...args); }
 function sharedVectorValues(...args) { return inspectorController.sharedVectorValues(...args); }
@@ -798,7 +798,7 @@ const eventBinder = createEventBinder({
   updateRotationModeButtons, updateScaleHandleModeButtons,
   updateSelectionLabels, updateTextureCreateDialog,
   updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
-  updateTransformGizmo, movePivotToRotationVertex, centerSelectedPivots,
+  updateTransformGizmo, movePivotToRotationVertex,
   uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView
 });
 function bindEvents(...args) { return eventBinder.bindEvents(...args); }

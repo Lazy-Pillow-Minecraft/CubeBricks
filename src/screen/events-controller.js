@@ -56,7 +56,6 @@ export function createEventBinder({
   updateSelectionLabels, updateTextureCreateDialog,
   updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
   updateTransformGizmo, movePivotToRotationVertex,
-  centerSelectedPivots,
   uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView
 }) {
 let recentRotationPress = null;
@@ -655,7 +654,6 @@ function bindEvents() {
     updateToolOptions();
     renderScene();
   }));
-  $('#pivotCenterButton').addEventListener('click', centerSelectedPivots);
   $$('[data-rotation-mode]').forEach(button => button.addEventListener('click', () => {
     state.rotationMode = button.dataset.rotationMode;
     updateRotationModeButtons();

@@ -36,7 +36,7 @@ function renderModelFormatPicker() {
       const placeholder = format.status === 'placeholder';
       const snap = Number(format.snap?.subdivisions);
       const details = [format.description, Number.isFinite(snap) ? `標準吸附 ${formatNumber(snap)} · ${formatNumber(16 / snap)}px` : ''].filter(Boolean).join(' · ');
-      return `<button type="button" class="model-format-card ${placeholder ? 'is-placeholder' : ''}" data-model-format="${escapeAttribute(format.id)}" aria-disabled="${placeholder}">
+      return `<button type="button" class="model-format-card ${placeholder ? 'is-placeholder' : ''}" data-model-format="${escapeAttribute(format.id)}" ${placeholder ? 'disabled' : ''} aria-disabled="${placeholder}">
         <span class="model-format-card-icon">${modelFormatIconMarkup(format.icon)}</span>
         <span class="model-format-card-copy"><strong>${escapeHtml(format.name)}</strong><small>${escapeHtml(details)}</small></span>
         ${placeholder ? `<span class="model-format-placeholder">佔位</span>` : ''}

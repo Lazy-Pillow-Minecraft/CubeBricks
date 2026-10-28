@@ -328,6 +328,18 @@ function onPointerMove(event) {
     return;
   }
   if (state.dragging.type === 'selection-box') {
+    if (state.dragging.blockbenchOrbit && Math.hypot(dx, dy) >= 4) {
+      const drag = state.dragging;
+      state.dragging = {
+        type: 'orbit', pointerId: drag.pointerId, x: drag.x, y: drag.y,
+        yaw: drag.orbitYaw, pitch: drag.orbitPitch, cameraButton: 0,
+        pressX: drag.x, pressY: drag.y, lastX: drag.x, lastY: drag.y, moved: true
+      };
+      selectionMarquee.hidden = true;
+      sceneCanvas.classList.add('is-orbiting');
+      onPointerMove(event);
+      return;
+    }
     const rect = sceneCanvas.getBoundingClientRect();
     state.dragging.currentX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
     state.dragging.currentY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
@@ -367,10 +379,43 @@ function onPointerMove(event) {
     };
     scheduleTransformUpdate(state.dragging);
     return;
-  } else if (state.dragging.type === 'pan') {
-    state.target = [0, 1, 2].map(axis => state.dragging.target[axis]
-      - state.dragging.right[axis] * dx * state.dragging.worldPerPixel
-      + state.dragging.up[axis] * dy * state.dragging.worldPerPixel);
+  }
+  if (state.dragging.type === 'pan' || state.dragging.type === 'orbit') {
+    const drag = state.dragging;
+    drag.moved ||= Math.hypot(event.clientX - drag.pressX, event.clientY - drag.pressY) >= 4;
+    if (drag.cameraButton === 1) {
+      const nextType = state.axisView || event.shiftKey ? 'pan' : 'orbit';
+      if (nextType !== drag.type) {
+        drag.type = nextType;
+        drag.x = drag.lastX;
+        drag.y = drag.lastY;
+        if (nextType === 'pan') {
+          const frame = sceneRenderer.getCameraFrame();
+          drag.target = [...state.target];
+          drag.right = [...frame.right];
+          drag.up = [...frame.up];
+          drag.worldPerPixel = frame.worldPerPixel;
+        } else {
+          drag.yaw = state.yaw;
+          drag.pitch = state.pitch;
+        }
+        sceneCanvas.classList.toggle('is-panning', nextType === 'pan');
+        sceneCanvas.classList.toggle('is-orbiting', nextType === 'orbit');
+      }
+    }
+    const cameraDx = event.clientX - drag.x;
+    const cameraDy = event.clientY - drag.y;
+    if (drag.type === 'pan') {
+      state.target = [0, 1, 2].map(axis => drag.target[axis]
+        - drag.right[axis] * cameraDx * drag.worldPerPixel
+        + drag.up[axis] * cameraDy * drag.worldPerPixel);
+    } else {
+      const fullTurn = Math.PI * 2;
+      state.yaw = ((drag.yaw - cameraDx * .01) % fullTurn + fullTurn) % fullTurn;
+      state.pitch = Math.max(-Math.PI / 2 + .001, Math.min(Math.PI / 2 - .001, drag.pitch + cameraDy * .01));
+    }
+    drag.lastX = event.clientX;
+    drag.lastY = event.clientY;
   } else {
     const fullTurn = Math.PI * 2;
     state.yaw = ((state.dragging.yaw - dx * .01) % fullTurn + fullTurn) % fullTurn;
@@ -530,6 +575,15 @@ function endPointerDrag(event) {
   $('#transformTooltip').hidden = true;
   sceneCanvas.classList.remove('is-orbiting', 'is-panning', 'is-move', 'is-resize', 'is-rotate', 'is-pivot');
   renderScene();
+  if ((finishedDrag.type === 'pan' || finishedDrag.type === 'orbit')
+    && finishedDrag.cameraButton === 2 && event.type !== 'pointercancel'
+    && !finishedDrag.moved
+    && Math.hypot(event.clientX - finishedDrag.pressX, event.clientY - finishedDrag.pressY) < 4) {
+    captureTarget.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, button: 2,
+      clientX: event.clientX, clientY: event.clientY
+    }));
+  }
 }
 
 function getPlaneDragDistances(drag, event, dx, dy) {

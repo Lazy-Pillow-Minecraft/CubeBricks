@@ -9,6 +9,7 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 - Cube geometry is the foundation. The editor also supports groups, locators, nodes, 2D/3D Bezier curves, and procedural shapes including polygonal prisms, dodecahedra, and soccer-ball-like truncated icosahedra. Shapes can retain their parameters while storing overrides to generated cubes.
 - The hierarchy supports multiselection, range selection, search, grouping, drag reordering, and quick navigation. Detailed rows expose visibility, locking, automatic UV, UV normalization, and export flags.
 - Move, Scale, Rotate, Move Pivot, Vertex Snap, intersection display, Knife, and Face Select cover different geometry interactions. Move and Rotate can use local, parent, or global reference frames; moving a pivot compensates geometry placement.
+- UV editing is part of Edit mode by default but can be split into a separate mode. Optional Blockbench-style viewport controls use left-drag to orbit, right-drag to pan, and Shift + left-drag to box-select.
 - Groups and individual elements can carry modifier stacks. The built-in symmetry modifier supports XYZ mirrors, radial copies, and mandala patterns; it can be stacked repeatedly, previewed, and baked one modifier at a time. `.bbmodel` export expands procedural results into compatible cubes and groups.
 - Real-time operators are separate from modifiers. The current Paint Symmetry operator relates matching faces and checks corresponding UV edge lengths; it creates no additional scene elements.
 
@@ -38,5 +39,6 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 
 - `.cbmodel` saves model data, textures, and optional operation history. `.bbmodel` supports Blockbench interchange. The working directory keeps a recoverable operation journal; archive export can include or omit history.
 - A registry defines model formats. Java Block/Item has three version-specific rotation rules, forced back-face culling, and element-coordinate bounds. Bedrock Block has a dynamic 30 px size constraint. Both show a complete boundary guide in the viewport. Modded Entity requires box UVs, integer cube dimensions, and group rotation rather than cube rotation.
+- New Minecraft Skin and GeckoLib projects are temporarily disabled; recognition of existing and imported projects remains available.
 - Java Block/Item has no Animation mode; its Display Settings page is currently a placeholder. Animation Editing in other formats also shows a placeholder while the full workflow is unfinished.
 - External [Shape packs](../SHAPE_PACKS.en.md) and [language/font packs](../RESOURCE_PACKS.en.md) load through the pack manager. External modifier or operator packs are not available yet.

@@ -103,6 +103,7 @@ function applyRegisteredConfig(id, value, notify = false) {
       if (!toolSupportsMode(state.tool)) setTool(state.mode === 'uv' ? 'faceSelect' : 'move');
     }
   }
+  if (id === ConfigKey.BLOCKBENCH_CONTROLS) { state.blockbenchControls = value; renderScene(); }
   if (id === ConfigKey.SNAP) {
     state.settingsSnap = value;
     updateSnapButton();

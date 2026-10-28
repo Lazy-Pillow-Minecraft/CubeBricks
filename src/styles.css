@@ -1000,6 +1000,8 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .vector-field { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 27px; margin-bottom: 5px; padding-left: 46px; }
 .vector-field > span { position: absolute; left: 0; top: 50%; width: 42px; transform: translateY(-50%); color: var(--subtle); font-size: .61rem; }
 .vector-field > .number-wrap { flex: 0 0 68px; width: 68px; min-width: 68px; }
+.pivot-center-field-button { flex: 0 0 68px; width: 68px; height: 27px; border: 1px solid var(--line-strong); border-radius: 4px; background: rgba(var(--accent-rgb), .08); color: var(--accent); font-size: .62rem; }
+.pivot-center-field-button:hover { background: rgba(var(--accent-rgb), .18); }
 .vector-field.scalar-field .number-wrap input { padding-left: 6px; }
 .number-wrap { position: relative; }
 .number-wrap b { position: absolute; left: 5px; top: 50%; transform: translateY(-50%); font-size: .55rem; }

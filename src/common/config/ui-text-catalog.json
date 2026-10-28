@@ -9,7 +9,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:442"
+        "src/index.html:453"
       ]
     },
     {
@@ -20,7 +20,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:438"
+        "src/index.html:449"
       ]
     },
     {
@@ -31,7 +31,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:438"
+        "src/index.html:449"
       ]
     },
     {
@@ -42,7 +42,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:438"
+        "src/index.html:449"
       ]
     },
     {
@@ -53,7 +53,29 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:441"
+        "src/index.html:452"
+      ]
+    },
+    {
+      "key": "ui.2-mb",
+      "zhHant": "色卡檔案不能超過 2 MB",
+      "zhHans": "色卡档案不能超过 2 MB",
+      "en": "Color-map files cannot exceed 2 MB",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/controller.js:110"
+      ]
+    },
+    {
+      "key": "ui.256",
+      "zhHant": "匯入後不能超過 256 行色卡",
+      "zhHans": "汇入后不能超过 256 行色卡",
+      "en": "The imported palette cannot exceed 256 rows",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/controller.js:113"
       ]
     },
     {
@@ -64,19 +86,19 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:386",
+        "src/index.html:397",
         "src/shapes/bezier-2d.js:2"
       ]
     },
     {
       "key": "ui.2d-enveloped-b-zier",
       "zhHant": "二維包絡貝塞爾",
-      "zhHans": "二维包絡贝塞尔",
+      "zhHans": "二维包络贝塞尔",
       "en": "2D enveloped Bézier",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:388"
+        "src/index.html:399"
       ]
     },
     {
@@ -87,7 +109,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:343"
+        "src/index.html:351"
       ]
     },
     {
@@ -98,7 +120,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:387",
+        "src/index.html:398",
         "src/shapes/bezier-3d.js:2"
       ]
     },
@@ -110,18 +132,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:606"
+        "src/index.html:619"
       ]
     },
     {
       "key": "ui.3d-enveloped-b-zier",
       "zhHant": "三維包絡貝塞爾",
-      "zhHans": "三维包絡贝塞尔",
+      "zhHans": "三维包络贝塞尔",
       "en": "3D enveloped Bézier",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:389"
+        "src/index.html:400"
       ]
     },
     {
@@ -132,7 +154,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:48"
+        "src/editor/tool-mode-controller.js:65"
       ]
     },
     {
@@ -143,20 +165,20 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/uv-preview-controller.js:356"
+        "src/screen/uv-preview-controller.js:369"
       ]
     },
     {
       "key": "ui.a-curve-needs-at-least-two-nodes",
       "zhHant": "曲線至少需要兩個節點",
-      "zhHans": "曲线至少需要兩个节点",
+      "zhHans": "曲线至少需要两个节点",
       "en": "A curve needs at least two nodes",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:297",
-        "src/screen/palette/controller.js:641",
-        "src/screen/palette/controller.js:688"
+        "src/screen/context-menus.js:313",
+        "src/screen/palette/controller.js:755",
+        "src/screen/palette/controller.js:802"
       ]
     },
     {
@@ -178,7 +200,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:157"
+        "src/index.html:162"
       ]
     },
     {
@@ -189,9 +211,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:510",
-        "src/index.html:511",
-        "src/index.html:512"
+        "src/index.html:522",
+        "src/index.html:523",
+        "src/index.html:524"
       ]
     },
     {
@@ -202,7 +224,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:519"
+        "src/index.html:531"
       ]
     },
     {
@@ -213,13 +235,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:148"
+        "src/index.html:153"
       ]
     },
     {
       "key": "ui.actual-inner-radius",
       "zhHant": "實際內半徑",
-      "zhHans": "实際内半径",
+      "zhHans": "实际内半径",
       "en": "Actual inner radius",
       "dynamic": false,
       "englishMissing": false,
@@ -275,7 +297,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:392"
+        "src/screen/context-menus.js:408"
       ]
     },
     {
@@ -286,7 +308,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:379"
+        "src/index.html:390"
       ]
     },
     {
@@ -308,7 +330,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:393"
+        "src/index.html:404"
       ]
     },
     {
@@ -328,7 +350,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:392"
+        "src/index.html:403"
       ]
     },
     {
@@ -357,7 +379,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:542"
+        "src/index.html:554"
       ]
     },
     {
@@ -368,7 +390,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:400"
+        "src/screen/context-menus.js:416"
       ]
     },
     {
@@ -390,7 +412,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:344"
+        "src/index.html:352"
       ]
     },
     {
@@ -410,7 +432,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:381"
+        "src/index.html:392"
       ]
     },
     {
@@ -430,18 +452,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:192"
+        "src/index.html:197"
       ]
     },
     {
       "key": "ui.added-dimension-2-variant-envelope",
       "zhHant": "已新增${dimension === 2 ? '二維' : '三維'}${variant === 'envelope' ? '包絡' : ''}貝塞爾元素",
-      "zhHans": "已新增${dimension === 2 ? '二维' : '三维'}${variant === 'envelope' ? '包絡' : ''}贝塞尔元素",
+      "zhHans": "已新增${dimension === 2 ? '二维' : '三维'}${variant === 'envelope' ? '包络' : ''}贝塞尔元素",
       "en": "Added ${dimension === 2 ? '二維' : '三維'}${variant === 'envelope' ? '包絡' : ''}貝塞爾元素",
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:88"
+        "src/editor/element-commands.js:106"
       ]
     },
     {
@@ -452,7 +474,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:67"
+        "src/editor/element-commands.js:83"
       ]
     },
     {
@@ -463,8 +485,8 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/palette/controller.js:674",
-        "src/screen/palette/controller.js:681"
+        "src/screen/palette/controller.js:788",
+        "src/screen/palette/controller.js:795"
       ]
     },
     {
@@ -475,7 +497,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:264",
+        "src/index.html:270",
         "src/screen/reference-images.js:78"
       ]
     },
@@ -487,7 +509,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:601"
+        "src/index.html:614"
       ]
     },
     {
@@ -498,7 +520,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/uv-preview-controller.js:406"
+        "src/screen/uv-preview-controller.js:419"
       ]
     },
     {
@@ -509,7 +531,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:461"
+        "src/index.html:472"
       ]
     },
     {
@@ -520,7 +542,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:416"
+        "src/index.html:427"
       ]
     },
     {
@@ -531,7 +553,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:508"
+        "src/index.html:520"
       ]
     },
     {
@@ -542,7 +564,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:417"
+        "src/index.html:428"
       ]
     },
     {
@@ -553,7 +575,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:527"
+        "src/index.html:539"
       ]
     },
     {
@@ -582,7 +604,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:963"
+        "src/editor/transform-interaction.js:1040"
       ]
     },
     {
@@ -593,8 +615,8 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:916",
-        "src/editor/transform-interaction.js:954"
+        "src/editor/transform-interaction.js:1031",
+        "src/editor/transform-interaction.js:993"
       ]
     },
     {
@@ -616,40 +638,51 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:177"
+        "src/index.html:182"
       ]
     },
     {
-      "key": "ui.animation-mode",
-      "zhHant": "動畫模式",
-      "zhHans": "动画模式",
-      "en": "Animation mode",
+      "key": "ui.animation-editing",
+      "zhHant": "動畫編輯",
+      "zhHans": "动画编辑",
+      "en": "Animation Editing",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:53"
+        "src/editor/tool-mode-controller.js:65"
       ]
     },
     {
-      "key": "ui.animation-preview",
-      "zhHant": "動畫預覽",
-      "zhHans": "动画预览",
-      "en": "Animation preview",
+      "key": "ui.animation-editing-coming-soon",
+      "zhHant": "動畫編輯 · 即將推出",
+      "zhHans": "动画编辑 · 即将推出",
+      "en": "Animation Editing · Coming Soon",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:48"
+        "src/index.html:293"
+      ]
+    },
+    {
+      "key": "ui.animation-editing-in-development",
+      "zhHant": "動畫編輯（開發中）",
+      "zhHans": "动画编辑（开发中）",
+      "en": "Animation Editing (in development)",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/editor/tool-mode-controller.js:70"
       ]
     },
     {
       "key": "ui.antialiased-round-brush-edge",
       "zhHant": "圓形筆刷邊緣抗鋸齒",
-      "zhHans": "圆形笔刷边缘抗鋸齒",
+      "zhHans": "圆形笔刷边缘抗锯齿",
       "en": "Antialiased round-brush edge",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:157"
+        "src/index.html:162"
       ]
     },
     {
@@ -660,8 +693,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:467",
-        "src/index.html:516",
+        "src/index.html:478",
+        "src/index.html:528",
         "src/screen/inspector-controller.js:383"
       ]
     },
@@ -684,7 +717,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:476"
+        "src/index.html:488"
       ]
     },
     {
@@ -695,7 +728,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/palette/controller.js:709"
+        "src/screen/palette/controller.js:823"
       ]
     },
     {
@@ -728,7 +761,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:445"
+        "src/index.html:456"
       ]
     },
     {
@@ -739,7 +772,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:147"
+        "src/index.html:152"
       ]
     },
     {
@@ -750,7 +783,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:136"
+        "src/index.html:139"
       ]
     },
     {
@@ -761,7 +794,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:137"
+        "src/index.html:140"
       ]
     },
     {
@@ -772,7 +805,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:138"
+        "src/index.html:141"
       ]
     },
     {
@@ -805,7 +838,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:243"
+        "src/index.html:249"
       ]
     },
     {
@@ -837,7 +870,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:317"
+        "src/index.html:325"
       ]
     },
     {
@@ -859,7 +892,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:278"
+        "src/index.html:284"
       ]
     },
     {
@@ -870,7 +903,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:331"
+        "src/index.html:339"
       ]
     },
     {
@@ -881,7 +914,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:520"
+        "src/index.html:532"
       ]
     },
     {
@@ -892,7 +925,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:269"
+        "src/index.html:275"
       ]
     },
     {
@@ -949,13 +982,15 @@
       ]
     },
     {
+      "key": "ui.base-image",
       "zhHant": "底圖",
       "zhHans": "底图",
       "en": "Base image",
       "dynamic": false,
       "englishMissing": false,
-      "locations": [],
-      "key": "ui.base-image"
+      "locations": [
+        "src/texture/template-controller.js:200"
+      ]
     },
     {
       "zhHant": "基本",
@@ -1018,7 +1053,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/settings-controller.js:147"
+        "src/screen/settings-controller.js:148"
       ]
     },
     {
@@ -1029,7 +1064,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:550"
+        "src/index.html:562"
       ]
     },
     {
@@ -1040,7 +1075,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:627"
+        "src/index.html:641"
+      ]
+    },
+    {
+      "key": "ui.blockbench",
+      "zhHant": "Blockbench 風格操作",
+      "zhHans": "Blockbench 风格操作",
+      "en": "Blockbench-style controls",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:487"
       ]
     },
     {
@@ -1051,7 +1097,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:336"
+        "src/index.html:344"
       ]
     },
     {
@@ -1073,7 +1119,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:329"
+        "src/index.html:337"
       ]
     },
     {
@@ -1084,7 +1130,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:124"
+        "src/index.html:127"
       ]
     },
     {
@@ -1095,7 +1141,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:269"
+        "src/index.html:275"
       ]
     },
     {
@@ -1132,12 +1178,12 @@
     {
       "key": "ui.browser-preview-does-not-use-expanded-working-directories",
       "zhHant": "瀏覽器預覽不使用展開式工作目錄",
-      "zhHans": "瀏览器预览不使用展开式工作目錄",
+      "zhHans": "浏览器预览不使用展开式工作目录",
       "en": "Browser preview does not use expanded working directories",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:364"
+        "src/screen/events-controller.js:397"
       ]
     },
     {
@@ -1148,19 +1194,20 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:110",
-        "src/index.html:99"
+        "src/editor/tool-mode-controller.js:129",
+        "src/index.html:104"
       ]
     },
     {
       "key": "ui.brush-2",
       "zhHant": "塗抹",
-      "zhHans": "塗抹",
+      "zhHans": "涂抹",
       "en": "Brush",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:145"
+        "src/editor/tool-mode-controller.js:140",
+        "src/index.html:150"
       ]
     },
     {
@@ -1171,7 +1218,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:99"
+        "src/index.html:104"
       ]
     },
     {
@@ -1191,7 +1238,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:156"
+        "src/index.html:161"
       ]
     },
     {
@@ -1228,7 +1275,7 @@
     {
       "key": "ui.building-face-relations",
       "zhHant": "正在建立面關聯…",
-      "zhHans": "正在建立面关聯…",
+      "zhHans": "正在建立面关联…",
       "en": "Building face relations…",
       "dynamic": false,
       "englishMissing": false,
@@ -1244,8 +1291,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:158",
-        "src/index.html:495",
+        "src/common/config/app-config.js:160",
+        "src/index.html:507",
         "src/screen/player-reference-controller.js:11",
         "src/screen/player-reference-controller.js:27"
       ]
@@ -1267,7 +1314,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:612"
+        "src/index.html:625"
       ]
     },
     {
@@ -1304,7 +1351,7 @@
     {
       "key": "ui.by-saturation",
       "zhHant": "按飽和度",
-      "zhHans": "按飽和度",
+      "zhHans": "按饱和度",
       "en": "By saturation",
       "dynamic": false,
       "englishMissing": false,
@@ -1331,12 +1378,12 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:445",
-        "src/index.html:454",
-        "src/index.html:569",
-        "src/index.html:584",
-        "src/project/file-controller.js:201",
-        "src/project/tabs-controller.js:198",
+        "src/index.html:456",
+        "src/index.html:465",
+        "src/index.html:582",
+        "src/index.html:597",
+        "src/project/file-controller.js:202",
+        "src/project/tabs-controller.js:199",
         "src/screen/packs-controller.js:163",
         "src/screen/prompt-dialog.js:4"
       ]
@@ -1349,7 +1396,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:900"
+        "src/screen/events-controller.js:969"
       ]
     },
     {
@@ -1360,8 +1407,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:635",
-        "src/screen/context-menus.js:172"
+        "src/index.html:664",
+        "src/screen/context-menus.js:178"
       ]
     },
     {
@@ -1376,6 +1423,28 @@
       ]
     },
     {
+      "key": "ui.cbcmap",
+      "zhHant": "只導出目前選中的色卡為 .cbcmap；檔案不包含名稱",
+      "zhHans": "只导出当前选中的色卡为 .cbcmap；档案不包含名称",
+      "en": "Export only the selected palette as .cbcmap; the file does not include its name",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:354"
+      ]
+    },
+    {
+      "key": "ui.cbcmap-2",
+      "zhHant": "追加匯入 .cbcmap 色卡",
+      "zhHans": "追加汇入 .cbcmap 色卡",
+      "en": "Append a .cbcmap palette",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:353"
+      ]
+    },
+    {
       "key": "ui.cbmodel",
       "zhHant": ".cbmodel 需要在桌面版打開",
       "zhHans": ".cbmodel 需要在桌面版打开",
@@ -1383,7 +1452,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:87"
+        "src/screen/events-controller.js:88"
       ]
     },
     {
@@ -1394,7 +1463,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:198"
+        "src/project/file-controller.js:199"
       ]
     },
     {
@@ -1405,7 +1474,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:479"
+        "src/index.html:491"
       ]
     },
     {
@@ -1416,8 +1485,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:163",
-        "src/index.html:486"
+        "src/common/config/app-config.js:165",
+        "src/index.html:498"
       ]
     },
     {
@@ -1428,7 +1497,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:86"
+        "src/index.html:91"
       ]
     },
     {
@@ -1439,7 +1508,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/texture-pointer-controller.js:20"
+        "src/paint/texture-pointer-controller.js:91"
       ]
     },
     {
@@ -1450,7 +1519,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:171"
+        "src/editor/tool-mode-controller.js:205"
       ]
     },
     {
@@ -1461,18 +1530,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:426"
+        "src/index.html:437"
       ]
     },
     {
       "key": "ui.choose-an-endpoint-on-the-same-cube",
       "zhHant": "選擇同一 Cube 上的終點",
-      "zhHans": "选择同一 Cube 上的終点",
+      "zhHans": "选择同一 Cube 上的终点",
       "en": "Choose an endpoint on the same cube",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/scene-controller.js:341"
+        "src/paint/scene-controller.js:366"
       ]
     },
     {
@@ -1503,30 +1572,30 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:233"
+        "src/screen/context-menus.js:263"
       ]
     },
     {
       "key": "ui.choose-the-face-gradient-endpoint",
       "zhHant": "選擇面漸變終點",
-      "zhHans": "选择面渐变終点",
+      "zhHans": "选择面渐变终点",
       "en": "Choose the face-gradient endpoint",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/scene-controller.js:341",
-        "src/paint/texture-pointer-controller.js:24"
+        "src/paint/scene-controller.js:366",
+        "src/paint/texture-pointer-controller.js:94"
       ]
     },
     {
       "key": "ui.choose-two-points-on-the-same-cube-in-the-3d-view-for-a-volume-gradient",
       "zhHant": "體漸變需要在三維視圖的同一個 Cube 上選取兩點",
-      "zhHans": "体渐变需要在三维视图的同一个 Cube 上选取兩点",
+      "zhHans": "体渐变需要在三维视图的同一个 Cube 上选取两点",
       "en": "Choose two points on the same cube in the 3D view for a volume gradient",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/texture-pointer-controller.js:17"
+        "src/paint/texture-pointer-controller.js:86"
       ]
     },
     {
@@ -1537,7 +1606,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:156"
+        "src/index.html:161"
       ]
     },
     {
@@ -1548,7 +1617,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:559"
+        "src/index.html:571"
       ]
     },
     {
@@ -1559,7 +1628,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/texture/template-controller.js:212"
+        "src/texture/template-controller.js:265"
       ]
     },
     {
@@ -1570,7 +1639,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:153"
+        "src/index.html:158"
       ]
     },
     {
@@ -1581,7 +1650,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:283"
+        "src/index.html:289"
       ]
     },
     {
@@ -1592,12 +1661,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:537",
-        "src/index.html:598",
-        "src/index.html:618",
-        "src/index.html:635",
-        "src/index.html:638",
-        "src/project/tabs-controller.js:198"
+        "src/index.html:549",
+        "src/index.html:611",
+        "src/index.html:631",
+        "src/index.html:664",
+        "src/index.html:667",
+        "src/index.html:81",
+        "src/project/tabs-controller.js:199"
       ]
     },
     {
@@ -1608,18 +1678,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:565"
+        "src/index.html:578"
       ]
     },
     {
       "key": "ui.close-application",
       "zhHant": "關閉軟體",
-      "zhHans": "关闭軟体",
+      "zhHans": "关闭软体",
       "en": "Close application",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:451"
+        "src/index.html:462"
       ]
     },
     {
@@ -1630,7 +1700,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/project/tabs-controller.js:369"
+        "src/project/tabs-controller.js:370"
       ]
     },
     {
@@ -1641,7 +1711,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/tabs-controller.js:198"
+        "src/project/tabs-controller.js:199"
       ]
     },
     {
@@ -1652,7 +1722,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:159"
+        "src/index.html:164"
       ]
     },
     {
@@ -1682,7 +1752,7 @@
       "englishMissing": false,
       "locations": [
         "src/screen/context-menus.js:123",
-        "src/screen/context-menus.js:358"
+        "src/screen/context-menus.js:374"
       ]
     },
     {
@@ -1713,7 +1783,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:166"
       ]
     },
     {
@@ -1753,7 +1823,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:600"
+        "src/index.html:613"
       ]
     },
     {
@@ -1764,7 +1834,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:598"
+        "src/index.html:611"
       ]
     },
     {
@@ -1775,7 +1845,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/palette/controller.js:492"
+        "src/screen/palette/controller.js:606"
       ]
     },
     {
@@ -1786,7 +1856,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:516"
+        "src/index.html:528"
       ]
     },
     {
@@ -1797,7 +1867,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:345"
+        "src/index.html:356"
       ]
     },
     {
@@ -1808,7 +1878,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:345"
+        "src/index.html:356"
       ]
     },
     {
@@ -1819,13 +1889,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:242"
+        "src/index.html:248"
       ]
     },
     {
       "key": "ui.confirm",
       "zhHant": "確認",
-      "zhHans": "確认",
+      "zhHans": "确认",
       "en": "Confirm",
       "dynamic": false,
       "englishMissing": false,
@@ -1836,12 +1906,12 @@
     {
       "key": "ui.confirm-and-close",
       "zhHant": "確認並關閉",
-      "zhHans": "確认并关闭",
+      "zhHans": "确认并关闭",
       "en": "Confirm and close",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:454"
+        "src/index.html:465"
       ]
     },
     {
@@ -1861,18 +1931,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:166"
       ]
     },
     {
       "key": "ui.continue-a-project-or-create-a-model-from-the-left",
       "zhHant": "繼續上次的工作，或從左側新建模型。",
-      "zhHans": "繼续上次的工作，或从左侧新建模型。",
+      "zhHans": "继续上次的工作，或从左侧新建模型。",
       "en": "Continue a project or create a model from the left.",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:87"
+        "src/index.html:92"
       ]
     },
     {
@@ -1892,35 +1962,35 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:481"
+        "src/screen/events-controller.js:514"
       ]
     },
     {
       "key": "ui.copied-payload-roots-length",
       "zhHant": "已複製 ${payload.roots.length} 項",
-      "zhHans": "已複制 ${payload.roots.length} 项",
+      "zhHans": "已复制 ${payload.roots.length} 项",
       "en": "Copied ${payload.roots.length} 項",
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:181"
+        "src/editor/element-commands.js:200"
       ]
     },
     {
       "key": "ui.copied-selection",
       "zhHant": "已複製選中項",
-      "zhHans": "已複制选中项",
+      "zhHans": "已复制选中项",
       "en": "Copied selection",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:181"
+        "src/editor/element-commands.js:200"
       ]
     },
     {
       "key": "ui.copy-count",
       "zhHant": "複製數量",
-      "zhHans": "複制数量",
+      "zhHans": "复制数量",
       "en": "Copy count",
       "dynamic": false,
       "englishMissing": false,
@@ -1932,7 +2002,7 @@
     {
       "key": "ui.copy-ctrl-c",
       "zhHant": "複製 Ctrl+C",
-      "zhHans": "複制 Ctrl+C",
+      "zhHans": "复制 Ctrl+C",
       "en": "Copy Ctrl+C",
       "dynamic": false,
       "englishMissing": false,
@@ -1943,7 +2013,7 @@
     {
       "key": "ui.copy-elements",
       "zhHant": "複製元素",
-      "zhHans": "複制元素",
+      "zhHans": "复制元素",
       "en": "Copy elements",
       "dynamic": false,
       "englishMissing": false,
@@ -1954,7 +2024,7 @@
     {
       "key": "ui.copy-elements-to-clipboard",
       "zhHant": "複製元素到剪貼簿",
-      "zhHans": "複制元素到剪贴簿",
+      "zhHans": "复制元素到剪贴簿",
       "en": "Copy elements to clipboard",
       "dynamic": false,
       "englishMissing": false,
@@ -1965,17 +2035,17 @@
     {
       "key": "ui.copy-pixels-off",
       "zhHant": "複製像素：關",
-      "zhHans": "複制像素：关",
+      "zhHans": "复制像素：关",
       "en": "Copy pixels: off",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:150"
+        "src/index.html:155"
       ]
     },
     {
       "zhHant": "複製像素：開",
-      "zhHans": "複制像素：开",
+      "zhHans": "复制像素：开",
       "en": "Copy pixels: on",
       "dynamic": false,
       "englishMissing": false,
@@ -1985,23 +2055,23 @@
     {
       "key": "ui.copy-texture",
       "zhHant": "複製貼圖",
-      "zhHans": "複制贴图",
+      "zhHans": "复制贴图",
       "en": "Copy texture",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:346"
+        "src/screen/context-menus.js:362"
       ]
     },
     {
       "key": "ui.copy-to-clipboard",
       "zhHant": "複製到剪切板",
-      "zhHans": "複制到剪切板",
+      "zhHans": "复制到剪切板",
       "en": "Copy to clipboard",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:638"
+        "src/index.html:667"
       ]
     },
     {
@@ -2012,7 +2082,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:524"
+        "src/index.html:536"
       ]
     },
     {
@@ -2067,7 +2137,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/app.js:939"
+        "src/app.js:966"
       ]
     },
     {
@@ -2140,7 +2210,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/webgl-renderer.js:1514"
+        "src/render/webgl-renderer.js:1533"
       ]
     },
     {
@@ -2177,7 +2247,7 @@
     {
       "key": "ui.could-not-scan-shape-packs",
       "zhHant": "Shape 包掃描失敗",
-      "zhHans": "Shape 包掃描失败",
+      "zhHans": "Shape 包扫描失败",
       "en": "Could not scan shape packs",
       "dynamic": false,
       "englishMissing": false,
@@ -2193,7 +2263,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:569"
+        "src/index.html:582"
       ]
     },
     {
@@ -2270,7 +2340,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/texture-pointer-controller.js:60"
+        "src/paint/texture-pointer-controller.js:136"
       ]
     },
     {
@@ -2290,7 +2360,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/layer-editor-dialog.js:84"
+        "src/texture/layer-editor-dialog.js:212"
       ]
     },
     {
@@ -2349,7 +2419,7 @@
     {
       "key": "ui.created-cache-relationcount-0",
       "zhHant": "已建立 ${cache.relationCount || 0} 組關聯",
-      "zhHans": "已建立 ${cache.relationCount || 0} 组关聯",
+      "zhHans": "已建立 ${cache.relationCount || 0} 组关联",
       "en": "Created ${cache.relationCount || 0} 組關聯",
       "dynamic": true,
       "englishMissing": false,
@@ -2376,7 +2446,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/texture/template-controller.js:330"
+        "src/texture/template-controller.js:426"
       ]
     },
     {
@@ -2398,18 +2468,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:53"
+        "src/editor/element-commands.js:68"
       ]
     },
     {
       "key": "ui.cube-appearance-animation",
       "zhHant": "Cube 出現動畫",
-      "zhHans": "Cube 出現动画",
+      "zhHans": "Cube 出现动画",
       "en": "Cube appearance animation",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:489"
+        "src/index.html:501"
       ]
     },
     {
@@ -2431,7 +2501,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:490"
+        "src/index.html:502"
       ]
     },
     {
@@ -2462,7 +2532,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:198"
+        "src/project/file-controller.js:199"
       ]
     },
     {
@@ -2473,7 +2543,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:460"
+        "src/index.html:471"
       ]
     },
     {
@@ -2504,7 +2574,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:278"
+        "src/index.html:284"
       ]
     },
     {
@@ -2516,7 +2586,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:94",
-        "src/screen/uv-preview-controller.js:333"
+        "src/screen/uv-preview-controller.js:346"
       ]
     },
     {
@@ -2527,7 +2597,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:559"
+        "src/index.html:571"
       ]
     },
     {
@@ -2538,7 +2608,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:239"
+        "src/index.html:245"
       ]
     },
     {
@@ -2558,7 +2628,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/uv-preview-controller.js:407"
+        "src/screen/uv-preview-controller.js:420"
       ]
     },
     {
@@ -2569,14 +2639,14 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:163",
-        "src/index.html:486"
+        "src/common/config/app-config.js:165",
+        "src/index.html:498"
       ]
     },
     {
       "key": "ui.current-changes-have-not-been-saved-to-the-working-journal",
       "zhHant": "目前變更尚未寫入工作記錄",
-      "zhHans": "当前变更尚未写入工作记錄",
+      "zhHans": "当前变更尚未写入工作记录",
       "en": "Current changes have not been saved to the working journal",
       "dynamic": false,
       "englishMissing": false,
@@ -2592,8 +2662,8 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:207",
-        "src/editor/tool-mode-controller.js:208"
+        "src/editor/tool-mode-controller.js:241",
+        "src/editor/tool-mode-controller.js:242"
       ]
     },
     {
@@ -2604,7 +2674,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:622"
+        "src/index.html:635"
       ]
     },
     {
@@ -2615,7 +2685,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:622"
+        "src/index.html:635"
       ]
     },
     {
@@ -2635,7 +2705,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:209"
+        "src/editor/tool-mode-controller.js:243"
       ]
     },
     {
@@ -2664,7 +2734,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:296"
+        "src/index.html:304"
       ]
     },
     {
@@ -2702,7 +2772,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:160"
+        "src/index.html:165"
       ]
     },
     {
@@ -2713,7 +2783,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:108"
+        "src/index.html:111"
       ]
     },
     {
@@ -2724,7 +2794,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:155"
+        "src/index.html:160"
       ]
     },
     {
@@ -2753,7 +2823,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:609"
+        "src/index.html:622"
       ]
     },
     {
@@ -2764,7 +2834,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:612"
+        "src/index.html:625"
       ]
     },
     {
@@ -2775,7 +2845,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/palette/controller.js:456"
+        "src/screen/palette/controller.js:570"
       ]
     },
     {
@@ -2833,7 +2903,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:270"
+        "src/editor/element-commands.js:289"
       ]
     },
     {
@@ -2899,7 +2969,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:270"
+        "src/editor/element-commands.js:289"
       ]
     },
     {
@@ -2911,7 +2981,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:114",
-        "src/screen/context-menus.js:347"
+        "src/screen/context-menus.js:363"
       ]
     },
     {
@@ -2933,7 +3003,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:260"
+        "src/screen/context-menus.js:193"
       ]
     },
     {
@@ -2953,7 +3023,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/uv-preview-controller.js:328"
+        "src/screen/uv-preview-controller.js:341"
       ]
     },
     {
@@ -2964,7 +3034,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/palette/controller.js:10"
+        "src/screen/palette/controller.js:11"
       ]
     },
     {
@@ -2975,7 +3045,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:510"
+        "src/index.html:522"
       ]
     },
     {
@@ -2986,7 +3056,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:512"
+        "src/index.html:524"
       ]
     },
     {
@@ -2997,7 +3067,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:511"
+        "src/index.html:523"
       ]
     },
     {
@@ -3008,7 +3078,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:498"
+        "src/index.html:510"
       ]
     },
     {
@@ -3019,20 +3089,20 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:510",
-        "src/index.html:511",
-        "src/index.html:512"
+        "src/index.html:522",
+        "src/index.html:523",
+        "src/index.html:524"
       ]
     },
     {
       "key": "ui.default-operation-history-limit",
       "zhHant": "預設操作歷史上限",
-      "zhHans": "预设操作歷史上限",
+      "zhHans": "预设操作历史上限",
       "en": "Default operation history limit",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:476"
+        "src/index.html:488"
       ]
     },
     {
@@ -3065,7 +3135,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:389"
+        "src/screen/context-menus.js:405"
       ]
     },
     {
@@ -3116,8 +3186,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:604",
-        "src/screen/context-menus.js:296"
+        "src/index.html:617",
+        "src/screen/context-menus.js:312"
       ]
     },
     {
@@ -3148,7 +3218,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:394",
+        "src/index.html:405",
         "src/screen/context-menus.js:165",
         "src/screen/inspector-controller.js:409"
       ]
@@ -3162,7 +3232,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:113",
-        "src/screen/context-menus.js:352"
+        "src/screen/context-menus.js:368"
       ]
     },
     {
@@ -3173,7 +3243,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:155"
+        "src/editor/element-commands.js:174"
       ]
     },
     {
@@ -3184,12 +3254,12 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:158"
+        "src/index.html:163"
       ]
     },
     {
       "zhHant": "詳",
-      "zhHans": "詳",
+      "zhHans": "详",
       "en": "Details",
       "dynamic": false,
       "englishMissing": false,
@@ -3198,7 +3268,7 @@
     },
     {
       "zhHant": "尺寸擬合",
-      "zhHans": "尺寸擬合",
+      "zhHans": "尺寸拟合",
       "en": "Dimension snapping",
       "dynamic": false,
       "englishMissing": false,
@@ -3222,7 +3292,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:149"
+        "src/index.html:154"
       ]
     },
     {
@@ -3233,7 +3303,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:394"
+        "src/screen/context-menus.js:410"
       ]
     },
     {
@@ -3264,8 +3334,8 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:615",
-        "src/editor/transform-interaction.js:667"
+        "src/editor/transform-interaction.js:692",
+        "src/editor/transform-interaction.js:744"
       ]
     },
     {
@@ -3276,7 +3346,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:620"
+        "src/editor/transform-interaction.js:697"
       ]
     },
     {
@@ -3287,7 +3357,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:632"
+        "src/editor/transform-interaction.js:709"
       ]
     },
     {
@@ -3298,7 +3368,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:688"
+        "src/editor/transform-interaction.js:765"
       ]
     },
     {
@@ -3320,7 +3390,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:244"
+        "src/index.html:250"
       ]
     },
     {
@@ -3342,7 +3412,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:531"
+        "src/index.html:543"
       ]
     },
     {
@@ -3371,7 +3441,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:877"
+        "src/editor/transform-interaction.js:954"
       ]
     },
     {
@@ -3382,7 +3452,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:604"
+        "src/editor/transform-interaction.js:681"
       ]
     },
     {
@@ -3393,7 +3463,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:311"
+        "src/editor/transform-interaction.js:324"
       ]
     },
     {
@@ -3404,7 +3474,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:793"
+        "src/editor/transform-interaction.js:870"
       ]
     },
     {
@@ -3457,7 +3527,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/template-controller.js:303"
+        "src/texture/template-controller.js:378"
       ]
     },
     {
@@ -3474,43 +3544,43 @@
     {
       "key": "ui.duplicate-elements-ctrl-d",
       "zhHant": "複製元素 Ctrl+D",
-      "zhHans": "複制元素 Ctrl+D",
+      "zhHans": "复制元素 Ctrl+D",
       "en": "Duplicate elements Ctrl+D",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
         "src/screen/context-menus.js:162",
-        "src/screen/context-menus.js:256",
-        "src/screen/context-menus.js:281"
+        "src/screen/context-menus.js:188",
+        "src/screen/context-menus.js:297"
       ]
     },
     {
       "key": "ui.duplicate-texture-in-place",
       "zhHant": "原地複製貼圖",
-      "zhHans": "原地複制贴图",
+      "zhHans": "原地复制贴图",
       "en": "Duplicate texture in place",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:116",
-        "src/screen/context-menus.js:349"
+        "src/screen/context-menus.js:365"
       ]
     },
     {
       "key": "ui.duplicated-selection-in-place",
       "zhHant": "已就地複製選中項",
-      "zhHans": "已就地複制选中项",
+      "zhHans": "已就地复制选中项",
       "en": "Duplicated selection in place",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:262"
+        "src/editor/element-commands.js:281"
       ]
     },
     {
       "key": "ui.each-side-of-the-cut-must-retain-at-least-two-nodes",
       "zhHant": "切割後兩端都必須至少保留兩個節點",
-      "zhHans": "切割后兩端都必须至少保留兩个节点",
+      "zhHans": "切割后两端都必须至少保留两个节点",
       "en": "Each side of the cut must retain at least two nodes",
       "dynamic": false,
       "englishMissing": false,
@@ -3520,7 +3590,7 @@
     },
     {
       "zhHant": "東",
-      "zhHans": "東",
+      "zhHans": "东",
       "en": "East",
       "dynamic": false,
       "englishMissing": false,
@@ -3557,13 +3627,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:174"
+        "src/index.html:179"
       ]
     },
     {
       "key": "ui.edit-3",
       "zhHant": "修改曲線包絡方向",
-      "zhHans": "修改曲线包絡方向",
+      "zhHans": "修改曲线包络方向",
       "en": "Edit 曲線包絡方向",
       "dynamic": false,
       "englishMissing": false,
@@ -3610,7 +3680,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:399"
+        "src/screen/context-menus.js:415"
       ]
     },
     {
@@ -3751,7 +3821,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:53"
+        "src/editor/tool-mode-controller.js:70"
       ]
     },
     {
@@ -3878,7 +3948,7 @@
     {
       "key": "ui.edit-tiled-texture-settings",
       "zhHant": "修改平鋪貼圖參數",
-      "zhHans": "修改平鋪贴图参数",
+      "zhHans": "修改平铺贴图参数",
       "en": "Edit tiled texture settings",
       "dynamic": false,
       "englishMissing": false,
@@ -3905,7 +3975,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:166"
       ]
     },
     {
@@ -3925,19 +3995,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:110",
-        "src/index.html:103"
-      ]
-    },
-    {
-      "key": "ui.ellipse-o",
-      "zhHant": "橢圓（O）",
-      "zhHans": "椭圆（O）",
-      "en": "Ellipse (O)",
-      "dynamic": false,
-      "englishMissing": false,
-      "locations": [
-        "src/index.html:103"
+        "src/editor/tool-mode-controller.js:129",
+        "src/editor/tool-mode-controller.js:133",
+        "src/index.html:148"
       ]
     },
     {
@@ -3957,7 +4017,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:527"
+        "src/index.html:539"
       ]
     },
     {
@@ -3968,7 +4028,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:394"
+        "src/screen/context-menus.js:410"
       ]
     },
     {
@@ -3979,7 +4039,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:393"
+        "src/screen/context-menus.js:409"
       ]
     },
     {
@@ -4008,7 +4068,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:499"
+        "src/index.html:511"
       ]
     },
     {
@@ -4019,7 +4079,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:242"
+        "src/index.html:248"
       ]
     },
     {
@@ -4039,7 +4099,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:561"
+        "src/index.html:573"
       ]
     },
     {
@@ -4081,8 +4141,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:48",
-        "src/index.html:255"
+        "src/editor/tool-mode-controller.js:65",
+        "src/index.html:261"
       ]
     },
     {
@@ -4093,7 +4153,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:154"
+        "src/index.html:159"
       ]
     },
     {
@@ -4104,7 +4164,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:154"
+        "src/index.html:159"
       ]
     },
     {
@@ -4133,7 +4193,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:117"
+        "src/index.html:120"
       ]
     },
     {
@@ -4144,7 +4204,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:117"
+        "src/index.html:120"
       ]
     },
     {
@@ -4155,7 +4215,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:612"
+        "src/index.html:625"
       ]
     },
     {
@@ -4195,9 +4255,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:414",
+        "src/index.html:425",
         "src/screen/context-menus.js:123",
-        "src/screen/context-menus.js:358"
+        "src/screen/context-menus.js:374"
       ]
     },
     {
@@ -4218,8 +4278,9 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:128",
-        "src/index.html:76",
-        "src/project/file-controller.js:201"
+        "src/index.html:354",
+        "src/index.html:67",
+        "src/project/file-controller.js:202"
       ]
     },
     {
@@ -4230,18 +4291,18 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:228"
+        "src/project/file-controller.js:229"
       ]
     },
     {
       "key": "ui.exported-bbmodel-format-selection-is-unavailable-in-this-browser",
       "zhHant": "已導出 .bbmodel（目前瀏覽器不支援格式選擇）",
-      "zhHans": "已导出 .bbmodel（当前瀏览器不支援格式选择）",
+      "zhHans": "已导出 .bbmodel（当前浏览器不支援格式选择）",
       "en": "Exported .bbmodel; format selection is unavailable in this browser",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:225"
+        "src/project/file-controller.js:226"
       ]
     },
     {
@@ -4252,7 +4313,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:209"
+        "src/project/file-controller.js:210"
       ]
     },
     {
@@ -4263,7 +4324,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:208"
+        "src/project/file-controller.js:209"
       ]
     },
     {
@@ -4274,7 +4335,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:222"
+        "src/project/file-controller.js:223"
       ]
     },
     {
@@ -4285,7 +4346,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:158"
+        "src/index.html:163"
       ]
     },
     {
@@ -4296,8 +4357,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:110",
-        "src/index.html:106"
+        "src/editor/tool-mode-controller.js:129",
+        "src/index.html:108"
       ]
     },
     {
@@ -4308,7 +4369,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:106"
+        "src/index.html:108"
       ]
     },
     {
@@ -4328,7 +4389,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:244"
+        "src/index.html:250"
       ]
     },
     {
@@ -4339,7 +4400,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:163"
+        "src/index.html:168"
       ]
     },
     {
@@ -4350,8 +4411,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:109",
-        "src/index.html:98"
+        "src/editor/tool-mode-controller.js:128",
+        "src/index.html:103"
       ]
     },
     {
@@ -4362,18 +4423,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:419"
+        "src/index.html:430"
       ]
     },
     {
       "key": "ui.failed-error-message",
       "zhHant": "工作目錄更改失敗：${error.message}",
-      "zhHans": "工作目錄更改失败：${error.message}",
+      "zhHans": "工作目录更改失败：${error.message}",
       "en": "工作目錄更改 failed: ${error.message}",
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:376"
+        "src/screen/events-controller.js:409"
       ]
     },
     {
@@ -4424,7 +4485,7 @@
     {
       "key": "ui.failed-error-message-14",
       "zhHant": "複製截圖失敗：${error.message}",
-      "zhHans": "複制截图失败：${error.message}",
+      "zhHans": "复制截图失败：${error.message}",
       "en": "複製截圖 failed: ${error.message}",
       "dynamic": true,
       "englishMissing": false,
@@ -4433,9 +4494,20 @@
       ]
     },
     {
+      "key": "ui.failed-error-message-15",
+      "zhHant": "匯入色卡失敗：${error.message}",
+      "zhHans": "汇入色卡失败：${error.message}",
+      "en": "匯入色卡 failed: ${error.message}",
+      "dynamic": true,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/controller.js:127"
+      ]
+    },
+    {
       "key": "ui.failed-error-message-16",
       "zhHant": "操作記錄失敗：${error.message}",
-      "zhHans": "操作记錄失败：${error.message}",
+      "zhHans": "操作记录失败：${error.message}",
       "en": "操作記錄 failed: ${error.message}",
       "dynamic": true,
       "englishMissing": false,
@@ -4451,7 +4523,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/project/tabs-controller.js:206"
+        "src/project/tabs-controller.js:207"
       ]
     },
     {
@@ -4462,18 +4534,40 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:112"
+        "src/screen/events-controller.js:113"
       ]
     },
     {
       "key": "ui.failed-error-message-19",
       "zhHant": "歷史裁剪失敗：${error.message}",
-      "zhHans": "歷史裁剪失败：${error.message}",
+      "zhHans": "历史裁剪失败：${error.message}",
       "en": "歷史裁剪 failed: ${error.message}",
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/project/tabs-controller.js:323"
+        "src/project/tabs-controller.js:324"
+      ]
+    },
+    {
+      "key": "ui.failed-error-message-2",
+      "zhHant": "色卡載入失敗：${error.message}",
+      "zhHans": "色卡载入失败：${error.message}",
+      "en": "色卡載入 failed: ${error.message}",
+      "dynamic": true,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/controller.js:78"
+      ]
+    },
+    {
+      "key": "ui.failed-error-message-20",
+      "zhHant": "導出色卡失敗：${error.message}",
+      "zhHans": "导出色卡失败：${error.message}",
+      "en": "導出色卡 failed: ${error.message}",
+      "dynamic": true,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/controller.js:104"
       ]
     },
     {
@@ -4523,7 +4617,7 @@
     {
       "key": "ui.failed-error-message-7",
       "zhHant": "空白工作目錄清理失敗：${error.message}",
-      "zhHans": "空白工作目錄清理失败：${error.message}",
+      "zhHans": "空白工作目录清理失败：${error.message}",
       "en": "空白工作目錄清理 failed: ${error.message}",
       "dynamic": true,
       "englishMissing": false,
@@ -4594,18 +4688,18 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/events-controller.js:92"
+        "src/screen/events-controller.js:93"
       ]
     },
     {
       "key": "ui.file-name-2",
       "zhHant": "無法取得 ${file.name} 的本機路徑",
-      "zhHans": "无法取得 ${file.name} 的本機路径",
+      "zhHans": "无法取得 ${file.name} 的本机路径",
       "en": "無法取得 ${file.name} 的本機路徑",
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/events-controller.js:84"
+        "src/screen/events-controller.js:85"
       ]
     },
     {
@@ -4616,8 +4710,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:110",
-        "src/index.html:104"
+        "src/editor/tool-mode-controller.js:129",
+        "src/index.html:106"
       ]
     },
     {
@@ -4628,7 +4722,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:555"
+        "src/index.html:567"
       ]
     },
     {
@@ -4639,7 +4733,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:104"
+        "src/index.html:106"
       ]
     },
     {
@@ -4650,7 +4744,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:166"
       ]
     },
     {
@@ -4693,7 +4787,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:166"
+        "src/index.html:171"
       ]
     },
     {
@@ -4704,7 +4798,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:165"
+        "src/index.html:170"
       ]
     },
     {
@@ -4715,7 +4809,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:124"
+        "src/index.html:127"
       ]
     },
     {
@@ -4726,7 +4820,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:125"
+        "src/index.html:128"
       ]
     },
     {
@@ -4737,8 +4831,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:269",
-        "src/index.html:333"
+        "src/index.html:341"
       ]
     },
     {
@@ -4749,9 +4842,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:252",
-        "src/screen/context-menus.js:273",
-        "src/screen/context-menus.js:420"
+        "src/screen/context-menus.js:183",
+        "src/screen/context-menus.js:289",
+        "src/screen/context-menus.js:436"
       ]
     },
     {
@@ -4762,7 +4855,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:245"
+        "src/index.html:251"
       ]
     },
     {
@@ -4774,7 +4867,7 @@
       "englishMissing": false,
       "locations": [
         "src/screen/context-menus.js:117",
-        "src/screen/context-menus.js:413",
+        "src/screen/context-menus.js:429",
         "src/screen/context-menus.js:97"
       ]
     },
@@ -4786,7 +4879,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:245"
+        "src/index.html:251"
       ]
     },
     {
@@ -4797,7 +4890,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:442"
+        "src/index.html:453"
       ]
     },
     {
@@ -4808,7 +4901,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:539",
+        "src/index.html:551",
         "src/screen/packs-controller.js:4"
       ]
     },
@@ -4820,7 +4913,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:385",
+        "src/index.html:396",
         "src/shapes/truncated-icosahedron.js:2"
       ]
     },
@@ -4832,7 +4925,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:864"
+        "src/editor/transform-interaction.js:941"
       ]
     },
     {
@@ -4843,7 +4936,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:140"
+        "src/index.html:143"
       ]
     },
     {
@@ -4865,7 +4958,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:149"
+        "src/index.html:154"
       ]
     },
     {
@@ -4876,7 +4969,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:145"
+        "src/editor/tool-mode-controller.js:140",
+        "src/index.html:150"
       ]
     },
     {
@@ -4896,7 +4990,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:328"
+        "src/index.html:336"
       ]
     },
     {
@@ -4907,7 +5001,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:621"
+        "src/index.html:634"
       ]
     },
     {
@@ -4918,7 +5012,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:621"
+        "src/index.html:634"
       ]
     },
     {
@@ -4929,8 +5023,19 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:518",
+        "src/index.html:530",
         "src/screen/packs-controller.js:6"
+      ]
+    },
+    {
+      "key": "ui.geckolib",
+      "zhHant": "GeckoLib 模型目前暫停新建",
+      "zhHans": "GeckoLib 模型当前暂停新建",
+      "en": "Creating GeckoLib models is temporarily unavailable",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/common/config/model-formats.js:126"
       ]
     },
     {
@@ -4941,7 +5046,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/model-formats.js:118"
+        "src/common/config/model-formats.js:120"
       ]
     },
     {
@@ -4953,8 +5058,8 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/layer-blend.js:2",
-        "src/index.html:464",
-        "src/index.html:471"
+        "src/index.html:475",
+        "src/index.html:482"
       ]
     },
     {
@@ -4985,7 +5090,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:260",
+        "src/index.html:266",
         "src/screen/reference-images.js:66"
       ]
     },
@@ -5017,7 +5122,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:590"
+        "src/index.html:603"
       ]
     },
     {
@@ -5048,7 +5153,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:413"
+        "src/index.html:424"
       ]
     },
     {
@@ -5059,7 +5164,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:601"
+        "src/index.html:614"
       ]
     },
     {
@@ -5070,7 +5175,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:111"
+        "src/index.html:114"
       ]
     },
     {
@@ -5081,7 +5186,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:172"
+        "src/index.html:177"
       ]
     },
     {
@@ -5092,7 +5197,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:111"
+        "src/index.html:114"
       ]
     },
     {
@@ -5103,8 +5208,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:110",
-        "src/index.html:105"
+        "src/editor/tool-mode-controller.js:129",
+        "src/index.html:107"
       ]
     },
     {
@@ -5126,7 +5231,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:166"
+        "src/index.html:171"
       ]
     },
     {
@@ -5137,7 +5242,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:105"
+        "src/index.html:107"
       ]
     },
     {
@@ -5148,7 +5253,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:288"
+        "src/index.html:296"
       ]
     },
     {
@@ -5159,7 +5264,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:168"
+        "src/index.html:173"
       ]
     },
     {
@@ -5170,8 +5275,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:612",
-        "src/screen/palette/controller.js:339"
+        "src/index.html:625",
+        "src/screen/palette/controller.js:454"
       ]
     },
     {
@@ -5191,12 +5296,12 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:192"
+        "src/index.html:197"
       ]
     },
     {
       "zhHant": "組",
-      "zhHans": "組",
+      "zhHans": "组",
       "en": "Group",
       "dynamic": false,
       "englishMissing": false,
@@ -5211,7 +5316,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:139"
+        "src/editor/element-commands.js:158"
       ]
     },
     {
@@ -5270,7 +5375,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:143",
-        "src/index.html:554"
+        "src/index.html:566"
       ]
     },
     {
@@ -5281,7 +5386,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:414",
+        "src/screen/context-menus.js:430",
         "src/screen/outliner-view.js:150"
       ]
     },
@@ -5293,7 +5398,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:264"
+        "src/screen/context-menus.js:197"
       ]
     },
     {
@@ -5322,7 +5427,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:259"
+        "src/screen/context-menus.js:192"
       ]
     },
     {
@@ -5367,7 +5472,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:600"
+        "src/index.html:613"
       ]
     },
     {
@@ -5378,7 +5483,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:600"
+        "src/index.html:613"
       ]
     },
     {
@@ -5389,7 +5494,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:418"
+        "src/index.html:429"
       ]
     },
     {
@@ -5406,7 +5511,7 @@
     {
       "key": "ui.image-editing-is-not-implemented-yet",
       "zhHant": "圖像編輯尚未實現",
-      "zhHans": "图像编辑尚未实現",
+      "zhHans": "图像编辑尚未实现",
       "en": "Image editing is not implemented yet",
       "dynamic": false,
       "englishMissing": false,
@@ -5422,7 +5527,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:191"
+        "src/index.html:196"
       ]
     },
     {
@@ -5433,7 +5538,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:372"
+        "src/screen/context-menus.js:388"
       ]
     },
     {
@@ -5444,7 +5549,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:496"
+        "src/index.html:508"
       ]
     },
     {
@@ -5455,7 +5560,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:582"
+        "src/index.html:595"
       ]
     },
     {
@@ -5477,7 +5582,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:263"
+        "src/index.html:269"
       ]
     },
     {
@@ -5489,7 +5594,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:112",
-        "src/index.html:191"
+        "src/index.html:196"
       ]
     },
     {
@@ -5539,6 +5644,17 @@
       ]
     },
     {
+      "key": "ui.incoming-length",
+      "zhHant": "已匯入 ${incoming.length} 行色卡",
+      "zhHans": "已汇入 ${incoming.length} 行色卡",
+      "en": "已匯入 ${incoming.length} 行色卡",
+      "dynamic": true,
+      "englishMissing": true,
+      "locations": [
+        "src/screen/palette/controller.js:126"
+      ]
+    },
+    {
       "key": "ui.index-1",
       "zhHant": "節點 ${index + 1}",
       "zhHans": "节点 ${index + 1}",
@@ -5546,7 +5662,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/context-menus.js:295",
+        "src/screen/context-menus.js:311",
         "src/screen/outliner-view.js:53"
       ]
     },
@@ -5558,7 +5674,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/palette/controller.js:103"
+        "src/screen/palette/controller.js:181"
       ]
     },
     {
@@ -5591,7 +5707,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:518"
+        "src/index.html:530"
       ]
     },
     {
@@ -5602,7 +5718,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:473"
+        "src/index.html:484"
       ]
     },
     {
@@ -5624,7 +5740,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:471"
+        "src/index.html:482"
       ]
     },
     {
@@ -5635,7 +5751,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:115"
+        "src/editor/transform-geometry.js:142"
       ]
     },
     {
@@ -5646,7 +5762,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/settings-controller.js:183"
+        "src/screen/settings-controller.js:184"
       ]
     },
     {
@@ -5657,7 +5773,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/scene-controller.js:314"
+        "src/paint/scene-controller.js:339"
       ]
     },
     {
@@ -5685,7 +5801,7 @@
     {
       "key": "ui.item-variant-envelope",
       "zhHant": "二維${item.variant === 'envelope' ? '包絡' : ''}貝塞爾",
-      "zhHans": "二维${item.variant === 'envelope' ? '包絡' : ''}贝塞尔",
+      "zhHans": "二维${item.variant === 'envelope' ? '包络' : ''}贝塞尔",
       "en": "二維${item.variant === 'envelope' ? '包絡' : ''}貝塞爾",
       "dynamic": true,
       "englishMissing": true,
@@ -5696,7 +5812,7 @@
     {
       "key": "ui.item-variant-envelope-2",
       "zhHant": "三維${item.variant === 'envelope' ? '包絡' : ''}貝塞爾",
-      "zhHans": "三维${item.variant === 'envelope' ? '包絡' : ''}贝塞尔",
+      "zhHans": "三维${item.variant === 'envelope' ? '包络' : ''}贝塞尔",
       "en": "三維${item.variant === 'envelope' ? '包絡' : ''}貝塞爾",
       "dynamic": true,
       "englishMissing": true,
@@ -5723,18 +5839,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:438"
-      ]
-    },
-    {
-      "key": "ui.keep-at-least-one-palette-row",
-      "zhHant": "至少保留一行色卡",
-      "zhHans": "至少保留一行色卡",
-      "en": "Keep at least one palette row",
-      "dynamic": false,
-      "englishMissing": false,
-      "locations": [
-        "src/screen/palette/controller.js:423"
+        "src/index.html:449"
       ]
     },
     {
@@ -5745,29 +5850,29 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:562"
+        "src/index.html:574"
       ]
     },
     {
       "key": "ui.keep-operation-history",
       "zhHant": "保留操作歷史",
-      "zhHans": "保留操作歷史",
+      "zhHans": "保留操作历史",
       "en": "Keep operation history",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:200"
+        "src/project/file-controller.js:201"
       ]
     },
     {
       "key": "ui.keep-original-pixels-and-duplicate-the-selection-on-the-next-transform",
       "zhHant": "保留原像素，下次變換時複製選中像素",
-      "zhHans": "保留原像素，下次变换时複制选中像素",
+      "zhHans": "保留原像素，下次变换时复制选中像素",
       "en": "Keep original pixels and duplicate the selection on the next transform",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:150"
+        "src/index.html:155"
       ]
     },
     {
@@ -5789,19 +5894,19 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:109",
-        "src/index.html:97"
+        "src/editor/tool-mode-controller.js:128",
+        "src/index.html:102"
       ]
     },
     {
       "key": "ui.language-font-and-shape-packs-are-stored-separately-but-share-add-reorder-and-remove-controls-shape",
       "zhHant": "語言、字體與 Shape 包分開存放，共用加入、排序和移除操作。Shape 包包含可執行的 JavaScript，請只安裝可信來源。",
-      "zhHans": "语言、字体与 Shape 包分开存放，共用加入、排序和移除操作。Shape 包包含可执行的 JavaScript，请只安裝可信来源。",
+      "zhHans": "语言、字体与 Shape 包分开存放，共用加入、排序和移除操作。Shape 包包含可执行的 JavaScript，请只安装可信来源。",
       "en": "Language, font and shape packs are stored separately but share add, reorder and remove controls. Shape packs execute JavaScript; install only trusted sources.",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:538"
+        "src/index.html:550"
       ]
     },
     {
@@ -5812,19 +5917,19 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:539",
+        "src/index.html:551",
         "src/screen/packs-controller.js:4"
       ]
     },
     {
       "key": "ui.large-projects-show-extraction-verification-and-loading-progress",
       "zhHant": "大型項目會顯示解壓、校驗和載入進度",
-      "zhHans": "大型项目会显示解壓、校驗和载入进度",
+      "zhHans": "大型项目会显示解压、校验和载入进度",
       "en": "Large projects show extraction, verification, and loading progress",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:577"
+        "src/index.html:590"
       ]
     },
     {
@@ -5835,8 +5940,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:401",
-        "src/index.html:629"
+        "src/index.html:412",
+        "src/index.html:658"
       ]
     },
     {
@@ -5847,7 +5952,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:618"
+        "src/index.html:631"
       ]
     },
     {
@@ -5876,7 +5981,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:563"
+        "src/index.html:576"
       ]
     },
     {
@@ -5887,7 +5992,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:170"
+        "src/index.html:175"
       ]
     },
     {
@@ -5898,7 +6003,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:183"
+        "src/index.html:188"
       ]
     },
     {
@@ -5909,7 +6014,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:330"
+        "src/index.html:338"
       ]
     },
     {
@@ -5920,7 +6025,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:163"
+        "src/index.html:168"
       ]
     },
     {
@@ -5931,7 +6036,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:162"
+        "src/index.html:167"
       ]
     },
     {
@@ -5942,7 +6047,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:162"
+        "src/index.html:167"
       ]
     },
     {
@@ -5962,19 +6067,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:110",
-        "src/index.html:101"
-      ]
-    },
-    {
-      "key": "ui.line-l",
-      "zhHant": "直線（L）",
-      "zhHans": "直线（L）",
-      "en": "Line (L)",
-      "dynamic": false,
-      "englishMissing": false,
-      "locations": [
-        "src/index.html:101"
+        "src/editor/tool-mode-controller.js:129",
+        "src/editor/tool-mode-controller.js:133",
+        "src/index.html:148"
       ]
     },
     {
@@ -5985,7 +6080,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:479"
+        "src/index.html:491"
       ]
     },
     {
@@ -6007,13 +6102,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:113"
+        "src/index.html:116"
       ]
     },
     {
       "key": "ui.local-pack-management-is-available-in-the-desktop-app",
       "zhHant": "本機包管理只在桌面版提供",
-      "zhHans": "本機包管理只在桌面版提供",
+      "zhHans": "本机包管理只在桌面版提供",
       "en": "Local pack management is available in the desktop app.",
       "dynamic": false,
       "englishMissing": false,
@@ -6023,7 +6118,7 @@
     },
     {
       "zhHant": "本機工作項目只在桌面版顯示。",
-      "zhHans": "本機工作项目只在桌面版显示。",
+      "zhHans": "本机工作项目只在桌面版显示。",
       "en": "Local projects are available in the desktop app.",
       "dynamic": false,
       "englishMissing": false,
@@ -6038,7 +6133,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:115"
+        "src/index.html:118"
       ]
     },
     {
@@ -6049,7 +6144,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:113"
+        "src/index.html:116"
       ]
     },
     {
@@ -6060,7 +6155,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:77"
+        "src/editor/element-commands.js:94"
       ]
     },
     {
@@ -6071,7 +6166,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:289"
+        "src/index.html:297"
       ]
     },
     {
@@ -6091,7 +6186,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:478"
+        "src/index.html:490"
       ]
     },
     {
@@ -6126,7 +6221,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:139"
+        "src/index.html:142"
       ]
     },
     {
@@ -6137,7 +6232,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:139"
+        "src/index.html:142"
       ]
     },
     {
@@ -6148,7 +6243,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:67"
+        "src/index.html:71"
       ]
     },
     {
@@ -6159,7 +6254,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:474"
+        "src/index.html:485"
       ]
     },
     {
@@ -6170,7 +6265,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:474"
+        "src/index.html:485"
       ]
     },
     {
@@ -6192,6 +6287,448 @@
       "key": "ui.material-color"
     },
     {
+      "key": "ui.message",
+      "zhHant": "工作記錄尚未寫入，請稍後重試",
+      "zhHans": "工作记录尚未写入，请稍后重试",
+      "en": "The work journal has not been written yet; try again shortly",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/project/file-controller.js:174"
+      ]
+    },
+    {
+      "key": "ui.message-10",
+      "zhHant": "色卡保存失敗",
+      "zhHans": "色卡保存失败",
+      "en": "Could not save the palette",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/controller.js:37"
+      ]
+    },
+    {
+      "key": "ui.message-11",
+      "zhHant": "色卡檔案格式或數量無效",
+      "zhHans": "色卡档案格式或数量无效",
+      "en": "Invalid color-map format or number of palettes",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/color-map-file.js:18"
+      ]
+    },
+    {
+      "key": "ui.message-12",
+      "zhHant": "色階映射",
+      "zhHans": "色阶映射",
+      "en": "Gradient mapping",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/common/core/layer-blend.js:11"
+      ]
+    },
+    {
+      "key": "ui.message-13",
+      "zhHant": "取來源亮度與透明度作蒙版；來源隱藏時仍生效。",
+      "zhHans": "取来源亮度与透明度作蒙版；来源隐藏时仍生效。",
+      "en": "Use source brightness and alpha as the mask; it remains active when the source is hidden.",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:642"
+      ]
+    },
+    {
+      "key": "ui.message-14",
+      "zhHant": "保留圖層結構",
+      "zhHans": "保留图层结构",
+      "en": "Preserve layer structure",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:575"
+      ]
+    },
+    {
+      "key": "ui.message-15",
+      "zhHant": "指定基礎色與灰度",
+      "zhHans": "指定基础色与灰度",
+      "en": "Set base color and gray level",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:646"
+      ]
+    },
+    {
+      "key": "ui.message-16",
+      "zhHant": "指定基礎位置與灰度",
+      "zhHans": "指定基础位置与灰度",
+      "en": "Set base position and gray level",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:651"
+      ]
+    },
+    {
+      "key": "ui.message-17",
+      "zhHant": "基礎灰度 %",
+      "zhHans": "基础灰度 %",
+      "en": "Base gray level %",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:654"
+      ]
+    },
+    {
+      "key": "ui.message-18",
+      "zhHant": "基礎色",
+      "zhHans": "基础色",
+      "en": "Base color",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:647"
+      ]
+    },
+    {
+      "key": "ui.message-19",
+      "zhHant": "基礎色卡位置 %",
+      "zhHans": "基础色卡位置 %",
+      "en": "Base palette position %",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:652"
+      ]
+    },
+    {
+      "key": "ui.message-2",
+      "zhHant": "工作項目已保留在項目資料夾",
+      "zhHans": "工作项目已保留在项目资料夹",
+      "en": "Work project retained in the project folder",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/project/file-controller.js:178"
+      ]
+    },
+    {
+      "key": "ui.message-20",
+      "zhHant": "視窗控制",
+      "zhHans": "视窗控制",
+      "en": "Window controls",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:78"
+      ]
+    },
+    {
+      "key": "ui.message-21",
+      "zhHant": "最大化",
+      "zhHans": "最大化",
+      "en": "Maximize",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/app.js:934",
+        "src/index.html:80"
+      ]
+    },
+    {
+      "key": "ui.message-22",
+      "zhHant": "最小化",
+      "zhHans": "最小化",
+      "en": "Minimize",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:79"
+      ]
+    },
+    {
+      "key": "ui.message-23",
+      "zhHant": "無蒙版",
+      "zhHans": "无蒙版",
+      "en": "No mask",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/layer-editor-dialog.js:117"
+      ]
+    },
+    {
+      "key": "ui.message-24",
+      "zhHant": "匯入",
+      "zhHans": "汇入",
+      "en": "Import",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:353"
+      ]
+    },
+    {
+      "key": "ui.message-25",
+      "zhHant": "匯入檔案沒有色卡",
+      "zhHans": "汇入档案没有色卡",
+      "en": "The imported file contains no palettes",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/color-map-file.js:83"
+      ]
+    },
+    {
+      "key": "ui.message-26",
+      "zhHant": "填充內部",
+      "zhHans": "填充内部",
+      "en": "Fill interior",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:149"
+      ]
+    },
+    {
+      "key": "ui.message-27",
+      "zhHant": "填滿矩形或橢圓內部",
+      "zhHans": "填满矩形或椭圆内部",
+      "en": "Fill the inside of a rectangle or ellipse",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:149"
+      ]
+    },
+    {
+      "key": "ui.message-28",
+      "zhHant": "源色卡",
+      "zhHans": "源色卡",
+      "en": "Source palette",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:644"
+      ]
+    },
+    {
+      "key": "ui.message-29",
+      "zhHant": "圖形",
+      "zhHans": "图形",
+      "en": "Shape",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:148"
+      ]
+    },
+    {
+      "key": "ui.message-3",
+      "zhHant": "已移除的色卡（使用保存的顏色）",
+      "zhHans": "已移除的色卡（使用保存的颜色）",
+      "en": "Removed palette (using saved colors)",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/layer-editor-dialog.js:57"
+      ]
+    },
+    {
+      "key": "ui.message-30",
+      "zhHant": "圖形繪製",
+      "zhHans": "图形绘制",
+      "en": "Shape drawing",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:105"
+      ]
+    },
+    {
+      "key": "ui.message-31",
+      "zhHant": "圖形繪製（目前：直線）",
+      "zhHans": "图形绘制（当前：直线）",
+      "en": "Shape drawing (current: line)",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:105"
+      ]
+    },
+    {
+      "key": "ui.message-32",
+      "zhHant": "蒙版來源",
+      "zhHans": "蒙版来源",
+      "en": "Mask source",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:642"
+      ]
+    },
+    {
+      "key": "ui.message-33",
+      "zhHant": "模板底圖",
+      "zhHans": "模板底图",
+      "en": "Template base layer",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/template-controller.js:384"
+      ]
+    },
+    {
+      "key": "ui.message-34",
+      "zhHant": "請先建立有顏色的色卡",
+      "zhHans": "请先建立有颜色的色卡",
+      "en": "Create a palette with colors first",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/layer-editor-dialog.js:87"
+      ]
+    },
+    {
+      "key": "ui.message-35",
+      "zhHant": "請先選擇色卡",
+      "zhHans": "请先选择色卡",
+      "en": "Select a palette first",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/color-map-file.js:70",
+        "src/screen/palette/controller.js:90"
+      ]
+    },
+    {
+      "key": "ui.message-36",
+      "zhHant": "還原視窗",
+      "zhHans": "还原视窗",
+      "en": "Restore window",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/app.js:934"
+      ]
+    },
+    {
+      "key": "ui.message-37",
+      "zhHant": "瀏覽器預覽無法保留工作目錄，請使用導出",
+      "zhHans": "浏览器预览无法保留工作目录，请使用导出",
+      "en": "Browser preview cannot retain the work folder; use Export",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/project/file-controller.js:168"
+      ]
+    },
+    {
+      "key": "ui.message-38",
+      "zhHant": "顯示設置",
+      "zhHans": "显示设置",
+      "en": "Display settings",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/editor/tool-mode-controller.js:65"
+      ]
+    },
+    {
+      "key": "ui.message-39",
+      "zhHant": "顯示設置 · 即將推出",
+      "zhHans": "显示设置 · 即将推出",
+      "en": "Display settings · Coming Soon",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:292"
+      ]
+    },
+    {
+      "key": "ui.message-4",
+      "zhHant": "左側對應亮部，右側對應暗部。原始像素與透明度不會被修改。",
+      "zhHans": "左侧对应亮部，右侧对应暗部。原始像素与透明度不会被修改。",
+      "en": "The left maps to highlights and the right to shadows. Original pixels and alpha remain unchanged.",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:655"
+      ]
+    },
+    {
+      "key": "ui.message-40",
+      "zhHant": "顯示設置（開發中）",
+      "zhHans": "显示设置（开发中）",
+      "en": "Display settings (in development)",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/editor/tool-mode-controller.js:70"
+      ]
+    },
+    {
+      "key": "ui.message-5",
+      "zhHant": "正在保存重排後的圖層…",
+      "zhHans": "正在保存重排后的图层…",
+      "en": "Saving the rearranged layers…",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/template-controller.js:381"
+      ]
+    },
+    {
+      "key": "ui.message-6",
+      "zhHant": "皮膚模型目前暫停新建",
+      "zhHans": "皮肤模型当前暂停新建",
+      "en": "Creating skin models is temporarily unavailable",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/common/config/model-formats.js:112"
+      ]
+    },
+    {
+      "key": "ui.message-7",
+      "zhHant": "色卡已導出",
+      "zhHans": "色卡已导出",
+      "en": "Palette exported",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/controller.js:95"
+      ]
+    },
+    {
+      "key": "ui.message-8",
+      "zhHant": "色卡分段數",
+      "zhHans": "色卡分段数",
+      "en": "Palette steps",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:650"
+      ]
+    },
+    {
+      "key": "ui.message-9",
+      "zhHant": "色卡名稱或顏色資料無效",
+      "zhHans": "色卡名称或颜色资料无效",
+      "en": "Invalid palette name or color data",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/palette/color-map-file.js:22"
+      ]
+    },
+    {
       "key": "ui.middle-mouse",
       "zhHant": "中鍵",
       "zhHans": "中键",
@@ -6199,7 +6736,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:333"
+        "src/index.html:341"
       ]
     },
     {
@@ -6294,7 +6831,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:237"
+        "src/index.html:243"
       ]
     },
     {
@@ -6314,7 +6851,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:292"
+        "src/index.html:300"
       ]
     },
     {
@@ -6325,7 +6862,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:238"
+        "src/index.html:244"
       ]
     },
     {
@@ -6358,7 +6895,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:163"
+        "src/index.html:168"
       ]
     },
     {
@@ -6380,13 +6917,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:410"
+        "src/index.html:421"
       ]
     },
     {
       "key": "ui.model-capture-copied-to-clipboard",
       "zhHant": "模型截圖已複製到剪切板",
-      "zhHans": "模型截图已複制到剪切板",
+      "zhHans": "模型截图已复制到剪切板",
       "en": "Model capture copied to clipboard",
       "dynamic": false,
       "englishMissing": false,
@@ -6425,7 +6962,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:437"
+        "src/index.html:448"
       ]
     },
     {
@@ -6445,7 +6982,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:232"
+        "src/screen/context-menus.js:262"
       ]
     },
     {
@@ -6456,7 +6993,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:116"
+        "src/editor/transform-geometry.js:143"
       ]
     },
     {
@@ -6489,8 +7026,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:527",
-        "src/screen/palette/controller.js:9"
+        "src/index.html:539",
+        "src/screen/palette/controller.js:10"
       ]
     },
     {
@@ -6501,10 +7038,10 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:109",
-        "src/index.html:128",
-        "src/index.html:148",
-        "src/index.html:92"
+        "src/editor/tool-mode-controller.js:128",
+        "src/index.html:131",
+        "src/index.html:153",
+        "src/index.html:97"
       ]
     },
     {
@@ -6537,7 +7074,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:192"
+        "src/screen/context-menus.js:220"
       ]
     },
     {
@@ -6581,8 +7118,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:109",
-        "src/index.html:95"
+        "src/editor/tool-mode-controller.js:128",
+        "src/index.html:100"
       ]
     },
     {
@@ -6624,7 +7161,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:128"
+        "src/index.html:131"
       ]
     },
     {
@@ -6635,7 +7172,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:194"
+        "src/screen/context-menus.js:222"
       ]
     },
     {
@@ -6646,7 +7183,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:350"
+        "src/screen/context-menus.js:366"
       ]
     },
     {
@@ -6657,7 +7194,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:193"
+        "src/screen/context-menus.js:221"
       ]
     },
     {
@@ -6679,7 +7216,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:191"
+        "src/screen/context-menus.js:219"
       ]
     },
     {
@@ -6701,7 +7238,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:184"
+        "src/editor/transform-geometry.js:211"
       ]
     },
     {
@@ -6712,7 +7249,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:185"
+        "src/editor/transform-geometry.js:212"
       ]
     },
     {
@@ -6723,7 +7260,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:119"
+        "src/index.html:122"
       ]
     },
     {
@@ -6734,9 +7271,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:141",
         "src/common/config/app-config.js:143",
-        "src/common/config/app-config.js:145"
+        "src/common/config/app-config.js:145",
+        "src/common/config/app-config.js:147"
       ]
     },
     {
@@ -6759,7 +7296,8 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:126",
-        "src/index.html:551"
+        "src/index.html:563",
+        "src/index.html:639"
       ]
     },
     {
@@ -6770,7 +7308,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:416"
+        "src/index.html:427"
       ]
     },
     {
@@ -6781,7 +7319,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:68"
+        "src/index.html:72"
       ]
     },
     {
@@ -6792,7 +7330,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:86"
+        "src/index.html:91"
       ]
     },
     {
@@ -6803,8 +7341,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:425",
-        "src/index.html:82"
+        "src/index.html:436",
+        "src/index.html:87"
       ]
     },
     {
@@ -6815,8 +7353,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:190",
-        "src/index.html:548"
+        "src/index.html:195",
+        "src/index.html:560"
       ]
     },
     {
@@ -6827,7 +7365,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:190"
+        "src/index.html:195"
       ]
     },
     {
@@ -6838,9 +7376,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:235",
-        "src/screen/uv-preview-controller.js:159",
-        "src/screen/uv-preview-controller.js:318"
+        "src/index.html:241",
+        "src/screen/uv-preview-controller.js:172",
+        "src/screen/uv-preview-controller.js:331"
       ]
     },
     {
@@ -6851,8 +7389,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:625",
-        "src/texture/layer-editor-dialog.js:33"
+        "src/index.html:638",
+        "src/texture/layer-editor-dialog.js:109"
       ]
     },
     {
@@ -6896,12 +7434,12 @@
     {
       "key": "ui.no-selected-item-to-copy",
       "zhHant": "沒有可複製的選中項",
-      "zhHans": "没有可複制的选中项",
+      "zhHans": "没有可复制的选中项",
       "en": "No selected item to copy",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:247"
+        "src/editor/element-commands.js:266"
       ]
     },
     {
@@ -6912,7 +7450,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:212"
+        "src/index.html:218"
       ]
     },
     {
@@ -6923,7 +7461,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/texture/atlas-controller.js:263"
+        "src/texture/atlas-controller.js:275"
       ]
     },
     {
@@ -6934,7 +7472,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:603"
+        "src/index.html:616"
       ]
     },
     {
@@ -6977,9 +7515,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:201",
-        "src/index.html:312",
-        "src/index.html:313"
+        "src/editor/tool-mode-controller.js:235",
+        "src/index.html:320",
+        "src/index.html:321"
       ]
     },
     {
@@ -7037,7 +7575,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:261",
+        "src/index.html:267",
         "src/screen/reference-images.js:68"
       ]
     },
@@ -7071,7 +7609,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:155"
+        "src/editor/element-commands.js:174"
       ]
     },
     {
@@ -7082,8 +7620,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:357",
-        "src/index.html:365",
+        "src/index.html:368",
+        "src/index.html:376",
         "src/screen/inspector-controller.js:289"
       ]
     },
@@ -7095,7 +7633,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:174"
+        "src/screen/context-menus.js:180"
       ]
     },
     {
@@ -7112,12 +7650,12 @@
     {
       "key": "ui.only-models-created-this-session-are-listed-select-tabs-to-restore-next-time-clearing-a-tab-deletes",
       "zhHant": "以下僅列出本次啟動新建的模型。勾選下次要恢復的分頁；取消勾選會刪除該項目的本機工作記錄，不會刪除已保存的模型檔。原有模型會自動保留。",
-      "zhHans": "以下仅列出本次启动新建的模型。勾选下次要恢复的分页；取消勾选会删除該项目的本機工作记錄，不会删除已保存的模型档。原有模型会自动保留。",
+      "zhHans": "以下仅列出本次启动新建的模型。勾选下次要恢复的分页；取消勾选会删除该项目的本机工作记录，不会删除已保存的模型档。原有模型会自动保留。",
       "en": "Only models created this session are listed. Select tabs to restore next time; clearing a tab deletes its local working record, not the saved model file. Existing models are kept automatically.",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:452"
+        "src/index.html:463"
       ]
     },
     {
@@ -7128,8 +7666,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:160",
-        "src/index.html:626"
+        "src/index.html:165",
+        "src/index.html:640"
       ]
     },
     {
@@ -7149,7 +7687,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:69"
+        "src/index.html:73"
       ]
     },
     {
@@ -7171,7 +7709,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:371"
+        "src/screen/context-menus.js:387"
       ]
     },
     {
@@ -7182,7 +7720,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:93"
+        "src/screen/events-controller.js:94"
       ]
     },
     {
@@ -7204,18 +7742,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:574"
+        "src/index.html:587"
       ]
     },
     {
       "key": "ui.operation-history-limit",
       "zhHant": "操作歷史上限",
-      "zhHans": "操作歷史上限",
+      "zhHans": "操作历史上限",
       "en": "Operation history limit",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:442"
+        "src/index.html:453"
       ]
     },
     {
@@ -7237,7 +7775,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:333"
+        "src/index.html:341"
       ]
     },
     {
@@ -7248,9 +7786,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:153",
-        "src/index.html:253",
-        "src/index.html:485"
+        "src/common/config/app-config.js:155",
+        "src/index.html:259",
+        "src/index.html:497"
       ]
     },
     {
@@ -7274,7 +7812,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:375"
+        "src/index.html:386"
       ]
     },
     {
@@ -7314,7 +7852,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/template-controller.js:273"
+        "src/texture/template-controller.js:326"
       ]
     },
     {
@@ -7325,7 +7863,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:563"
+        "src/index.html:576"
       ]
     },
     {
@@ -7336,7 +7874,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:564"
+        "src/index.html:577"
       ]
     },
     {
@@ -7347,7 +7885,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:176"
+        "src/index.html:181"
       ]
     },
     {
@@ -7358,7 +7896,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:159"
+        "src/index.html:164"
       ]
     },
     {
@@ -7400,7 +7938,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:502"
+        "src/index.html:514"
       ]
     },
     {
@@ -7411,7 +7949,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:502"
+        "src/index.html:514"
       ]
     },
     {
@@ -7422,7 +7960,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:53"
+        "src/editor/tool-mode-controller.js:70"
       ]
     },
     {
@@ -7433,8 +7971,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:110",
-        "src/index.html:100"
+        "src/editor/tool-mode-controller.js:129",
+        "src/index.html:109"
       ]
     },
     {
@@ -7467,7 +8005,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:339"
+        "src/index.html:347"
       ]
     },
     {
@@ -7478,7 +8016,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:348"
+        "src/index.html:359"
       ]
     },
     {
@@ -7489,8 +8027,19 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/palette/controller.js:103",
-        "src/screen/palette/controller.js:113"
+        "src/screen/palette/controller.js:181",
+        "src/screen/palette/controller.js:191"
+      ]
+    },
+    {
+      "key": "ui.paletterows-length-1",
+      "zhHant": "匯入色卡 ${paletteRows.length + 1}",
+      "zhHans": "汇入色卡 ${paletteRows.length + 1}",
+      "en": "匯入色卡 ${paletteRows.length + 1}",
+      "dynamic": true,
+      "englishMissing": true,
+      "locations": [
+        "src/screen/palette/controller.js:111"
       ]
     },
     {
@@ -7501,7 +8050,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/palette/controller.js:313"
+        "src/screen/palette/controller.js:428"
       ]
     },
     {
@@ -7512,7 +8061,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:333"
+        "src/index.html:341"
       ]
     },
     {
@@ -7523,7 +8072,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:521"
+        "src/index.html:533"
       ]
     },
     {
@@ -7534,7 +8083,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:112"
+        "src/index.html:115"
       ]
     },
     {
@@ -7545,7 +8094,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:112"
+        "src/index.html:115"
       ]
     },
     {
@@ -7557,8 +8106,8 @@
       "englishMissing": false,
       "locations": [
         "src/screen/context-menus.js:161",
-        "src/screen/context-menus.js:255",
-        "src/screen/context-menus.js:280"
+        "src/screen/context-menus.js:187",
+        "src/screen/context-menus.js:296"
       ]
     },
     {
@@ -7581,8 +8130,8 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:115",
-        "src/screen/context-menus.js:348",
-        "src/screen/context-menus.js:367"
+        "src/screen/context-menus.js:364",
+        "src/screen/context-menus.js:383"
       ]
     },
     {
@@ -7593,13 +8142,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:262"
+        "src/editor/element-commands.js:281"
       ]
     },
     {
       "key": "ui.pending-length",
       "zhHant": "找到 ${pending.length} 個未保存的工作項目。要全部恢復到分頁嗎？",
-      "zhHans": "找到 ${pending.length} 个未保存的工作项目。要全部恢复到分页嗎？",
+      "zhHans": "找到 ${pending.length} 个未保存的工作项目。要全部恢复到分页吗？",
       "en": "找到 ${pending.length} 個未保存的工作項目。要全部恢復到分頁嗎？",
       "dynamic": true,
       "englishMissing": true,
@@ -7624,10 +8173,10 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:153",
-        "src/index.html:253",
-        "src/index.html:485",
-        "src/index.html:602"
+        "src/common/config/app-config.js:155",
+        "src/index.html:259",
+        "src/index.html:497",
+        "src/index.html:615"
       ]
     },
     {
@@ -7649,7 +8198,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:140"
+        "src/index.html:143"
       ]
     },
     {
@@ -7660,18 +8209,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:415"
-      ]
-    },
-    {
-      "key": "ui.pixel-transform",
-      "zhHant": "像素變換",
-      "zhHans": "像素变换",
-      "en": "Pixel transform",
-      "dynamic": false,
-      "englishMissing": false,
-      "locations": [
-        "src/index.html:145"
+        "src/index.html:426"
       ]
     },
     {
@@ -7691,7 +8229,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:412"
+        "src/index.html:423"
       ]
     },
     {
@@ -7702,8 +8240,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:494",
-        "src/index.html:495"
+        "src/index.html:506",
+        "src/index.html:507"
       ]
     },
     {
@@ -7747,8 +8285,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/scene-controller.js:689",
-        "src/paint/scene-controller.js:721"
+        "src/paint/scene-controller.js:761",
+        "src/paint/scene-controller.js:793"
       ]
     },
     {
@@ -7759,7 +8297,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/stroke-controller.js:513"
+        "src/paint/stroke-controller.js:575"
       ]
     },
     {
@@ -7770,7 +8308,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/stroke-controller.js:518"
+        "src/paint/stroke-controller.js:580"
       ]
     },
     {
@@ -7781,7 +8319,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/stroke-controller.js:535"
+        "src/paint/stroke-controller.js:597"
       ]
     },
     {
@@ -7792,7 +8330,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:501"
+        "src/index.html:513"
       ]
     },
     {
@@ -7803,13 +8341,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:500"
+        "src/index.html:512"
       ]
     },
     {
       "key": "ui.polygon-editing-is-not-implemented-yet",
       "zhHant": "多面體編輯尚未實現",
-      "zhHans": "多面体编辑尚未实現",
+      "zhHans": "多面体编辑尚未实现",
       "en": "Polygon editing is not implemented yet",
       "dynamic": false,
       "englishMissing": false,
@@ -7825,7 +8363,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:383",
+        "src/index.html:394",
         "src/shapes/polygon-prism.js:2"
       ]
     },
@@ -7837,7 +8375,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:116"
+        "src/index.html:119"
       ]
     },
     {
@@ -7848,7 +8386,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:116"
+        "src/index.html:119"
       ]
     },
     {
@@ -7865,7 +8403,7 @@
     {
       "key": "ui.precise-rotation",
       "zhHant": "精確旋轉",
-      "zhHans": "精確旋转",
+      "zhHans": "精确旋转",
       "en": "Precise rotation",
       "dynamic": false,
       "englishMissing": false,
@@ -7876,23 +8414,23 @@
     {
       "key": "ui.preparing-facecount",
       "zhHant": "正在準備 ${faceCount} 個面…",
-      "zhHans": "正在准備 ${faceCount} 个面…",
+      "zhHans": "正在准备 ${faceCount} 个面…",
       "en": "Preparing ${faceCount} 個面…",
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/texture/template-controller.js:217"
+        "src/texture/template-controller.js:270"
       ]
     },
     {
       "key": "ui.preparing-uvs",
       "zhHant": "正在準備 UV…",
-      "zhHans": "正在准備 UV…",
+      "zhHans": "正在准备 UV…",
       "en": "Preparing UVs…",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:591"
+        "src/index.html:604"
       ]
     },
     {
@@ -7903,7 +8441,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:417"
+        "src/index.html:428"
       ]
     },
     {
@@ -7914,7 +8452,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:562"
+        "src/index.html:574"
       ]
     },
     {
@@ -7956,7 +8494,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/uv-preview-controller.js:412"
+        "src/screen/uv-preview-controller.js:425"
       ]
     },
     {
@@ -7967,7 +8505,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:171"
+        "src/editor/tool-mode-controller.js:205"
       ]
     },
     {
@@ -7996,7 +8534,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:593"
+        "src/index.html:606"
       ]
     },
     {
@@ -8007,7 +8545,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:443"
+        "src/index.html:454"
       ]
     },
     {
@@ -8018,7 +8556,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:85",
+        "src/index.html:90",
         "src/project/tabs-controller.js:117"
       ]
     },
@@ -8030,7 +8568,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:433"
+        "src/index.html:444"
       ]
     },
     {
@@ -8041,7 +8579,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/tabs-controller.js:307"
+        "src/project/tabs-controller.js:308"
       ]
     },
     {
@@ -8052,7 +8590,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:436"
+        "src/index.html:447"
       ]
     },
     {
@@ -8065,17 +8603,6 @@
       "key": "ui.project-ready"
     },
     {
-      "key": "ui.project-saved",
-      "zhHant": "項目已保存",
-      "zhHans": "项目已保存",
-      "en": "Project saved",
-      "dynamic": false,
-      "englishMissing": false,
-      "locations": [
-        "src/project/file-controller.js:177"
-      ]
-    },
-    {
       "key": "ui.project-tabs",
       "zhHant": "項目分頁",
       "zhHans": "项目分页",
@@ -8083,23 +8610,23 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:80"
+        "src/index.html:85"
       ]
     },
     {
       "key": "ui.projects-and-each-pack-type-are-stored-separately-install-only-trusted-shape-js-packs",
       "zhHant": "projects/、shapepacks/、languagepacks/、fontpacks/ 分開保存；僅安裝可信的 Shape JS 包",
-      "zhHans": "projects/、shapepacks/、languagepacks/、fontpacks/ 分开保存；仅安裝可信的 Shape JS 包",
+      "zhHans": "projects/、shapepacks/、languagepacks/、fontpacks/ 分开保存；仅安装可信的 Shape JS 包",
       "en": "Projects and each pack type are stored separately; install only trusted Shape JS packs.",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:479"
+        "src/index.html:491"
       ]
     },
     {
       "zhHant": "projects/ 保存新項目的展開記錄；shapepacks/ 放外部 Shape 包（僅安裝可信的 JS 包）",
-      "zhHans": "projects/ 保存新项目的展开记錄；shapepacks/ 放外部 Shape 包（仅安裝可信的 JS 包）",
+      "zhHans": "projects/ 保存新项目的展开记录；shapepacks/ 放外部 Shape 包（仅安装可信的 JS 包）",
       "en": "projects/ stores working journals; shapepacks/ holds external shapes (install trusted JS packs only).",
       "dynamic": false,
       "englishMissing": false,
@@ -8109,12 +8636,12 @@
     {
       "key": "ui.projecttablabel-tab-has-not-been-saved-close-it-anyway",
       "zhHant": "「${projectTabLabel(tab)}」尚未保存，仍要關閉嗎？",
-      "zhHans": "「${projectTabLabel(tab)}」尚未保存，仍要关闭嗎？",
+      "zhHans": "「${projectTabLabel(tab)}」尚未保存，仍要关闭吗？",
       "en": "“${projectTabLabel(tab)}” has not been saved. Close it anyway?",
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/project/tabs-controller.js:197"
+        "src/project/tabs-controller.js:198"
       ]
     },
     {
@@ -8125,8 +8652,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:163",
-        "src/index.html:486"
+        "src/common/config/app-config.js:165",
+        "src/index.html:498"
       ]
     },
     {
@@ -8157,7 +8684,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:854"
+        "src/editor/transform-interaction.js:931"
       ]
     },
     {
@@ -8168,7 +8695,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/template-controller.js:271"
+        "src/texture/template-controller.js:324"
       ]
     },
     {
@@ -8179,7 +8706,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:575"
+        "src/index.html:588"
       ]
     },
     {
@@ -8207,7 +8734,7 @@
     {
       "key": "ui.recovered-projects-open-in-tabs-existing-work-is-not-overwritten",
       "zhHant": "恢復後會以分頁打開；現有工作項目不會被覆蓋。",
-      "zhHans": "恢复后会以分页打开；現有工作项目不会被覆盖。",
+      "zhHans": "恢复后会以分页打开；现有工作项目不会被覆盖。",
       "en": "Recovered projects open in tabs; existing work is not overwritten.",
       "dynamic": false,
       "englishMissing": false,
@@ -8223,7 +8750,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:145"
+        "src/editor/tool-mode-controller.js:140",
+        "src/index.html:150"
       ]
     },
     {
@@ -8234,19 +8762,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:110",
-        "src/index.html:102"
-      ]
-    },
-    {
-      "key": "ui.rectangle-m",
-      "zhHant": "矩形（M）",
-      "zhHans": "矩形（M）",
-      "en": "Rectangle (M)",
-      "dynamic": false,
-      "englishMissing": false,
-      "locations": [
-        "src/index.html:102"
+        "src/editor/tool-mode-controller.js:129",
+        "src/editor/tool-mode-controller.js:133",
+        "src/index.html:148"
       ]
     },
     {
@@ -8258,7 +8776,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:119",
-        "src/index.html:72"
+        "src/index.html:76"
       ]
     },
     {
@@ -8269,8 +8787,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:258",
-        "src/screen/context-menus.js:190"
+        "src/index.html:264",
+        "src/screen/context-menus.js:218"
       ]
     },
     {
@@ -8301,8 +8819,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:542",
-        "src/index.html:87"
+        "src/index.html:554",
+        "src/index.html:92"
       ]
     },
     {
@@ -8313,7 +8831,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:384",
+        "src/index.html:395",
         "src/shapes/dodecahedron.js:2"
       ]
     },
@@ -8337,7 +8855,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:196"
+        "src/screen/context-menus.js:224"
       ]
     },
     {
@@ -8359,7 +8877,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:266"
+        "src/index.html:272"
       ]
     },
     {
@@ -8370,7 +8888,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/uv-preview-controller.js:406"
+        "src/screen/uv-preview-controller.js:419"
       ]
     },
     {
@@ -8425,7 +8943,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:558"
+        "src/index.html:570"
       ]
     },
     {
@@ -8456,7 +8974,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:265"
+        "src/index.html:271"
       ]
     },
     {
@@ -8511,8 +9029,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:474",
-        "src/index.html:537"
+        "src/index.html:485",
+        "src/index.html:549"
       ]
     },
     {
@@ -8523,7 +9041,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:496"
+        "src/index.html:508"
       ]
     },
     {
@@ -8534,7 +9052,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:531"
+        "src/index.html:543"
       ]
     },
     {
@@ -8545,13 +9063,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/uv-preview-controller.js:333"
+        "src/screen/uv-preview-controller.js:346"
       ]
     },
     {
       "key": "ui.restore-the-unsaved-working-project-pending-0-name",
       "zhHant": "找到未保存的工作項目「${pending[0].name}」。要恢復嗎？",
-      "zhHans": "找到未保存的工作项目「${pending[0].name}」。要恢复嗎？",
+      "zhHans": "找到未保存的工作项目「${pending[0].name}」。要恢复吗？",
       "en": "Restore the unsaved working project “${pending[0].name}”?",
       "dynamic": true,
       "englishMissing": false,
@@ -8578,7 +9096,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/uv-preview-controller.js:407"
+        "src/screen/uv-preview-controller.js:420"
       ]
     },
     {
@@ -8589,13 +9107,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:398"
+        "src/screen/events-controller.js:431"
       ]
     },
     {
       "key": "ui.result-historywarning",
       "zhHant": "歷史裁剪未完成：${result.historyWarning}",
-      "zhHans": "歷史裁剪未完成：${result.historyWarning}",
+      "zhHans": "历史裁剪未完成：${result.historyWarning}",
       "en": "歷史裁剪未完成：${result.historyWarning}",
       "dynamic": true,
       "englishMissing": true,
@@ -8611,8 +9129,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:253",
-        "src/screen/context-menus.js:421"
+        "src/screen/context-menus.js:184",
+        "src/screen/context-menus.js:437"
       ]
     },
     {
@@ -8623,7 +9141,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:600"
+        "src/index.html:613"
       ]
     },
     {
@@ -8634,7 +9152,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:354"
+        "src/index.html:365"
       ]
     },
     {
@@ -8654,7 +9172,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:327"
+        "src/index.html:335"
       ]
     },
     {
@@ -8674,7 +9192,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:929"
+        "src/editor/transform-interaction.js:1006"
       ]
     },
     {
@@ -8686,11 +9204,11 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:136",
-        "src/editor/tool-mode-controller.js:109",
-        "src/index.html:130",
-        "src/index.html:148",
-        "src/index.html:333",
-        "src/index.html:94"
+        "src/editor/tool-mode-controller.js:128",
+        "src/index.html:133",
+        "src/index.html:153",
+        "src/index.html:341",
+        "src/index.html:99"
       ]
     },
     {
@@ -8701,7 +9219,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:236"
+        "src/index.html:242"
       ]
     },
     {
@@ -8723,7 +9241,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:152"
+        "src/index.html:157"
       ]
     },
     {
@@ -8734,7 +9252,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:151"
+        "src/index.html:156"
       ]
     },
     {
@@ -8745,7 +9263,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:130"
+        "src/index.html:133"
       ]
     },
     {
@@ -8767,7 +9285,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:185"
+        "src/editor/transform-geometry.js:212"
       ]
     },
     {
@@ -8787,7 +9305,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:70"
+        "src/index.html:74"
       ]
     },
     {
@@ -8798,7 +9316,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:638"
+        "src/index.html:667"
       ]
     },
     {
@@ -8809,7 +9327,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:178"
+        "src/project/file-controller.js:179"
       ]
     },
     {
@@ -8820,10 +9338,10 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:109",
-        "src/index.html:129",
-        "src/index.html:333",
-        "src/index.html:93"
+        "src/editor/tool-mode-controller.js:128",
+        "src/index.html:132",
+        "src/index.html:341",
+        "src/index.html:98"
       ]
     },
     {
@@ -8834,7 +9352,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:793"
+        "src/editor/transform-interaction.js:870"
       ]
     },
     {
@@ -8856,7 +9374,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:123"
+        "src/index.html:126"
       ]
     },
     {
@@ -8878,7 +9396,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:129"
+        "src/index.html:132"
       ]
     },
     {
@@ -8889,7 +9407,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:129"
+        "src/editor/transform-geometry.js:156"
       ]
     },
     {
@@ -8911,7 +9429,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:185"
+        "src/editor/transform-geometry.js:212"
       ]
     },
     {
@@ -8922,8 +9440,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:372",
-        "src/index.html:397"
+        "src/index.html:383",
+        "src/index.html:408"
       ]
     },
     {
@@ -8934,13 +9452,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:166"
       ]
     },
     {
       "key": "ui.screen",
       "zhHant": "濾色",
-      "zhHans": "濾色",
+      "zhHans": "滤色",
       "en": "Screen",
       "dynamic": false,
       "englishMissing": false,
@@ -8956,7 +9474,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:173"
+        "src/screen/context-menus.js:179"
       ]
     },
     {
@@ -8967,7 +9485,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:396"
+        "src/index.html:407"
       ]
     },
     {
@@ -8978,7 +9496,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:168"
+        "src/index.html:173"
       ]
     },
     {
@@ -8989,7 +9507,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:167"
+        "src/index.html:172"
       ]
     },
     {
@@ -9009,8 +9527,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/uv-preview-controller.js:355",
-        "src/screen/uv-preview-controller.js:373"
+        "src/screen/uv-preview-controller.js:368",
+        "src/screen/uv-preview-controller.js:386"
       ]
     },
     {
@@ -9048,8 +9566,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:232",
-        "src/screen/uv-preview-controller.js:422"
+        "src/index.html:238",
+        "src/screen/uv-preview-controller.js:435"
       ]
     },
     {
@@ -9069,8 +9587,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:171",
-        "src/index.html:143"
+        "src/editor/tool-mode-controller.js:205",
+        "src/index.html:146"
       ]
     },
     {
@@ -9090,7 +9608,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:123"
+        "src/editor/tool-mode-controller.js:154"
       ]
     },
     {
@@ -9101,7 +9619,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:200"
+        "src/index.html:205"
       ]
     },
     {
@@ -9112,7 +9630,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:197"
+        "src/index.html:202"
       ]
     },
     {
@@ -9123,7 +9641,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:195"
+        "src/index.html:200"
       ]
     },
     {
@@ -9134,7 +9652,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:196"
+        "src/index.html:201"
       ]
     },
     {
@@ -9145,7 +9663,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:199"
+        "src/index.html:204"
       ]
     },
     {
@@ -9156,7 +9674,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:198"
+        "src/index.html:203"
       ]
     },
     {
@@ -9167,7 +9685,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/palette/controller.js:705"
+        "src/screen/palette/controller.js:819"
       ]
     },
     {
@@ -9178,8 +9696,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:124",
-        "src/index.html:142"
+        "src/editor/tool-mode-controller.js:155",
+        "src/index.html:145"
       ]
     },
     {
@@ -9190,7 +9708,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:123"
+        "src/editor/tool-mode-controller.js:154"
       ]
     },
     {
@@ -9201,7 +9719,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:165"
+        "src/index.html:170"
       ]
     },
     {
@@ -9212,12 +9730,12 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:167"
+        "src/index.html:172"
       ]
     },
     {
       "zhHant": "勾選下次要恢復的分頁。取消勾選會刪除該項目的本機工作記錄，不會刪除已保存的模型檔。",
-      "zhHans": "勾选下次要恢复的分页。取消勾选会删除該项目的本機工作记錄，不会删除已保存的模型档。",
+      "zhHans": "勾选下次要恢复的分页。取消勾选会删除该项目的本机工作记录，不会删除已保存的模型档。",
       "en": "Select the tabs to keep for next time. Unselected local working records are deleted; saved model files are not.",
       "dynamic": false,
       "englishMissing": false,
@@ -9232,7 +9750,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:558"
+        "src/index.html:570"
       ]
     },
     {
@@ -9243,7 +9761,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:377"
+        "src/index.html:388"
       ]
     },
     {
@@ -9254,7 +9772,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:290"
+        "src/index.html:298"
       ]
     },
     {
@@ -9265,7 +9783,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:234"
+        "src/index.html:240"
       ]
     },
     {
@@ -9285,7 +9803,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:676"
+        "src/screen/inspector-controller.js:684"
       ]
     },
     {
@@ -9296,7 +9814,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:608"
+        "src/index.html:621"
       ]
     },
     {
@@ -9307,7 +9825,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:228"
+        "src/index.html:234"
       ]
     },
     {
@@ -9341,7 +9859,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:214"
+        "src/index.html:220"
       ]
     },
     {
@@ -9352,7 +9870,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:145"
+        "src/index.html:150"
       ]
     },
     {
@@ -9363,7 +9881,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:523"
+        "src/index.html:535"
       ]
     },
     {
@@ -9374,7 +9892,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:120"
+        "src/index.html:123"
       ]
     },
     {
@@ -9385,7 +9903,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:414"
+        "src/index.html:425"
       ]
     },
     {
@@ -9396,7 +9914,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:475"
+        "src/index.html:486"
       ]
     },
     {
@@ -9407,18 +9925,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:345"
+        "src/screen/context-menus.js:361"
       ]
     },
     {
       "key": "ui.sets-cube-rotation-limits",
       "zhHant": "決定 Cube 旋轉限制",
-      "zhHans": "決定 Cube 旋转限制",
+      "zhHans": "决定 Cube 旋转限制",
       "en": "Sets cube rotation limits",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:438"
+        "src/index.html:449"
       ]
     },
     {
@@ -9429,7 +9947,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:75"
+        "src/index.html:66"
       ]
     },
     {
@@ -9440,7 +9958,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:463"
+        "src/index.html:474"
       ]
     },
     {
@@ -9452,7 +9970,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:126",
-        "src/index.html:411"
+        "src/index.html:422"
       ]
     },
     {
@@ -9463,7 +9981,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:492"
+        "src/index.html:504"
       ]
     },
     {
@@ -9474,7 +9992,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:156"
+        "src/index.html:161"
       ]
     },
     {
@@ -9502,7 +10020,7 @@
     {
       "key": "ui.shape-failed-error-message",
       "zhHant": "Shape 包掃描失敗：${error.message}",
-      "zhHans": "Shape 包掃描失败：${error.message}",
+      "zhHans": "Shape 包扫描失败：${error.message}",
       "en": "Shape 包掃描 failed: ${error.message}",
       "dynamic": true,
       "englishMissing": false,
@@ -9524,7 +10042,7 @@
     {
       "key": "ui.shape-not-installed-item-shapetype",
       "zhHant": "未安裝的 Shape：${item.shapeType}",
-      "zhHans": "未安裝的 Shape：${item.shapeType}",
+      "zhHans": "未安装的 Shape：${item.shapeType}",
       "en": "Shape not installed: ${item.shapeType}",
       "dynamic": true,
       "englishMissing": false,
@@ -9540,7 +10058,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:539",
+        "src/index.html:551",
         "src/screen/packs-controller.js:4"
       ]
     },
@@ -9565,6 +10083,28 @@
       ]
     },
     {
+      "key": "ui.shapenames-shapetool",
+      "zhHant": "圖形繪製（目前：${shapeNames[shapeTool]}）",
+      "zhHans": "图形绘制（当前：${shapeNames[shapeTool]}）",
+      "en": "圖形繪製（目前：${shapeNames[shapeTool]}）",
+      "dynamic": true,
+      "englishMissing": true,
+      "locations": [
+        "src/editor/tool-mode-controller.js:135"
+      ]
+    },
+    {
+      "key": "ui.shift",
+      "zhHant": "左鍵拖動旋轉、右鍵拖動平移；Shift + 左鍵框選",
+      "zhHans": "左键拖动旋转、右键拖动平移；Shift + 左键框选",
+      "en": "Left-drag to orbit, right-drag to pan; Shift + left-drag to box-select",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:487"
+      ]
+    },
+    {
       "key": "ui.shift-drag-to-add-uv-faces-ctrl-drag-to-subtract-uv-faces",
       "zhHant": "Shift 框選追加 UV 面；Ctrl 框選移除 UV 面",
       "zhHans": "Shift 框选追加 UV 面；Ctrl 框选移除 UV 面",
@@ -9572,7 +10112,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:202"
+        "src/index.html:207"
       ]
     },
     {
@@ -9583,7 +10123,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:333"
+        "src/index.html:341"
       ]
     },
     {
@@ -9594,7 +10134,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:414"
+        "src/screen/context-menus.js:430"
       ]
     },
     {
@@ -9605,7 +10145,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:133"
+        "src/index.html:136"
       ]
     },
     {
@@ -9616,7 +10156,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:412"
+        "src/index.html:423"
       ]
     },
     {
@@ -9627,7 +10167,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:264"
+        "src/screen/context-menus.js:197"
       ]
     },
     {
@@ -9638,7 +10178,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:376"
+        "src/index.html:387"
       ]
     },
     {
@@ -9658,7 +10198,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:419"
+        "src/index.html:430"
       ]
     },
     {
@@ -9669,7 +10209,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:491"
+        "src/index.html:503"
       ]
     },
     {
@@ -9689,7 +10229,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:133"
+        "src/index.html:136"
       ]
     },
     {
@@ -9700,7 +10240,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:132"
+        "src/index.html:135"
       ]
     },
     {
@@ -9720,7 +10260,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:413"
+        "src/index.html:424"
       ]
     },
     {
@@ -9731,7 +10271,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:269"
+        "src/index.html:275"
       ]
     },
     {
@@ -9742,8 +10282,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:487",
-        "src/screen/context-menus.js:259"
+        "src/index.html:499",
+        "src/screen/context-menus.js:192"
       ]
     },
     {
@@ -9766,7 +10306,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:415"
+        "src/index.html:426"
       ]
     },
     {
@@ -9788,8 +10328,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:46",
-        "src/index.html:473"
+        "src/common/config/app-config.js:47",
+        "src/index.html:484"
       ]
     },
     {
@@ -9810,8 +10350,8 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:137",
-        "src/index.html:146",
-        "src/index.html:155"
+        "src/index.html:151",
+        "src/index.html:160"
       ]
     },
     {
@@ -9822,7 +10362,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:831"
+        "src/editor/transform-interaction.js:908"
       ]
     },
     {
@@ -9833,7 +10373,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:873"
+        "src/editor/transform-interaction.js:950"
       ]
     },
     {
@@ -9844,7 +10384,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:819"
+        "src/editor/transform-interaction.js:896"
       ]
     },
     {
@@ -9855,7 +10395,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:565"
+        "src/index.html:578"
       ]
     },
     {
@@ -9866,7 +10406,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:839"
+        "src/editor/transform-interaction.js:916"
       ]
     },
     {
@@ -9888,7 +10428,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:418"
+        "src/index.html:429"
       ]
     },
     {
@@ -9899,7 +10439,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:527"
+        "src/index.html:539"
       ]
     },
     {
@@ -9910,7 +10450,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:243"
+        "src/index.html:249"
       ]
     },
     {
@@ -9921,8 +10461,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:466",
-        "src/index.html:506"
+        "src/index.html:477",
+        "src/index.html:518"
       ]
     },
     {
@@ -9933,7 +10473,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:170"
+        "src/index.html:175"
       ]
     },
     {
@@ -9949,7 +10489,7 @@
     },
     {
       "zhHant": "擬合整體半徑",
-      "zhHans": "擬合整体半径",
+      "zhHans": "拟合整体半径",
       "en": "Snap overall radius",
       "dynamic": false,
       "englishMissing": false,
@@ -9958,7 +10498,7 @@
     },
     {
       "zhHant": "擬合多邊形邊長",
-      "zhHans": "擬合多边形边长",
+      "zhHans": "拟合多边形边长",
       "en": "Snap polygon edge length",
       "dynamic": false,
       "englishMissing": false,
@@ -9973,7 +10513,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:509"
+        "src/index.html:521"
       ]
     },
     {
@@ -9989,7 +10529,7 @@
     },
     {
       "zhHant": "擬合單邊邊長",
-      "zhHans": "擬合单边边长",
+      "zhHans": "拟合单边边长",
       "en": "Snap single-edge length",
       "dynamic": false,
       "englishMissing": false,
@@ -10004,7 +10544,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:506"
+        "src/index.html:518"
       ]
     },
     {
@@ -10024,7 +10564,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:271"
+        "src/index.html:277"
       ]
     },
     {
@@ -10035,9 +10575,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:201",
-        "src/index.html:306",
-        "src/index.html:307"
+        "src/editor/tool-mode-controller.js:235",
+        "src/index.html:314",
+        "src/index.html:315"
       ]
     },
     {
@@ -10048,7 +10588,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:272"
+        "src/index.html:278"
       ]
     },
     {
@@ -10059,7 +10599,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:550"
+        "src/index.html:562"
       ]
     },
     {
@@ -10070,7 +10610,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:225"
+        "src/screen/context-menus.js:255"
       ]
     },
     {
@@ -10096,7 +10636,7 @@
     {
       "key": "ui.split-curve",
       "zhHant": "切斷曲線",
-      "zhHans": "切斷曲线",
+      "zhHans": "切断曲线",
       "en": "Split curve",
       "dynamic": false,
       "englishMissing": false,
@@ -10107,7 +10647,7 @@
     {
       "key": "ui.split-the-bezier-element-in-two",
       "zhHant": "已將貝塞爾元素斷開為兩段",
-      "zhHans": "已将贝塞尔元素斷开为兩段",
+      "zhHans": "已将贝塞尔元素断开为两段",
       "en": "Split the Bezier element in two",
       "dynamic": false,
       "englishMissing": false,
@@ -10123,7 +10663,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:156"
+        "src/index.html:161"
       ]
     },
     {
@@ -10134,7 +10674,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:441"
+        "src/index.html:452"
       ]
     },
     {
@@ -10149,12 +10689,12 @@
     {
       "key": "ui.state-paintselectioncopy",
       "zhHant": "複製像素：${state.paintSelectionCopy ? '開' : '關'}",
-      "zhHans": "複制像素：${state.paintSelectionCopy ? '开' : '关'}",
+      "zhHans": "复制像素：${state.paintSelectionCopy ? '开' : '关'}",
       "en": "複製像素：${state.paintSelectionCopy ? '開' : '關'}",
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/tool-mode-controller.js:136"
+        "src/editor/tool-mode-controller.js:170"
       ]
     },
     {
@@ -10187,7 +10727,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/texture/asset-controller.js:81"
+        "src/texture/asset-controller.js:110"
       ]
     },
     {
@@ -10198,13 +10738,13 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:147"
+        "src/editor/element-commands.js:166"
       ]
     },
     {
       "key": "ui.subtract",
       "zhHant": "相減",
-      "zhHans": "相減",
+      "zhHans": "相减",
       "en": "Subtract",
       "dynamic": false,
       "englishMissing": false,
@@ -10252,7 +10792,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/modifiers.js:7",
-        "src/index.html:147"
+        "src/index.html:152"
       ]
     },
     {
@@ -10286,7 +10826,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:477"
+        "src/index.html:489"
       ]
     },
     {
@@ -10297,7 +10837,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:518",
+        "src/index.html:530",
         "src/screen/packs-controller.js:7"
       ]
     },
@@ -10320,7 +10860,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/texture/template-controller.js:283"
+        "src/texture/template-controller.js:336"
       ]
     },
     {
@@ -10331,7 +10871,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:189"
+        "src/index.html:194"
       ]
     },
     {
@@ -10353,7 +10893,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:357"
+        "src/screen/context-menus.js:373"
       ]
     },
     {
@@ -10364,7 +10904,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/asset-controller.js:88"
+        "src/texture/asset-controller.js:117"
       ]
     },
     {
@@ -10375,7 +10915,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:440"
+        "src/index.html:451"
       ]
     },
     {
@@ -10386,7 +10926,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:366"
+        "src/screen/context-menus.js:382"
       ]
     },
     {
@@ -10397,7 +10937,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/texture-features.js:44"
+        "src/common/core/texture-features.js:45"
       ]
     },
     {
@@ -10408,7 +10948,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:370"
+        "src/screen/context-menus.js:386"
       ]
     },
     {
@@ -10419,7 +10959,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:550"
+        "src/index.html:562"
       ]
     },
     {
@@ -10430,7 +10970,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:439"
+        "src/index.html:450"
       ]
     },
     {
@@ -10441,9 +10981,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:201",
-        "src/index.html:309",
-        "src/index.html:310"
+        "src/editor/tool-mode-controller.js:235",
+        "src/index.html:317",
+        "src/index.html:318"
       ]
     },
     {
@@ -10454,8 +10994,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:186",
-        "src/screen/context-menus.js:344"
+        "src/index.html:191",
+        "src/screen/context-menus.js:360"
       ]
     },
     {
@@ -10477,7 +11017,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/element-commands.js:247"
+        "src/editor/element-commands.js:266"
       ]
     },
     {
@@ -10492,12 +11032,12 @@
     {
       "key": "ui.the-gradient-points-are-too-close-together",
       "zhHant": "漸變兩點距離太短",
-      "zhHans": "渐变兩点距离太短",
+      "zhHans": "渐变两点距离太短",
       "en": "The gradient points are too close together",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/texture-pointer-controller.js:33"
+        "src/paint/texture-pointer-controller.js:109"
       ]
     },
     {
@@ -10519,7 +11059,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:66"
+        "src/editor/tool-mode-controller.js:83"
       ]
     },
     {
@@ -10541,7 +11081,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/scene-controller.js:348"
+        "src/paint/scene-controller.js:373"
       ]
     },
     {
@@ -10552,7 +11092,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/texture-pointer-controller.js:28"
+        "src/paint/texture-pointer-controller.js:103"
       ]
     },
     {
@@ -10575,7 +11115,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/scene-controller.js:348"
+        "src/paint/scene-controller.js:373"
       ]
     },
     {
@@ -10586,7 +11126,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:174"
+        "src/editor/transform-geometry.js:201"
       ]
     },
     {
@@ -10612,23 +11152,23 @@
     {
       "key": "ui.the-working-directory-was-kept-because-some-operations-are-still-unwritten",
       "zhHant": "尚有未寫入的操作，工作目錄已保留",
-      "zhHans": "尚有未写入的操作，工作目錄已保留",
+      "zhHans": "尚有未写入的操作，工作目录已保留",
       "en": "The working directory was kept because some operations are still unwritten",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/tabs-controller.js:186"
+        "src/project/tabs-controller.js:187"
       ]
     },
     {
       "key": "ui.the-workspace-location-can-only-be-changed-in-the-desktop-app",
       "zhHant": "僅桌面版可更改工作目錄",
-      "zhHans": "仅桌面版可更改工作目錄",
+      "zhHans": "仅桌面版可更改工作目录",
       "en": "The workspace location can only be changed in the desktop app",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:367"
+        "src/screen/events-controller.js:400"
       ]
     },
     {
@@ -10639,7 +11179,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/template-controller.js:184"
+        "src/texture/template-controller.js:237"
       ]
     },
     {
@@ -10650,8 +11190,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/template-controller.js:189",
-        "src/texture/template-controller.js:212"
+        "src/texture/template-controller.js:242",
+        "src/texture/template-controller.js:265"
       ]
     },
     {
@@ -10695,7 +11235,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:434"
+        "src/index.html:445"
       ]
     },
     {
@@ -10706,7 +11246,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/stroke-controller.js:514"
+        "src/paint/stroke-controller.js:576"
       ]
     },
     {
@@ -10717,10 +11257,11 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/paint/scene-controller.js:447",
-        "src/paint/scene-controller.js:692",
-        "src/paint/scene-controller.js:699",
-        "src/paint/scene-controller.js:721"
+        "src/paint/scene-controller.js:472",
+        "src/paint/scene-controller.js:764",
+        "src/paint/scene-controller.js:771",
+        "src/paint/scene-controller.js:793",
+        "src/paint/scene-controller.js:798"
       ]
     },
     {
@@ -10746,7 +11287,7 @@
     {
       "key": "ui.this-format-is-not-implemented-yet",
       "zhHant": "這個格式尚未實現",
-      "zhHans": "这个格式尚未实現",
+      "zhHans": "这个格式尚未实现",
       "en": "This format is not implemented yet",
       "dynamic": false,
       "englishMissing": false,
@@ -10757,7 +11298,7 @@
     {
       "key": "ui.this-java-version-only-permits-one-axis-rotation-drag-the-x-y-or-z-ring",
       "zhHant": "目前 Java 版本只允許單軸旋轉，請拖動 X、Y 或 Z 軸圓環",
-      "zhHans": "当前 Java 版本只允许单轴旋转，请拖动 X、Y 或 Z 轴圆環",
+      "zhHans": "当前 Java 版本只允许单轴旋转，请拖动 X、Y 或 Z 轴圆环",
       "en": "This Java version only permits one-axis rotation. Drag the X, Y, or Z ring.",
       "dynamic": false,
       "englishMissing": false,
@@ -10773,7 +11314,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:668"
+        "src/screen/inspector-controller.js:676"
       ]
     },
     {
@@ -10784,7 +11325,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-geometry.js:130"
+        "src/editor/transform-geometry.js:157"
       ]
     },
     {
@@ -10841,7 +11382,7 @@
     },
     {
       "zhHant": "選中面的平鋪",
-      "zhHans": "选中面的平鋪",
+      "zhHans": "选中面的平铺",
       "en": "Tiling for selected face",
       "dynamic": false,
       "englishMissing": false,
@@ -10898,7 +11439,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:411"
+        "src/index.html:422"
       ]
     },
     {
@@ -10909,7 +11450,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:109"
+        "src/index.html:112"
       ]
     },
     {
@@ -10920,7 +11461,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:90"
+        "src/index.html:95"
       ]
     },
     {
@@ -10931,7 +11472,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:91"
+        "src/index.html:96"
       ]
     },
     {
@@ -10962,7 +11503,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:326"
+        "src/index.html:334"
       ]
     },
     {
@@ -10973,8 +11514,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:45",
-        "src/index.html:473"
+        "src/common/config/app-config.js:46",
+        "src/index.html:484"
       ]
     },
     {
@@ -10985,7 +11526,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:121"
+        "src/index.html:124"
       ]
     },
     {
@@ -10996,7 +11537,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:120"
+        "src/index.html:123"
       ]
     },
     {
@@ -11007,7 +11548,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:293"
+        "src/index.html:301"
       ]
     },
     {
@@ -11029,7 +11570,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:110"
+        "src/index.html:113"
       ]
     },
     {
@@ -11040,7 +11581,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:275"
+        "src/index.html:281"
       ]
     },
     {
@@ -11051,7 +11592,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:276"
+        "src/index.html:282"
       ]
     },
     {
@@ -11062,7 +11603,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:636"
+        "src/index.html:665"
       ]
     },
     {
@@ -11082,7 +11623,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:550"
+        "src/index.html:562"
       ]
     },
     {
@@ -11093,7 +11634,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:525"
+        "src/index.html:537"
       ]
     },
     {
@@ -11105,7 +11646,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:118",
-        "src/index.html:71"
+        "src/index.html:75"
       ]
     },
     {
@@ -11125,7 +11666,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:359"
+        "src/screen/context-menus.js:375"
       ]
     },
     {
@@ -11136,7 +11677,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:121"
+        "src/index.html:124"
       ]
     },
     {
@@ -11147,7 +11688,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:809"
+        "src/editor/transform-interaction.js:886"
       ]
     },
     {
@@ -11158,7 +11699,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:859"
+        "src/editor/transform-interaction.js:936"
       ]
     },
     {
@@ -11203,7 +11744,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:65"
+        "src/index.html:69"
       ]
     },
     {
@@ -11214,7 +11755,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/tabs-controller.js:198"
+        "src/project/tabs-controller.js:199"
       ]
     },
     {
@@ -11234,7 +11775,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:560"
+        "src/index.html:572"
       ]
     },
     {
@@ -11249,12 +11790,12 @@
     {
       "key": "ui.use-a-64-64-minecraft-skin-or-a-proportional-high-resolution-version",
       "zhHant": "建議使用 64×64 或等比例高清 Minecraft 皮膚。",
-      "zhHans": "建議使用 64×64 或等比例高清 Minecraft 皮肤。",
+      "zhHans": "建议使用 64×64 或等比例高清 Minecraft 皮肤。",
       "en": "Use a 64×64 Minecraft skin or a proportional high-resolution version.",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:495"
+        "src/index.html:507"
       ]
     },
     {
@@ -11274,7 +11815,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:584"
+        "src/index.html:597"
       ]
     },
     {
@@ -11285,7 +11826,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:584"
+        "src/index.html:597"
       ]
     },
     {
@@ -11296,7 +11837,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:560"
+        "src/index.html:572"
       ]
     },
     {
@@ -11307,7 +11848,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:393"
+        "src/screen/context-menus.js:409"
       ]
     },
     {
@@ -11318,7 +11859,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:164"
+        "src/index.html:169"
       ]
     },
     {
@@ -11329,7 +11870,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:561"
+        "src/index.html:573"
       ]
     },
     {
@@ -11349,7 +11890,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:125"
+        "src/index.html:128"
       ]
     },
     {
@@ -11360,18 +11901,29 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:164"
+        "src/index.html:169"
+      ]
+    },
+    {
+      "key": "ui.uv",
+      "zhHant": "依新 UV 重排各圖層像素，保留組與混合設定",
+      "zhHans": "依新 UV 重排各图层像素，保留组与混合设置",
+      "en": "Rearrange each layer for the new UVs while preserving groups and blend settings",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:575"
       ]
     },
     {
       "key": "ui.uv-dimensions-are-rounded-using-the-project-base-snap-nonzero-edges-get-at-least-1-px-and-are-packed",
       "zhHant": "UV 尺寸會按照項目基礎吸附分辨率四捨五入；非零邊長至少分配 1px，並由大到小自左上角打包。",
-      "zhHans": "UV 尺寸会按照项目基础吸附分辨率四捨五入；非零边长至少分配 1px，并由大到小自左上角打包。",
+      "zhHans": "UV 尺寸会按照项目基础吸附分辨率四舍五入；非零边长至少分配 1px，并由大到小自左上角打包。",
       "en": "UV dimensions are rounded using the project base snap; nonzero edges get at least 1 px and are packed largest-first from the top-left.",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:568"
+        "src/index.html:581"
       ]
     },
     {
@@ -11382,7 +11934,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:48"
+        "src/editor/tool-mode-controller.js:65"
       ]
     },
     {
@@ -11393,7 +11945,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:53"
+        "src/editor/tool-mode-controller.js:70"
       ]
     },
     {
@@ -11404,7 +11956,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:210"
+        "src/index.html:216"
       ]
     },
     {
@@ -11415,7 +11967,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:194"
+        "src/index.html:199"
       ]
     },
     {
@@ -11437,7 +11989,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:224"
+        "src/index.html:230"
       ]
     },
     {
@@ -11448,7 +12000,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:241"
+        "src/index.html:247"
       ]
     },
     {
@@ -11459,9 +12011,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/config/app-config.js:141",
         "src/common/config/app-config.js:143",
-        "src/common/config/app-config.js:145"
+        "src/common/config/app-config.js:145",
+        "src/common/config/app-config.js:147"
       ]
     },
     {
@@ -11472,7 +12024,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:135"
+        "src/index.html:138"
       ]
     },
     {
@@ -11484,8 +12036,8 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/operation-registry.js:59",
-        "src/editor/tool-mode-controller.js:109",
-        "src/index.html:96"
+        "src/editor/tool-mode-controller.js:128",
+        "src/index.html:101"
       ]
     },
     {
@@ -11496,7 +12048,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:127"
+        "src/index.html:130"
       ]
     },
     {
@@ -11518,8 +12070,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:465",
-        "src/index.html:483"
+        "src/index.html:476",
+        "src/index.html:495"
       ]
     },
     {
@@ -11530,7 +12082,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:252"
+        "src/index.html:258"
       ]
     },
     {
@@ -11541,7 +12093,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:522"
+        "src/index.html:534"
       ]
     },
     {
@@ -11552,7 +12104,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:486"
+        "src/index.html:498"
       ]
     },
     {
@@ -11563,7 +12115,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:489"
+        "src/index.html:501"
       ]
     },
     {
@@ -11574,7 +12126,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:490"
+        "src/index.html:502"
       ]
     },
     {
@@ -11585,7 +12137,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:483"
+        "src/index.html:495"
       ]
     },
     {
@@ -11596,7 +12148,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:485"
+        "src/index.html:497"
       ]
     },
     {
@@ -11629,7 +12181,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:163"
+        "src/index.html:168"
       ]
     },
     {
@@ -11640,7 +12192,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/palette/controller.js:11"
+        "src/screen/palette/controller.js:12"
       ]
     },
     {
@@ -11671,7 +12223,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:333"
+        "src/index.html:341"
       ]
     },
     {
@@ -11682,7 +12234,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:508"
+        "src/index.html:520"
       ]
     },
     {
@@ -11693,7 +12245,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:553"
+        "src/index.html:565"
       ]
     },
     {
@@ -11704,9 +12256,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/tool-mode-controller.js:201",
-        "src/index.html:303",
-        "src/index.html:304"
+        "src/editor/tool-mode-controller.js:235",
+        "src/index.html:311",
+        "src/index.html:312"
       ]
     },
     {
@@ -11717,18 +12269,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:488"
+        "src/index.html:500"
       ]
     },
     {
       "key": "ui.without-history-only-the-current-complete-model-is-saved-undo-records-in-the-working-directory-are-u",
       "zhHant": "不保留歷史時只保存目前完整模型；工作目錄中的撤回記錄不受影響。",
-      "zhHans": "不保留歷史时只保存当前完整模型；工作目錄中的撤回记錄不受影响。",
+      "zhHans": "不保留历史时只保存当前完整模型；工作目录中的撤回记录不受影响。",
       "en": "Without history, only the current complete model is saved; undo records in the working directory are unchanged.",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/file-controller.js:199"
+        "src/project/file-controller.js:200"
       ]
     },
     {
@@ -11739,18 +12291,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:374"
+        "src/screen/events-controller.js:407"
       ]
     },
     {
       "key": "ui.workspace-folder",
       "zhHant": "工作空間目錄",
-      "zhHans": "工作空间目錄",
+      "zhHans": "工作空间目录",
       "en": "Workspace folder",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:479"
+        "src/index.html:491"
       ]
     },
     {
@@ -11761,7 +12313,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:87"
+        "src/index.html:92"
       ]
     },
     {
@@ -11778,12 +12330,12 @@
     {
       "key": "ui.x-hue-red-saturation",
       "zhHant": "X · 色相／紅／飽和",
-      "zhHans": "X · 色相／紅／飽和",
+      "zhHans": "X · 色相／红／饱和",
       "en": "X · Hue / red / saturation",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:601"
+        "src/index.html:614"
       ]
     },
     {
@@ -11809,12 +12361,12 @@
     {
       "key": "ui.y-saturation-green-value",
       "zhHant": "Y · 飽和／綠／亮度",
-      "zhHans": "Y · 飽和／綠／亮度",
+      "zhHans": "Y · 饱和／绿／亮度",
       "en": "Y · Saturation / green / value",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:601"
+        "src/index.html:614"
       ]
     },
     {
@@ -11831,12 +12383,12 @@
     {
       "key": "ui.z-value-blue-hue",
       "zhHant": "Z · 亮度／藍／色相",
-      "zhHans": "Z · 亮度／藍／色相",
+      "zhHans": "Z · 亮度／蓝／色相",
       "en": "Z · Value / blue / hue",
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:601"
+        "src/index.html:614"
       ]
     }
   ]

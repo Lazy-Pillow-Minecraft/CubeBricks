@@ -16,7 +16,7 @@ Java Block/Item projects force back-face culling and per-face UVs. Their three v
 | Input | Result |
 | --- | --- |
 | Middle-drag | Orbit in the general view; pan in an axis view |
-| `Shift` + middle-drag | Pan the general view |
+| `Shift` + middle-drag | Pan the general view; press or release `Shift` without releasing the middle button to switch modes |
 | Mouse wheel | Zoom the main viewport |
 | `R` / `Shift+R` | Focus selected content / return to scene center; when the texture view has focus, these instead focus or reset that view |
 | Click the six-direction axis widget | Enter the corresponding orthographic axis view; click the same direction again to flip to the opposite side |
@@ -26,6 +26,8 @@ Java Block/Item projects force back-face culling and per-face UVs. Their three v
 | `Ctrl+A` | Select all eligible elements in the main viewport or hierarchy |
 
 The hierarchy and main viewport share object selection. The list supports multiselection, search, drag reordering, and moving entries into groups. During a list drag, scroll with the wheel or move the pointer near an edge to autoscroll. Right-clicking an object or its list row opens the same object actions.
+
+**Separate UV Editing Mode** is off by default in Settings, so UV tools are part of Edit mode; turn it on for a separate UV workspace. **Blockbench-style controls** are off by default. When enabled, left-drag orbits and right-drag pans in the modeling viewport; box selection requires `Shift` + left-drag. A stationary left-click still selects, and only a stationary right-click opens the context menu. Paint mode keeps left-click for painting. Right-clicking empty paint-viewport background opens the view menu without Paste or Duplicate in Place.
 
 ## 3. Modeling and transforms
 
@@ -42,7 +44,7 @@ Use the controls above the scene hierarchy to create cubes, groups, locators, an
 | `7` | Face Select |
 
 - Gizmos respond to the left mouse button; the middle button remains reserved for camera control. Axis, plane, and center handles perform the corresponding dimensional transforms.
-- Move and Rotate can use local, parent, or global coordinates. Multiselection can apply transforms together or separately. Moving a pivot compensates object parameters so the visible geometry stays put.
+- Move and Rotate can use local, parent, or global coordinates. Multiselection can apply transforms together or separately. Moving a pivot compensates object parameters so the visible geometry stays put. **Center Pivot** follows the Pivot X/Y/Z fields in Object Properties and places all selected pivots at the combined geometric center.
 - Hold `Alt` while rotating to show the selected object's vertices temporarily. Click one to move its pivot there. Vertex Snap can also show intersections; square-diamond intersection marks can be target points, not starting points.
 - `Ctrl+Z` undoes and `Ctrl+Shift+Z` redoes. With a text field focused, `Ctrl+Z` edits the text rather than undoing the project.
 - `Ctrl+C` copies, `Ctrl+X` cuts, `Ctrl+V` pastes, and `Ctrl+D` duplicates in place. Depending on focus, these operate on eligible objects or textures.
