@@ -7,7 +7,7 @@ export function createContextMenuController({
   state, $, outliner, inspector, sceneCanvas, sceneRenderer, inspectorController,
   referenceImages, getDockManager,
   textureInput, palette, paletteRows, configRegistry,
-  captureModel, saveModelCapture, copyModelCapture, clearModelCapture,
+  captureModel, saveModelCapture, copyModelCapture, clearModelCapture, updateModelCaptureCrop,
   cancelKnifeSelection, updateToolOptions, renderScene, toast,
   selectItem, selected, selectedNodeUids, focusSelected, focusSceneOrigin,
   pasteElements, isBezierElement, addCurveNodeAtViewportPoint,
@@ -441,6 +441,7 @@ function bindContextMenus() {
   window.addEventListener('blur', closeContextMenu);
   $('#modelCaptureSave').addEventListener('click', saveModelCapture);
   $('#modelCaptureCopy').addEventListener('click', copyModelCapture);
+  $('#modelCaptureAutoCrop').addEventListener('change', updateModelCaptureCrop);
   $('#modelCaptureDialog').addEventListener('close', () => {
     $('#modelCaptureImage').removeAttribute('src');
     clearModelCapture();

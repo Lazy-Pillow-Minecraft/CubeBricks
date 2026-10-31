@@ -74,7 +74,14 @@ function restoredProjectSession(session, data, restoreTextures = false) {
     ? previousSelectionAnchorUid
     : restored.selectedUid;
   const restoredSelection = restored.project.getNode(restored.selectedUid);
-  if (!isBezierElement(restoredSelection) || restored.selectedCurveNodeIndex >= restoredSelection.nodes.length) restored.selectedCurveNodeIndex = null;
+  const previousCurve = session.project.getNode(previousSelectedUid);
+  if (!isBezierElement(restoredSelection) || !isBezierElement(previousCurve)
+    || !Number.isInteger(session.selectedCurveNodeIndex)) restored.selectedCurveNodeIndex = null;
+  else {
+    const previousNodeUid = previousCurve.nodes[session.selectedCurveNodeIndex]?.uid;
+    const nextIndex = restoredSelection.nodes.findIndex(node => node.uid === previousNodeUid);
+    restored.selectedCurveNodeIndex = nextIndex < 0 ? null : nextIndex;
+  }
   if (![...(restoredSelection?.modifiers || []), ...(restoredSelection?.operators || [])].some(modifier => modifier.uid === restored.selectedModifierUid)) restored.selectedModifierUid = null;
   if (restored.vertexSnapSource && !restored.project.getNode(restored.vertexSnapSource.rootUid)) restored.vertexSnapSource = null;
   if (restored.knifeSelection && !restored.project.getNode(restored.knifeSelection.uid)) restored.knifeSelection = null;

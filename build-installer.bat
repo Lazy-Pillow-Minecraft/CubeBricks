@@ -21,7 +21,9 @@ if errorlevel 1 (
 
 for /f "delims=" %%V in ('node -p "require('./package.json').version"') do set "CUBEBRICKS_BASE_VERSION=%%V"
 if not defined CUBEBRICKS_BASE_VERSION goto :failed
-set "CUBEBRICKS_DEFAULT_VERSION=%CUBEBRICKS_BASE_VERSION%-beta"
+set "CUBEBRICKS_DEFAULT_VERSION=%CUBEBRICKS_BASE_VERSION%"
+echo %CUBEBRICKS_BASE_VERSION%| findstr /c:"-" >nul
+if errorlevel 1 set "CUBEBRICKS_DEFAULT_VERSION=%CUBEBRICKS_BASE_VERSION%-beta"
 echo Enter the installer version, including its release label if needed.
 echo Examples: 0.1.0-beta, 0.1.0-rc.1, 0.1.0
 set "CUBEBRICKS_INSTALLER_VERSION="

@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body data-editor-mode="edit">
+  <div id="startupCover" aria-hidden="true" style="position:fixed;inset:0;z-index:2147483647;background:var(--bg,#11130f)"></div>
   <svg class="icon-symbols" aria-hidden="true" width="0" height="0">
     <defs>
       <symbol id="icon-open" viewBox="0 0 179.85 115.4">
@@ -662,7 +663,8 @@
   <dialog id="modelCaptureDialog" class="theme-dialog model-capture-dialog" aria-labelledby="modelCaptureTitle">
     <form method="dialog">
       <div class="dialog-heading"><div><span class="eyebrow">MODEL CAPTURE</span><h2 id="modelCaptureTitle">截屏模型</h2></div><button value="cancel" class="close-button" aria-label="關閉">×</button></div>
-      <div class="model-capture-preview"><img id="modelCaptureImage" alt="透明背景模型截圖預覽" /></div>
+      <div class="model-capture-preview"><div class="model-capture-image-wrap"><img id="modelCaptureImage" alt="透明背景模型截圖預覽" /><div id="modelCaptureCropOutline" class="model-capture-crop-outline" hidden></div></div></div>
+      <label class="model-capture-crop-option"><input type="checkbox" id="modelCaptureAutoCrop" /> 自動裁剪至模型像素</label>
       <div class="model-capture-info" id="modelCaptureInfo"></div>
       <div class="dialog-actions"><button value="cancel">關閉</button><div class="model-capture-actions"><button type="button" id="modelCaptureCopy">複製到剪切板</button><button type="button" class="primary-button" id="modelCaptureSave">另存為 PNG</button></div></div>
     </form>

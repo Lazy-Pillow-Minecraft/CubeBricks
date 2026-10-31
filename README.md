@@ -23,6 +23,7 @@ npm install
 | 想了解的内容 | 文档 |
 | --- | --- |
 | 从仓库启动、浏览器预览、测试、单文件打包 | [启动与构建](docs/GETTING_STARTED.md) |
+| 0.1.2-beta 相较 0.1.1 的改进与上传备注 | [版本说明](docs/RELEASE_0.1.2-beta.md) |
 | 当前的建模、UV、图层、绘画与扩展能力 | [功能概览](docs/FEATURES.md) |
 | 日常操作、快捷键、纹理模板及绘画流程 | [操作教程](docs/USER_GUIDE.md) |
 | `.cbmodel`、`.bbmodel`、`.cbcmap` 与工作记录恢复 | [文件格式与恢复](docs/FORMATS_AND_RECOVERY.md) |
@@ -44,6 +45,7 @@ There is no separate download page yet. On Windows, clone this repository, run `
 | Topic | English guide |
 | --- | --- |
 | Clone, launch, preview, test, and build | [Getting started](docs/GETTING_STARTED.en.md) |
+| 0.1.2-beta changes since 0.1.1 and upload note | [Release notes](docs/RELEASE_0.1.2-beta.en.md) |
 | Modeling, UVs, layers, painting, and extension features | [Feature overview](docs/FEATURES.en.md) |
 | Everyday workflow, shortcuts, templates, and painting | [User guide](docs/USER_GUIDE.en.md) |
 | `.cbmodel`, `.bbmodel`, `.cbcmap`, and journal recovery | [Formats and recovery](docs/FORMATS_AND_RECOVERY.en.md) |

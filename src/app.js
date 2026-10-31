@@ -150,7 +150,8 @@ const cameraController = createCameraController({
 const { bakeCameraPan, cancelCameraFocus, focusSelected, focusSceneOrigin, currentProjection,
   updateProjectionControls, enterAxisView, exitAxisView, updateAxisWidget,
   beginAxisWidgetDrag, moveAxisWidgetDrag, endAxisWidgetDrag } = cameraController;
-const { captureModel, captureProjectCover, saveModelCapture, copyModelCapture, clearModelCapture } = createModelCaptureController({
+const { captureModel, captureProjectCover, saveModelCapture, copyModelCapture, clearModelCapture,
+  updateModelCaptureCrop } = createModelCaptureController({
   state, $, sceneCanvas, sceneRenderer, textureCanvas,
   getTextureAtlasEntries: () => textureAtlasController.textureAtlasEntries, getTextureAtlasCanvas: () => textureAtlasController.textureAtlasCanvas,
   currentProjection, toast
@@ -718,7 +719,7 @@ const contextMenuController = createContextMenuController({
   state, $, outliner, inspector, sceneCanvas, sceneRenderer, inspectorController,
   referenceImages, getDockManager: () => dockManager,
   textureInput, palette, paletteRows, configRegistry,
-  captureModel, saveModelCapture, copyModelCapture, clearModelCapture,
+  captureModel, saveModelCapture, copyModelCapture, clearModelCapture, updateModelCaptureCrop,
   cancelKnifeSelection, updateToolOptions, renderScene, toast,
   selectItem, selected, selectedNodeUids, focusSelected, focusSceneOrigin,
   pasteElements, isBezierElement, addCurveNodeAtViewportPoint,
@@ -960,7 +961,17 @@ updateToolVisibility();
 renderAll();
 markDirty(false);
 shapePacksReady = loadExternalShapePacks();
-void shapePacksReady.then(async () => {
-  await packsController.refresh();
-  modelFormatPicker.renderProjectHome();
-}).catch(error => console.warn('資源包載入失敗', error));
+void (async () => {
+  try {
+    await shapePacksReady;
+    await packsController.refresh();
+  } catch (error) { console.warn('資源包載入失敗', error); }
+  try {
+    await modelFormatPicker.renderProjectHome();
+    await document.fonts.ready;
+  } finally {
+    // Keep the first paint covered until the home page and its project list
+    // have been laid out. The cover is a plain background-color rectangle.
+    requestAnimationFrame(() => $('#startupCover')?.remove());
+  }
+})();

@@ -1,4 +1,5 @@
-import { Shape, addModifier, addOperator, bakeModifier, setPivotPreservingGeometry, setNodeName, setNodeUnnamed } from '../model.js';
+import { Shape, addModifier, addOperator, bakeModifier, setPivotPreservingGeometry, setNodeName, setNodeUnnamed, translateNode } from '../model.js';
+import { actualTransformValue, applyTransform, displayedTransformVector, restoreTransform, supportsAppliedTransform } from '../common/core/applied-transform.js';
 import { formatRules, constrainNode, captureFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { modifierRegistry } from '../common/config/modifiers.js';
 import { operatorRegistry } from '../common/config/operators.js';
@@ -23,10 +24,11 @@ function inspectorBatchNodes() {
 }
 
 function sharedVectorValues(nodes, field, fallback) {
-  if (nodes.length <= 1) return [...fallback];
+  if (field.startsWith('curve-node:')) return [...fallback];
+  if (nodes.length <= 1) return displayedTransformVector(nodes[0], field);
   return [0, 1, 2].map(axis => {
-    const first = nodes[0]?.[field]?.[axis];
-    if (!Number.isFinite(first) || !nodes.every(node => Number.isFinite(node?.[field]?.[axis]) && Math.abs(node[field][axis] - first) < 1e-9)) return null;
+    const first = displayedTransformVector(nodes[0], field)[axis];
+    if (!Number.isFinite(first) || !nodes.every(node => Math.abs(displayedTransformVector(node, field)[axis] - first) < 1e-9)) return null;
     return first;
   });
 }
@@ -141,7 +143,8 @@ function discardSubdivisionEdits(target) {
 function curveNodeInspectorMarkup(item, index) {
   const node = item.nodes[index];
   if (!node) return '';
-  const displayedRotation = node.autoTangent ? item.resolvedNodeState(index).rotation : node.rotation;
+  const resolved = node.autoTangent ? item.resolvedNodeState(index) : null;
+  const displayedRotation = resolved?.rotation || node.rotation;
   return `<div class="field-section curve-node-card active" data-curve-node-card="${index}">
     <div class="field-title"><span>節點 ${index + 1}</span><span>${item.dimension === 2 ? '2D' : '3D'}</span></div>
     ${vectorField('位置', `curve-node:${index}:position`, node.position)}
@@ -152,7 +155,7 @@ function curveNodeInspectorMarkup(item, index) {
     ${item.dimension === 3 ? `<div class="option-row"><span>滾動角</span><div class="number-wrap" style="width:68px"><input type="number" step="0.1" data-curve-node-roll="${index}" value="${round(node.roll || 0)}" /></div></div>` : ''}
     <div class="option-row"><span>貝塞爾手柄</span><label class="switch"><input type="checkbox" data-curve-node-toggle="${index}" ${node.handlesEnabled ? 'checked' : ''}/><i></i></label></div>
     ${node.handlesEnabled ? `<div class="option-row"><span>對稱手柄</span><label class="switch"><input type="checkbox" data-curve-node-symmetric="${index}" ${node.symmetricHandles ? 'checked' : ''}/><i></i></label></div>` : ''}
-    ${node.handlesEnabled ? `${vectorField('前手柄', `curve-node:${index}:handleIn`, node.handleIn)}${vectorField('後手柄', `curve-node:${index}:handleOut`, node.handleOut)}` : ''}
+    ${node.handlesEnabled ? `${vectorField('前手柄', `curve-node:${index}:handleIn`, resolved?.localHandleIn || node.handleIn)}${vectorField('後手柄', `curve-node:${index}:handleOut`, resolved?.localHandleOut || node.handleOut)}` : ''}
     <button type="button" class="curve-node-remove" data-remove-curve-node="${index}" ${item.nodes.length <= 2 ? 'disabled' : ''}>刪除節點</button>
   </div>`;
 }
@@ -374,7 +377,9 @@ function renderInspector() {
       <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
     : `
       <div class="field-title"><span>組屬性</span></div>
+      ${vectorField('位置', 'transformPosition', item.pivot, items)}
       ${vectorField('樞軸', 'pivot', item.pivot, items)}
+      ${vectorField('旋轉', 'rotation', rotation, items)}
       ${scalarField('膨脹', 'inflate', item.inflate, items)}
       <div class="option-row"><span>直接子項</span><strong style="color:var(--accent)">${item.children.length}</strong></div>`;
   const appearanceCapable = item.type === 'cube' || isShapeElement(item) || isBezierElement(item) || item.type === 'group';
@@ -395,6 +400,12 @@ function renderInspector() {
     </div>
     <div class="field-section">
       ${details}
+      ${supportsAppliedTransform(item) ? `<div class="applied-transform-actions">
+        <button type="button" data-transform-action="apply" data-transform-kind="position">應用位移</button>
+        <button type="button" data-transform-action="restore" data-transform-kind="position" ${items.some(node => node.appliedTransform?.position) ? '' : 'disabled'}>還原位移</button>
+        <button type="button" data-transform-action="apply" data-transform-kind="rotation">應用旋轉</button>
+        <button type="button" data-transform-action="restore" data-transform-kind="rotation" ${items.some(node => node.appliedTransform?.rotation) ? '' : 'disabled'}>還原旋轉</button>
+      </div>` : ''}
     </div>
     ${isProceduralShape(item) ? `<div class="field-section subdivision-controls">
       <div class="field-title"><span>細分編輯</span><span>${Object.keys(item.subdivisionEdits || {}).length} 個覆寫</span></div>
@@ -553,7 +564,8 @@ function bindInspector(root = null) {
         const node = item.nodes[Number(indexText)];
         if (!node || !Array.isArray(node[property])) return;
         discardSubdivisionEdits(item);
-        if (property === 'rotation' && node.autoTangent) bakeCurveNodeTangent(item, Number(indexText));
+        if (node.autoTangent && ['rotation', 'handleIn', 'handleOut'].includes(property))
+          bakeCurveNodeTangent(item, Number(indexText));
         const planarVector = property === 'position' || property === 'handleIn' || property === 'handleOut';
         const lockedPlanarAxis = item.dimension === 2
           && ((planarVector && axis === 1) || (property === 'rotation' && axis !== 1));
@@ -572,12 +584,22 @@ function bindInspector(root = null) {
         markDirty(); invalidateSelectionRenderGeometry(); renderScene();
         return;
       }
-      for (const target of items.filter(node => Array.isArray(node[field]))) {
+      for (const target of items.filter(node => field === 'transformPosition' ? node.type === 'group' : Array.isArray(node[field]))) {
         const rules = formatRules(state.project);
         const requested = target.type === 'cube' && field === 'size' && rules.integerCubeSize ? Math.round(value) : value;
+        const displayed = displayedTransformVector(target, field);
+        displayed[axis] = requested;
+        const actual = ['position', 'origin', 'transformPosition', 'rotation'].includes(field)
+          ? actualTransformValue(target, field, displayed) : displayed;
         const nextValue = target.type === 'cube' && field === 'size' && !state.allowNegativeSize
           ? Math.max(0, requested)
-          : requested;
+          : actual[axis];
+        if (field === 'transformPosition' && target.type === 'group') {
+          const delta = actual.map((component, index) => component - target.pivot[index]);
+          translateNode(state.project, target, delta);
+        } else if (field === 'rotation' && supportsAppliedTransform(target)) {
+          target.rotation = actual;
+        } else
         if (target.type === 'cube' && field === 'position') {
           const delta = nextValue - target.position[axis];
           target.position[axis] = nextValue;
@@ -676,9 +698,10 @@ function bindInspector(root = null) {
     if (!result) return toast('這個修改器目前無法烘焙');
     state.selectedModifierUid = null;
     state.collapsedModifiers.delete(modifierUid);
-    state.selectedUid = result.rootUid;
-    state.selectedUids = new Set([result.rootUid]);
-    state.selectionAnchorUid = result.rootUid;
+    const bakedSelection = result.groupUids.length ? [result.rootUid] : result.elementUids;
+    state.selectedUid = bakedSelection[0] || null;
+    state.selectedUids = new Set(bakedSelection);
+    state.selectionAnchorUid = state.selectedUid;
     sceneRenderer.invalidateMirrorGeometry();
     invalidateAllRenderGeometry();
     markDirty(); renderAll(); toast('已烘焙選中的修改器');
@@ -967,12 +990,22 @@ function bindInspector(root = null) {
   }));
   $('[data-action="deleteSelected"]', inspector)?.addEventListener('click', deleteSelected);
   $('[data-action="centerPivot"]', inspector)?.addEventListener('click', centerSelectedPivots);
+  $$('[data-transform-action]', inspector).forEach(button => button.addEventListener('click', () => {
+    const kind = button.dataset.transformKind;
+    const action = button.dataset.transformAction;
+    const targets = items.filter(supportsAppliedTransform);
+    if (!targets.length || action === 'restore' && !targets.some(target => target.appliedTransform?.[kind])) return;
+    snapshot(`core.element.${action}_applied_${kind}`);
+    targets.forEach(target => action === 'apply' ? applyTransform(target, kind) : restoreTransform(target, kind));
+    markDirty(); renderAll('selection');
+  }));
   $('[data-action="enterSubdivisionEdit"]', inspector)?.addEventListener('click', () => enterSubdivisionEdit(item));
   $('[data-action="exitSubdivisionEdit"]', inspector)?.addEventListener('click', () => exitSubdivisionEdit());
   $('[data-action="resetTransform"]', inspector)?.addEventListener('click', () => {
     snapshot('core.element.reset_rotation');
     for (const target of items) {
-      if (target.type !== 'group' && Array.isArray(target.rotation)) target.rotation = [0, 0, 0];
+      if (target.type !== 'group' && Array.isArray(target.rotation))
+        target.rotation = actualTransformValue(target, 'rotation', [0, 0, 0]);
     }
     markDirty(); renderAll('selection');
   });

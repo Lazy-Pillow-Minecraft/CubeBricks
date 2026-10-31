@@ -9,7 +9,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:453"
+        "src/index.html:454"
       ]
     },
     {
@@ -20,7 +20,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:449"
+        "src/index.html:450"
       ]
     },
     {
@@ -31,7 +31,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:449"
+        "src/index.html:450"
       ]
     },
     {
@@ -42,7 +42,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:449"
+        "src/index.html:450"
       ]
     },
     {
@@ -53,7 +53,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:452"
+        "src/index.html:453"
       ]
     },
     {
@@ -86,7 +86,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:397",
+        "src/index.html:398",
         "src/shapes/bezier-2d.js:2"
       ]
     },
@@ -98,7 +98,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:399"
+        "src/index.html:400"
       ]
     },
     {
@@ -109,7 +109,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:351"
+        "src/index.html:352"
       ]
     },
     {
@@ -120,7 +120,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:398",
+        "src/index.html:399",
         "src/shapes/bezier-3d.js:2"
       ]
     },
@@ -132,7 +132,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:619"
+        "src/index.html:620"
       ]
     },
     {
@@ -143,7 +143,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:400"
+        "src/index.html:401"
       ]
     },
     {
@@ -200,7 +200,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:162"
+        "src/index.html:163"
       ]
     },
     {
@@ -211,9 +211,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:522",
         "src/index.html:523",
-        "src/index.html:524"
+        "src/index.html:524",
+        "src/index.html:525"
       ]
     },
     {
@@ -224,7 +224,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:531"
+        "src/index.html:532"
       ]
     },
     {
@@ -235,7 +235,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:153"
+        "src/index.html:154"
       ]
     },
     {
@@ -246,7 +246,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:347"
+        "src/screen/inspector-controller.js:350"
       ]
     },
     {
@@ -308,7 +308,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:390"
+        "src/index.html:391"
       ]
     },
     {
@@ -319,7 +319,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:78"
+        "src/common/core/operation-registry.js:82"
       ]
     },
     {
@@ -330,7 +330,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:404"
+        "src/index.html:405"
       ]
     },
     {
@@ -350,7 +350,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:403"
+        "src/index.html:404"
       ]
     },
     {
@@ -379,7 +379,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:554"
+        "src/index.html:555"
       ]
     },
     {
@@ -401,7 +401,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:83"
+        "src/common/core/operation-registry.js:87"
       ]
     },
     {
@@ -412,7 +412,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:352"
+        "src/index.html:353"
       ]
     },
     {
@@ -432,7 +432,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:392"
+        "src/index.html:393"
       ]
     },
     {
@@ -452,7 +452,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:197"
+        "src/index.html:198"
       ]
     },
     {
@@ -497,7 +497,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:270",
+        "src/index.html:271",
         "src/screen/reference-images.js:78"
       ]
     },
@@ -509,7 +509,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:614"
+        "src/index.html:615"
       ]
     },
     {
@@ -531,7 +531,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:472"
+        "src/index.html:473"
       ]
     },
     {
@@ -542,7 +542,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:427"
+        "src/index.html:428"
       ]
     },
     {
@@ -553,7 +553,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:520"
+        "src/index.html:521"
       ]
     },
     {
@@ -564,7 +564,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:428"
+        "src/index.html:429"
       ]
     },
     {
@@ -575,7 +575,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:539"
+        "src/index.html:540"
       ]
     },
     {
@@ -604,7 +604,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:1040"
+        "src/editor/transform-interaction.js:1090"
       ]
     },
     {
@@ -615,8 +615,8 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:1031",
-        "src/editor/transform-interaction.js:993"
+        "src/editor/transform-interaction.js:1042",
+        "src/editor/transform-interaction.js:1081"
       ]
     },
     {
@@ -627,7 +627,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:144"
+        "src/common/core/operation-registry.js:148"
       ]
     },
     {
@@ -638,7 +638,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:182"
+        "src/index.html:183"
       ]
     },
     {
@@ -660,7 +660,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:293"
+        "src/index.html:294"
       ]
     },
     {
@@ -682,7 +682,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:162"
+        "src/index.html:163"
       ]
     },
     {
@@ -693,9 +693,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:478",
-        "src/index.html:528",
-        "src/screen/inspector-controller.js:383"
+        "src/index.html:479",
+        "src/index.html:529",
+        "src/screen/inspector-controller.js:388"
       ]
     },
     {
@@ -717,7 +717,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:488"
+        "src/index.html:489"
       ]
     },
     {
@@ -761,7 +761,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:456"
+        "src/index.html:457"
       ]
     },
     {
@@ -772,7 +772,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:152"
+        "src/index.html:153"
       ]
     },
     {
@@ -783,7 +783,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:139"
+        "src/index.html:140"
       ]
     },
     {
@@ -794,7 +794,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:140"
+        "src/index.html:141"
       ]
     },
     {
@@ -805,7 +805,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:141"
+        "src/index.html:142"
       ]
     },
     {
@@ -816,7 +816,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:97"
+        "src/common/core/operation-registry.js:101"
       ]
     },
     {
@@ -827,7 +827,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:91"
+        "src/common/core/operation-registry.js:95"
       ]
     },
     {
@@ -838,7 +838,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:249"
+        "src/index.html:250"
       ]
     },
     {
@@ -849,7 +849,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:127",
+        "src/common/core/operation-registry.js:131",
         "src/screen/outliner-view.js:156"
       ]
     },
@@ -870,7 +870,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:325"
+        "src/index.html:326"
       ]
     },
     {
@@ -892,7 +892,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:284"
+        "src/index.html:285"
       ]
     },
     {
@@ -903,7 +903,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:339"
+        "src/index.html:340"
       ]
     },
     {
@@ -914,7 +914,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:532"
+        "src/index.html:533"
       ]
     },
     {
@@ -925,7 +925,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:275"
+        "src/index.html:276"
       ]
     },
     {
@@ -956,7 +956,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:63"
+        "src/common/core/operation-registry.js:67"
       ]
     },
     {
@@ -1009,7 +1009,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:382"
+        "src/screen/inspector-controller.js:387"
       ]
     },
     {
@@ -1042,7 +1042,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:129"
+        "src/common/core/operation-registry.js:133"
       ]
     },
     {
@@ -1064,7 +1064,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:562"
+        "src/index.html:563"
       ]
     },
     {
@@ -1075,7 +1075,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:641"
+        "src/index.html:642"
       ]
     },
     {
@@ -1086,7 +1086,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:487"
+        "src/index.html:488"
       ]
     },
     {
@@ -1097,7 +1097,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:344"
+        "src/index.html:345"
       ]
     },
     {
@@ -1119,7 +1119,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:337"
+        "src/index.html:338"
       ]
     },
     {
@@ -1130,7 +1130,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:127"
+        "src/index.html:128"
       ]
     },
     {
@@ -1141,7 +1141,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:275"
+        "src/index.html:276"
       ]
     },
     {
@@ -1183,7 +1183,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:397"
+        "src/screen/events-controller.js:396"
       ]
     },
     {
@@ -1195,7 +1195,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:129",
-        "src/index.html:104"
+        "src/index.html:105"
       ]
     },
     {
@@ -1207,7 +1207,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:140",
-        "src/index.html:150"
+        "src/index.html:151"
       ]
     },
     {
@@ -1218,7 +1218,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:104"
+        "src/index.html:105"
       ]
     },
     {
@@ -1238,7 +1238,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:162"
       ]
     },
     {
@@ -1258,7 +1258,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:104"
+        "src/common/core/operation-registry.js:108"
       ]
     },
     {
@@ -1269,7 +1269,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:108"
+        "src/common/core/operation-registry.js:112"
       ]
     },
     {
@@ -1280,7 +1280,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:226"
+        "src/screen/inspector-controller.js:229"
       ]
     },
     {
@@ -1292,7 +1292,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/app-config.js:160",
-        "src/index.html:507",
+        "src/index.html:508",
         "src/screen/player-reference-controller.js:11",
         "src/screen/player-reference-controller.js:27"
       ]
@@ -1314,7 +1314,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:625"
+        "src/index.html:626"
       ]
     },
     {
@@ -1378,10 +1378,10 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:456",
-        "src/index.html:465",
-        "src/index.html:582",
-        "src/index.html:597",
+        "src/index.html:457",
+        "src/index.html:466",
+        "src/index.html:583",
+        "src/index.html:598",
         "src/project/file-controller.js:202",
         "src/project/tabs-controller.js:199",
         "src/screen/packs-controller.js:163",
@@ -1396,7 +1396,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:969"
+        "src/screen/events-controller.js:968"
       ]
     },
     {
@@ -1407,7 +1407,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:664",
+        "src/index.html:665",
         "src/screen/context-menus.js:178"
       ]
     },
@@ -1419,7 +1419,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:67"
+        "src/render/model-capture.js:120"
       ]
     },
     {
@@ -1430,7 +1430,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:354"
+        "src/index.html:355"
       ]
     },
     {
@@ -1441,7 +1441,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:353"
+        "src/index.html:354"
       ]
     },
     {
@@ -1452,7 +1452,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:88"
+        "src/screen/events-controller.js:87"
       ]
     },
     {
@@ -1474,7 +1474,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:491"
+        "src/index.html:492"
       ]
     },
     {
@@ -1486,7 +1486,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/app-config.js:165",
-        "src/index.html:498"
+        "src/index.html:499"
       ]
     },
     {
@@ -1497,7 +1497,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:91"
+        "src/index.html:92"
       ]
     },
     {
@@ -1530,7 +1530,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:437"
+        "src/index.html:438"
       ]
     },
     {
@@ -1552,7 +1552,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:412"
+        "src/screen/inspector-controller.js:423"
       ]
     },
     {
@@ -1606,7 +1606,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:162"
       ]
     },
     {
@@ -1617,7 +1617,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:571"
+        "src/index.html:572"
       ]
     },
     {
@@ -1639,7 +1639,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:158"
+        "src/index.html:159"
       ]
     },
     {
@@ -1650,7 +1650,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:289"
+        "src/index.html:290"
       ]
     },
     {
@@ -1661,12 +1661,12 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:549",
-        "src/index.html:611",
-        "src/index.html:631",
-        "src/index.html:664",
-        "src/index.html:667",
-        "src/index.html:81",
+        "src/index.html:550",
+        "src/index.html:612",
+        "src/index.html:632",
+        "src/index.html:665",
+        "src/index.html:669",
+        "src/index.html:82",
         "src/project/tabs-controller.js:199"
       ]
     },
@@ -1678,7 +1678,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:578"
+        "src/index.html:579"
       ]
     },
     {
@@ -1689,7 +1689,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:462"
+        "src/index.html:463"
       ]
     },
     {
@@ -1722,7 +1722,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:164"
+        "src/index.html:165"
       ]
     },
     {
@@ -1783,7 +1783,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:166"
+        "src/index.html:167"
       ]
     },
     {
@@ -1823,7 +1823,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:613"
+        "src/index.html:614"
       ]
     },
     {
@@ -1834,7 +1834,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:611"
+        "src/index.html:612"
       ]
     },
     {
@@ -1856,7 +1856,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:528"
+        "src/index.html:529"
       ]
     },
     {
@@ -1867,7 +1867,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:356"
+        "src/index.html:357"
       ]
     },
     {
@@ -1878,7 +1878,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:356"
+        "src/index.html:357"
       ]
     },
     {
@@ -1889,7 +1889,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:248"
+        "src/index.html:249"
       ]
     },
     {
@@ -1911,7 +1911,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:465"
+        "src/index.html:466"
       ]
     },
     {
@@ -1931,7 +1931,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:166"
+        "src/index.html:167"
       ]
     },
     {
@@ -1942,7 +1942,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:92"
+        "src/index.html:93"
       ]
     },
     {
@@ -1962,7 +1962,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:514"
+        "src/screen/events-controller.js:513"
       ]
     },
     {
@@ -1995,8 +1995,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:178",
-        "src/screen/inspector-controller.js:234"
+        "src/screen/inspector-controller.js:181",
+        "src/screen/inspector-controller.js:237"
       ]
     },
     {
@@ -2018,7 +2018,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:51"
+        "src/common/core/operation-registry.js:55"
       ]
     },
     {
@@ -2029,7 +2029,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:50"
+        "src/common/core/operation-registry.js:54"
       ]
     },
     {
@@ -2040,7 +2040,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:155"
+        "src/index.html:156"
       ]
     },
     {
@@ -2071,7 +2071,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:667"
+        "src/index.html:669"
       ]
     },
     {
@@ -2082,7 +2082,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:536"
+        "src/index.html:537"
       ]
     },
     {
@@ -2115,7 +2115,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:83"
+        "src/render/model-capture.js:145"
       ]
     },
     {
@@ -2137,7 +2137,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/app.js:966"
+        "src/app.js:968"
       ]
     },
     {
@@ -2263,7 +2263,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:582"
+        "src/index.html:583"
       ]
     },
     {
@@ -2274,7 +2274,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:65"
+        "src/common/core/operation-registry.js:69"
       ]
     },
     {
@@ -2285,7 +2285,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:61"
+        "src/common/core/operation-registry.js:65"
       ]
     },
     {
@@ -2296,7 +2296,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:66"
+        "src/common/core/operation-registry.js:70"
       ]
     },
     {
@@ -2307,7 +2307,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:64"
+        "src/common/core/operation-registry.js:68"
       ]
     },
     {
@@ -2318,7 +2318,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:226"
+        "src/screen/inspector-controller.js:229"
       ]
     },
     {
@@ -2391,7 +2391,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:62"
+        "src/common/core/operation-registry.js:66"
       ]
     },
     {
@@ -2402,7 +2402,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:98"
+        "src/common/core/operation-registry.js:102"
       ]
     },
     {
@@ -2424,7 +2424,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:226"
+        "src/screen/inspector-controller.js:229"
       ]
     },
     {
@@ -2457,7 +2457,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:310"
+        "src/screen/inspector-controller.js:313"
       ]
     },
     {
@@ -2479,7 +2479,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:501"
+        "src/index.html:502"
       ]
     },
     {
@@ -2490,7 +2490,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:144"
+        "src/common/core/operation-registry.js:148"
       ]
     },
     {
@@ -2501,7 +2501,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:502"
+        "src/index.html:503"
       ]
     },
     {
@@ -2521,7 +2521,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:145"
+        "src/common/core/operation-registry.js:149"
       ]
     },
     {
@@ -2543,7 +2543,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:471"
+        "src/index.html:472"
       ]
     },
     {
@@ -2563,7 +2563,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:41"
+        "src/editor/transform-interaction.js:42"
       ]
     },
     {
@@ -2574,7 +2574,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:284"
+        "src/index.html:285"
       ]
     },
     {
@@ -2585,7 +2585,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:94",
+        "src/common/core/operation-registry.js:98",
         "src/screen/uv-preview-controller.js:346"
       ]
     },
@@ -2597,7 +2597,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:571"
+        "src/index.html:572"
       ]
     },
     {
@@ -2608,7 +2608,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:245"
+        "src/index.html:246"
       ]
     },
     {
@@ -2640,7 +2640,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/app-config.js:165",
-        "src/index.html:498"
+        "src/index.html:499"
       ]
     },
     {
@@ -2651,7 +2651,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/journal-controller.js:157"
+        "src/project/journal-controller.js:164"
       ]
     },
     {
@@ -2674,7 +2674,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:635"
+        "src/index.html:636"
       ]
     },
     {
@@ -2685,7 +2685,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:635"
+        "src/index.html:636"
       ]
     },
     {
@@ -2734,7 +2734,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:304"
+        "src/index.html:305"
       ]
     },
     {
@@ -2772,7 +2772,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:165"
+        "src/index.html:166"
       ]
     },
     {
@@ -2783,7 +2783,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:111"
+        "src/index.html:112"
       ]
     },
     {
@@ -2794,7 +2794,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:160"
+        "src/index.html:161"
       ]
     },
     {
@@ -2823,7 +2823,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:622"
+        "src/index.html:623"
       ]
     },
     {
@@ -2834,7 +2834,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:625"
+        "src/index.html:626"
       ]
     },
     {
@@ -2925,7 +2925,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:81"
+        "src/common/core/operation-registry.js:85"
       ]
     },
     {
@@ -2936,7 +2936,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:53"
+        "src/common/core/operation-registry.js:57"
       ]
     },
     {
@@ -2980,7 +2980,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:114",
+        "src/common/core/operation-registry.js:118",
         "src/screen/context-menus.js:363"
       ]
     },
@@ -3045,7 +3045,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:522"
+        "src/index.html:523"
       ]
     },
     {
@@ -3056,7 +3056,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:524"
+        "src/index.html:525"
       ]
     },
     {
@@ -3067,7 +3067,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:523"
+        "src/index.html:524"
       ]
     },
     {
@@ -3078,7 +3078,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:510"
+        "src/index.html:511"
       ]
     },
     {
@@ -3089,9 +3089,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:522",
         "src/index.html:523",
-        "src/index.html:524"
+        "src/index.html:524",
+        "src/index.html:525"
       ]
     },
     {
@@ -3102,7 +3102,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:488"
+        "src/index.html:489"
       ]
     },
     {
@@ -3113,7 +3113,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:366"
+        "src/screen/inspector-controller.js:369"
       ]
     },
     {
@@ -3146,7 +3146,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:79"
+        "src/common/core/operation-registry.js:83"
       ]
     },
     {
@@ -3157,7 +3157,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:49"
+        "src/common/core/operation-registry.js:53"
       ]
     },
     {
@@ -3186,7 +3186,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:617",
+        "src/index.html:618",
         "src/screen/context-menus.js:312"
       ]
     },
@@ -3207,7 +3207,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:84"
+        "src/common/core/operation-registry.js:88"
       ]
     },
     {
@@ -3218,9 +3218,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:405",
+        "src/index.html:406",
         "src/screen/context-menus.js:165",
-        "src/screen/inspector-controller.js:409"
+        "src/screen/inspector-controller.js:420"
       ]
     },
     {
@@ -3231,7 +3231,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:113",
+        "src/common/core/operation-registry.js:117",
         "src/screen/context-menus.js:368"
       ]
     },
@@ -3254,7 +3254,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:163"
+        "src/index.html:164"
       ]
     },
     {
@@ -3292,7 +3292,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:154"
+        "src/index.html:155"
       ]
     },
     {
@@ -3314,7 +3314,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:128"
+        "src/common/core/operation-registry.js:132"
       ]
     },
     {
@@ -3334,8 +3334,8 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:692",
-        "src/editor/transform-interaction.js:744"
+        "src/editor/transform-interaction.js:741",
+        "src/editor/transform-interaction.js:793"
       ]
     },
     {
@@ -3346,7 +3346,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:697"
+        "src/editor/transform-interaction.js:746"
       ]
     },
     {
@@ -3357,7 +3357,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:709"
+        "src/editor/transform-interaction.js:758"
       ]
     },
     {
@@ -3368,7 +3368,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:765"
+        "src/editor/transform-interaction.js:814"
       ]
     },
     {
@@ -3379,7 +3379,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:144"
+        "src/common/core/operation-registry.js:148"
       ]
     },
     {
@@ -3390,7 +3390,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:250"
+        "src/index.html:251"
       ]
     },
     {
@@ -3412,7 +3412,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:543"
+        "src/index.html:544"
       ]
     },
     {
@@ -3441,7 +3441,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:954"
+        "src/editor/transform-interaction.js:1003"
       ]
     },
     {
@@ -3452,7 +3452,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:681"
+        "src/editor/transform-interaction.js:730"
       ]
     },
     {
@@ -3463,7 +3463,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:324"
+        "src/editor/transform-interaction.js:344"
       ]
     },
     {
@@ -3474,7 +3474,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/editor/transform-interaction.js:870"
+        "src/editor/transform-interaction.js:919"
       ]
     },
     {
@@ -3494,7 +3494,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:107"
+        "src/common/core/operation-registry.js:111"
       ]
     },
     {
@@ -3505,7 +3505,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:105"
+        "src/common/core/operation-registry.js:109"
       ]
     },
     {
@@ -3516,7 +3516,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:106"
+        "src/common/core/operation-registry.js:110"
       ]
     },
     {
@@ -3562,7 +3562,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:116",
+        "src/common/core/operation-registry.js:120",
         "src/screen/context-menus.js:365"
       ]
     },
@@ -3627,7 +3627,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:179"
+        "src/index.html:180"
       ]
     },
     {
@@ -3638,7 +3638,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:76"
+        "src/common/core/operation-registry.js:80"
       ]
     },
     {
@@ -3658,7 +3658,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:75"
+        "src/common/core/operation-registry.js:79"
       ]
     },
     {
@@ -3691,7 +3691,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:72"
+        "src/common/core/operation-registry.js:76"
       ]
     },
     {
@@ -3702,7 +3702,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:74"
+        "src/common/core/operation-registry.js:78"
       ]
     },
     {
@@ -3713,7 +3713,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:71"
+        "src/common/core/operation-registry.js:75"
       ]
     },
     {
@@ -3724,7 +3724,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:73"
+        "src/common/core/operation-registry.js:77"
       ]
     },
     {
@@ -3757,7 +3757,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:133"
+        "src/common/core/operation-registry.js:137"
       ]
     },
     {
@@ -3799,7 +3799,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:148"
+        "src/common/core/operation-registry.js:152"
       ]
     },
     {
@@ -3810,7 +3810,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:140"
+        "src/common/core/operation-registry.js:144"
       ]
     },
     {
@@ -3832,7 +3832,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:110"
+        "src/common/core/operation-registry.js:114"
       ]
     },
     {
@@ -3876,7 +3876,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:69"
+        "src/common/core/operation-registry.js:73"
       ]
     },
     {
@@ -3887,7 +3887,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:70"
+        "src/common/core/operation-registry.js:74"
       ]
     },
     {
@@ -3898,7 +3898,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:68"
+        "src/common/core/operation-registry.js:72"
       ]
     },
     {
@@ -3909,7 +3909,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:67"
+        "src/common/core/operation-registry.js:71"
       ]
     },
     {
@@ -3920,7 +3920,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:101"
+        "src/common/core/operation-registry.js:105"
       ]
     },
     {
@@ -3931,7 +3931,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:100"
+        "src/common/core/operation-registry.js:104"
       ]
     },
     {
@@ -3942,7 +3942,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:111"
+        "src/common/core/operation-registry.js:115"
       ]
     },
     {
@@ -3953,7 +3953,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:96"
+        "src/common/core/operation-registry.js:100"
       ]
     },
     {
@@ -3964,7 +3964,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:95"
+        "src/common/core/operation-registry.js:99"
       ]
     },
     {
@@ -3975,7 +3975,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:166"
+        "src/index.html:167"
       ]
     },
     {
@@ -3997,7 +3997,7 @@
       "locations": [
         "src/editor/tool-mode-controller.js:129",
         "src/editor/tool-mode-controller.js:133",
-        "src/index.html:148"
+        "src/index.html:149"
       ]
     },
     {
@@ -4017,7 +4017,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:539"
+        "src/index.html:540"
       ]
     },
     {
@@ -4068,7 +4068,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:511"
+        "src/index.html:512"
       ]
     },
     {
@@ -4079,7 +4079,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:248"
+        "src/index.html:249"
       ]
     },
     {
@@ -4099,7 +4099,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:573"
+        "src/index.html:574"
       ]
     },
     {
@@ -4130,7 +4130,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:115"
+        "src/screen/inspector-controller.js:117"
       ]
     },
     {
@@ -4142,7 +4142,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:65",
-        "src/index.html:261"
+        "src/index.html:262"
       ]
     },
     {
@@ -4153,7 +4153,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:159"
+        "src/index.html:160"
       ]
     },
     {
@@ -4164,7 +4164,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:159"
+        "src/index.html:160"
       ]
     },
     {
@@ -4193,7 +4193,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:120"
+        "src/index.html:121"
       ]
     },
     {
@@ -4204,7 +4204,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:120"
+        "src/index.html:121"
       ]
     },
     {
@@ -4215,7 +4215,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:625"
+        "src/index.html:626"
       ]
     },
     {
@@ -4255,7 +4255,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:425",
+        "src/index.html:426",
         "src/screen/context-menus.js:123",
         "src/screen/context-menus.js:374"
       ]
@@ -4277,9 +4277,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:128",
-        "src/index.html:354",
-        "src/index.html:67",
+        "src/common/core/operation-registry.js:132",
+        "src/index.html:355",
+        "src/index.html:68",
         "src/project/file-controller.js:202"
       ]
     },
@@ -4346,7 +4346,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:163"
+        "src/index.html:164"
       ]
     },
     {
@@ -4358,7 +4358,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:129",
-        "src/index.html:108"
+        "src/index.html:109"
       ]
     },
     {
@@ -4369,7 +4369,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:108"
+        "src/index.html:109"
       ]
     },
     {
@@ -4389,7 +4389,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:250"
+        "src/index.html:251"
       ]
     },
     {
@@ -4400,7 +4400,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:168"
+        "src/index.html:169"
       ]
     },
     {
@@ -4412,7 +4412,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:128",
-        "src/index.html:103"
+        "src/index.html:104"
       ]
     },
     {
@@ -4423,7 +4423,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:430"
+        "src/index.html:431"
       ]
     },
     {
@@ -4434,7 +4434,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:409"
+        "src/screen/events-controller.js:408"
       ]
     },
     {
@@ -4479,7 +4479,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:76"
+        "src/render/model-capture.js:137"
       ]
     },
     {
@@ -4490,7 +4490,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:122"
+        "src/render/model-capture.js:186"
       ]
     },
     {
@@ -4512,7 +4512,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/project/journal-controller.js:336"
+        "src/project/journal-controller.js:343"
       ]
     },
     {
@@ -4534,7 +4534,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:113"
+        "src/screen/events-controller.js:112"
       ]
     },
     {
@@ -4633,7 +4633,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:110"
+        "src/render/model-capture.js:173"
       ]
     },
     {
@@ -4684,22 +4684,22 @@
       "key": "ui.file-name",
       "zhHant": "不支援拖入 ${file.name}",
       "zhHans": "不支援拖入 ${file.name}",
-      "en": "不支援拖入 ${file.name}",
+      "en": "Unsupported drop: ${file.name}",
       "dynamic": true,
-      "englishMissing": true,
+      "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:93"
+        "src/screen/events-controller.js:92"
       ]
     },
     {
       "key": "ui.file-name-2",
       "zhHant": "無法取得 ${file.name} 的本機路徑",
       "zhHans": "无法取得 ${file.name} 的本机路径",
-      "en": "無法取得 ${file.name} 的本機路徑",
+      "en": "Could not find the local path for ${file.name}",
       "dynamic": true,
-      "englishMissing": true,
+      "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:85"
+        "src/screen/events-controller.js:84"
       ]
     },
     {
@@ -4711,7 +4711,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:129",
-        "src/index.html:106"
+        "src/index.html:107"
       ]
     },
     {
@@ -4722,7 +4722,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:567"
+        "src/index.html:568"
       ]
     },
     {
@@ -4733,7 +4733,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:106"
+        "src/index.html:107"
       ]
     },
     {
@@ -4744,7 +4744,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:166"
+        "src/index.html:167"
       ]
     },
     {
@@ -4787,7 +4787,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:171"
+        "src/index.html:172"
       ]
     },
     {
@@ -4798,7 +4798,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:170"
+        "src/index.html:171"
       ]
     },
     {
@@ -4809,7 +4809,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:127"
+        "src/index.html:128"
       ]
     },
     {
@@ -4820,7 +4820,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:128"
+        "src/index.html:129"
       ]
     },
     {
@@ -4831,7 +4831,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:341"
+        "src/index.html:342"
       ]
     },
     {
@@ -4855,7 +4855,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:251"
+        "src/index.html:252"
       ]
     },
     {
@@ -4879,7 +4879,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:251"
+        "src/index.html:252"
       ]
     },
     {
@@ -4890,7 +4890,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:453"
+        "src/index.html:454"
       ]
     },
     {
@@ -4901,7 +4901,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:551",
+        "src/index.html:552",
         "src/screen/packs-controller.js:4"
       ]
     },
@@ -4913,7 +4913,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:396",
+        "src/index.html:397",
         "src/shapes/truncated-icosahedron.js:2"
       ]
     },
@@ -4921,11 +4921,11 @@
       "key": "ui.formatnumber-item-parameters-radius-formatnumber-item-parameters-height-px",
       "zhHant": "等距尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px",
       "zhHans": "等距尺寸 半径 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px",
-      "en": "等距尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px",
+      "en": "Uniform size Radius ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px",
       "dynamic": true,
-      "englishMissing": true,
+      "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:941"
+        "src/editor/transform-interaction.js:990"
       ]
     },
     {
@@ -4936,7 +4936,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:143"
+        "src/index.html:144"
       ]
     },
     {
@@ -4958,7 +4958,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:154"
+        "src/index.html:155"
       ]
     },
     {
@@ -4970,7 +4970,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:140",
-        "src/index.html:150"
+        "src/index.html:151"
       ]
     },
     {
@@ -4990,7 +4990,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:336"
+        "src/index.html:337"
       ]
     },
     {
@@ -5001,7 +5001,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:634"
+        "src/index.html:635"
       ]
     },
     {
@@ -5012,7 +5012,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:634"
+        "src/index.html:635"
       ]
     },
     {
@@ -5023,7 +5023,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:530",
+        "src/index.html:531",
         "src/screen/packs-controller.js:6"
       ]
     },
@@ -5058,8 +5058,8 @@
       "englishMissing": false,
       "locations": [
         "src/common/core/layer-blend.js:2",
-        "src/index.html:475",
-        "src/index.html:482"
+        "src/index.html:476",
+        "src/index.html:483"
       ]
     },
     {
@@ -5090,7 +5090,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:266",
+        "src/index.html:267",
         "src/screen/reference-images.js:66"
       ]
     },
@@ -5102,7 +5102,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:99"
+        "src/common/core/operation-registry.js:103"
       ]
     },
     {
@@ -5122,7 +5122,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:603"
+        "src/index.html:604"
       ]
     },
     {
@@ -5153,7 +5153,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:424"
+        "src/index.html:425"
       ]
     },
     {
@@ -5164,7 +5164,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:614"
+        "src/index.html:615"
       ]
     },
     {
@@ -5175,7 +5175,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:114"
+        "src/index.html:115"
       ]
     },
     {
@@ -5186,7 +5186,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:177"
+        "src/index.html:178"
       ]
     },
     {
@@ -5197,7 +5197,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:114"
+        "src/index.html:115"
       ]
     },
     {
@@ -5209,7 +5209,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:129",
-        "src/index.html:107"
+        "src/index.html:108"
       ]
     },
     {
@@ -5220,7 +5220,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:109"
+        "src/common/core/operation-registry.js:113"
       ]
     },
     {
@@ -5231,7 +5231,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:171"
+        "src/index.html:172"
       ]
     },
     {
@@ -5242,7 +5242,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:107"
+        "src/index.html:108"
       ]
     },
     {
@@ -5253,7 +5253,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:296"
+        "src/index.html:297"
       ]
     },
     {
@@ -5264,7 +5264,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:173"
+        "src/index.html:174"
       ]
     },
     {
@@ -5275,7 +5275,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:625",
+        "src/index.html:626",
         "src/screen/palette/controller.js:454"
       ]
     },
@@ -5296,7 +5296,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:197"
+        "src/index.html:198"
       ]
     },
     {
@@ -5374,8 +5374,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:143",
-        "src/index.html:566"
+        "src/common/core/operation-registry.js:147",
+        "src/index.html:567"
       ]
     },
     {
@@ -5472,7 +5472,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:613"
+        "src/index.html:614"
       ]
     },
     {
@@ -5483,7 +5483,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:613"
+        "src/index.html:614"
       ]
     },
     {
@@ -5494,7 +5494,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:429"
+        "src/index.html:430"
       ]
     },
     {
@@ -5527,7 +5527,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:196"
+        "src/index.html:197"
       ]
     },
     {
@@ -5549,7 +5549,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:508"
+        "src/index.html:509"
       ]
     },
     {
@@ -5560,7 +5560,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:595"
+        "src/index.html:596"
       ]
     },
     {
@@ -5582,7 +5582,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:269"
+        "src/index.html:270"
       ]
     },
     {
@@ -5593,8 +5593,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:112",
-        "src/index.html:196"
+        "src/common/core/operation-registry.js:116",
+        "src/index.html:197"
       ]
     },
     {
@@ -5638,9 +5638,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:137",
-        "src/screen/inspector-controller.js:155",
-        "src/screen/inspector-controller.js:360"
+        "src/common/core/operation-registry.js:141",
+        "src/screen/inspector-controller.js:158",
+        "src/screen/inspector-controller.js:363"
       ]
     },
     {
@@ -5685,7 +5685,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:128"
+        "src/common/core/operation-registry.js:132"
       ]
     },
     {
@@ -5696,7 +5696,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:143"
+        "src/common/core/operation-registry.js:147"
       ]
     },
     {
@@ -5707,7 +5707,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:530"
+        "src/index.html:531"
       ]
     },
     {
@@ -5718,7 +5718,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:484"
+        "src/index.html:485"
       ]
     },
     {
@@ -5740,7 +5740,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:482"
+        "src/index.html:483"
       ]
     },
     {
@@ -5784,7 +5784,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:347"
+        "src/screen/inspector-controller.js:350"
       ]
     },
     {
@@ -5795,7 +5795,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/inspector-controller.js:409"
+        "src/screen/inspector-controller.js:420"
       ]
     },
     {
@@ -5806,7 +5806,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/inspector-controller.js:309"
+        "src/screen/inspector-controller.js:312"
       ]
     },
     {
@@ -5817,7 +5817,7 @@
       "dynamic": true,
       "englishMissing": true,
       "locations": [
-        "src/screen/inspector-controller.js:310"
+        "src/screen/inspector-controller.js:313"
       ]
     },
     {
@@ -5839,7 +5839,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:449"
+        "src/index.html:450"
       ]
     },
     {
@@ -5850,7 +5850,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:574"
+        "src/index.html:575"
       ]
     },
     {
@@ -5872,16 +5872,16 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:155"
+        "src/index.html:156"
       ]
     },
     {
       "key": "ui.kind-labels-kind",
       "zhHant": "尚未加入${KIND_LABELS[kind]}",
       "zhHans": "尚未加入${KIND_LABELS[kind]}",
-      "en": "尚未加入${KIND_LABELS[kind]}",
+      "en": "No ${KIND_LABELS[kind]} packs added yet",
       "dynamic": true,
-      "englishMissing": true,
+      "englishMissing": false,
       "locations": [
         "src/screen/packs-controller.js:115"
       ]
@@ -5895,7 +5895,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:128",
-        "src/index.html:102"
+        "src/index.html:103"
       ]
     },
     {
@@ -5906,7 +5906,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:550"
+        "src/index.html:551"
       ]
     },
     {
@@ -5917,7 +5917,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:551",
+        "src/index.html:552",
         "src/screen/packs-controller.js:4"
       ]
     },
@@ -5929,7 +5929,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:590"
+        "src/index.html:591"
       ]
     },
     {
@@ -5940,8 +5940,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:412",
-        "src/index.html:658"
+        "src/index.html:413",
+        "src/index.html:659"
       ]
     },
     {
@@ -5952,7 +5952,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:631"
+        "src/index.html:632"
       ]
     },
     {
@@ -5981,7 +5981,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:576"
+        "src/index.html:577"
       ]
     },
     {
@@ -5992,7 +5992,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:175"
+        "src/index.html:176"
       ]
     },
     {
@@ -6003,7 +6003,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:188"
+        "src/index.html:189"
       ]
     },
     {
@@ -6014,7 +6014,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:338"
+        "src/index.html:339"
       ]
     },
     {
@@ -6025,7 +6025,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:168"
+        "src/index.html:169"
       ]
     },
     {
@@ -6036,7 +6036,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:167"
+        "src/index.html:168"
       ]
     },
     {
@@ -6047,7 +6047,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:167"
+        "src/index.html:168"
       ]
     },
     {
@@ -6069,7 +6069,7 @@
       "locations": [
         "src/editor/tool-mode-controller.js:129",
         "src/editor/tool-mode-controller.js:133",
-        "src/index.html:148"
+        "src/index.html:149"
       ]
     },
     {
@@ -6080,7 +6080,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:491"
+        "src/index.html:492"
       ]
     },
     {
@@ -6102,7 +6102,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:116"
+        "src/index.html:117"
       ]
     },
     {
@@ -6133,7 +6133,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:118"
+        "src/index.html:119"
       ]
     },
     {
@@ -6144,7 +6144,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:116"
+        "src/index.html:117"
       ]
     },
     {
@@ -6166,7 +6166,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:297"
+        "src/index.html:298"
       ]
     },
     {
@@ -6186,7 +6186,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:490"
+        "src/index.html:491"
       ]
     },
     {
@@ -6208,7 +6208,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:128",
+        "src/common/core/operation-registry.js:132",
         "src/screen/outliner-view.js:152",
         "src/screen/outliner-view.js:159"
       ]
@@ -6221,7 +6221,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:142"
+        "src/index.html:143"
       ]
     },
     {
@@ -6232,7 +6232,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:142"
+        "src/index.html:143"
       ]
     },
     {
@@ -6243,7 +6243,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:71"
+        "src/index.html:72"
       ]
     },
     {
@@ -6254,7 +6254,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:485"
+        "src/index.html:486"
       ]
     },
     {
@@ -6265,7 +6265,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:485"
+        "src/index.html:486"
       ]
     },
     {
@@ -6338,7 +6338,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:642"
+        "src/index.html:643"
       ]
     },
     {
@@ -6349,7 +6349,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:575"
+        "src/index.html:576"
       ]
     },
     {
@@ -6360,7 +6360,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:646"
+        "src/index.html:647"
       ]
     },
     {
@@ -6371,7 +6371,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:651"
+        "src/index.html:652"
       ]
     },
     {
@@ -6382,7 +6382,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:654"
+        "src/index.html:655"
       ]
     },
     {
@@ -6393,7 +6393,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:647"
+        "src/index.html:648"
       ]
     },
     {
@@ -6404,7 +6404,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:652"
+        "src/index.html:653"
       ]
     },
     {
@@ -6426,7 +6426,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:78"
+        "src/index.html:79"
       ]
     },
     {
@@ -6437,8 +6437,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/app.js:934",
-        "src/index.html:80"
+        "src/app.js:935",
+        "src/index.html:81"
       ]
     },
     {
@@ -6449,7 +6449,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:79"
+        "src/index.html:80"
       ]
     },
     {
@@ -6471,7 +6471,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:353"
+        "src/index.html:354"
       ]
     },
     {
@@ -6493,7 +6493,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:149"
+        "src/index.html:150"
       ]
     },
     {
@@ -6504,7 +6504,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:149"
+        "src/index.html:150"
       ]
     },
     {
@@ -6515,7 +6515,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:644"
+        "src/index.html:645"
       ]
     },
     {
@@ -6526,7 +6526,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:148"
+        "src/index.html:149"
       ]
     },
     {
@@ -6548,7 +6548,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:105"
+        "src/index.html:106"
       ]
     },
     {
@@ -6559,7 +6559,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:105"
+        "src/index.html:106"
       ]
     },
     {
@@ -6570,7 +6570,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:642"
+        "src/index.html:643"
       ]
     },
     {
@@ -6615,7 +6615,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/app.js:934"
+        "src/app.js:935"
       ]
     },
     {
@@ -6648,7 +6648,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:292"
+        "src/index.html:293"
       ]
     },
     {
@@ -6659,7 +6659,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:655"
+        "src/index.html:656"
       ]
     },
     {
@@ -6671,6 +6671,61 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:70"
+      ]
+    },
+    {
+      "key": "ui.message-41",
+      "zhHant": "自動裁剪至模型像素",
+      "zhHans": "自动裁剪至模型像素",
+      "en": "Auto-crop to model pixels",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:667"
+      ]
+    },
+    {
+      "key": "ui.message-42",
+      "zhHant": "應用元素位移",
+      "zhHans": "应用元素位移",
+      "en": "Apply element position",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/common/core/operation-registry.js:49"
+      ]
+    },
+    {
+      "key": "ui.message-43",
+      "zhHant": "應用元素旋轉",
+      "zhHans": "应用元素旋转",
+      "en": "Apply element rotation",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/common/core/operation-registry.js:51"
+      ]
+    },
+    {
+      "key": "ui.message-44",
+      "zhHant": "還原已應用位移",
+      "zhHans": "还原已应用位移",
+      "en": "Restore applied position",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/common/core/operation-registry.js:50"
+      ]
+    },
+    {
+      "key": "ui.message-45",
+      "zhHant": "還原已應用旋轉",
+      "zhHans": "还原已应用旋转",
+      "en": "Restore applied rotation",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/common/core/operation-registry.js:52"
       ]
     },
     {
@@ -6714,7 +6769,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:650"
+        "src/index.html:651"
       ]
     },
     {
@@ -6736,7 +6791,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:341"
+        "src/index.html:342"
       ]
     },
     {
@@ -6831,7 +6886,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:243"
+        "src/index.html:244"
       ]
     },
     {
@@ -6851,7 +6906,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:300"
+        "src/index.html:301"
       ]
     },
     {
@@ -6862,7 +6917,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:244"
+        "src/index.html:245"
       ]
     },
     {
@@ -6873,7 +6928,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:93"
+        "src/common/core/operation-registry.js:97"
       ]
     },
     {
@@ -6895,18 +6950,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:168"
-      ]
-    },
-    {
-      "key": "ui.mode-offscreen-pixelwidth-pixelheight-png",
-      "zhHant": "${mode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${pixelWidth} × ${pixelHeight} PNG · 透明背景",
-      "zhHans": "${mode === 'offscreen' ? '离屏渲染 · 自动框住可见模型' : '屏幕截图 · 仅当前视窗范围'} · ${pixelWidth} × ${pixelHeight} PNG · 透明背景",
-      "en": "${mode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${pixelWidth} × ${pixelHeight} PNG · 透明背景",
-      "dynamic": true,
-      "englishMissing": true,
-      "locations": [
-        "src/render/model-capture.js:73"
+        "src/index.html:169"
       ]
     },
     {
@@ -6917,7 +6961,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:421"
+        "src/index.html:422"
       ]
     },
     {
@@ -6928,7 +6972,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:120"
+        "src/render/model-capture.js:184"
       ]
     },
     {
@@ -6939,7 +6983,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:107"
+        "src/render/model-capture.js:170"
       ]
     },
     {
@@ -6950,8 +6994,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:100",
-        "src/render/model-capture.js:93"
+        "src/render/model-capture.js:156",
+        "src/render/model-capture.js:163"
       ]
     },
     {
@@ -6962,7 +7006,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:448"
+        "src/index.html:449"
       ]
     },
     {
@@ -6973,6 +7017,17 @@
       "englishMissing": false,
       "locations": [],
       "key": "ui.model-palette"
+    },
+    {
+      "key": "ui.modelcapturemode-offscreen-output-width-output-height-png",
+      "zhHant": "${modelCaptureMode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${output.width} × ${output.height} PNG · 透明背景",
+      "zhHans": "${modelCaptureMode === 'offscreen' ? '离屏渲染 · 自动框住可见模型' : '屏幕截图 · 仅当前视窗范围'} · ${output.width} × ${output.height} PNG · 透明背景",
+      "en": "${modelCaptureMode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${output.width} × ${output.height} PNG · 透明背景",
+      "dynamic": true,
+      "englishMissing": true,
+      "locations": [
+        "src/render/model-capture.js:85"
+      ]
     },
     {
       "key": "ui.modifier-result-read-only",
@@ -7004,7 +7059,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:385"
+        "src/screen/inspector-controller.js:390"
       ]
     },
     {
@@ -7026,7 +7081,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:539",
+        "src/index.html:540",
         "src/screen/palette/controller.js:10"
       ]
     },
@@ -7039,9 +7094,9 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:128",
-        "src/index.html:131",
-        "src/index.html:153",
-        "src/index.html:97"
+        "src/index.html:132",
+        "src/index.html:154",
+        "src/index.html:98"
       ]
     },
     {
@@ -7052,7 +7107,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:80"
+        "src/common/core/operation-registry.js:84"
       ]
     },
     {
@@ -7085,7 +7140,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:55"
+        "src/common/core/operation-registry.js:59"
       ]
     },
     {
@@ -7096,7 +7151,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:54"
+        "src/common/core/operation-registry.js:58"
       ]
     },
     {
@@ -7119,7 +7174,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:128",
-        "src/index.html:100"
+        "src/index.html:101"
       ]
     },
     {
@@ -7130,7 +7185,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:58"
+        "src/common/core/operation-registry.js:62"
       ]
     },
     {
@@ -7141,7 +7196,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:86"
+        "src/common/core/operation-registry.js:90"
       ]
     },
     {
@@ -7161,7 +7216,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:131"
+        "src/index.html:132"
       ]
     },
     {
@@ -7227,7 +7282,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:89"
+        "src/common/core/operation-registry.js:93"
       ]
     },
     {
@@ -7260,7 +7315,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:122"
+        "src/index.html:123"
       ]
     },
     {
@@ -7295,9 +7350,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:126",
-        "src/index.html:563",
-        "src/index.html:639"
+        "src/common/core/operation-registry.js:130",
+        "src/index.html:564",
+        "src/index.html:640"
       ]
     },
     {
@@ -7308,7 +7363,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:427"
+        "src/index.html:428"
       ]
     },
     {
@@ -7319,7 +7374,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:72"
+        "src/index.html:73"
       ]
     },
     {
@@ -7330,7 +7385,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:91"
+        "src/index.html:92"
       ]
     },
     {
@@ -7341,8 +7396,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:436",
-        "src/index.html:87"
+        "src/index.html:437",
+        "src/index.html:88"
       ]
     },
     {
@@ -7353,8 +7408,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:195",
-        "src/index.html:560"
+        "src/index.html:196",
+        "src/index.html:561"
       ]
     },
     {
@@ -7365,7 +7420,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:195"
+        "src/index.html:196"
       ]
     },
     {
@@ -7376,7 +7431,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:241",
+        "src/index.html:242",
         "src/screen/uv-preview-controller.js:172",
         "src/screen/uv-preview-controller.js:331"
       ]
@@ -7389,7 +7444,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:638",
+        "src/index.html:639",
         "src/texture/layer-editor-dialog.js:109"
       ]
     },
@@ -7401,7 +7456,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:82"
+        "src/render/model-capture.js:144"
       ]
     },
     {
@@ -7450,7 +7505,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:218"
+        "src/index.html:219"
       ]
     },
     {
@@ -7472,7 +7527,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:616"
+        "src/index.html:617"
       ]
     },
     {
@@ -7483,7 +7538,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:309"
+        "src/screen/inspector-controller.js:312"
       ]
     },
     {
@@ -7503,7 +7558,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:127",
+        "src/common/core/operation-registry.js:131",
         "src/screen/outliner-view.js:157"
       ]
     },
@@ -7516,8 +7571,8 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:235",
-        "src/index.html:320",
-        "src/index.html:321"
+        "src/index.html:321",
+        "src/index.html:322"
       ]
     },
     {
@@ -7575,7 +7630,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:267",
+        "src/index.html:268",
         "src/screen/reference-images.js:68"
       ]
     },
@@ -7587,7 +7642,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/journal-controller.js:162"
+        "src/project/journal-controller.js:169"
       ]
     },
     {
@@ -7598,7 +7653,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/project/journal-controller.js:162"
+        "src/project/journal-controller.js:169"
       ]
     },
     {
@@ -7620,9 +7675,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:368",
-        "src/index.html:376",
-        "src/screen/inspector-controller.js:289"
+        "src/index.html:369",
+        "src/index.html:377",
+        "src/screen/inspector-controller.js:292"
       ]
     },
     {
@@ -7655,7 +7710,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:463"
+        "src/index.html:464"
       ]
     },
     {
@@ -7666,8 +7721,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:165",
-        "src/index.html:640"
+        "src/index.html:166",
+        "src/index.html:641"
       ]
     },
     {
@@ -7687,7 +7742,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:73"
+        "src/index.html:74"
       ]
     },
     {
@@ -7720,7 +7775,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:94"
+        "src/screen/events-controller.js:93"
       ]
     },
     {
@@ -7742,7 +7797,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:587"
+        "src/index.html:588"
       ]
     },
     {
@@ -7753,7 +7808,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:453"
+        "src/index.html:454"
       ]
     },
     {
@@ -7764,7 +7819,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:386"
+        "src/screen/inspector-controller.js:391"
       ]
     },
     {
@@ -7775,7 +7830,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:341"
+        "src/index.html:342"
       ]
     },
     {
@@ -7787,8 +7842,8 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/app-config.js:155",
-        "src/index.html:259",
-        "src/index.html:497"
+        "src/index.html:260",
+        "src/index.html:498"
       ]
     },
     {
@@ -7799,9 +7854,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:137",
-        "src/screen/inspector-controller.js:155",
-        "src/screen/inspector-controller.js:360"
+        "src/common/core/operation-registry.js:141",
+        "src/screen/inspector-controller.js:158",
+        "src/screen/inspector-controller.js:363"
       ]
     },
     {
@@ -7812,7 +7867,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:386"
+        "src/index.html:387"
       ]
     },
     {
@@ -7837,9 +7892,9 @@
       "key": "ui.pack-name",
       "zhHant": "移除「${pack.name}」？",
       "zhHans": "移除「${pack.name}」？",
-      "en": "移除「${pack.name}」？",
+      "en": "Remove “${pack.name}”?",
       "dynamic": true,
-      "englishMissing": true,
+      "englishMissing": false,
       "locations": [
         "src/screen/packs-controller.js:162"
       ]
@@ -7863,7 +7918,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:576"
+        "src/index.html:577"
       ]
     },
     {
@@ -7874,7 +7929,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:577"
+        "src/index.html:578"
       ]
     },
     {
@@ -7885,7 +7940,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:181"
+        "src/index.html:182"
       ]
     },
     {
@@ -7896,7 +7951,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:164"
+        "src/index.html:165"
       ]
     },
     {
@@ -7927,7 +7982,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:93"
+        "src/screen/inspector-controller.js:95"
       ]
     },
     {
@@ -7938,7 +7993,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:514"
+        "src/index.html:515"
       ]
     },
     {
@@ -7949,7 +8004,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:514"
+        "src/index.html:515"
       ]
     },
     {
@@ -7972,7 +8027,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:129",
-        "src/index.html:109"
+        "src/index.html:110"
       ]
     },
     {
@@ -7994,7 +8049,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:102"
+        "src/common/core/operation-registry.js:106"
       ]
     },
     {
@@ -8005,7 +8060,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:347"
+        "src/index.html:348"
       ]
     },
     {
@@ -8016,7 +8071,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:359"
+        "src/index.html:360"
       ]
     },
     {
@@ -8061,7 +8116,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:341"
+        "src/index.html:342"
       ]
     },
     {
@@ -8072,7 +8127,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:533"
+        "src/index.html:534"
       ]
     },
     {
@@ -8083,7 +8138,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:115"
+        "src/index.html:116"
       ]
     },
     {
@@ -8094,7 +8149,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:115"
+        "src/index.html:116"
       ]
     },
     {
@@ -8118,7 +8173,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:52"
+        "src/common/core/operation-registry.js:56"
       ]
     },
     {
@@ -8129,7 +8184,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:115",
+        "src/common/core/operation-registry.js:119",
         "src/screen/context-menus.js:364",
         "src/screen/context-menus.js:383"
       ]
@@ -8174,9 +8229,9 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/app-config.js:155",
-        "src/index.html:259",
-        "src/index.html:497",
-        "src/index.html:615"
+        "src/index.html:260",
+        "src/index.html:498",
+        "src/index.html:616"
       ]
     },
     {
@@ -8187,7 +8242,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:136"
+        "src/common/core/operation-registry.js:140"
       ]
     },
     {
@@ -8198,7 +8253,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:143"
+        "src/index.html:144"
       ]
     },
     {
@@ -8209,7 +8264,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:426"
+        "src/index.html:427"
       ]
     },
     {
@@ -8229,7 +8284,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:423"
+        "src/index.html:424"
       ]
     },
     {
@@ -8240,8 +8295,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:506",
-        "src/index.html:507"
+        "src/index.html:507",
+        "src/index.html:508"
       ]
     },
     {
@@ -8274,7 +8329,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:96"
+        "src/render/model-capture.js:159"
       ]
     },
     {
@@ -8330,7 +8385,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:513"
+        "src/index.html:514"
       ]
     },
     {
@@ -8341,7 +8396,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:512"
+        "src/index.html:513"
       ]
     },
     {
@@ -8363,7 +8418,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:394",
+        "src/index.html:395",
         "src/shapes/polygon-prism.js:2"
       ]
     },
@@ -8375,7 +8430,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:119"
+        "src/index.html:120"
       ]
     },
     {
@@ -8386,7 +8441,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:119"
+        "src/index.html:120"
       ]
     },
     {
@@ -8397,7 +8452,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:136"
+        "src/common/core/operation-registry.js:140"
       ]
     },
     {
@@ -8408,7 +8463,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:60"
+        "src/common/core/operation-registry.js:64"
       ]
     },
     {
@@ -8430,7 +8485,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:604"
+        "src/index.html:605"
       ]
     },
     {
@@ -8441,7 +8496,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:428"
+        "src/index.html:429"
       ]
     },
     {
@@ -8452,7 +8507,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:574"
+        "src/index.html:575"
       ]
     },
     {
@@ -8474,7 +8529,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:130"
+        "src/common/core/operation-registry.js:134"
       ]
     },
     {
@@ -8534,7 +8589,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:606"
+        "src/index.html:607"
       ]
     },
     {
@@ -8545,7 +8600,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:454"
+        "src/index.html:455"
       ]
     },
     {
@@ -8556,7 +8611,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:90",
+        "src/index.html:91",
         "src/project/tabs-controller.js:117"
       ]
     },
@@ -8568,7 +8623,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:444"
+        "src/index.html:445"
       ]
     },
     {
@@ -8590,7 +8645,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:447"
+        "src/index.html:448"
       ]
     },
     {
@@ -8610,7 +8665,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:85"
+        "src/index.html:86"
       ]
     },
     {
@@ -8621,7 +8676,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:491"
+        "src/index.html:492"
       ]
     },
     {
@@ -8653,7 +8708,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/app-config.js:165",
-        "src/index.html:498"
+        "src/index.html:499"
       ]
     },
     {
@@ -8673,7 +8728,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:143"
+        "src/common/core/operation-registry.js:147"
       ]
     },
     {
@@ -8684,7 +8739,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:931"
+        "src/editor/transform-interaction.js:980"
       ]
     },
     {
@@ -8706,7 +8761,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:588"
+        "src/index.html:589"
       ]
     },
     {
@@ -8751,7 +8806,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:140",
-        "src/index.html:150"
+        "src/index.html:151"
       ]
     },
     {
@@ -8764,7 +8819,7 @@
       "locations": [
         "src/editor/tool-mode-controller.js:129",
         "src/editor/tool-mode-controller.js:133",
-        "src/index.html:148"
+        "src/index.html:149"
       ]
     },
     {
@@ -8775,8 +8830,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:119",
-        "src/index.html:76"
+        "src/common/core/operation-registry.js:123",
+        "src/index.html:77"
       ]
     },
     {
@@ -8787,7 +8842,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:264",
+        "src/index.html:265",
         "src/screen/context-menus.js:218"
       ]
     },
@@ -8819,8 +8874,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:554",
-        "src/index.html:92"
+        "src/index.html:555",
+        "src/index.html:93"
       ]
     },
     {
@@ -8831,7 +8886,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:395",
+        "src/index.html:396",
         "src/shapes/dodecahedron.js:2"
       ]
     },
@@ -8877,7 +8932,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:272"
+        "src/index.html:273"
       ]
     },
     {
@@ -8899,7 +8954,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:67"
+        "src/render/model-capture.js:120"
       ]
     },
     {
@@ -8921,7 +8976,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:88"
+        "src/common/core/operation-registry.js:92"
       ]
     },
     {
@@ -8932,7 +8987,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:117"
+        "src/common/core/operation-registry.js:121"
       ]
     },
     {
@@ -8943,7 +8998,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:570"
+        "src/index.html:571"
       ]
     },
     {
@@ -8974,7 +9029,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:271"
+        "src/index.html:272"
       ]
     },
     {
@@ -8985,7 +9040,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:85"
+        "src/common/core/operation-registry.js:89"
       ]
     },
     {
@@ -9029,8 +9084,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:485",
-        "src/index.html:549"
+        "src/index.html:486",
+        "src/index.html:550"
       ]
     },
     {
@@ -9041,7 +9096,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:508"
+        "src/index.html:509"
       ]
     },
     {
@@ -9052,7 +9107,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:543"
+        "src/index.html:544"
       ]
     },
     {
@@ -9107,18 +9162,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:431"
+        "src/screen/events-controller.js:430"
       ]
     },
     {
       "key": "ui.result-historywarning",
       "zhHant": "歷史裁剪未完成：${result.historyWarning}",
       "zhHans": "历史裁剪未完成：${result.historyWarning}",
-      "en": "歷史裁剪未完成：${result.historyWarning}",
+      "en": "History compaction incomplete: ${result.historyWarning}",
       "dynamic": true,
-      "englishMissing": true,
+      "englishMissing": false,
       "locations": [
-        "src/project/journal-controller.js:331"
+        "src/project/journal-controller.js:338"
       ]
     },
     {
@@ -9141,7 +9196,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:613"
+        "src/index.html:614"
       ]
     },
     {
@@ -9152,7 +9207,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:365"
+        "src/index.html:366"
       ]
     },
     {
@@ -9172,7 +9227,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:335"
+        "src/index.html:336"
       ]
     },
     {
@@ -9192,7 +9247,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:1006"
+        "src/editor/transform-interaction.js:1055"
       ]
     },
     {
@@ -9203,12 +9258,12 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:136",
+        "src/common/core/operation-registry.js:140",
         "src/editor/tool-mode-controller.js:128",
-        "src/index.html:133",
-        "src/index.html:153",
-        "src/index.html:341",
-        "src/index.html:99"
+        "src/index.html:100",
+        "src/index.html:134",
+        "src/index.html:154",
+        "src/index.html:342"
       ]
     },
     {
@@ -9219,7 +9274,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:242"
+        "src/index.html:243"
       ]
     },
     {
@@ -9230,7 +9285,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:57"
+        "src/common/core/operation-registry.js:61"
       ]
     },
     {
@@ -9241,7 +9296,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:157"
+        "src/index.html:158"
       ]
     },
     {
@@ -9252,7 +9307,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:156"
+        "src/index.html:157"
       ]
     },
     {
@@ -9263,7 +9318,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:133"
+        "src/index.html:134"
       ]
     },
     {
@@ -9274,7 +9329,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:92"
+        "src/common/core/operation-registry.js:96"
       ]
     },
     {
@@ -9305,7 +9360,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:74"
+        "src/index.html:75"
       ]
     },
     {
@@ -9316,7 +9371,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:667"
+        "src/index.html:669"
       ]
     },
     {
@@ -9339,9 +9394,9 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:128",
-        "src/index.html:132",
-        "src/index.html:341",
-        "src/index.html:98"
+        "src/index.html:133",
+        "src/index.html:342",
+        "src/index.html:99"
       ]
     },
     {
@@ -9352,7 +9407,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:870"
+        "src/editor/transform-interaction.js:919"
       ]
     },
     {
@@ -9363,7 +9418,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:56"
+        "src/common/core/operation-registry.js:60"
       ]
     },
     {
@@ -9374,7 +9429,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:126"
+        "src/index.html:127"
       ]
     },
     {
@@ -9385,7 +9440,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:87"
+        "src/common/core/operation-registry.js:91"
       ]
     },
     {
@@ -9396,7 +9451,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:132"
+        "src/index.html:133"
       ]
     },
     {
@@ -9418,7 +9473,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:90"
+        "src/common/core/operation-registry.js:94"
       ]
     },
     {
@@ -9440,8 +9495,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:383",
-        "src/index.html:408"
+        "src/index.html:384",
+        "src/index.html:409"
       ]
     },
     {
@@ -9452,7 +9507,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:166"
+        "src/index.html:167"
       ]
     },
     {
@@ -9485,7 +9540,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:407"
+        "src/index.html:408"
       ]
     },
     {
@@ -9496,7 +9551,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:173"
+        "src/index.html:174"
       ]
     },
     {
@@ -9507,7 +9562,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:172"
+        "src/index.html:173"
       ]
     },
     {
@@ -9566,7 +9621,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:238",
+        "src/index.html:239",
         "src/screen/uv-preview-controller.js:435"
       ]
     },
@@ -9588,7 +9643,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:205",
-        "src/index.html:146"
+        "src/index.html:147"
       ]
     },
     {
@@ -9619,7 +9674,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:205"
+        "src/index.html:206"
       ]
     },
     {
@@ -9630,7 +9685,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:202"
+        "src/index.html:203"
       ]
     },
     {
@@ -9641,7 +9696,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:200"
+        "src/index.html:201"
       ]
     },
     {
@@ -9652,7 +9707,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:201"
+        "src/index.html:202"
       ]
     },
     {
@@ -9663,7 +9718,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:204"
+        "src/index.html:205"
       ]
     },
     {
@@ -9674,7 +9729,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:203"
+        "src/index.html:204"
       ]
     },
     {
@@ -9697,7 +9752,7 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:155",
-        "src/index.html:145"
+        "src/index.html:146"
       ]
     },
     {
@@ -9719,7 +9774,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:170"
+        "src/index.html:171"
       ]
     },
     {
@@ -9730,7 +9785,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:172"
+        "src/index.html:173"
       ]
     },
     {
@@ -9750,7 +9805,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:570"
+        "src/index.html:571"
       ]
     },
     {
@@ -9761,7 +9816,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:388"
+        "src/index.html:389"
       ]
     },
     {
@@ -9772,7 +9827,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:298"
+        "src/index.html:299"
       ]
     },
     {
@@ -9783,7 +9838,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:240"
+        "src/index.html:241"
       ]
     },
     {
@@ -9803,7 +9858,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:684"
+        "src/screen/inspector-controller.js:707"
       ]
     },
     {
@@ -9814,7 +9869,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:621"
+        "src/index.html:622"
       ]
     },
     {
@@ -9825,7 +9880,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:234"
+        "src/index.html:235"
       ]
     },
     {
@@ -9859,7 +9914,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:220"
+        "src/index.html:221"
       ]
     },
     {
@@ -9870,7 +9925,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:150"
+        "src/index.html:151"
       ]
     },
     {
@@ -9881,7 +9936,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:535"
+        "src/index.html:536"
       ]
     },
     {
@@ -9892,7 +9947,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:123"
+        "src/index.html:124"
       ]
     },
     {
@@ -9903,7 +9958,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:425"
+        "src/index.html:426"
       ]
     },
     {
@@ -9914,7 +9969,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:486"
+        "src/index.html:487"
       ]
     },
     {
@@ -9936,7 +9991,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:449"
+        "src/index.html:450"
       ]
     },
     {
@@ -9947,7 +10002,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:66"
+        "src/index.html:67"
       ]
     },
     {
@@ -9958,7 +10013,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:474"
+        "src/index.html:475"
       ]
     },
     {
@@ -9969,8 +10024,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:126",
-        "src/index.html:422"
+        "src/common/core/operation-registry.js:130",
+        "src/index.html:423"
       ]
     },
     {
@@ -9981,7 +10036,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:504"
+        "src/index.html:505"
       ]
     },
     {
@@ -9992,7 +10047,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:162"
       ]
     },
     {
@@ -10047,7 +10102,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:307"
+        "src/screen/inspector-controller.js:310"
       ]
     },
     {
@@ -10058,7 +10113,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:551",
+        "src/index.html:552",
         "src/screen/packs-controller.js:4"
       ]
     },
@@ -10079,16 +10134,16 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:306"
+        "src/screen/inspector-controller.js:309"
       ]
     },
     {
       "key": "ui.shapenames-shapetool",
       "zhHant": "圖形繪製（目前：${shapeNames[shapeTool]}）",
       "zhHans": "图形绘制（当前：${shapeNames[shapeTool]}）",
-      "en": "圖形繪製（目前：${shapeNames[shapeTool]}）",
+      "en": "Shape drawing (current: ${shapeNames[shapeTool]})",
       "dynamic": true,
-      "englishMissing": true,
+      "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:135"
       ]
@@ -10101,7 +10156,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:487"
+        "src/index.html:488"
       ]
     },
     {
@@ -10112,7 +10167,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:207"
+        "src/index.html:208"
       ]
     },
     {
@@ -10123,7 +10178,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:341"
+        "src/index.html:342"
       ]
     },
     {
@@ -10145,7 +10200,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:136"
+        "src/index.html:137"
       ]
     },
     {
@@ -10156,7 +10211,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:423"
+        "src/index.html:424"
       ]
     },
     {
@@ -10178,7 +10233,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:387"
+        "src/index.html:388"
       ]
     },
     {
@@ -10198,7 +10253,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:430"
+        "src/index.html:431"
       ]
     },
     {
@@ -10209,7 +10264,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:503"
+        "src/index.html:504"
       ]
     },
     {
@@ -10229,7 +10284,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:136"
+        "src/index.html:137"
       ]
     },
     {
@@ -10240,7 +10295,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:135"
+        "src/index.html:136"
       ]
     },
     {
@@ -10260,7 +10315,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:424"
+        "src/index.html:425"
       ]
     },
     {
@@ -10271,7 +10326,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:275"
+        "src/index.html:276"
       ]
     },
     {
@@ -10282,7 +10337,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:499",
+        "src/index.html:500",
         "src/screen/context-menus.js:192"
       ]
     },
@@ -10306,7 +10361,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:426"
+        "src/index.html:427"
       ]
     },
     {
@@ -10317,7 +10372,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:143"
+        "src/common/core/operation-registry.js:147"
       ]
     },
     {
@@ -10329,7 +10384,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/app-config.js:47",
-        "src/index.html:484"
+        "src/index.html:485"
       ]
     },
     {
@@ -10349,9 +10404,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:137",
-        "src/index.html:151",
-        "src/index.html:160"
+        "src/common/core/operation-registry.js:141",
+        "src/index.html:152",
+        "src/index.html:161"
       ]
     },
     {
@@ -10362,7 +10417,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:908"
+        "src/editor/transform-interaction.js:957"
       ]
     },
     {
@@ -10373,18 +10428,18 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:950"
+        "src/editor/transform-interaction.js:999"
       ]
     },
     {
       "key": "ui.size-map-formatnumber-join-px",
       "zhHant": "等距尺寸 ${size.map(formatNumber).join(' × ')} px",
       "zhHans": "等距尺寸 ${size.map(formatNumber).join(' × ')} px",
-      "en": "等距尺寸 ${size.map(formatNumber).join(' × ')} px",
+      "en": "Uniform size ${size.map(formatNumber).join(' × ')} px",
       "dynamic": true,
-      "englishMissing": true,
+      "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:896"
+        "src/editor/transform-interaction.js:945"
       ]
     },
     {
@@ -10395,7 +10450,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:578"
+        "src/index.html:579"
       ]
     },
     {
@@ -10406,7 +10461,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:916"
+        "src/editor/transform-interaction.js:965"
       ]
     },
     {
@@ -10428,7 +10483,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:429"
+        "src/index.html:430"
       ]
     },
     {
@@ -10439,7 +10494,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:539"
+        "src/index.html:540"
       ]
     },
     {
@@ -10450,7 +10505,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:249"
+        "src/index.html:250"
       ]
     },
     {
@@ -10461,8 +10516,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:477",
-        "src/index.html:518"
+        "src/index.html:478",
+        "src/index.html:519"
       ]
     },
     {
@@ -10473,7 +10528,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:175"
+        "src/index.html:176"
       ]
     },
     {
@@ -10513,7 +10568,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:521"
+        "src/index.html:522"
       ]
     },
     {
@@ -10544,7 +10599,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:518"
+        "src/index.html:519"
       ]
     },
     {
@@ -10564,7 +10619,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:277"
+        "src/index.html:278"
       ]
     },
     {
@@ -10576,8 +10631,8 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:235",
-        "src/index.html:314",
-        "src/index.html:315"
+        "src/index.html:315",
+        "src/index.html:316"
       ]
     },
     {
@@ -10588,7 +10643,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:278"
+        "src/index.html:279"
       ]
     },
     {
@@ -10599,7 +10654,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:562"
+        "src/index.html:563"
       ]
     },
     {
@@ -10641,7 +10696,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:82"
+        "src/common/core/operation-registry.js:86"
       ]
     },
     {
@@ -10663,7 +10718,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:161"
+        "src/index.html:162"
       ]
     },
     {
@@ -10674,7 +10729,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:452"
+        "src/index.html:453"
       ]
     },
     {
@@ -10780,7 +10835,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:129"
+        "src/common/core/operation-registry.js:133"
       ]
     },
     {
@@ -10792,7 +10847,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/modifiers.js:7",
-        "src/index.html:152"
+        "src/index.html:153"
       ]
     },
     {
@@ -10814,8 +10869,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:178",
-        "src/screen/inspector-controller.js:234"
+        "src/screen/inspector-controller.js:181",
+        "src/screen/inspector-controller.js:237"
       ]
     },
     {
@@ -10826,7 +10881,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:489"
+        "src/index.html:490"
       ]
     },
     {
@@ -10837,7 +10892,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:530",
+        "src/index.html:531",
         "src/screen/packs-controller.js:7"
       ]
     },
@@ -10849,7 +10904,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:126"
+        "src/common/core/operation-registry.js:130"
       ]
     },
     {
@@ -10871,7 +10926,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:194"
+        "src/index.html:195"
       ]
     },
     {
@@ -10915,7 +10970,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:451"
+        "src/index.html:452"
       ]
     },
     {
@@ -10959,7 +11014,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:562"
+        "src/index.html:563"
       ]
     },
     {
@@ -10970,7 +11025,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:450"
+        "src/index.html:451"
       ]
     },
     {
@@ -10982,8 +11037,8 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:235",
-        "src/index.html:317",
-        "src/index.html:318"
+        "src/index.html:318",
+        "src/index.html:319"
       ]
     },
     {
@@ -10994,7 +11049,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:191",
+        "src/index.html:192",
         "src/screen/context-menus.js:360"
       ]
     },
@@ -11168,7 +11223,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:400"
+        "src/screen/events-controller.js:399"
       ]
     },
     {
@@ -11202,7 +11257,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:41"
+        "src/render/model-capture.js:93"
       ]
     },
     {
@@ -11224,7 +11279,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/render/model-capture.js:64"
+        "src/render/model-capture.js:117"
       ]
     },
     {
@@ -11235,7 +11290,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:445"
+        "src/index.html:446"
       ]
     },
     {
@@ -11303,7 +11358,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:45"
+        "src/editor/transform-interaction.js:46"
       ]
     },
     {
@@ -11314,7 +11369,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:676"
+        "src/screen/inspector-controller.js:698"
       ]
     },
     {
@@ -11357,7 +11412,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/inspector-controller.js:102"
+        "src/screen/inspector-controller.js:104"
       ]
     },
     {
@@ -11399,6 +11454,17 @@
       "key": "ui.timeline"
     },
     {
+      "key": "ui.to-use-blockbench-style-controls-change-the-option-in-settings",
+      "zhHant": "如果希望使用 BB 风格的界面操作，可以进入设置调整",
+      "zhHans": "如果希望使用 BB 风格的界面操作，可以进入设置调整",
+      "en": "To use Blockbench-style controls, change the option in Settings",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/screen/events-controller.js:1187"
+      ]
+    },
+    {
       "key": "ui.toggle-element-options",
       "zhHant": "切換元素選項",
       "zhHans": "切换元素选项",
@@ -11428,7 +11494,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:77"
+        "src/common/core/operation-registry.js:81"
       ]
     },
     {
@@ -11439,7 +11505,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:422"
+        "src/index.html:423"
       ]
     },
     {
@@ -11450,7 +11516,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:112"
+        "src/index.html:113"
       ]
     },
     {
@@ -11461,7 +11527,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:95"
+        "src/index.html:96"
       ]
     },
     {
@@ -11472,7 +11538,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:96"
+        "src/index.html:97"
       ]
     },
     {
@@ -11503,7 +11569,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:334"
+        "src/index.html:335"
       ]
     },
     {
@@ -11515,7 +11581,7 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/app-config.js:46",
-        "src/index.html:484"
+        "src/index.html:485"
       ]
     },
     {
@@ -11526,7 +11592,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:124"
+        "src/index.html:125"
       ]
     },
     {
@@ -11537,7 +11603,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:123"
+        "src/index.html:124"
       ]
     },
     {
@@ -11548,7 +11614,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:301"
+        "src/index.html:302"
       ]
     },
     {
@@ -11559,7 +11625,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:103"
+        "src/common/core/operation-registry.js:107"
       ]
     },
     {
@@ -11570,7 +11636,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:113"
+        "src/index.html:114"
       ]
     },
     {
@@ -11581,7 +11647,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:281"
+        "src/index.html:282"
       ]
     },
     {
@@ -11592,7 +11658,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:282"
+        "src/index.html:283"
       ]
     },
     {
@@ -11603,7 +11669,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:665"
+        "src/index.html:666"
       ]
     },
     {
@@ -11623,7 +11689,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:562"
+        "src/index.html:563"
       ]
     },
     {
@@ -11634,7 +11700,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:537"
+        "src/index.html:538"
       ]
     },
     {
@@ -11645,8 +11711,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:118",
-        "src/index.html:75"
+        "src/common/core/operation-registry.js:122",
+        "src/index.html:76"
       ]
     },
     {
@@ -11677,7 +11743,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:124"
+        "src/index.html:125"
       ]
     },
     {
@@ -11688,7 +11754,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:886"
+        "src/editor/transform-interaction.js:935"
       ]
     },
     {
@@ -11699,7 +11765,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/editor/transform-interaction.js:936"
+        "src/editor/transform-interaction.js:985"
       ]
     },
     {
@@ -11744,7 +11810,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:69"
+        "src/index.html:70"
       ]
     },
     {
@@ -11775,7 +11841,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:572"
+        "src/index.html:573"
       ]
     },
     {
@@ -11795,7 +11861,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:507"
+        "src/index.html:508"
       ]
     },
     {
@@ -11815,7 +11881,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:597"
+        "src/index.html:598"
       ]
     },
     {
@@ -11826,7 +11892,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:597"
+        "src/index.html:598"
       ]
     },
     {
@@ -11837,7 +11903,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:572"
+        "src/index.html:573"
       ]
     },
     {
@@ -11859,7 +11925,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:169"
+        "src/index.html:170"
       ]
     },
     {
@@ -11870,7 +11936,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:573"
+        "src/index.html:574"
       ]
     },
     {
@@ -11890,7 +11956,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:128"
+        "src/index.html:129"
       ]
     },
     {
@@ -11901,7 +11967,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:169"
+        "src/index.html:170"
       ]
     },
     {
@@ -11912,7 +11978,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:575"
+        "src/index.html:576"
       ]
     },
     {
@@ -11923,7 +11989,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:581"
+        "src/index.html:582"
       ]
     },
     {
@@ -11956,7 +12022,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:216"
+        "src/index.html:217"
       ]
     },
     {
@@ -11967,7 +12033,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:199"
+        "src/index.html:200"
       ]
     },
     {
@@ -11978,7 +12044,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:127"
+        "src/common/core/operation-registry.js:131"
       ]
     },
     {
@@ -11989,7 +12055,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:230"
+        "src/index.html:231"
       ]
     },
     {
@@ -12000,7 +12066,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:247"
+        "src/index.html:248"
       ]
     },
     {
@@ -12024,7 +12090,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:138"
+        "src/index.html:139"
       ]
     },
     {
@@ -12035,9 +12101,9 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:59",
+        "src/common/core/operation-registry.js:63",
         "src/editor/tool-mode-controller.js:128",
-        "src/index.html:101"
+        "src/index.html:102"
       ]
     },
     {
@@ -12048,7 +12114,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:130"
+        "src/index.html:131"
       ]
     },
     {
@@ -12070,8 +12136,8 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:476",
-        "src/index.html:495"
+        "src/index.html:477",
+        "src/index.html:496"
       ]
     },
     {
@@ -12082,7 +12148,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:258"
+        "src/index.html:259"
       ]
     },
     {
@@ -12093,7 +12159,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:534"
+        "src/index.html:535"
       ]
     },
     {
@@ -12104,7 +12170,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:498"
+        "src/index.html:499"
       ]
     },
     {
@@ -12115,7 +12181,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:501"
+        "src/index.html:502"
       ]
     },
     {
@@ -12126,7 +12192,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:502"
+        "src/index.html:503"
       ]
     },
     {
@@ -12137,7 +12203,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:495"
+        "src/index.html:496"
       ]
     },
     {
@@ -12148,7 +12214,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:497"
+        "src/index.html:498"
       ]
     },
     {
@@ -12159,7 +12225,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:126"
+        "src/common/core/operation-registry.js:130"
       ]
     },
     {
@@ -12181,7 +12247,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:168"
+        "src/index.html:169"
       ]
     },
     {
@@ -12223,7 +12289,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:341"
+        "src/index.html:342"
       ]
     },
     {
@@ -12234,7 +12300,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:520"
+        "src/index.html:521"
       ]
     },
     {
@@ -12245,7 +12311,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:565"
+        "src/index.html:566"
       ]
     },
     {
@@ -12257,8 +12323,8 @@
       "englishMissing": false,
       "locations": [
         "src/editor/tool-mode-controller.js:235",
-        "src/index.html:311",
-        "src/index.html:312"
+        "src/index.html:312",
+        "src/index.html:313"
       ]
     },
     {
@@ -12269,7 +12335,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:500"
+        "src/index.html:501"
       ]
     },
     {
@@ -12291,7 +12357,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/events-controller.js:407"
+        "src/screen/events-controller.js:406"
       ]
     },
     {
@@ -12302,7 +12368,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:491"
+        "src/index.html:492"
       ]
     },
     {
@@ -12313,7 +12379,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:92"
+        "src/index.html:93"
       ]
     },
     {
@@ -12335,7 +12401,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:614"
+        "src/index.html:615"
       ]
     },
     {
@@ -12366,7 +12432,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:614"
+        "src/index.html:615"
       ]
     },
     {
@@ -12388,7 +12454,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:614"
+        "src/index.html:615"
       ]
     }
   ]

@@ -9,6 +9,7 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 - Cube geometry is the foundation. The editor also supports groups, locators, nodes, 2D/3D Bezier curves, and procedural shapes including polygonal prisms, dodecahedra, and soccer-ball-like truncated icosahedra. Shapes can retain their parameters while storing overrides to generated cubes.
 - The hierarchy supports multiselection, range selection, search, grouping, drag reordering, and quick navigation. Detailed rows expose visibility, locking, automatic UV, UV normalization, and export flags.
 - Move, Scale, Rotate, Move Pivot, Vertex Snap, intersection display, Knife, and Face Select cover different geometry interactions. Move and Rotate can use local, parent, or global reference frames; moving a pivot compensates geometry placement.
+- Cubes, groups, and Shapes can apply position and rotation independently as a new editing baseline. Their property fields return to zero without changing the visible model; Restore brings the applied values back to the fields. Exports use the composed final pose.
 - UV editing is part of Edit mode by default but can be split into a separate mode. Optional Blockbench-style viewport controls use left-drag to orbit, right-drag to pan, and Shift + left-drag to box-select.
 - Groups and individual elements can carry modifier stacks. The built-in symmetry modifier supports XYZ mirrors, radial copies, and mandala patterns; it can be stacked repeatedly, previewed, and baked one modifier at a time. `.bbmodel` export expands procedural results into compatible cubes and groups.
 - Real-time operators are separate from modifiers. The current Paint Symmetry operator relates matching faces and checks corresponding UV edge lengths; it creates no additional scene elements.
@@ -18,6 +19,7 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 - Perspective, orthographic, and dedicated six-direction axis views are available. Axis views are orthographic only; the camera supports pan, orbit, zoom, and eased focus.
 - Wireframe, solid, textured, and normal display modes are available. Grid, gizmos, outlines, and model surfaces each use an appropriate rendering path.
 - The main viewport supports reference images, a visual-only player reference, transparent-background model capture, and separate faded rendering for locked objects or modifier results.
+- Model capture preview offers optional automatic cropping with a visible crop outline. Saving or copying uses the crop only while enabled; the full image remains available.
 - Multiple projects can stay open as tabs. Dock panels on the left, right, and bottom can detach, snap back, merge into tabbed panels, collapse, and resize.
 
 ## UVs, textures, and layers

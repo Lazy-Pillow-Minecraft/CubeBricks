@@ -44,4 +44,4 @@ npm run test:journal
 
 ## 打包 Windows 安装版
 
-双击根目录的 `build-installer.bat`，可在打包前输入版本号（例如 `0.1.0-beta`，直接按回车则使用当前基础版本的 beta 版）；也可执行 `npm run dist:installer`，或通过环境变量 `CUBEBRICKS_INSTALLER_VERSION` 指定版本。版本只用于本次打包，不会改写 `package.json`。脚本会生成深棕／金色的 CubeBricks 安装器图像，并在 `dist/` 生成 `CubeBricks-v<version>-win-x64-setup.exe`。安装向导使用现有软件图标与标题，可选择安装目录，并建立桌面及开始菜单快捷方式。这是安装版，不是 `build-portable.bat` 的单文件便携版。首次构建可能需要下载打包资源；产物未进行代码签名。
+双击根目录的 `build-installer.bat`，可在打包前输入版本号（例如 `0.1.2-beta`，直接按回车则使用当前项目版本）；也可执行 `npm run dist:installer`，或通过环境变量 `CUBEBRICKS_INSTALLER_VERSION` 指定版本。输入的版本只用于本次打包，不会改写 `package.json`。脚本会生成深棕／金色的 CubeBricks 安装器图像，并在 `dist/` 生成 `CubeBricks-v<version>-win-x64-setup.exe`。安装向导使用现有软件图标与标题，可选择安装目录，并建立桌面及开始菜单快捷方式。这是安装版，不是 `build-portable.bat` 的单文件便携版。首次构建可能需要下载打包资源；产物未进行代码签名。

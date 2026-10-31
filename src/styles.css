@@ -1002,6 +1002,10 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .vector-field > .number-wrap { flex: 0 0 68px; width: 68px; min-width: 68px; }
 .pivot-center-field-button { flex: 0 0 68px; width: 68px; height: 27px; border: 1px solid var(--line-strong); border-radius: 4px; background: rgba(var(--accent-rgb), .08); color: var(--accent); font-size: .62rem; }
 .pivot-center-field-button:hover { background: rgba(var(--accent-rgb), .18); }
+.applied-transform-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 9px; }
+.applied-transform-actions button { min-height: 27px; padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel-2); color: var(--text); font-size: .62rem; }
+.applied-transform-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.applied-transform-actions button:disabled { opacity: .42; cursor: default; }
 .vector-field.scalar-field .number-wrap input { padding-left: 6px; }
 .number-wrap { position: relative; }
 .number-wrap b { position: absolute; left: 5px; top: 50%; transform: translateY(-50%); font-size: .55rem; }
@@ -1195,6 +1199,9 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .model-capture-dialog form { max-height: calc(100vh - 32px); }
 .model-capture-preview { display: grid; place-items: center; min-height: 180px; max-height: min(68vh, 720px); margin-top: 14px; overflow: auto; border: 1px solid var(--line-strong); background-color: #252525; background-image: conic-gradient(#333 25%, #252525 0 50%, #333 0 75%, #252525 0); background-size: 22px 22px; }
 .model-capture-preview img { display: block; max-width: 100%; max-height: min(66vh, 700px); object-fit: contain; }
+.model-capture-image-wrap { position: relative; display: inline-block; max-width: 100%; }
+.model-capture-crop-outline { position: absolute; box-sizing: border-box; border: 2px dashed var(--accent); pointer-events: none; box-shadow: 0 0 0 9999px #0007; }
+.model-capture-crop-option { display: flex; align-items: center; gap: 8px; margin-top: 10px; width: fit-content; cursor: pointer; }
 .model-capture-info { margin-top: 9px; color: var(--muted); font-size: .65rem; }
 .model-capture-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .subdivision-controls { border-color: rgba(var(--accent-rgb),.28); }

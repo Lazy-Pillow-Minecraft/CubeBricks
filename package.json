@@ -1,6 +1,6 @@
 {
   "name": "cubebricks",
-  "version": "0.1.0",
+  "version": "0.1.2-beta",
   "description": "A modular Minecraft modelling workspace built around cubes and procedural shapes.",
   "author": "CubeBricks",
   "productName": "CubeBricks",

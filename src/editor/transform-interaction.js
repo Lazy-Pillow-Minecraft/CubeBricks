@@ -2,7 +2,8 @@ import { Cube, Group, setPivotPreservingGeometry } from '../model.js';
 import { constrainNode, formatRules, captureFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { paintSymmetryRelationCache } from '../paint/symmetry-relations.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
-import { inverseRotateVector, quaternionFromAxisAngle, quaternionFromEuler, quaternionMultiply, eulerFromQuaternion } from '../utils/math/rotation.js';
+import { inverseRotateVector, quaternionFromAxisAngle, quaternionFromEuler, quaternionMultiply, eulerFromQuaternion,
+  shortestAngleDelta } from '../utils/math/rotation.js';
 
 export function createTransformInteraction({
   state, $, sceneCanvas, sceneRenderer, viewport, preciseRotationInput, selectionMarquee,
@@ -122,6 +123,13 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   const gizmoCenter = referenceHandle
     ? { x: referenceHandle.centerX + rect.left, y: referenceHandle.centerY + rect.top }
     : { x: state.gizmoCenter.x + rect.left, y: state.gizmoCenter.y + rect.top };
+  const rotationPlaneAxis = kind === 'rotate' && handle
+    && Math.abs(dot3(handle.vector, cameraFrame.forward)) > .2 ? normalize3(handle.vector) : null;
+  const rotationPlanePoint = rotationPlaneAxis
+    ? intersectRayPlane(sceneRenderer.getScreenRay(event.clientX - rect.left, event.clientY - rect.top),
+      state.gizmoOrigin, rotationPlaneAxis) : null;
+  const rotationPlaneVector = rotationPlanePoint
+    ? rotationPlanePoint.map((value, axis) => value - state.gizmoOrigin[axis]) : null;
   state.dragging = {
     type: 'transform', tool: state.tool, pointerId: event.pointerId,
     snapshotTaken: false,
@@ -130,8 +138,14 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
     planeAxes, planeDragPlane, planeDragStart,
     referenceWorldPerPixel: referenceHandle?.worldPerPixel, freeMovePlane, freeMoveStart,
     kind, sign, rotationAxis, rotationScreenSign, handleElement, gizmoCenter: handle ? gizmoCenter : null,
-    rotationMode: state.transformSpace === 'self' ? state.rotationMode : 'pose',
+    rotationPlaneAxis: rotationPlaneVector && Math.hypot(...rotationPlaneVector) > 1e-5 ? rotationPlaneAxis : null,
+    lastRotationVector: rotationPlaneVector,
+    rotationPlaneOrigin: [...state.gizmoOrigin],
+    rotationMode: formatRules(state.project).singleAxisRotation ? 'euler'
+      : state.transformSpace === 'self' ? state.rotationMode : 'pose',
     startAngle: kind.startsWith('rotate') && handle ? Math.atan2(event.clientY - (handle.centerY + rect.top), event.clientX - (handle.centerX + rect.left)) : 0,
+    lastAngle: kind.startsWith('rotate') && handle ? Math.atan2(event.clientY - (handle.centerY + rect.top), event.clientX - (handle.centerX + rect.left)) : 0,
+    accumulatedAngle: 0,
     rect, storedAxis, chain, selectionContext, targets, multiTransformMode: state.multiTransformMode,
     batchPreview: selectionContext.multiple && state.multiTransformMode === 'unified'
       && ['move', 'rotate'].includes(state.tool),
@@ -251,6 +265,12 @@ function applyExactRotation(drag, degrees) {
   }
   if (drag.curveNodeContext?.node.autoTangent) bakeCurveNodeTangent(drag.curveNodeContext.curve, drag.curveNodeContext.index);
   const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || drag.item;
+  if (formatRules(state.project).singleAxisRotation && drag.kind === 'rotate'
+    && Number.isInteger(drag.axisIndex) && !drag.curveNodeContext && !drag.modifierAnchorContext) {
+    target.rotation = [0, 0, 0];
+    target.rotation[drag.axisIndex] = drag.rotation[drag.axisIndex] + degrees;
+    return;
+  }
   const turn = quaternionFromAxisAngle(drag.rotationAxis, degrees);
   const current = quaternionFromEuler(drag.rotation);
   target.rotation = eulerFromQuaternion(state.transformSpace === 'self' && drag.kind !== 'rotate-view'
@@ -631,11 +651,40 @@ function applyTransformDrag(drag, dx, dy, event) {
   const item = drag.item;
   const axisDelta = drag.kind.startsWith('rotate') && drag.axis
     ? (() => {
-      const angle = Math.atan2(event.clientY - drag.gizmoCenter.y, event.clientX - drag.gizmoCenter.x);
-      let delta = angle - drag.startAngle;
-      while (delta > Math.PI) delta -= Math.PI * 2;
-      while (delta < -Math.PI) delta += Math.PI * 2;
-      return delta * 180 / Math.PI * drag.rotationScreenSign * rotationDragSensitivity;
+      if (Math.hypot(event.clientX - drag.gizmoCenter.x, event.clientY - drag.gizmoCenter.y) < 8)
+        return drag.accumulatedAngle * 180 / Math.PI * (drag.rotationPlaneAxis ? 1 : drag.rotationScreenSign) * rotationDragSensitivity;
+      let delta = null;
+      if (drag.rotationPlaneAxis) {
+        const point = intersectRayPlane(sceneRenderer.getScreenRay(
+          event.clientX - drag.rect.left, event.clientY - drag.rect.top),
+        drag.rotationPlaneOrigin, drag.rotationPlaneAxis);
+        if (point) {
+          const vector = point.map((value, axis) => value - drag.rotationPlaneOrigin[axis]);
+          if (Math.hypot(...vector) > 1e-5) {
+            delta = Math.atan2(dot3(drag.rotationPlaneAxis, cross3(drag.lastRotationVector, vector)),
+              dot3(drag.lastRotationVector, vector));
+            drag.lastRotationVector = vector;
+          }
+        }
+      }
+      if (drag.rotationPlaneAxis && delta === null)
+        return drag.accumulatedAngle * 180 / Math.PI * rotationDragSensitivity;
+      if (delta === null) {
+        const angle = Math.atan2(event.clientY - drag.gizmoCenter.y, event.clientX - drag.gizmoCenter.x);
+        delta = shortestAngleDelta(drag.lastAngle, angle);
+        drag.lastAngle = angle;
+      }
+      drag.accumulatedAngle += delta;
+      const rules = formatRules(state.project);
+      if (rules.singleAxisRotation && rules.rotationLimit && Number.isInteger(drag.axisIndex)
+        && !drag.curveNodeContext && !drag.modifierAnchorContext) {
+        const base = drag.rotation[drag.axisIndex] || 0;
+        const scale = 180 / Math.PI * (drag.rotationPlaneAxis ? 1 : drag.rotationScreenSign) * rotationDragSensitivity;
+        const degrees = Math.max(-rules.rotationLimit - base,
+          Math.min(rules.rotationLimit - base, drag.accumulatedAngle * scale));
+        drag.accumulatedAngle = degrees / scale;
+      }
+      return drag.accumulatedAngle * 180 / Math.PI * (drag.rotationPlaneAxis ? 1 : drag.rotationScreenSign) * rotationDragSensitivity;
     })()
     : drag.axis
     ? (dx * drag.axis.screen[0] + -dy * drag.axis.screen[1]) * drag.axis.worldPerPixel
@@ -1013,7 +1062,8 @@ function applyTransformDrag(drag, dx, dy, event) {
       const snappedDelta = snapAngle(angle, angleStep);
       if (drag.rotationMode === 'euler' && drag.kind === 'rotate') {
         const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || item;
-        target.rotation = [...drag.rotation];
+        target.rotation = formatRules(state.project).singleAxisRotation && !drag.curveNodeContext
+          && !drag.modifierAnchorContext ? [0, 0, 0] : [...drag.rotation];
         target.rotation[drag.axisIndex] = drag.rotation[drag.axisIndex] + snappedDelta;
       } else {
         const turn = quaternionFromAxisAngle(drag.rotationAxis, snappedDelta);

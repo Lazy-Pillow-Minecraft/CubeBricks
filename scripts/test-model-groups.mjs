@@ -5,6 +5,7 @@ import { ModelFormatRegistry } from '../src/common/core/model-format-registry.js
 import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/common/config/model-formats.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from '../src/assets/player-reference.js';
 import { constrainCube, formatRules } from '../src/common/core/format-constraints.js';
+import { rotateVector } from '../src/utils/math/rotation.js';
 
 assert.equal(modelFormatRegistry.list().length, 8, 'built-in model formats are registered');
 assert.deepEqual(modelFormatRegistry.list().filter(format => format.status === 'placeholder').map(format => format.id),
@@ -194,6 +195,152 @@ const reversedProject = new CubeBricksProject({ elements: [reversedEnvelope], ou
 const reversedBake = bakeProceduralShape(reversedProject, reversedEnvelope.uid);
 assert.equal(reversedBake.group.children[0], reversedBake.cubes.at(-1).uid,
   'tail-first direction reverses the nesting order without changing curve geometry');
+const samePoint = (left, right) => left.every((value, axis) => Math.abs(value - right[axis]) < 1e-5);
+const cubeHeadFace = (cube, headAtStart, from = cube.position, to = cube.position.map((value, axis) => value + cube.size[axis])) => [
+  (from[0] + to[0]) / 2, (from[1] + to[1]) / 2, headAtStart ? from[2] : to[2]
+];
+const assertBakedEnvelopePivots = (project, baked, headAtStart) => {
+  const ordered = headAtStart ? baked.cubes : [...baked.cubes].reverse();
+  for (const [index, layer] of [baked.group, ...baked.nestedGroups].entries()) {
+    const cube = ordered[index];
+    const localFace = applyGroupTransforms(cubeHeadFace(cube, headAtStart), [cube]);
+    const worldFace = applyGroupTransforms(localFace, project.getGroupChain(cube.uid));
+    const worldPivot = applyGroupTransforms(layer.pivot, project.getGroupChain(layer.uid));
+    assert.ok(samePoint(worldPivot, worldFace), 'every baked envelope group pivots at its leading cube face');
+    assert.ok(cube.rotation.every(value => Math.abs(value) < 1e-3),
+      'the outermost cube orientation is carried by its containing envelope group');
+  }
+};
+assertBakedEnvelopePivots(envelopeProject, envelopeBake, true);
+assertBakedEnvelopePivots(reversedProject, reversedBake, false);
+const rotatedEnvelope = new BezierElement({ ...JSON.parse(JSON.stringify(envelopeCurve)),
+  uid: 'rotated_envelope', origin: [2, 0, 1], rotation: [0, 35, 0] }, 3);
+const rotatedEnvelopeProject = new CubeBricksProject({ elements: [rotatedEnvelope], outliner: [rotatedEnvelope.uid] });
+const rotatedEnvelopeBake = bakeProceduralShape(rotatedEnvelopeProject, rotatedEnvelope.uid);
+assertBakedEnvelopePivots(rotatedEnvelopeProject, rotatedEnvelopeBake, true);
+const originalRotatedCube = constrainCube(rotatedEnvelope.toCubes()[0], formatRules(rotatedEnvelopeProject));
+const originalRotatedPoint = applyGroupTransforms(originalRotatedCube.position, [originalRotatedCube])
+  .map((value, axis) => value + rotatedEnvelope.origin[axis]);
+const originalWorldPoint = applyGroupTransforms(originalRotatedPoint,
+  [{ pivot: rotatedEnvelope.origin, rotation: rotatedEnvelope.rotation }]);
+const bakedRotatedCube = rotatedEnvelopeBake.cubes[0];
+const bakedWorldPoint = applyGroupTransforms(
+  applyGroupTransforms(bakedRotatedCube.position, [bakedRotatedCube]),
+  rotatedEnvelopeProject.getGroupChain(bakedRotatedCube.uid));
+assert.ok(samePoint(originalWorldPoint, bakedWorldPoint),
+  'moving the nested root pivot does not move rotated envelope geometry');
+const originalRotatedCubes = rotatedEnvelope.toCubes().map(cube => constrainCube(cube, formatRules(rotatedEnvelopeProject)));
+for (const [index, sourceCube] of originalRotatedCubes.entries()) {
+  const bakedCube = rotatedEnvelopeBake.cubes[index];
+  for (let vertex = 0; vertex < 8; vertex++) {
+    const corner = [0, 1, 2].map(axis => (vertex >> axis) & 1);
+    const originalLocal = sourceCube.position.map((value, axis) =>
+      value + sourceCube.size[axis] * corner[axis] + rotatedEnvelope.origin[axis]);
+    const original = applyGroupTransforms(applyGroupTransforms(originalLocal, [{
+      pivot: sourceCube.pivot.map((value, axis) => value + rotatedEnvelope.origin[axis]),
+      rotation: sourceCube.rotation
+    }]), [{ pivot: rotatedEnvelope.origin, rotation: rotatedEnvelope.rotation }]);
+    const bakedLocal = bakedCube.position.map((value, axis) => value + bakedCube.size[axis] * corner[axis]);
+    const result = applyGroupTransforms(applyGroupTransforms(bakedLocal, [bakedCube]),
+      rotatedEnvelopeProject.getGroupChain(bakedCube.uid));
+    assert.ok(samePoint(original, result), 'reorienting each envelope group preserves every cube vertex');
+  }
+}
+const freeCurve = new BezierElement({ variant: 'envelope', origin: [2, 0, 1], rotation: [25, 35, 17],
+  nodes: [
+    { position: [0, 0, 0], autoTangent: false, handleOut: [2, 3, 1], roll: 20 },
+    { position: [6, 3, 0], autoTangent: false, handleIn: [-2, -1, 1], handleOut: [1, 1, 3], roll: 50 },
+    { position: [8, 5, 4], handlesEnabled: false }
+  ], parameters: { radius: 1, segmentLength: 2, nestedBake: true } }, 3);
+const freeProject = new CubeBricksProject({ formatId: 'bedrock_entity', elements: [freeCurve], outliner: [freeCurve.uid] });
+const freeSources = freeCurve.toCubes();
+const freeBake = bakeProceduralShape(freeProject, freeCurve.uid);
+for (const [index, cube] of freeBake.cubes.entries()) {
+  const source = freeSources[index];
+  for (let vertex = 0; vertex < 8; vertex++) {
+    const corner = [0, 1, 2].map(axis => (vertex >> axis) & 1);
+    const originalPoint = source.position.map((value, axis) =>
+      value + source.size[axis] * corner[axis] + freeCurve.origin[axis]);
+    const original = applyGroupTransforms(applyGroupTransforms(originalPoint, [{
+      pivot: source.pivot.map((value, axis) => value + freeCurve.origin[axis]), rotation: source.rotation
+    }]), [{ pivot: freeCurve.origin, rotation: freeCurve.rotation }]);
+    const bakedPoint = cube.position.map((value, axis) => value + cube.size[axis] * corner[axis]);
+    const result = applyGroupTransforms(applyGroupTransforms(bakedPoint, [cube]), freeProject.getGroupChain(cube.uid));
+    assert.ok(original.every((value, axis) => Math.abs(value - result[axis]) < 1e-4),
+      'nested envelope orientation compensation preserves freely rotated 3D geometry');
+  }
+}
+const singleSegmentEnvelope = new BezierElement({ variant: 'envelope', uid: 'single_segment_envelope',
+  nodes: [{ position: [0, 0, 0], handlesEnabled: false }, { position: [0, 4, 0], handlesEnabled: false }],
+  parameters: { radius: 1, segmentLength: 100, nestedBake: true, headAtStart: true }
+}, 3);
+const singleSegmentProject = new CubeBricksProject({
+  elements: [singleSegmentEnvelope], outliner: [singleSegmentEnvelope.uid]
+});
+const singleSegmentBake = bakeProceduralShape(singleSegmentProject, singleSegmentEnvelope.uid);
+assert.equal(singleSegmentBake.cubes.length, 1, 'the single-segment case produces exactly one fitted cube');
+assertBakedEnvelopePivots(singleSegmentProject, singleSegmentBake, true);
+for (const [curve, headAtStart] of [[envelopeCurve, true], [reversedEnvelope, false],
+  [rotatedEnvelope, true], [singleSegmentEnvelope, true]]) {
+  const source = new CubeBricksProject({ elements: [curve], outliner: [curve.uid] });
+  const exported = exportBlockbench(source);
+  const ordered = Array.from({ length: curve.toCubes().length }, (_, index) => `${curve.uid}_cube_${index + 1}`);
+  if (!headAtStart) ordered.reverse();
+  let group = exported.outliner[0];
+  const ancestors = [];
+  for (const [index, cubeUid] of ordered.entries()) {
+    assert.equal(group.children[0], cubeUid, 'envelope export follows head-to-tail cube nesting');
+    const cube = exported.elements.find(element => element.uuid === cubeUid);
+    const localFace = applyGroupTransforms(cubeHeadFace(cube, headAtStart, cube.from, cube.to),
+      [{ pivot: cube.origin, rotation: cube.rotation }]);
+    const worldFace = applyGroupTransforms(localFace,
+      [...ancestors, { pivot: group.origin, rotation: group.rotation }]);
+    const worldPivot = applyGroupTransforms(group.origin, ancestors);
+    assert.ok(samePoint(worldPivot, worldFace), 'each exported envelope group pivots at its leading face');
+    assert.ok(cube.rotation.every(value => Math.abs(value) < 1e-3),
+      'exported envelope cube direction is transferred to its containing group');
+    if (index < ordered.length - 1) {
+      assert.equal(typeof group.children[1], 'object', 'each nonterminal exported segment owns a nested group');
+      ancestors.push({ pivot: group.origin, rotation: group.rotation });
+      group = group.children[1];
+    } else assert.equal(group.children.length, 1, 'the final exported group ends at its cube');
+  }
+  assert.equal(source.getNode(curve.uid)?.type, curve.type, 'bbmodel export leaves the source curve untouched');
+}
+const mirroredEnvelope = new BezierElement({ ...JSON.parse(JSON.stringify(envelopeCurve)), uid: 'mirrored_envelope' }, 3);
+const envelopeSymmetry = addModifier(mirroredEnvelope, 'symmetry', {
+  enabled: true, mode: 'axes', axes: { x: true, y: false, z: false }, wrapParent: false
+});
+const mirroredEnvelopeProject = new CubeBricksProject({
+  elements: [mirroredEnvelope], outliner: [mirroredEnvelope.uid]
+});
+const mirroredEnvelopeExport = exportBlockbench(mirroredEnvelopeProject);
+assert.equal(mirroredEnvelopeExport.outliner.length, 2, 'symmetry still creates both envelope branches');
+for (const branch of mirroredEnvelopeExport.outliner) {
+  let nested = branch;
+  for (let index = 0; index < mirroredEnvelope.toCubes().length - 1; index++) {
+    assert.equal(typeof nested.children[0], 'string', 'symmetry branch contains the current envelope cube');
+    assert.equal(typeof nested.children[1], 'object', 'symmetry export retains the next nested envelope group');
+    nested = nested.children[1];
+  }
+}
+const mirroredEnvelopeBake = bakeModifier(mirroredEnvelopeProject, mirroredEnvelope, envelopeSymmetry.uid);
+const bakedEnvelopeDepths = mirroredEnvelopeBake.elementUids.map(uid =>
+  mirroredEnvelopeProject.getGroupChain(uid).length);
+assert.ok(Math.max(...bakedEnvelopeDepths) > Math.min(...bakedEnvelopeDepths),
+  'modifier baking retains nested envelope groups instead of flattening every cube');
+const childEnvelope = new BezierElement({ ...JSON.parse(JSON.stringify(envelopeCurve)), uid: 'child_envelope' }, 3);
+const envelopeMirrorParent = new Group({ uid: 'envelope_mirror_parent', name: 'envelope_parent',
+  children: [childEnvelope.uid] });
+addModifier(envelopeMirrorParent, 'symmetry', {
+  enabled: true, mode: 'axes', axes: { x: true, y: false, z: false }, wrapParent: false
+});
+const childEnvelopeExport = exportBlockbench(new CubeBricksProject({
+  elements: [childEnvelope], groups: [envelopeMirrorParent], outliner: [envelopeMirrorParent.uid]
+}));
+assert.ok(childEnvelopeExport.outliner.every(branch =>
+  branch.children[0]?.children?.[1]?.children?.length),
+  'a parent-group symmetry modifier also preserves nested envelope descendants');
 assert.ok(spatialCurve.nodes.every(node => node.autoTangent), 'new bezier nodes start with pen-style automatic tangents');
 const autoMiddleCurve = new BezierElement({ nodes: [
   { position: [0, 0, 0] }, { position: [4, 2, 0] }, { position: [8, 0, 0] }
@@ -201,6 +348,19 @@ const autoMiddleCurve = new BezierElement({ nodes: [
 const autoMiddle = autoMiddleCurve.resolvedNodeState(1);
 assert.ok(autoMiddle.handleIn[0] < 0 && autoMiddle.handleOut[0] > 0,
   'an untouched middle node derives a smooth tangent from its neighbours');
+for (const endpoint of [[0, 8, 0], [0, -8, 0], [.1, 8, 0]]) {
+  const curve = new BezierElement({ nodes: [{ position: [0, 0, 0] }, { position: endpoint }] }, 3);
+  const resolved = curve.resolvedNodeState(0);
+  const forward = rotateVector([0, 0, 1], resolved.rotation);
+  const tangent = resolved.handleOut.map(value => value / Math.hypot(...resolved.handleOut));
+  assert.ok(forward.every((value, axis) => Math.abs(value - tangent[axis]) < 1e-6),
+    'vertical and nearly vertical restored node frames point along their tangent');
+  const restored = new CubeBricksProject(JSON.parse(new CubeBricksProject({
+    elements: [curve], outliner: [curve.uid]
+  }).serialize())).getNode(curve.uid);
+  assert.deepEqual(restored.resolvedNodeState(0).handleOut, resolved.handleOut,
+    'undo-style serialization preserves automatic curve handles');
+}
 const rolledCurve = new BezierElement({ nodes: [
   { position: [0, 0, 0], roll: 0 }, { position: [8, 0, 0], roll: 90 }
 ], parameters: { segmentLength: 2 } }, 3);
@@ -377,7 +537,9 @@ assert.ok(objectMirrorPreview.every(instance => instance.sourceUids[0] === objec
   'stacked object symmetry continues to reuse the existing object mesh range');
 const objectMirrorExport = exportBlockbench(objectMirrorProject);
 assert.equal(objectMirrorExport.outliner.length, 4,
-  'stacked object symmetry expands into the Cartesian product of both modifiers');
+  'stacked cube symmetry expands into four direct cube entries without wrapper groups');
+assert.ok(objectMirrorExport.outliner.every(entry => typeof entry === 'string'),
+  'cube symmetry exports only cube references at the original hierarchy level');
 assert.equal(objectMirrorExport.elements.length, 4, 'stacked object symmetry exports one cube per final result');
 
 const childStackCube = new Cube({ uid: 'child-stack-cube', position: [2, 0, 3], size: [1, 2, 1], pivot: [0, 0, 0] });
@@ -398,9 +560,9 @@ assert.equal(buildModifierRenderInstances(nestedStackProject).length, 3,
 const nestedStackExport = exportBlockbench(nestedStackProject);
 assert.equal(nestedStackExport.outliner.length, 2,
   'an unwrapped group modifier keeps one group for each of its own final branches');
-assert.ok(nestedStackExport.outliner.every(group => group.children.length === 1
-  && group.children[0].children.length === 2),
-  'each group branch retains the child modifier group with both generated results');
+assert.ok(nestedStackExport.outliner.every(group => group.children.length === 2
+  && group.children.every(child => typeof child === 'string')),
+  'each group branch retains both child cubes without a child modifier wrapper');
 assert.equal(nestedStackExport.elements.length, 4,
   'group export expands child and group modifier results instead of reading the raw child only');
 
@@ -428,11 +590,16 @@ const preservedSecondModifier = addModifier(bakeSource, 'symmetry', {
 });
 const bakeProject = new CubeBricksProject({ elements: [bakeSource], outliner: [bakeSource.uid] });
 const bakeResult = bakeModifier(bakeProject, bakeProject.getNode(bakeSource.uid), bakedFirstModifier.uid);
-assert.ok(bakeResult && bakeProject.getNode(bakeResult.rootUid)?.type === 'group', 'baking creates a real grouped result');
+assert.ok(bakeResult && bakeProject.getNode(bakeResult.rootUid)?.type === 'cube',
+  'baking a cube modifier keeps its result as cubes');
+assert.equal(bakeResult.groupUids.length, 0, 'cube modifier baking introduces no groups');
+assert.deepEqual(bakeProject.outliner, bakeResult.elementUids,
+  'baked cubes replace their source directly in the same outliner slot');
 assert.equal(bakeProject.getNode(bakeSource.uid), null, 'baking replaces the procedural source instead of leaving doubled geometry');
 assert.equal(bakeProject.elements.filter(element => element.type === 'cube').length, 2, 'a single-axis symmetry bakes exactly two physical cubes');
-assert.deepEqual(bakeProject.getNode(bakeResult.rootUid).modifiers.map(modifier => modifier.uid), [preservedSecondModifier.uid],
-  'baking one modifier preserves the other modifier in the stack');
+assert.ok(bakeResult.elementUids.every(uid =>
+  bakeProject.getNode(uid).modifiers.map(modifier => modifier.uid).join() === preservedSecondModifier.uid),
+  'baking one modifier preserves the other modifier on every resulting cube');
 
 symmetryModifier.mode = 'radial';
 symmetryModifier.copies = 4;
@@ -825,5 +992,43 @@ assert.deepEqual(radialBakedRoot.children.map(uid => radialBakeProject.getNode(u
 assert.deepEqual(radialBakedRoot.children.map(uid =>
   radialBakeProject.getNode(radialBakeProject.getNode(uid).children[0]).name),
 ['coil_1', 'coil_2', 'coil_3'], 'radial baking applies the numbered suffix to retained child groups');
+
+const centeredPart = new Cube({ uid: 'centered-part', name: 'centered', position: [-1, 0, 0], size: [2, 2, 2] });
+const offsetPart = new Cube({ uid: 'offset-part', name: 'offset', position: [2, 0, 0], size: [1, 1, 1] });
+const tipPart = new Cube({ uid: 'tip-part', name: 'tip_cube', position: [4, 0, 0], size: [1, 1, 1] });
+const centeredGroup = new Group({ uid: 'centered-group', name: 'core', rotation: [10, 0, 0],
+  children: [centeredPart.uid, offsetPart.uid] });
+const tipGroup = new Group({ uid: 'tip-group', name: 'tip', children: [tipPart.uid] });
+const partialOwner = new Group({ uid: 'partial-owner', name: 'balanced', rotation: [20, 0, 0],
+  children: [centeredGroup.uid, tipGroup.uid] });
+const partialModifier = addModifier(partialOwner, 'symmetry', {
+  enabled: true, mode: 'axes', axes: { x: true, y: false, z: false },
+  ignoreDuplicateCubes: true, wrapParent: false
+});
+const partialProject = new CubeBricksProject({
+  elements: [centeredPart, offsetPart, tipPart], groups: [partialOwner, centeredGroup, tipGroup],
+  outliner: [partialOwner.uid]
+});
+const partialExport = exportBlockbench(partialProject);
+assert.deepEqual(partialExport.outliner.map(group => group.name), ['balanced'],
+  'partial overlap keeps one original root group without symmetry prefixes even when wrapping is off');
+assert.deepEqual(partialExport.outliner[0].rotation, [20, 0, 0],
+  'merged symmetry keeps the original root group rotation');
+assert.deepEqual(partialExport.outliner[0].children.map(group => group.name), ['core', 'right_tip', 'left_tip'],
+  'an overlapping child group stays whole while non-overlapping siblings still expand into named branches');
+assert.ok(almostEqual(partialExport.outliner[0].children[0].rotation, [10, 0, 0]),
+  'merged nested groups keep their original orientation');
+assert.equal(partialExport.outliner[0].children[0].children.length, 3,
+  'the child group keeps its centered cube once and both non-overlapping reflected cubes');
+assert.equal(partialExport.elements.length, 5,
+  'export removes only the overlapping cube result, not unrelated mirrored geometry');
+assert.deepEqual(partialOwner.children, [centeredGroup.uid, tipGroup.uid],
+  'symmetry export leaves the original nested groups unchanged');
+const partialBaked = bakeModifier(partialProject, partialOwner, partialModifier.uid);
+assert.equal(partialBaked.mergedRoot, true, 'manual baking follows the same group overlap decision');
+const partialRoot = partialProject.getNode(partialBaked.rootUid);
+assert.equal(partialRoot.name, 'balanced');
+assert.deepEqual(partialRoot.children.map(uid => partialProject.getNode(uid).name),
+  ['core', 'right_tip', 'left_tip'], 'manual baking preserves merged and expanded subgroups together');
 
 console.log('Model group import tests passed.');

@@ -2168,12 +2168,12 @@ export const UI_MESSAGES = Object.freeze({
   "ui.file-name": {
     "zhHant": "不支援拖入 ${file.name}",
     "zhHans": "不支援拖入 ${file.name}",
-    "en": "不支援拖入 ${file.name}"
+    "en": "Unsupported drop: ${file.name}"
   },
   "ui.file-name-2": {
     "zhHant": "無法取得 ${file.name} 的本機路徑",
     "zhHans": "无法取得 ${file.name} 的本机路径",
-    "en": "無法取得 ${file.name} 的本機路徑"
+    "en": "Could not find the local path for ${file.name}"
   },
   "ui.fill": {
     "zhHant": "油漆桶",
@@ -2273,7 +2273,7 @@ export const UI_MESSAGES = Object.freeze({
   "ui.formatnumber-item-parameters-radius-formatnumber-item-parameters-height-px": {
     "zhHant": "等距尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px",
     "zhHans": "等距尺寸 半径 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px",
-    "en": "等距尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px"
+    "en": "Uniform size Radius ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px"
   },
   "ui.free-alignment-around-pivot": {
     "zhHant": "繞樞軸點自由對齊",
@@ -2713,7 +2713,7 @@ export const UI_MESSAGES = Object.freeze({
   "ui.kind-labels-kind": {
     "zhHant": "尚未加入${KIND_LABELS[kind]}",
     "zhHans": "尚未加入${KIND_LABELS[kind]}",
-    "en": "尚未加入${KIND_LABELS[kind]}"
+    "en": "No ${KIND_LABELS[kind]} packs added yet"
   },
   "ui.knife": {
     "zhHant": "刀具切割",
@@ -3075,6 +3075,31 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "显示设置（开发中）",
     "en": "Display settings (in development)"
   },
+  "ui.message-41": {
+    "zhHant": "自動裁剪至模型像素",
+    "zhHans": "自动裁剪至模型像素",
+    "en": "Auto-crop to model pixels"
+  },
+  "ui.message-42": {
+    "zhHant": "應用元素位移",
+    "zhHans": "应用元素位移",
+    "en": "Apply element position"
+  },
+  "ui.message-43": {
+    "zhHant": "應用元素旋轉",
+    "zhHans": "应用元素旋转",
+    "en": "Apply element rotation"
+  },
+  "ui.message-44": {
+    "zhHant": "還原已應用位移",
+    "zhHans": "还原已应用位移",
+    "en": "Restore applied position"
+  },
+  "ui.message-45": {
+    "zhHant": "還原已應用旋轉",
+    "zhHans": "还原已应用旋转",
+    "en": "Restore applied rotation"
+  },
   "ui.message-5": {
     "zhHant": "正在保存重排後的圖層…",
     "zhHans": "正在保存重排后的图层…",
@@ -3180,11 +3205,6 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "模式",
     "en": "Mode"
   },
-  "ui.mode-offscreen-pixelwidth-pixelheight-png": {
-    "zhHant": "${mode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${pixelWidth} × ${pixelHeight} PNG · 透明背景",
-    "zhHans": "${mode === 'offscreen' ? '离屏渲染 · 自动框住可见模型' : '屏幕截图 · 仅当前视窗范围'} · ${pixelWidth} × ${pixelHeight} PNG · 透明背景",
-    "en": "${mode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${pixelWidth} × ${pixelHeight} PNG · 透明背景"
-  },
   "ui.mode-options": {
     "zhHant": "模式選項",
     "zhHans": "模式选项",
@@ -3214,6 +3234,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "模型色卡",
     "zhHans": "模型色卡",
     "en": "Model palette"
+  },
+  "ui.modelcapturemode-offscreen-output-width-output-height-png": {
+    "zhHant": "${modelCaptureMode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${output.width} × ${output.height} PNG · 透明背景",
+    "zhHans": "${modelCaptureMode === 'offscreen' ? '离屏渲染 · 自动框住可见模型' : '屏幕截图 · 仅当前视窗范围'} · ${output.width} × ${output.height} PNG · 透明背景",
+    "en": "${modelCaptureMode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${output.width} × ${output.height} PNG · 透明背景"
   },
   "ui.modifier-result-read-only": {
     "zhHant": "修改器結果 · 唯讀",
@@ -3608,7 +3633,7 @@ export const UI_MESSAGES = Object.freeze({
   "ui.pack-name": {
     "zhHant": "移除「${pack.name}」？",
     "zhHans": "移除「${pack.name}」？",
-    "en": "移除「${pack.name}」？"
+    "en": "Remove “${pack.name}”?"
   },
   "ui.packing-uvs-from-largest-to-smallest": {
     "zhHant": "正在由大到小排列 UV…",
@@ -4188,7 +4213,7 @@ export const UI_MESSAGES = Object.freeze({
   "ui.result-historywarning": {
     "zhHant": "歷史裁剪未完成：${result.historyWarning}",
     "zhHans": "历史裁剪未完成：${result.historyWarning}",
-    "en": "歷史裁剪未完成：${result.historyWarning}"
+    "en": "History compaction incomplete: ${result.historyWarning}"
   },
   "ui.return-to-scene-origin": {
     "zhHant": "回到場景中心",
@@ -4633,7 +4658,7 @@ export const UI_MESSAGES = Object.freeze({
   "ui.shapenames-shapetool": {
     "zhHant": "圖形繪製（目前：${shapeNames[shapeTool]}）",
     "zhHans": "图形绘制（当前：${shapeNames[shapeTool]}）",
-    "en": "圖形繪製（目前：${shapeNames[shapeTool]}）"
+    "en": "Shape drawing (current: ${shapeNames[shapeTool]})"
   },
   "ui.shift": {
     "zhHant": "左鍵拖動旋轉、右鍵拖動平移；Shift + 左鍵框選",
@@ -4768,7 +4793,7 @@ export const UI_MESSAGES = Object.freeze({
   "ui.size-map-formatnumber-join-px": {
     "zhHant": "等距尺寸 ${size.map(formatNumber).join(' × ')} px",
     "zhHans": "等距尺寸 ${size.map(formatNumber).join(' × ')} px",
-    "en": "等距尺寸 ${size.map(formatNumber).join(' × ')} px"
+    "en": "Uniform size ${size.map(formatNumber).join(' × ')} px"
   },
   "ui.size-multiple": {
     "zhHant": "尺寸倍數",
@@ -5234,6 +5259,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "時間軸",
     "zhHans": "时间轴",
     "en": "Timeline"
+  },
+  "ui.to-use-blockbench-style-controls-change-the-option-in-settings": {
+    "zhHant": "如果希望使用 BB 风格的界面操作，可以进入设置调整",
+    "zhHans": "如果希望使用 BB 风格的界面操作，可以进入设置调整",
+    "en": "To use Blockbench-style controls, change the option in Settings"
   },
   "ui.toggle-element-options": {
     "zhHant": "切換元素選項",

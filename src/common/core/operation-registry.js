@@ -46,6 +46,10 @@ const coreOperations = {
   'core.element.flag': '切換元素選項',
   'core.element.visibility': '切換元素可見性',
   'core.element.reset_rotation': '重設元素旋轉',
+  'core.element.apply_applied_position': '應用元素位移',
+  'core.element.restore_applied_position': '還原已應用位移',
+  'core.element.apply_applied_rotation': '應用元素旋轉',
+  'core.element.restore_applied_rotation': '還原已應用旋轉',
   'core.element.delete': '刪除元素',
   'core.element.copy': '複製元素到剪貼簿',
   'core.element.duplicate': '複製元素',
@@ -133,7 +137,7 @@ for (const [key, label] of Object.entries(inspectorFields)) {
   registerOperation(`core.element.field.${key.toLowerCase()}`, `修改元素${label}`);
 }
 const inspectorVectors = {
-  position: '位置', origin: '位置', pivot: '樞軸', rotation: '旋轉',
+  position: '位置', origin: '位置', transformPosition: '位置', pivot: '樞軸', rotation: '旋轉',
   size: '尺寸', handleIn: '前手柄', handleOut: '後手柄'
 };
 for (const [key, label] of Object.entries(inspectorVectors)) {

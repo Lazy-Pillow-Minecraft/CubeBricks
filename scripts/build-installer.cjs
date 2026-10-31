@@ -10,7 +10,7 @@ if (process.platform !== 'win32') {
 
 const projectRoot = path.resolve(__dirname, '..');
 const baseVersion = require(path.join(projectRoot, 'package.json')).version;
-const installerVersion = process.env.CUBEBRICKS_INSTALLER_VERSION || `${baseVersion}-beta`;
+const installerVersion = process.env.CUBEBRICKS_INSTALLER_VERSION || (baseVersion.includes('-') ? baseVersion : `${baseVersion}-beta`);
 const versionCheck = spawnSync(process.execPath, [path.join(__dirname, 'installer-version.cjs'), installerVersion], {
   cwd: projectRoot, stdio: 'inherit'
 });

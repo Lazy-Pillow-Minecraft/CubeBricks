@@ -18,6 +18,8 @@ function captureGroupMembers(group) {
     else members.push({ node, position: [...node.origin], pivot: Array.isArray(node.pivot) ? [...node.pivot] : null, modifierAnchors: captureModifierAnchors(node) });
   };
   group.children.forEach(visit);
+  for (const member of members) member.appliedPosition = member.node.appliedTransform?.position
+    ? [...member.node.appliedTransform.position] : null;
   return members;
 }
 
@@ -98,6 +100,8 @@ function translateCapturedTarget(target, delta) {
   else if (node.type === 'group') {
     node.pivot = target.position.map((value, axis) => value + delta[axis]);
     target.groupMembers.forEach(member => {
+      if (member.appliedPosition)
+        member.node.appliedTransform.position = member.appliedPosition.map((value, axis) => value + delta[axis]);
       if (member.node.type === 'cube') {
         member.node.position = member.position.map((value, axis) => value + delta[axis]);
         member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);

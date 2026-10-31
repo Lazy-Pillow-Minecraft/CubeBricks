@@ -20,6 +20,26 @@ function model(nodes, textures = []) {
   return JSON.stringify({ name: 'test', formatVersion: 3, outliner: nodes.map(node => node.uid),
     elements: nodes, groups: [], textures });
 }
+test('undo restores curve nodes and their local handles without mixing node identities', async () => {
+  const directory = await fs.mkdtemp(path.join(__dirname, '..', '.journal-curve-node-test-'));
+  try {
+    const curve = { uid: 'curve_a', type: 'bezier3d', origin: [0, 0, 0], rotation: [0, 0, 0],
+      nodes: [
+        { uid: 'node_a', position: [0, 0, 0], rotation: [0, -90, -90],
+          handleIn: [0, 0, -2], handleOut: [0, 0, 2], autoTangent: false },
+        { uid: 'node_b', position: [0, 8, 0], rotation: [0, -90, -90],
+          handleIn: [0, 0, -2], handleOut: [0, 0, 2], autoTangent: false }
+      ] };
+    const journal = await new ProjectJournal(directory).initialize(model([curve]));
+    const edited = structuredClone(curve);
+    edited.nodes.splice(1, 0, { ...structuredClone(curve.nodes[0]), uid: 'node_added', position: [2, 4, 0] });
+    await journal.commit(model([edited]), 'core.curve.node_move');
+    await journal.navigate('undo');
+    assert.deepEqual(JSON.parse(await journal.content()).elements[0].nodes, curve.nodes);
+    await journal.navigate('redo');
+    assert.deepEqual(JSON.parse(await journal.content()).elements[0].nodes, edited.nodes);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
 test('texture delta stores both directions and restores pixels', () => {
   const before = image(25), after = image(210);
   const delta = createTextureDelta(before, after);

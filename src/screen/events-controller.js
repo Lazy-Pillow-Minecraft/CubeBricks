@@ -1163,6 +1163,31 @@ function bindEvents() {
   $('#transformGizmo').addEventListener('pointerup', endPointerDrag);
   $('#transformGizmo').addEventListener('pointercancel', endPointerDrag);
   sceneCanvas.addEventListener('pointerdown', () => sceneCanvas.focus({ preventScroll: true }), true);
+  const controlsHintKey = 'cubebricks.controls-hint-seen';
+  let controlsHintSeen = false;
+  try { controlsHintSeen = window.localStorage.getItem(controlsHintKey) === '1'; } catch { /* Storage may be unavailable. */ }
+  let firstDrag = null;
+  const finishControlsHint = () => {
+    controlsHintSeen = true;
+    firstDrag = null;
+    try { window.localStorage.setItem(controlsHintKey, '1'); } catch { /* Keep this session quiet. */ }
+  };
+  sceneCanvas.addEventListener('pointerdown', event => {
+    if (controlsHintSeen) return;
+    if (event.button === 1) { finishControlsHint(); return; }
+    if ((event.button === 0 || event.button === 2) && state.mode === 'edit' && !state.blockbenchControls)
+      firstDrag = { pointerId: event.pointerId, button: event.button, x: event.clientX, y: event.clientY };
+  }, true);
+  sceneCanvas.addEventListener('pointermove', event => {
+    if (!firstDrag || controlsHintSeen || event.pointerId !== firstDrag.pointerId) return;
+    const held = firstDrag.button === 0 ? event.buttons & 1 : event.buttons & 2;
+    if (!held) { firstDrag = null; return; }
+    if (Math.hypot(event.clientX - firstDrag.x, event.clientY - firstDrag.y) < 7) return;
+    finishControlsHint();
+    toast('如果希望使用 BB 风格的界面操作，可以进入设置调整');
+  }, true);
+  sceneCanvas.addEventListener('pointerup', event => { if (firstDrag?.pointerId === event.pointerId) firstDrag = null; }, true);
+  sceneCanvas.addEventListener('pointercancel', event => { if (firstDrag?.pointerId === event.pointerId) firstDrag = null; }, true);
   sceneCanvas.addEventListener('pointerdown', onPointerDown);
   sceneCanvas.addEventListener('pointermove', onScenePointerMove);
   viewport.addEventListener('pointermove', scheduleLockedHover);
