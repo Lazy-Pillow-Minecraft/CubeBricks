@@ -902,6 +902,9 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .outliner-disclosure-hit { position: relative; z-index: 2; border-radius: 4px; cursor: pointer; touch-action: manipulation; }
 .outliner-disclosure-hit:hover { color: var(--accent); background: rgba(var(--accent-rgb), .13); }
 .outliner-disclosure-hit .open-icon { pointer-events: none; }
+.outliner-copy-disclosure { position: absolute; right: 25px; top: 3px; z-index: 3; width: 22px; height: 25px; display: grid; place-items: center; color: var(--subtle); border-radius: 4px; cursor: pointer; }
+.outliner-copy-disclosure:hover { color: var(--accent); background: rgba(var(--accent-rgb), .13); }
+.outliner-item:has(.outliner-copy-disclosure) .item-name { padding-right: 20px; }
 .outliner-item .item-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outliner-flag { width: 18px; height: 26px; display: grid; place-items: center; color: var(--subtle); cursor: pointer; border-radius: 3px; }
 .outliner-flag:hover { color: var(--accent); background: rgba(var(--accent-rgb), .1); }
@@ -1049,6 +1052,9 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .modifier-anchor-edit { margin-left: auto; padding: 4px 7px; border: 1px solid rgba(var(--accent-rgb),.24); border-radius: 4px; color: var(--subtle); font-size: .56rem; }
 .modifier-anchor-edit:hover, .modifier-anchor-edit.active { color: var(--accent); border-color: rgba(var(--accent-rgb),.56); background: rgba(var(--accent-rgb),.1); }
 .modifier-anchor-note { margin: 3px 0 7px; color: var(--subtle); font-size: .56rem; line-height: 1.5; }
+.copy-node-card { margin: 5px 0; padding: 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-2); }
+.copy-node-card.active { border-color: var(--accent); }
+.copy-node-card .field-title > div { display: flex; gap: 5px; }
 .modifier-vector-field { padding-left: 46px; }
 .modifier-vector-field .axis-inputs { display: flex; flex-wrap: wrap; gap: 4px; }
 .modifier-vector-field .axis-inputs label { position: relative; flex: 0 0 68px; width: 68px; }

@@ -44,15 +44,15 @@ function captureModifierAnchors(node) {
 function translateModifierAnchorsFromSnapshot(node, anchors, delta) {
   for (const modifier of [...(node.modifiers || []), ...(node.operators || [])]) {
     const start = anchors?.get(modifier.uid);
-    if (!start || !Array.isArray(modifier.anchor?.position)) continue;
-    modifier.anchor.position = start.map((value, axis) => value + delta[axis]);
+    if (start && Array.isArray(modifier.anchor?.position))
+      modifier.anchor.position = start.map((value, axis) => value + delta[axis]);
   }
 }
 
 function translateModifierAnchors(node, delta) {
   for (const modifier of [...(node.modifiers || []), ...(node.operators || [])]) {
-    if (!Array.isArray(modifier.anchor?.position)) continue;
-    modifier.anchor.position = modifier.anchor.position.map((value, axis) => value + delta[axis]);
+    if (Array.isArray(modifier.anchor?.position))
+      modifier.anchor.position = modifier.anchor.position.map((value, axis) => value + delta[axis]);
   }
 }
 

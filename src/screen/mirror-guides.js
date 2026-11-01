@@ -34,6 +34,12 @@ function selectedMirrorGuideGroup() {
 function mirrorControllerWorldFrame(owner, modifier) {
   if (!owner || !modifier?.anchor) return null;
   const chain = state.project.getGroupChain(owner.uid);
+  if (modifier.type === 'element_copy') {
+    const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(direction => normalize3(applyGroupTransforms(
+      rotateVector(direction, modifier.anchor.rotation || [0, 0, 0]),
+      chain.map(parent => ({ pivot: [0, 0, 0], rotation: parent.rotation || [0, 0, 0] })))));
+    return { origin: applyGroupTransforms(modifier.anchor.position, chain), axes };
+  }
   const pivot = owner.type === 'group' || owner.type === 'cube' || isShapeElement(owner) ? owner.pivot : owner.origin || owner.position || [0, 0, 0];
   const ownerRotation = owner.rotation || [0, 0, 0];
   const offset = modifier.anchor.position.map((value, axis) => value - pivot[axis]);

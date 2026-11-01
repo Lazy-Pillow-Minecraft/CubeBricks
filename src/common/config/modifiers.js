@@ -20,3 +20,11 @@ modifierRegistry.register({
   })
 });
 
+modifierRegistry.register({
+  id: 'element_copy',
+  label: '元素拷貝',
+  allowMultiple: true,
+  targets: ['group', 'cube', 'polygon_prism', 'dodecahedron', 'truncated_icosahedron', 'bezier2d', 'bezier3d'],
+  createDefault: () => ({ nodes: [] })
+});
+

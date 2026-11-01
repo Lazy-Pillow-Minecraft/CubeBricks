@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, addModifier, bakeModifier, bakeProceduralShape, buildModifierRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt } from '../src/model.js';
+import { BezierElement, Cube, CurveNode, Group, NodeElement, Shape, CubeBricksProject, addModifier, bakeModifier, bakeProceduralShape, buildModifierRenderInstances, chooseKnifeCutAxis, exportBlockbench, getKnifeFaceAxes, getModifier, importBlockbench, setPivotPreservingGeometry, splitCubeAt, translateNode } from '../src/model.js';
 import { applyGroupTransforms } from '../src/render/webgl-renderer.js';
 import { ModelFormatRegistry } from '../src/common/core/model-format-registry.js';
 import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../src/common/config/model-formats.js';
@@ -600,6 +600,84 @@ assert.equal(bakeProject.elements.filter(element => element.type === 'cube').len
 assert.ok(bakeResult.elementUids.every(uid =>
   bakeProject.getNode(uid).modifiers.map(modifier => modifier.uid).join() === preservedSecondModifier.uid),
   'baking one modifier preserves the other modifier on every resulting cube');
+
+const copySource = new Cube({ uid: 'copy-source', name: 'copy_source', position: [0, 0, 0],
+  size: [2, 1, 1], pivot: [0, 0, 0] });
+const copyModifier = addModifier(copySource, 'element_copy');
+copyModifier.nodes = [
+  { uid: 'copy-a', position: [5, 0, 0], rotation: [0, 0, 0] },
+  { uid: 'copy-b', position: [0, 0, 5], rotation: [0, 90, 0] }
+];
+const copyProject = new CubeBricksProject({ elements: [copySource], outliner: [copySource.uid] });
+const copyInstances = buildModifierRenderInstances(copyProject);
+assert.equal(copyInstances.length, 2, 'each disconnected copy node produces one render instance');
+assert.ok(copyInstances.some(instance => Math.abs(instance.translation[0] - 5) < 1e-9),
+  'copy node position aligns to the source pivot');
+const copyExport = exportBlockbench(copyProject);
+assert.equal(copyExport.elements.length, 3, 'export bakes the source and both copy nodes');
+assert.equal(copyProject.elements.length, 1, 'export leaves the live document procedural');
+const copyBakeResult = bakeModifier(copyProject, copySource, copyModifier.uid);
+assert.equal(copyBakeResult.copiedElementUids.length, 2, 'baking one copy modifier creates its two copies');
+assert.equal(copyProject.elements.length, 3, 'baking preserves the source element');
+assert.equal(copySource.modifiers.length, 0, 'baking removes only the chosen copy modifier');
+const stackedCopyCube = new Cube({ uid: 'stacked-copy', position: [0, 0, 0], size: [1, 1, 1], pivot: [0, 0, 0] });
+addModifier(stackedCopyCube, 'element_copy').nodes = [{ uid: 'first-node', position: [5, 0, 0], rotation: [0, 0, 0] }];
+addModifier(stackedCopyCube, 'element_copy').nodes = [{ uid: 'second-node', position: [10, 0, 0], rotation: [0, 0, 0] }];
+const stackedCopyProject = new CubeBricksProject({ elements: [stackedCopyCube], outliner: [stackedCopyCube.uid] });
+assert.deepEqual(buildModifierRenderInstances(stackedCopyProject).map(instance => instance.translation[0]).sort((a, b) => a - b),
+  [5, 10, 15], 'later copy modifiers consume earlier copy results');
+assert.deepEqual(exportBlockbench(stackedCopyProject).elements.map(element => element.from[0]).sort((a, b) => a - b),
+  [0, 5, 10, 15], 'stacked copy export preserves the viewport arrangement');
+const groupCopyCube = new Cube({ uid: 'group-copy-cube', position: [0, 0, 0], size: [1, 1, 1], pivot: [0, 0, 0] });
+const groupCopyChild = new Group({ uid: 'group-copy-child', name: 'child', children: [groupCopyCube.uid] });
+const groupCopyOwner = new Group({ uid: 'group-copy-owner', name: 'owner', children: [groupCopyChild.uid] });
+const groupCopyModifier = addModifier(groupCopyOwner, 'element_copy');
+assert.ok(groupCopyModifier, 'groups can attach the copy modifier');
+groupCopyModifier.nodes = [{ uid: 'group-copy-node', position: [8, 0, 0], rotation: [0, 0, 0] }];
+const groupCopyProject = new CubeBricksProject({ elements: [groupCopyCube],
+  groups: [groupCopyOwner, groupCopyChild], outliner: [groupCopyOwner.uid] });
+assert.equal(buildModifierRenderInstances(groupCopyProject).length, 1,
+  'one group copy node previews the complete child geometry');
+const groupCopyExport = exportBlockbench(groupCopyProject);
+assert.equal(groupCopyExport.outliner.length, 2, 'group copy exports an original and a copied root group');
+assert.equal(groupCopyExport.outliner[1].children[0].children.length, 1,
+  'group copy preserves nested group hierarchy when baking');
+assert.equal(groupCopyExport.outliner[1].name, 'owner2', 'a copied group uses a numeric suffix');
+assert.equal(groupCopyExport.outliner[1].children[0].name, 'child2',
+  'nested copied groups use the parent copy number');
+const groupCopyBake = bakeModifier(groupCopyProject, groupCopyOwner, groupCopyModifier.uid);
+assert.equal(groupCopyBake.copiedGroupUids.length, 1, 'manual group baking creates a separate copied group');
+assert.equal(groupCopyProject.getNode(groupCopyOwner.uid).children[0], groupCopyChild.uid,
+  'manual group baking keeps the original group hierarchy');
+const stackedGroupCube = new Cube({ uid: 'stacked-group-cube', position: [0, 0, 0], size: [1, 1, 1] });
+const stackedGroup = new Group({ uid: 'stacked-group', children: [stackedGroupCube.uid] });
+addModifier(stackedGroup, 'element_copy').nodes = [{ uid: 'group-first', position: [5, 0, 0], rotation: [0, 0, 0] }];
+addModifier(stackedGroup, 'element_copy').nodes = [{ uid: 'group-second', position: [10, 0, 0], rotation: [0, 0, 0] }];
+const stackedGroupProject = new CubeBricksProject({ elements: [stackedGroupCube], groups: [stackedGroup], outliner: [stackedGroup.uid] });
+assert.deepEqual(exportBlockbench(stackedGroupProject).elements.map(element => element.from[0]).sort((a, b) => a - b),
+  [0, 5, 10, 15], 'stacked group copies keep their composed positions during export');
+const appliedCopyCube = new Cube({ uid: 'applied-copy', position: [0, 0, 0], size: [2, 1, 1],
+  pivot: [0, 0, 0], rotation: [0, 90, 0], appliedTransform: { rotation: [0, 90, 0] } });
+const appliedCopyModifier = addModifier(appliedCopyCube, 'element_copy');
+const appliedCopyProject = new CubeBricksProject({ elements: [appliedCopyCube], outliner: [appliedCopyCube.uid] });
+const appliedCopyExport = exportBlockbench(appliedCopyProject);
+assert.deepEqual(appliedCopyModifier.nodes[0].rotation, [0, 0, 0],
+  'a new copy node starts in the owner sibling coordinate frame after rotation is applied');
+assert.ok(appliedCopyExport.elements.some(element => Math.abs(element.origin[0]) < 1e-4
+  && element.rotation.every(value => Math.abs(value) < 1e-4)),
+  'an applied rotation produces a world-aligned copy at the initial node');
+const appliedMirror = addModifier(appliedCopyCube, 'symmetry');
+assert.ok(Math.abs(appliedMirror.anchor.rotation[1] + 90) < 1e-4,
+  'other new modifier anchors also cancel the applied owner rotation');
+const appliedCopyLive = appliedCopyProject.getNode(appliedCopyCube.uid);
+const appliedCopyLiveModifier = appliedCopyLive.modifiers.find(modifier => modifier.type === 'element_copy');
+appliedCopyLiveModifier.nodes[0].position = [5, 0, 0];
+translateNode(appliedCopyProject, appliedCopyLive, [2, 0, 0]);
+assert.deepEqual(appliedCopyLiveModifier.nodes[0].position, [5, 0, 0],
+  'copy nodes remain at their sibling-level coordinates when the owner moves');
+assert.ok(exportBlockbench(appliedCopyProject).elements.some(element => Math.abs(element.origin[0] - 5) < 1e-4
+  && element.rotation.every(value => Math.abs(value) < 1e-4)),
+  'the moved and rotated owner does not alter the copy node world frame');
 
 symmetryModifier.mode = 'radial';
 symmetryModifier.copies = 4;

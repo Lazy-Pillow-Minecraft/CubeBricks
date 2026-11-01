@@ -1712,7 +1712,9 @@ export class WebGLSceneRenderer {
             closestDistance = distance;
             closest = {
               uid: face.uid, cubeUid: face.cubeUid || face.uid, cubeIndex: face.cubeIndex ?? null,
-              distance, faceName: face.faceName, generated: true, instanceKey: instance.key,
+              cube: face.cube || null, distance, faceName: face.faceName, generated: true, instanceKey: instance.key,
+              copyNodeUid: instance.copyNodeUid, copyOwnerUid: instance.copyOwnerUid,
+              copyModifierUid: instance.copyModifierUid,
               facePoints: face.quad.map(point => this.paintExplodeInstancePoint(instance, face.uid, point)),
               point: ray.origin.map((value, axis) => value + ray.direction[axis] * distance),
               modelPoint: localRay.origin.map((value, axis) => value + localRay.direction[axis] * distance

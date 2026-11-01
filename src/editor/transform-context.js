@@ -172,6 +172,10 @@ function activeCurveNodeContext() {
 function activeModifierAnchorContext() {
   const owner = selected();
   const modifier = [...(owner?.modifiers || []), ...(owner?.operators || [])].find(entry => entry.uid === state.selectedModifierUid);
+  if (modifier?.enabled && modifier.type === 'element_copy') {
+    const node = modifier.nodes?.find(entry => entry.uid === state.selectedModifierNodeUid) || modifier.nodes?.[0];
+    return node ? { owner, modifier: { ...modifier, anchor: node }, node } : null;
+  }
   return modifier?.enabled && ['symmetry', 'paint_symmetry'].includes(modifier.type) ? { owner, modifier } : null;
 }
 
@@ -216,10 +220,10 @@ function getModifierAnchorTransformAxes(context) {
   const units = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
   if (state.transformSpace === 'global') return units;
   const owner = context.owner;
-  const chain = [...state.project.getGroupChain(owner.uid), {
-    pivot: [0, 0, 0],
-    rotation: owner.rotation || [0, 0, 0]
-  }];
+  const chain = [...state.project.getGroupChain(owner.uid),
+    ...(context.modifier.type === 'element_copy' ? [] : [{
+      pivot: [0, 0, 0], rotation: owner.rotation || [0, 0, 0]
+    }])];
   const rotationChain = chain.map(entry => ({ pivot: [0, 0, 0], rotation: entry.rotation || [0, 0, 0] }));
   const transformDirection = direction => normalize3(applyGroupTransforms(direction, rotationChain));
   const parentAxes = units.map(transformDirection);

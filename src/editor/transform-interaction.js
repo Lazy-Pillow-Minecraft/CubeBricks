@@ -65,7 +65,8 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
   }
   const itemSubdivisionOwner = subdivisionOwner(item);
   const parentChain = state.project.getGroupChain(itemSubdivisionOwner?.uid || item.uid);
-  const chain = state.tool === 'pivot' && selectionContext.multiple && !modifierAnchorContext ? [] : modifierAnchorContext
+  const chain = state.tool === 'pivot' && selectionContext.multiple && !modifierAnchorContext ? [] : modifierAnchorContext?.modifier.type === 'element_copy'
+    ? parentChain : modifierAnchorContext
     ? [...parentChain, { pivot: item.type === 'group' || item.type === 'cube' || isShapeElement(item) ? item.pivot : item.origin || item.position || [0, 0, 0], rotation: item.rotation || [0, 0, 0] }]
     : curveNodeContext
     ? [...parentChain, { pivot: item.origin, rotation: item.rotation || [0, 0, 0] }]
@@ -554,6 +555,21 @@ function endPointerDrag(event) {
       applyViewportBoxSelection(hitUids, finishedDrag);
     } else if (event.type !== 'pointercancel') {
       if (finishedDrag.generatedHit && !state.modifierResultGhost) {
+        if (finishedDrag.generatedHit.copyNodeUid && finishedDrag.generatedHit.copyOwnerUid) {
+          const owner = state.project.getNode(finishedDrag.generatedHit.copyOwnerUid);
+          const modifier = owner?.modifiers?.find(entry => entry.uid === finishedDrag.generatedHit.copyModifierUid);
+          if (modifier?.nodes?.some(node => node.uid === finishedDrag.generatedHit.copyNodeUid)) {
+            sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
+            state.selectedGenerated = null;
+            state.selectedUid = owner.uid; state.selectedUids = new Set([owner.uid]);
+            state.selectedModifierUid = modifier.uid;
+            state.selectedModifierNodeUid = finishedDrag.generatedHit.copyNodeUid;
+            state.selectedCurveNodeIndex = null;
+            state.inspectorPage = 'modifiers';
+            refreshSelectionUi();
+            return;
+          }
+        }
         sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
         state.selectedUids = new Set(); state.selectedUid = null;
         state.selectedGenerated = {

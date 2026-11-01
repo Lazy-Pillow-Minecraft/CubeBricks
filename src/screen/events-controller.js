@@ -856,6 +856,24 @@ function bindEvents() {
       refreshSelectionUi();
       return;
     }
+    if (button.dataset.copyNodeUid) {
+      const owner = state.project.getNode(button.dataset.uid);
+      const modifier = owner?.modifiers?.find(entry => entry.uid === button.dataset.copyModifierUid);
+      if (!modifier?.nodes?.some(node => node.uid === button.dataset.copyNodeUid)) return;
+      state.selectedUid = owner.uid; state.selectedUids = new Set([owner.uid]);
+      state.selectedGenerated = null; state.selectedCurveNodeIndex = null;
+      state.selectedModifierUid = modifier.uid; state.selectedModifierNodeUid = button.dataset.copyNodeUid;
+      state.inspectorPage = 'modifiers';
+      refreshSelectionUi();
+      return;
+    }
+    const copyDisclosure = event.target.closest('[data-copy-disclosure]');
+    if (copyDisclosure) {
+      event.preventDefault();
+      const uidValue = copyDisclosure.dataset.copyDisclosure;
+      state.collapsedCopyNodes.has(uidValue) ? state.collapsedCopyNodes.delete(uidValue) : state.collapsedCopyNodes.add(uidValue);
+      renderOutliner(); return;
+    }
     const flag = event.target.closest('[data-node-toggle]');
     if (flag && !flag.classList.contains('unavailable')) {
       event.preventDefault();
@@ -912,9 +930,9 @@ function bindEvents() {
   };
   outliner.addEventListener('pointerdown', event => {
     if (event.button !== 0 || state.mode === 'paint'
-      || event.target.closest('[data-disclosure], [data-node-toggle], [data-group-line-uid]')) return;
+      || event.target.closest('[data-disclosure], [data-copy-disclosure], [data-node-toggle], [data-group-line-uid]')) return;
     const item = event.target.closest('.outliner-item');
-    if (!item || item.dataset.curveNodeIndex !== undefined) return;
+    if (!item || item.dataset.curveNodeIndex !== undefined || item.dataset.copyNodeUid !== undefined) return;
     outlinerPointerDrag = { pointerId: event.pointerId, uid: item.dataset.uid,
       startX: event.clientX, startY: event.clientY, active: false };
   });
@@ -1096,6 +1114,7 @@ function bindEvents() {
       const modifier = [...(owner?.modifiers || []), ...(owner?.operators || [])].find(entry => entry.uid === handle.dataset.modifierUid);
       if (!modifier?.enabled) return;
       state.selectedModifierUid = modifier.uid;
+      state.selectedModifierNodeUid = handle.dataset.modifierNodeUid || null;
       state.selectedCurveNodeIndex = null;
       state.inspectorPage = modifier.type === 'paint_symmetry' ? 'operators' : 'modifiers';
       if (!['move', 'rotate', 'pivot'].includes(state.tool)) setTool('move');

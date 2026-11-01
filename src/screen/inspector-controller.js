@@ -192,6 +192,13 @@ function symmetryModifierMarkup(owner, modifier) {
   </div>`;
 }
 
+function elementCopyModifierMarkup(modifier) {
+  return `<div class="modifier-settings">
+    <p class="modifier-anchor-note">拷貝節點在右側元素列表中，與所屬物件同層變換。</p>
+    <div class="field-title"><span>拷貝節點 · ${modifier.nodes.length}</span><button type="button" data-copy-node-add="${modifier.uid}">＋ 新增節點</button></div>
+  </div>`;
+}
+
 function modifierPanelMarkup(owner) {
   const modifiers = owner.modifiers || [];
   const available = modifierRegistry.listFor(owner.type).filter(definition =>
@@ -209,7 +216,8 @@ function modifierPanelMarkup(owner) {
         <button type="button" data-modifier-move="down" data-modifier-uid="${modifier.uid}" ${index === modifiers.length - 1 ? 'disabled' : ''}>↓</button>
         <button type="button" class="danger" data-modifier-remove="${modifier.uid}">×</button>
       </div>
-      ${collapsed ? '' : modifier.type === 'symmetry' ? symmetryModifierMarkup(owner, modifier) : ''}
+      ${collapsed ? '' : modifier.type === 'symmetry' ? symmetryModifierMarkup(owner, modifier)
+        : modifier.type === 'element_copy' ? elementCopyModifierMarkup(modifier) : ''}
     </section>`;
   }).join('');
   return `<div class="field-section modifier-page">
@@ -300,6 +308,20 @@ function renderInspector() {
   }
   if (isBezierElement(item) && Number.isInteger(state.selectedCurveNodeIndex) && item.nodes[state.selectedCurveNodeIndex]) {
     inspector.innerHTML = `<nav class="inspector-tabs"><button type="button" class="active">節點</button></nav>${curveNodeInspectorMarkup(item, state.selectedCurveNodeIndex)}`;
+    bindInspector();
+    return;
+  }
+  const selectedCopyModifier = (item.modifiers || []).find(modifier => modifier.type === 'element_copy'
+    && modifier.uid === state.selectedModifierUid);
+  const selectedCopyNode = selectedCopyModifier?.nodes?.find(node => node.uid === state.selectedModifierNodeUid);
+  if (selectedCopyNode) {
+    inspector.innerHTML = `<nav class="inspector-tabs"><button type="button" class="active">拷貝節點</button></nav>
+      <div class="field-section">
+        ${modifierVectorField('位置', selectedCopyModifier, `nodes.${selectedCopyNode.uid}.position`, selectedCopyNode.position)}
+        ${modifierVectorField('旋轉', selectedCopyModifier, `nodes.${selectedCopyNode.uid}.rotation`, selectedCopyNode.rotation)}
+        <button type="button" data-copy-node-add="${selectedCopyModifier.uid}">＋ 新增節點</button>
+        <button type="button" class="danger" data-copy-node-remove="${selectedCopyNode.uid}" data-modifier-uid="${selectedCopyModifier.uid}">刪除節點</button>
+      </div>`;
     bindInspector();
     return;
   }
@@ -665,9 +687,10 @@ function bindInspector(root = null) {
     const type = $('[data-modifier-add-type]', inspector)?.value;
     if (!type) return;
     snapshot(`modifier.${type}.add`);
-    const modifier = addModifier(item, type);
+    const modifier = addModifier(item, type, {}, state.project);
     if (!modifier) return;
     state.selectedModifierUid = modifier.uid;
+    state.selectedModifierNodeUid = modifier.type === 'element_copy' ? modifier.nodes[0]?.uid || null : null;
     state.selectedCurveNodeIndex = null;
     sceneRenderer.invalidateMirrorGeometry();
     markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
@@ -687,7 +710,9 @@ function bindInspector(root = null) {
   $$('[data-modifier-remove]', inspector).forEach(button => button.addEventListener('click', () => {
     snapshot(`modifier.${item.modifiers?.find(modifier => modifier.uid === button.dataset.modifierRemove)?.type || 'symmetry'}.remove`);
     item.modifiers = (item.modifiers || []).filter(modifier => modifier.uid !== button.dataset.modifierRemove);
-    if (state.selectedModifierUid === button.dataset.modifierRemove) state.selectedModifierUid = null;
+    if (state.selectedModifierUid === button.dataset.modifierRemove) {
+      state.selectedModifierUid = null; state.selectedModifierNodeUid = null;
+    }
     state.collapsedModifiers.delete(button.dataset.modifierRemove);
     sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
   }));
@@ -716,6 +741,36 @@ function bindInspector(root = null) {
       return;
     }
     renderInspector(); renderScene(); updateSelectionLabels();
+  }));
+  $$('[data-copy-node-add]', inspector).forEach(button => button.addEventListener('click', () => {
+    const modifier = modifierByUid(button.dataset.copyNodeAdd);
+    if (!modifier || modifier.type !== 'element_copy') return;
+    snapshot(`modifier.${modifier.type}.change`);
+    const current = modifier.nodes.find(node => node.uid === state.selectedModifierNodeUid);
+    const pivot = item.pivot || item.origin || item.position || [0, 0, 0];
+    const source = current && current !== modifier.nodes[0] ? current : null;
+    const node = { uid: `copy_node_${crypto.randomUUID()}`,
+      position: [...(source?.position || pivot)],
+      rotation: [...(source?.rotation || displayedTransformVector(item, 'rotation'))] };
+    modifier.nodes.push(node);
+    state.selectedModifierUid = modifier.uid; state.selectedModifierNodeUid = node.uid;
+    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
+  }));
+  $$('[data-copy-node-remove]', inspector).forEach(button => button.addEventListener('click', () => {
+    const modifier = modifierByUid(button.dataset.modifierUid);
+    if (!modifier || modifier.type !== 'element_copy') return;
+    snapshot(`modifier.${modifier.type}.change`);
+    modifier.nodes = modifier.nodes.filter(node => node.uid !== button.dataset.copyNodeRemove);
+    if (state.selectedModifierNodeUid === button.dataset.copyNodeRemove)
+      state.selectedModifierNodeUid = modifier.nodes[0]?.uid || null;
+    sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderInspector(); renderScene(); updateSelectionLabels();
+  }));
+  $$('[data-copy-node-select]', inspector).forEach(button => button.addEventListener('click', () => {
+    state.selectedModifierUid = button.dataset.modifierUid;
+    state.selectedModifierNodeUid = button.dataset.copyNodeSelect;
+    state.selectedCurveNodeIndex = null;
+    if (!['move', 'rotate', 'pivot'].includes(state.tool)) setTool('move');
+    else { renderInspector(); renderScene(); updateSelectionLabels(); }
   }));
   $$('[data-modifier-move]', inspector).forEach(button => button.addEventListener('click', () => {
     const index = item.modifiers?.findIndex(modifier => modifier.uid === button.dataset.modifierUid) ?? -1;
@@ -760,9 +815,11 @@ function bindInspector(root = null) {
       if (!modifier || !Number.isFinite(value)) return;
       const [scope, property] = input.dataset.modifierVector.split('.');
       const axis = Number(input.dataset.axis);
-      if (modifier[scope][property][axis] === value) return;
+      const vector = scope === 'nodes' ? modifier.nodes?.find(node => node.uid === property)?.[input.dataset.modifierVector.split('.')[2]]
+        : modifier[scope]?.[property];
+      if (!vector || vector[axis] === value) return;
       if (!snapshotTaken) { snapshot(`modifier.${modifier.type}.transform`); snapshotTaken = true; }
-      modifier[scope][property][axis] = value;
+      vector[axis] = value;
       sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
     };
     input.addEventListener('input', apply);

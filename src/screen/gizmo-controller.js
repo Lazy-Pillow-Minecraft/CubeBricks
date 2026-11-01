@@ -285,13 +285,13 @@ function pivotMarkerMarkup(origin) {
   </g>`;
 }
 
-function modifierAnchorMarkerMarkup(entry, active = false) {
+function modifierAnchorMarkerMarkup(entry, active = false, nodeUid = null) {
   const frame = mirrorControllerWorldFrame(entry.owner, entry.modifier);
   if (!frame) return '';
   const point = projectViewportPoint(frame.origin);
   if (point.behind || point.depth < -1 || point.depth > 1) return '';
   const radius = active ? 11 : 9;
-  return `<g class="${active ? '' : 'gizmo-control '}modifier-anchor-marker ${active ? 'active' : ''}" ${active ? '' : `data-kind="modifier-anchor" data-modifier-uid="${entry.modifier.uid}" ${gizmoDepthAttributes('point', [point], 'center')}`}>
+  return `<g class="${active ? '' : 'gizmo-control '}modifier-anchor-marker ${active ? 'active' : ''}" ${active ? '' : `data-kind="modifier-anchor" data-modifier-uid="${entry.modifier.uid}" ${nodeUid ? `data-modifier-node-uid="${nodeUid}"` : ''} ${gizmoDepthAttributes('point', [point], 'center')}`}>
     ${active ? '' : `<circle class="gizmo-hit-point" cx="${point.x}" cy="${point.y}" r="18"/>`}
     <path class="gizmo-visible modifier-anchor-ring" d="M${point.x},${point.y - radius} L${point.x + radius},${point.y} L${point.x},${point.y + radius} L${point.x - radius},${point.y} Z"/>
     <path class="gizmo-visible modifier-anchor-axis" d="M${point.x - 14},${point.y} H${point.x + 14} M${point.x},${point.y - 14} V${point.y + 14}"/>
@@ -553,7 +553,15 @@ function updateTransformGizmo() {
   const modifierAnchorMarker = symmetryEntry
     ? modifierAnchorMarkerMarkup(symmetryEntry, modifierAnchorContext?.modifier.uid === symmetryEntry.modifier.uid)
     : '';
-  const editorOverlay = curveOverlay + modifierAnchorMarker;
+  const copyNodeMarkers = state.inspectorPage === 'modifiers' && item
+    ? (item.modifiers || []).filter(modifier => modifier.enabled && modifier.type === 'element_copy')
+      .flatMap(modifier => (modifier.nodes || []).map(node => modifierAnchorMarkerMarkup(
+        { owner: item, modifier: { ...modifier, anchor: node } },
+        modifier.uid === state.selectedModifierUid && node.uid ===
+          (modifier.nodes.some(entry => entry.uid === state.selectedModifierNodeUid)
+            ? state.selectedModifierNodeUid : modifier.nodes[0]?.uid), node.uid)))
+      .join('') : '';
+  const editorOverlay = curveOverlay + modifierAnchorMarker + copyNodeMarkers;
   if (!item || isEffectivelyLocked(item.uid) || !['move', 'resize', 'rotate', 'pivot', 'vertexSnap'].includes(state.tool)) {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
     if (editorOverlay && item && !isEffectivelyLocked(item.uid)) {

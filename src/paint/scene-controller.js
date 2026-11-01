@@ -6,7 +6,7 @@ import { PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
 import { paintSelectionAllows } from './selection-controller.js';
 
 export function sceneBrushHitKey(hit) {
-  return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.faceName}` : '';
+  return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.faceName}::${hit.instanceKey || 'source'}` : '';
 }
 
 export function sceneBrushBranchKey(sourceHit, targetHit, assetUid) {
@@ -16,7 +16,7 @@ export function sceneBrushBranchKey(sourceHit, targetHit, assetUid) {
 export function paintDragAcceptsHit(drag, hit) {
   if (!drag || drag.multiSurface || drag.bucketDrag) return true;
   return hit.uid === drag.uid && (hit.cubeUid || hit.uid) === (drag.cubeUid || drag.uid)
-    && hit.faceName === drag.faceName;
+    && hit.faceName === drag.faceName && (hit.instanceKey || null) === (drag.instanceKey || null);
 }
 
 export function createScenePaintController({
@@ -429,6 +429,8 @@ function scenePaintHit(clientX, clientY, drag = null) {
   const rect = sceneCanvas.getBoundingClientRect();
   const x = clientX - rect.left, y = clientY - rect.top;
   let hit, hits = [];
+  const generatedVisible = !state.modifierResultGhost && !!sceneRenderer.mirrorCache?.instances?.length;
+  const needsCoincident = state.paintIgnoreTransparent || state.tool === 'brush' && state.paintBrushOverlay;
   if (state.paintIgnoreTransparent) {
     const ordered = sceneRenderer.pickCoincident(state.project, x, y, true, true);
     hit = ordered.find(candidate => paintHitVisibleAtStart(candidate, drag)) || null;
@@ -441,7 +443,16 @@ function scenePaintHit(clientX, clientY, drag = null) {
   } else {
     hits = state.tool === 'brush' && state.paintBrushOverlay
       ? sceneRenderer.pickCoincident(state.project, x, y, true) : [];
-    hit = hits[0] || sceneRenderer.pickDetailed(state.project, x, y, true);
+    hit = hits[0] || sceneRenderer.pickDetailed(state.project, x, y, true,
+      { includeGenerated: generatedVisible });
+  }
+  if (generatedVisible && needsCoincident) {
+    const visible = sceneRenderer.pickDetailed(state.project, x, y, true, { includeGenerated: true });
+    if (visible?.generated && (!hit || visible.distance <= hit.distance + 1e-6)
+      && (!state.paintIgnoreTransparent || paintHitVisibleAtStart(visible, drag))) {
+      hit = visible;
+      hits = [visible];
+    }
   }
   if (!hit?.faceName) return null;
   if (!paintDragAcceptsHit(drag, hit)) return null;
@@ -820,7 +831,7 @@ function startScenePaintPointer(event, x, y) {
   sceneCanvas.setPointerCapture(event.pointerId);
   const drag = {
     type: 'texture-paint-3d', pointerId: event.pointerId, uid: hit.uid,
-    cubeUid: hit.cubeUid || hit.uid, faceName: hit.faceName,
+    cubeUid: hit.cubeUid || hit.uid, faceName: hit.faceName, instanceKey: hit.instanceKey || null,
     asset: target.asset, cube: target.cube, tool: state.tool,
     initialHit: hit, latestClient: [event.clientX, event.clientY],
     canvas: null, context: null, last: null, ready: false, ended: false, canceled: false, finished: false,

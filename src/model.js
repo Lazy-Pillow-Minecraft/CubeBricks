@@ -46,6 +46,18 @@ export function allocateGroupName(project, sourceName = 'group_1', { duplicate =
   return `${source.prefix}${candidate}`;
 }
 
+function copyNameOrdinal(name, copyIndex) {
+  const match = String(name).match(/^(.*?)(\d+)$/);
+  const base = match ? match[1] : String(name);
+  const first = match ? BigInt(match[2]) : 1n;
+  const ordinal = first + BigInt(copyIndex) + 1n;
+  return { name: `${base}${ordinal}`, ordinal };
+}
+
+function copyNameAtOrdinal(name, ordinal) {
+  return `${String(name).replace(/\d+$/, '')}${ordinal}`;
+}
+
 export function refreshAutomaticNodeName(project, node) {
   if (!node?.unnamed || node.type === 'group') return;
   const parent = project.getParentGroup(node.uid);
@@ -124,7 +136,7 @@ function normalizeReferenceImages(value) {
   }));
 }
 
-function normalizeModifierList(modifiers, targetType, anchorPosition = [0, 0, 0]) {
+function normalizeModifierList(modifiers, targetType, anchorPosition = [0, 0, 0], ownerRotation = [0, 0, 0]) {
   if (!Array.isArray(modifiers)) return [];
   return modifiers.flatMap(data => {
     const modifier = modifierRegistry.create(data?.type, targetType, data);
@@ -133,6 +145,18 @@ function normalizeModifierList(modifiers, targetType, anchorPosition = [0, 0, 0]
       position: vector3(modifier.anchor?.position, anchorPosition),
       rotation: vector3(modifier.anchor?.rotation)
     };
+    if (modifier.type === 'element_copy') {
+      const legacyOwnerSpace = modifier.coordinateSpace !== 'sibling';
+      modifier.nodes = Array.isArray(modifier.nodes)
+        ? modifier.nodes.map(node => {
+          const position = vector3(node.position, anchorPosition);
+          const rotation = vector3(node.rotation);
+          return { uid: String(node.uid || uid('copy_node')),
+            position: legacyOwnerSpace ? transformAround(position, anchorPosition, rotationMatrix(ownerRotation)) : position,
+            rotation: legacyOwnerSpace ? matrixEuler(matrixMultiply(rotationMatrix(ownerRotation), rotationMatrix(rotation))) : rotation };
+        }) : [];
+      modifier.coordinateSpace = 'sibling';
+    }
     return [modifier];
   });
 }
@@ -181,7 +205,7 @@ export function getModifier(owner, type) {
   return owner?.modifiers?.find(modifier => modifier.type === type) || null;
 }
 
-export function addModifier(owner, type, data = {}) {
+export function addModifier(owner, type, data = {}, project = null) {
   if (!owner) return null;
   const definition = modifierRegistry.get(type);
   if (definition?.allowMultiple === false && getModifier(owner, type)) return null;
@@ -190,10 +214,20 @@ export function addModifier(owner, type, data = {}) {
   const anchorPosition = owner.type === 'group' || owner.type === 'cube' || owner instanceof Shape
     ? owner.pivot
     : owner.origin || owner.position || [0, 0, 0];
+  const ownerWorldOrientation = owner.appliedTransform?.rotation && type !== 'element_copy'
+    ? groupChainMatrix([...(project?.getGroupChain(owner.uid) || []), modifierOwnerTransform(owner)]) : null;
+  const neutralRotation = ownerWorldOrientation
+    ? matrixEuler(matrixTranspose(ownerWorldOrientation)) : [0, 0, 0];
   modifier.anchor = {
     position: vector3(data.anchor?.position, anchorPosition),
-    rotation: vector3(data.anchor?.rotation)
+    rotation: vector3(data.anchor?.rotation, neutralRotation)
   };
+  if (type === 'element_copy') {
+    modifier.coordinateSpace = 'sibling';
+    modifier.nodes = [{ uid: uid('copy_node'),
+      position: [...anchorPosition],
+      rotation: owner.appliedTransform?.rotation ? [0, 0, 0] : [...(owner.rotation || [0, 0, 0])] }];
+  }
   owner.modifiers ||= [];
   owner.modifiers.push(modifier);
   return modifier;
@@ -263,7 +297,7 @@ export class Cube {
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.color = typeof data.color === 'number' ? BLOCKBENCH_MARKER_COLORS[((Math.floor(data.color) % 10) + 10) % 10]
       : data.color || '#9ac24d';
-    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot, this.rotation);
     this.operators = normalizeOperatorList(data.operators, this.type, this.pivot);
   }
 }
@@ -295,7 +329,7 @@ export class Shape {
     this.color = data.color || '#d6b35b';
     this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
     this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
-    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot, this.rotation);
     this.operators = normalizeOperatorList(data.operators, this.type, this.pivot);
   }
 
@@ -388,7 +422,7 @@ export class NodeElement {
     this.locked = booleanProperty(data.locked, false);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.mirrorControllerFor = data.mirrorControllerFor || null;
-    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.position);
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.position, this.rotation);
     this.operators = normalizeOperatorList(data.operators, this.type, this.position);
   }
 }
@@ -479,7 +513,7 @@ export class BezierElement {
     this.color = data.color || (dimension === 2 ? '#d7b25b' : '#78b6d7');
     this.preserveSubdivisionEdits = booleanProperty(data.preserveSubdivisionEdits, false);
     this.subdivisionEdits = cloneData(data.subdivisionEdits || {});
-    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.origin);
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.origin, this.rotation);
     this.operators = normalizeOperatorList(data.operators, this.type, this.origin);
   }
 
@@ -662,7 +696,7 @@ export class Locator {
     this.exported = booleanProperty(data.exported ?? data.export, true);
     this.locked = booleanProperty(data.locked, false);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
-    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.position);
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.position, this.rotation);
     this.operators = normalizeOperatorList(data.operators, this.type, this.position);
   }
 }
@@ -684,7 +718,7 @@ export class Group {
     this.shade = booleanProperty(data.shade, true);
     this.visible = booleanProperty(data.visible ?? data.visibility, true);
     this.children = [...(data.children || [])];
-    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot);
+    this.modifiers = normalizeModifierList(data.modifiers, this.type, this.pivot, this.rotation);
     this.operators = normalizeOperatorList(data.operators, this.type, this.pivot);
     if (!getModifier(this, 'symmetry')) {
       const migrated = legacyMirrorModifier(data.mirror, this.type, this.pivot);
@@ -708,8 +742,8 @@ function inverseRotateVector(vector, rotation) {
 
 function translateModifierAnchors(node, delta) {
   for (const modifier of node?.modifiers || []) {
-    if (!Array.isArray(modifier.anchor?.position)) continue;
-    modifier.anchor.position = modifier.anchor.position.map((value, axis) => value + delta[axis]);
+    if (Array.isArray(modifier.anchor?.position))
+      modifier.anchor.position = modifier.anchor.position.map((value, axis) => value + delta[axis]);
   }
   for (const operator of node?.operators || []) {
     if (!Array.isArray(operator.anchor?.position)) continue;
@@ -1542,6 +1576,28 @@ function affineKey(affine) {
   return JSON.stringify([...affine.matrix.flat(), ...affine.translation].map(clean));
 }
 
+function copyNodeAffine(project, owner, node) {
+  const pivot = modifierOwnerTransform(owner).pivot;
+  const base = symmetryWorldFrame(project, owner, { anchor: { position: pivot, rotation: [0, 0, 0] } });
+  const parentChain = project.getGroupChain(owner.uid);
+  const target = { center: applyGroupChainPoint(node.position, parentChain),
+    matrix: matrixMultiply(groupChainMatrix(parentChain), rotationMatrix(node.rotation || [0, 0, 0])) };
+  const matrix = matrixMultiply(target.matrix, matrixTranspose(base.matrix));
+  const transformedPivot = matrixVector(matrix, base.center);
+  return { matrix, translation: target.center.map((value, axis) => value - transformedPivot[axis]) };
+}
+
+function rebaseCopyNode(project, oldOwner, newOwner, node, parentChain) {
+  const operation = copyNodeAffine(project, oldOwner, node);
+  const ownerChain = [...parentChain, modifierOwnerTransform(newOwner)];
+  const base = { center: applyGroupChainPoint(newOwner.pivot, ownerChain),
+    matrix: groupChainMatrix(ownerChain) };
+  const position = inverseGroupChainPoint(affinePoint(operation, base.center), parentChain);
+  const rotation = matrixEuler(matrixMultiply(matrixTranspose(groupChainMatrix(parentChain)),
+    matrixMultiply(operation.matrix, base.matrix)));
+  return { ...cloneData(node), position, rotation };
+}
+
 function sourceCubeEntries(project, element) {
   if (element.type === 'locator' || element.type === 'node') return [];
   const cubes = typeof element.toCubes === 'function' ? element.toCubes() : element.type === 'cube' ? [element] : [];
@@ -1597,7 +1653,21 @@ function evaluateModifierStack(project, owners, initialVariants = null) {
   let variants = initialVariants || [{ affine: affineIdentity(), modifierUids: [], names: [] }];
   for (const owner of owners) {
     for (const modifier of owner.modifiers || []) {
-      if (!modifier?.enabled || modifier.type !== 'symmetry') continue;
+      if (!modifier?.enabled) continue;
+      if (modifier.type === 'element_copy') {
+        const definitions = [{ affine: affineIdentity(), name: null, nodeUid: null },
+          ...(modifier.nodes || []).map((node, index) => ({ affine: copyNodeAffine(project, owner, node), name: `copy_${index + 1}`, nodeUid: node.uid }))];
+        variants = variants.flatMap(variant => definitions.map(definition => ({
+          affine: affineCompose(definition.affine, variant.affine),
+          modifierUids: definition.name ? [...variant.modifierUids, modifier.uid] : [...variant.modifierUids],
+          names: definition.name ? [...variant.names, definition.name] : [...variant.names],
+          copyNodeUid: definition.nodeUid || variant.copyNodeUid,
+          copyOwnerUid: definition.nodeUid ? owner.uid : variant.copyOwnerUid,
+          copyModifierUid: definition.nodeUid ? modifier.uid : variant.copyModifierUid
+        })));
+        continue;
+      }
+      if (modifier.type !== 'symmetry') continue;
       const frame = symmetryWorldFrame(project, owner, modifier);
       const definitions = symmetryInstanceDefinitions(owner, modifier, frame.matrix);
       variants = variants.flatMap(variant => definitions.map(definition => {
@@ -1605,7 +1675,9 @@ function evaluateModifierStack(project, owners, initialVariants = null) {
         return {
           affine: affineCompose(operation, variant.affine),
           modifierUids: [...variant.modifierUids, modifier.uid],
-          names: [...variant.names, definition.name]
+          names: [...variant.names, definition.name],
+          copyNodeUid: variant.copyNodeUid, copyOwnerUid: variant.copyOwnerUid,
+          copyModifierUid: variant.copyModifierUid
         };
       }));
     }
@@ -1618,7 +1690,7 @@ function evaluateModifierStack(project, owners, initialVariants = null) {
 // applies these world-space matrices at draw time.
 export function buildModifierRenderInstances(project) {
   if (![...project.elements, ...project.groups].some(owner =>
-    owner.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry'))) return [];
+    owner.modifiers?.some(modifier => modifier?.enabled && ['symmetry', 'element_copy'].includes(modifier.type)))) return [];
   const byTransform = new Map();
   const sourcesByUid = new Map();
   const deduplicate = [...project.elements, ...project.groups].some(owner =>
@@ -1638,6 +1710,8 @@ export function buildModifierRenderInstances(project) {
           groupUid: owners.at(-1)?.uid || element.uid,
           modifierUid: variant.modifierUids.join(':'),
           modifierUids: [...variant.modifierUids],
+          copyNodeUid: variant.copyNodeUid, copyOwnerUid: variant.copyOwnerUid,
+          copyModifierUid: variant.copyModifierUid,
           sourceUids: [],
           cubeIndices: {},
           matrix: variant.affine.matrix.map(row => [...row]),
@@ -1724,7 +1798,122 @@ function bakeNestedEnvelopeDescendants(project, owner) {
 
 export function bakeModifier(project, owner, modifierUid) {
   let modifier = owner?.modifiers?.find(entry => entry.uid === modifierUid);
-  if (!project || !owner || !modifier?.enabled || modifier.type !== 'symmetry') return null;
+  if (!project || !owner || !modifier?.enabled) return null;
+  if (modifier.type === 'element_copy') {
+    const parent = project.getParentGroup(owner.uid);
+    const container = parent ? parent.children : project.outliner;
+    const position = container.indexOf(owner.uid);
+    const index = owner.modifiers.findIndex(entry => entry.uid === modifierUid);
+    const preceding = owner.modifiers.slice(0, index);
+    const following = owner.modifiers.slice(index + 1);
+    const followingFrames = following.map(entry => entry.type === 'symmetry'
+      ? symmetryWorldFrame(project, owner, entry) : null);
+    const variants = evaluateModifierStack(project, [{ ...owner, modifiers: [...preceding, modifier] }])
+      .filter(variant => variant.modifierUids.includes(modifierUid));
+    const parentChain = project.getGroupChain(owner.uid);
+    if (owner.type === 'group') {
+      const generatedGroups = [], generatedElements = [], rootUids = [];
+      const copyGroup = (original, destinationChain, affine, name) => {
+        const originalChain = project.getGroupChain(original.uid);
+        const worldPivot = applyGroupChainPoint(original.pivot, originalChain);
+        const worldOrientation = groupChainMatrix([...originalChain, original]);
+        const rotation = matrixEuler(matrixMultiply(matrixTranspose(groupChainMatrix(destinationChain)),
+          matrixMultiply(affine.matrix, worldOrientation)));
+        const group = new Group({ ...cloneData(original), uid: undefined, name, unnamed: false,
+          pivot: inverseGroupChainPoint(affinePoint(affine, worldPivot), destinationChain),
+          rotation, children: [], modifiers: [], operators: [] });
+        generatedGroups.push(group);
+        return group;
+      };
+      const visit = (sourceUid, destination, destinationChain, outerAffine, ordinal) => {
+        const source = project.getNode(sourceUid);
+        if (!source) return;
+        if (source.type === 'group') {
+          const group = copyGroup(source, destinationChain, outerAffine, copyNameAtOrdinal(source.name, ordinal));
+          destination.children.push(group.uid);
+          source.children.forEach(childUid => visit(childUid, group, [...destinationChain, group], outerAffine, ordinal));
+          return;
+        }
+        const innerVariants = evaluateModifierStack(project, modifierEvaluationOwners(project, source, owner, false));
+        for (const inner of innerVariants) {
+          const affine = affineCompose(outerAffine, inner.affine);
+          if (source.type === 'locator' || source.type === 'node') {
+            const originalChain = project.getGroupChain(source.uid);
+            const worldPosition = applyGroupChainPoint(source.position, originalChain);
+            const worldOrientation = matrixMultiply(groupChainMatrix(originalChain), rotationMatrix(source.rotation));
+            const locator = new Locator({ ...cloneData(source), uid: undefined,
+              name: copyNameAtOrdinal(source.name, ordinal), unnamed: false,
+              position: inverseGroupChainPoint(affinePoint(affine, worldPosition), destinationChain),
+              rotation: matrixEuler(matrixMultiply(matrixTranspose(groupChainMatrix(destinationChain)),
+                matrixMultiply(affine.matrix, worldOrientation))), modifiers: [], operators: [] });
+            generatedElements.push(locator);
+            destination.children.push(locator.uid);
+            continue;
+          }
+          for (const cubeSource of sourceCubeEntries(project, source)) {
+            const cube = bakedCubeFromWorld(cubeSource, affine, destinationChain);
+            cube.name = copyNameAtOrdinal(source.name, ordinal);
+            cube.unnamed = false;
+            generatedElements.push(cube);
+            destination.children.push(cube.uid);
+          }
+        }
+      };
+      variants.forEach((variant, variantIndex) => {
+        const copyName = copyNameOrdinal(owner.name, variantIndex);
+        const root = copyGroup(owner, parentChain, variant.affine, copyName.name);
+        root.modifiers = following.map((entry, modifierIndex) => {
+          if (entry.type === 'element_copy') return { ...cloneData(entry),
+            nodes: (entry.nodes || []).map(node => rebaseCopyNode(project, owner, root, node, parentChain)) };
+          if (entry.type !== 'symmetry') return cloneData(entry);
+          const frame = followingFrames[modifierIndex];
+          const anchorInParent = inverseGroupChainPoint(frame.center, parentChain);
+          return { ...cloneData(entry), anchor: {
+            position: transformAround(anchorInParent, root.pivot,
+              matrixTranspose(rotationMatrix(root.rotation))),
+            rotation: matrixEuler(matrixMultiply(matrixTranspose(groupChainMatrix([...parentChain, root])), frame.matrix))
+          } };
+        });
+        rootUids.push(root.uid);
+        owner.children.forEach(childUid => visit(childUid, root, [...parentChain, root], variant.affine, copyName.ordinal));
+      });
+      owner.modifiers.splice(index, 1);
+      project.groups.push(...generatedGroups);
+      project.elements.push(...generatedElements);
+      container.splice(position + 1, 0, ...rootUids);
+      project.invalidateHierarchyIndex();
+      return { rootUid: owner.uid, elementUids: [owner.uid], groupUids: [],
+        copiedGroupUids: rootUids, copiedElementUids: generatedElements.map(element => element.uid) };
+    }
+    const sources = sourceCubeEntries(project, owner);
+    const copies = variants.flatMap((variant, variantIndex) => sources.map(source => {
+      const cube = bakedCubeFromWorld(source, variant.affine, parentChain);
+      cube.name = copyNameOrdinal(owner.name, variantIndex).name;
+      cube.unnamed = false;
+      const worldOrientation = matrixMultiply(groupChainMatrix(parentChain), rotationMatrix(cube.rotation));
+      cube.modifiers = following.map((entry, modifierIndex) => {
+        if (entry.type === 'element_copy') return {
+          ...cloneData(entry),
+          nodes: (entry.nodes || []).map(node => rebaseCopyNode(project, owner, cube, node, parentChain))
+        };
+        if (entry.type !== 'symmetry') return cloneData(entry);
+        const frame = followingFrames[modifierIndex];
+        const anchorInParent = inverseGroupChainPoint(frame.center, parentChain);
+        return { ...cloneData(entry), anchor: {
+          position: transformAround(anchorInParent, cube.pivot,
+            matrixTranspose(rotationMatrix(cube.rotation))),
+          rotation: matrixEuler(matrixMultiply(matrixTranspose(worldOrientation), frame.matrix))
+        } };
+      });
+      return cube;
+    }));
+    owner.modifiers.splice(index, 1);
+    project.elements.push(...copies);
+    container.splice(position + 1, 0, ...copies.map(cube => cube.uid));
+    project.invalidateHierarchyIndex();
+    return { rootUid: owner.uid, elementUids: [owner.uid], groupUids: [], copiedElementUids: copies.map(cube => cube.uid) };
+  }
+  if (modifier.type !== 'symmetry') return null;
   owner = bakeNestedEnvelopeDescendants(project, owner);
   modifier = owner.modifiers.find(entry => entry.uid === modifierUid);
   const parent = project.getParentGroup(owner.uid);
@@ -1952,16 +2141,16 @@ export const buildGroupMirrorRenderInstances = buildModifierRenderInstances;
 
 function bakeSymmetryForExport(sourceProject) {
   if (![...sourceProject.elements, ...sourceProject.groups].some(owner =>
-    owner.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry'))) return sourceProject;
+    owner.modifiers?.some(modifier => modifier?.enabled && ['symmetry', 'element_copy'].includes(modifier.type)))) return sourceProject;
   // Export uses the same baking path as the editor, but only on a detached
   // project. No generated group or cube is written back to the open document.
   const project = new CubeBricksProject(structuredClone({ ...sourceProject, referenceImages: {} }));
   while (true) {
     const owner = [...project.elements, ...project.groups]
-      .filter(node => node.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry'))
+      .filter(node => node.modifiers?.some(modifier => modifier?.enabled && ['symmetry', 'element_copy'].includes(modifier.type)))
       .sort((left, right) => project.getGroupChain(right.uid).length - project.getGroupChain(left.uid).length)[0];
     if (!owner) break;
-    const modifier = owner.modifiers.find(entry => entry?.enabled && entry.type === 'symmetry');
+    const modifier = owner.modifiers.find(entry => entry?.enabled && ['symmetry', 'element_copy'].includes(entry.type));
     const hasSymmetryAncestor = project.getGroupChain(owner.uid).some(group =>
       group.modifiers?.some(entry => entry?.enabled && entry.type === 'symmetry'));
     const result = bakeModifier(project, owner, modifier.uid);
