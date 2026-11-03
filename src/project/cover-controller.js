@@ -1,13 +1,21 @@
 // Covers are a disposable application cache. They never enter cbmodel data or
 // the journal, and always use the default camera rather than the edit camera.
-export function createProjectCoverController({ projectTabsController, captureProjectCover }) {
+export function createProjectCoverController({ projectTabsController, captureProjectCover, isInteracting = () => false }) {
   const timers = new Map();
   const revisions = new Map();
   const writes = new Map();
 
-  function update(tab, revision) {
+  function update(tab, revision, force = false) {
     if (!tab?.journalId || tab.id !== projectTabsController.activeId
       || !window.cubeBricksDesktop?.saveProjectCover) return;
+    if (!force && isInteracting()) {
+      clearTimeout(timers.get(tab.id));
+      timers.set(tab.id, setTimeout(() => {
+        timers.delete(tab.id);
+        if (revisions.get(tab.id) === revision) update(tab, revision);
+      }, 300));
+      return;
+    }
     let dataUrl;
     try { dataUrl = captureProjectCover(); }
     catch (error) { console.warn('項目封面渲染失敗', error); return; }
@@ -40,7 +48,7 @@ export function createProjectCoverController({ projectTabsController, capturePro
     timers.delete(tab.id);
     const revision = (revisions.get(tab.id) || 0) + 1;
     revisions.set(tab.id, revision);
-    return update(tab, revision);
+    return update(tab, revision, true);
   }
 
   return { schedule, flush };

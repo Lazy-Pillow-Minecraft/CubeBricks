@@ -3,6 +3,7 @@ import { createListDragAutoScroll } from './list-drag-scroll.js';
 import { verticalDropTarget } from './vertical-drop.js';
 import { Cube, Group, Shape } from '../model.js';
 import { shapeRegistry } from '../shapes/builtins.js';
+import { performanceMonitor } from '../utils/performance-monitor.js';
 
 export function createEventBinder({
   state, $, $$, viewport, sceneCanvas, sceneRenderer, uvPreviewCanvas,
@@ -61,6 +62,59 @@ export function createEventBinder({
 let recentRotationPress = null;
 let pendingRotationPress = null;
 let externalDropQueue = Promise.resolve();
+let lastProfiledPointerAt = 0;
+let lastProfiledPointerStamp = 0;
+let lastProfiledPointerId = null;
+let lastProfiledRawPointerAt = 0;
+let lastInputProfileSession = 0;
+function resetInputProfileSession() {
+  if (lastInputProfileSession === performanceMonitor.session) return;
+  lastInputProfileSession = performanceMonitor.session;
+  lastProfiledPointerAt = lastProfiledPointerStamp = lastProfiledRawPointerAt = 0;
+  lastProfiledPointerId = null;
+}
+let pendingCameraRawPointer = null;
+let cameraRawPointerFrame = null;
+let lastCameraDomInputAt = 0;
+let cameraCursorPollFrame = null;
+let cameraCursorPollPending = false;
+function noteCameraPointerInput(event) {
+  const drag = state.dragging;
+  if (!drag || !['pan', 'orbit'].includes(drag.type) || drag.pointerId !== event.pointerId) return;
+  lastCameraDomInputAt = performance.now();
+  ensureCameraCursorPoll();
+}
+function ensureCameraCursorPoll() {
+  // Native cursor polling has not recovered a frame during an input gap, and
+  // its IPC replies can themselves be delayed. Keep it for the short profiler
+  // capture only, so ordinary camera drags do not create extra main-process work.
+  if (!performanceMonitor.enabled || cameraCursorPollFrame !== null
+    || !window.cubeBricksDesktop?.getCursorClientPoint) return;
+  const poll = now => {
+    cameraCursorPollFrame = null;
+    const drag = state.dragging;
+    if (!performanceMonitor.enabled || !drag || !['pan', 'orbit'].includes(drag.type)
+      || !document.hasFocus()) return;
+    cameraCursorPollFrame = requestAnimationFrame(poll);
+    if (now - lastCameraDomInputAt < 35 || cameraCursorPollPending) return;
+    cameraCursorPollPending = true;
+    const requestedAt = performance.now();
+    window.cubeBricksDesktop.getCursorClientPoint().then(point => {
+      cameraCursorPollPending = false;
+      performanceMonitor.record('input.nativePollLatency', performance.now() - requestedAt);
+      if (Number.isFinite(point?.mainDurationMs))
+        performanceMonitor.record('input.nativeMainDuration', point.mainDurationMs);
+      performanceMonitor.record(point ? 'input.nativePoll' : 'input.nativeNull', 1);
+      const current = state.dragging;
+      if (point && current === drag && Number.isFinite(point.x) && Number.isFinite(point.y)
+        && Math.hypot(point.x - current.lastX, point.y - current.lastY) >= .75)
+        performanceMonitor.record('input.nativeMoved', 1);
+      if (lastCameraDomInputAt > requestedAt) performanceMonitor.record('input.nativeLate', 1);
+      // Measure the native path without injecting delayed samples into a drag.
+    }).catch(() => { cameraCursorPollPending = false; });
+  };
+  cameraCursorPollFrame = requestAnimationFrame(poll);
+}
 const droppedFileExtension = file => String(file.name || '').split('.').at(-1)?.toLowerCase() || '';
 async function isPngFile(file) {
   const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
@@ -777,26 +831,29 @@ function bindEvents() {
     event.preventDefault();
     const type = $('#textureCreateType').value;
     const name = $('#textureCreateName').value.trim() || 'texture.png';
-    $('#textureCreateDialog').close();
-    if (type === 'template') {
-      await createTextureTemplate({
-        name,
-        selectedOnly: $('#textureTemplateSelectedOnly').checked,
-        cleanInvalidFaces: $('#textureTemplateCleanInvalid').checked,
-        boxUv: $('#textureTemplateBoxUv').checked,
-        powerOfTwo: $('#textureTemplatePowerOfTwo').checked,
-        keepMultiTexture: $('#textureTemplateKeepMulti').checked,
-        keepLayers: $('#textureTemplateKeepLayers').checked,
-        paddingEnabled: $('#textureTemplatePaddingEnabled').checked,
-        padding: Number($('#textureTemplatePadding').value) || 0,
-        multiple: Number($('#textureTemplateMultiple').value) || 4
-      });
-    } else createSimpleTexture({
+    // Read every form control before closing its method="dialog" parent.
+    // The chosen UV reuse mode must be fixed for this generation pass.
+    const templateOptions = type === 'template' ? {
+      name,
+      selectedOnly: $('#textureTemplateSelectedOnly').checked,
+      cleanInvalidFaces: $('#textureTemplateCleanInvalid').checked,
+      boxUv: $('#textureTemplateBoxUv').checked,
+      powerOfTwo: $('#textureTemplatePowerOfTwo').checked,
+      keepMultiTexture: $('#textureTemplateKeepMulti').checked,
+      keepLayers: $('#textureTemplateKeepLayers').checked,
+      paddingEnabled: $('#textureTemplatePaddingEnabled').checked,
+      padding: Number($('#textureTemplatePadding').value) || 0,
+      multiple: Number($('#textureTemplateMultiple').value) || 4
+    } : null;
+    const basicOptions = type !== 'template' ? {
       type, name,
       width: Number($('#textureCreateWidth').value) || 1,
       height: Number($('#textureCreateHeight').value) || 1,
       color: $('#textureCreateColor').value
-    });
+    } : null;
+    $('#textureCreateDialog').close();
+    if (templateOptions) await createTextureTemplate(templateOptions);
+    else createSimpleTexture(basicOptions);
   });
   $('[data-action="playTimeline"]')?.addEventListener('click', playTimeline);
   $('[data-action="stopTimeline"]')?.addEventListener('click', stopTimeline);
@@ -1207,9 +1264,66 @@ function bindEvents() {
   }, true);
   sceneCanvas.addEventListener('pointerup', event => { if (firstDrag?.pointerId === event.pointerId) firstDrag = null; }, true);
   sceneCanvas.addEventListener('pointercancel', event => { if (firstDrag?.pointerId === event.pointerId) firstDrag = null; }, true);
-  sceneCanvas.addEventListener('pointerdown', onPointerDown);
-  sceneCanvas.addEventListener('pointermove', onScenePointerMove);
-  viewport.addEventListener('pointermove', scheduleLockedHover);
+  sceneCanvas.addEventListener('pointerdown', event => {
+    onPointerDown(event);
+    noteCameraPointerInput(event);
+  });
+  sceneCanvas.addEventListener('pointermove', event => {
+    if (!performanceMonitor.enabled) {
+      onScenePointerMove(event);
+      noteCameraPointerInput(event);
+      return;
+    }
+    resetInputProfileSession();
+    const started = performance.now();
+    if (event.buttons && lastProfiledPointerId === event.pointerId && lastProfiledPointerAt) {
+      performanceMonitor.record('input.pointerInterval', started - lastProfiledPointerAt);
+      if (lastProfiledPointerStamp) performanceMonitor.record('input.eventInterval', event.timeStamp - lastProfiledPointerStamp);
+    }
+    const eventLag = started - event.timeStamp;
+    if (eventLag >= 0 && eventLag < 1000) performanceMonitor.record('input.eventLag', eventLag);
+    lastProfiledPointerAt = event.buttons ? started : 0;
+    lastProfiledPointerStamp = event.buttons ? event.timeStamp : 0;
+    lastProfiledPointerId = event.pointerId;
+    onScenePointerMove(event);
+    performanceMonitor.record('input.pointerHandler', performance.now() - started);
+    noteCameraPointerInput(event);
+  });
+  // Chromium may defer/coalesce pointermove while the compositor continues to
+  // produce frames. The camera only needs the newest position each frame, so
+  // accept raw updates as an alternate source without processing every mouse
+  // polling sample or duplicating a later pointermove at the same position.
+  sceneCanvas.addEventListener('pointerrawupdate', event => {
+    const drag = state.dragging;
+    if (!drag || !['pan', 'orbit'].includes(drag.type) || event.pointerId !== drag.pointerId) return;
+    noteCameraPointerInput(event);
+    if (performanceMonitor.enabled) {
+      resetInputProfileSession();
+      const now = performance.now();
+      if (lastProfiledRawPointerAt && now - lastProfiledRawPointerAt < 1000)
+        performanceMonitor.record('input.rawInterval', now - lastProfiledRawPointerAt);
+      lastProfiledRawPointerAt = now;
+    }
+    pendingCameraRawPointer = event;
+    if (cameraRawPointerFrame !== null) return;
+    cameraRawPointerFrame = requestAnimationFrame(() => {
+      cameraRawPointerFrame = null;
+      const sample = pendingCameraRawPointer;
+      pendingCameraRawPointer = null;
+      const currentDrag = state.dragging;
+      if (!sample || !currentDrag || !['pan', 'orbit'].includes(currentDrag.type)
+        || sample.pointerId !== currentDrag.pointerId
+        || sample.timeStamp <= (currentDrag.lastEventStamp ?? -Infinity)
+        || sample.clientX === currentDrag.lastX && sample.clientY === currentDrag.lastY) return;
+      onScenePointerMove(sample);
+    });
+  });
+  viewport.addEventListener('pointermove', event => {
+    if (!performanceMonitor.enabled) { scheduleLockedHover(event); return; }
+    const started = performance.now();
+    scheduleLockedHover(event);
+    performanceMonitor.record('input.hoverHandler', performance.now() - started);
+  });
   viewport.addEventListener('pointerleave', () => {
     sceneCanvas.classList.remove('is-curve-handle-hover', 'is-curve-node-hover');
     $('#transformGizmo').querySelectorAll('.curve-node-marker.hover').forEach(marker => marker.classList.remove('hover'));
@@ -1233,6 +1347,20 @@ function bindEvents() {
   document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
     const key = event.key.toLowerCase();
+    if (!event.repeat && event.ctrlKey && event.shiftKey && key === 'f12') {
+      event.preventDefault();
+      toast('開始記錄 8 秒，請持續操作主視圖');
+      performanceMonitor.capture(8000).then(async report => {
+        try {
+          await navigator.clipboard.writeText(JSON.stringify(report));
+          toast('性能記錄已複製到剪貼板');
+        } catch {
+          console.info('CubeBricks performance report', report);
+          toast('無法複製性能記錄，請查看開發者工具');
+        }
+      });
+      return;
+    }
     if (event.key === 'Alt' && !event.repeat && beginTemporaryEyedropper()) {
       event.preventDefault();
       return;

@@ -11,7 +11,7 @@
 | `src/common/` | 跨功能的配置定义、注册表、格式约束与既有通用机制。 |
 | `src/screen/` | 停靠、参考图、列表、选色器和色卡等可见画面及交互。 |
 | `src/project/` | 工程分页、工作阶段切换、历史记录与日志协调。 |
-| `src/utils/` | 不读取 DOM 或项目状态的数学、Shape 共用几何与排版算法；`index.js` 统一向外部 Shape Pack 暴露公共工具。 |
+| `src/utils/` | 数学、Shape 共用几何、排版与性能记录工具；`dom/` 单独放置不依赖项目状态的界面辅助函数。`index.js` 向外部 Shape Pack 暴露公共计算工具。 |
 | `src/editor/` | 编辑器共享状态、工具注册与刀具等建模交互。 |
 | `src/paint/` | 笔画、对称关联等绘画领域逻辑。 |
 | `src/texture/` | 贴图生成、图层与像素处理。 |
@@ -23,7 +23,7 @@
 
 ## 新代码约定
 
-1. 先按层分到 `common`、`screen`、`utils` 或领域目录，再按功能归档；不要建立含糊的 `misc.js`。只有真正跨功能的纯计算才进 `utils/`。
+1. 先按层分到 `common`、`screen`、`utils` 或领域目录，再按功能归档；不要建立含糊的 `misc.js`。通用计算与 DOM 辅助分目录存放，后者不得读取编辑器项目状态。
 2. 依赖方向为 `utils/common/model → 功能模块与 screen → app.js`。功能模块不可反向导入 `app.js`。界面控制器需要编辑器操作时，由入口注入明确的回调。
 3. 可变的功能内部状态留在控制器内，仅暴露必要读写界面。共享编辑状态放 `src/editor/state.js`，不要复制第二份。
 4. 数据计算与画面事件分开；纯计算函数写直接测试。对工程有影响的操作仍须登记操作 ID，并保持日志测试覆盖。
@@ -36,3 +36,9 @@
 ## 贴图模板与图层边界
 
 `src/texture/template-controller.js` 负责收集 Cube 面、打包新 UV、绘制模板与更新面指派；它不应直接实现图层合成规则。勾选保留图层时，来源图层及组的结构会复制到新贴图，图片层的像素逐层重排，遮罩 UID 改指向新层；最终合成仍使用 `src/common/core/texture-features.js` 的图层管线。关闭时使用原本的合成单张模板流程。图层资产的加载、启用与预览刷新则由 `src/texture/asset-controller.js` 负责。
+
+## 日志线程与视图更新
+
+`electron/main.cjs` 管理窗口、项目所有权和逐项目操作队列；`journal-service.cjs` 将日志调用转交 `journal-worker.cjs`，实际快照、文件读写、撤销和归档沿用 `project-journal.cjs`。工作线程完成或失败时同步返回状态与错误；确认顺序、原子写入和恢复校验不因后台执行而放宽。
+
+手柄通过 `src/utils/dom/svg-markup.js` 保留 SVG 节点并更新坐标与路径，拓扑改变时才重建。`src/utils/performance-monitor.js` 提供短时采样，`electron/main-performance.cjs` 记录主线程延迟及进行中的操作。`scripts/profile-viewport-input.cjs` 可使用临时项目执行自动基准；详细测量见[性能排查记录](docs/CODE_AUDIT_2026-11-01.md)。

@@ -43,6 +43,7 @@ export const state = {
   paintExplode: false,
   paintPixelGrid: false,
   paintExplodeGap: configRegistry.get(ConfigKey.PAINT_EXPLODE_GAP),
+  paintScreenHeight: configRegistry.get(ConfigKey.PAINT_SCREEN_HEIGHT),
   modifierResultGhost: configRegistry.get(ConfigKey.MODIFIER_RESULT_GHOST),
   settingsSnap: configRegistry.get(ConfigKey.SNAP),
   allowNegativeSize: configRegistry.get(ConfigKey.ALLOW_NEGATIVE_SIZE),

@@ -6,6 +6,7 @@ import { ModelFormatId, createModelProjectData, modelFormatRegistry } from '../s
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from '../src/assets/player-reference.js';
 import { constrainCube, formatRules } from '../src/common/core/format-constraints.js';
 import { rotateVector } from '../src/utils/math/rotation.js';
+import { canReuseJournalOutliner } from '../src/editor/workspace-coordinator.js';
 
 assert.equal(modelFormatRegistry.list().length, 8, 'built-in model formats are registered');
 assert.deepEqual(modelFormatRegistry.list().filter(format => format.status === 'placeholder').map(format => format.id),
@@ -27,6 +28,30 @@ assert.deepEqual(bedrockProject.snap, { subdivisions: 16 });
 const bedrockRoundTrip = new CubeBricksProject(JSON.parse(bedrockProject.serialize()));
 assert.equal(bedrockRoundTrip.formatId, ModelFormatId.BEDROCK_ENTITY, 'project format survives a cbmodel round trip');
 assert.deepEqual(bedrockRoundTrip.snap, { subdivisions: 16 }, 'project standard snap survives a cbmodel round trip');
+const journalBase = new CubeBricksProject({
+  elements: [new Cube({ uid: 'journal_cube_a', size: [2, 2, 2] }), new Cube({ uid: 'journal_cube_b' })],
+  groups: [new Group({ uid: 'journal_group', children: ['journal_cube_a', 'journal_cube_b'] })],
+  outliner: ['journal_group']
+});
+const journalData = JSON.parse(journalBase.serialize());
+journalData.elements[0].size = [4, 2, 2];
+const journalRestored = new CubeBricksProject(journalData, {
+  reuseElementsFrom: journalBase, changedUids: ['journal_cube_a']
+});
+assert.notEqual(journalRestored.getNode('journal_cube_a'), journalBase.getNode('journal_cube_a'),
+  'journal restore reconstructs edited elements');
+assert.equal(journalRestored.getNode('journal_cube_b'), journalBase.getNode('journal_cube_b'),
+  'journal restore reuses unaffected elements');
+assert.notEqual(journalRestored.getNode('journal_group'), journalBase.getNode('journal_group'),
+  'journal restore keeps hierarchy arrays independent');
+assert.deepEqual(journalRestored.getNode('journal_cube_a').size, [4, 2, 2]);
+assert.deepEqual(journalBase.getNode('journal_cube_a').size, [2, 2, 2]);
+assert.equal(canReuseJournalOutliner(journalBase, journalRestored, ['journal_cube_a'], []), true,
+  'geometry-only undo can retain the visible outliner rows');
+const journalRenamed = JSON.parse(journalRestored.serialize());
+journalRenamed.elements[0].name = 'Renamed';
+assert.equal(canReuseJournalOutliner(journalRestored, new CubeBricksProject(journalRenamed), ['journal_cube_a'], []), false,
+  'name changes still rebuild the outliner');
 const referenceProject = new CubeBricksProject({ referenceImages: {
   general: { name: 'layout.png', source: 'data:image/png;base64,AA==', naturalWidth: 320, naturalHeight: 180, offset: [14, -9], scale: .75 },
   x: [
@@ -580,6 +605,56 @@ assert.ok(buildModifierRenderInstances(orderedStackProject).some(instance =>
   instance.matrix.every((row, rowIndex) => row.every((value, columnIndex) => Math.abs(value - (rowIndex === columnIndex ? 1 : 0)) < 1e-9))
   && Math.abs(instance.translation[0] - 20) < 1e-9),
   'later modifiers transform the geometry produced by earlier modifiers in stack order');
+
+const mixedStackCube = new Cube({ uid: 'mixed-stack-cube', position: [2, 0, 0],
+  size: [1, 1, 1], pivot: [0, 0, 0] });
+addModifier(mixedStackCube, 'symmetry', { enabled: true,
+  axes: { x: true, y: false, z: false }, wrapParent: false,
+  anchor: { position: [0, 0, 0] } });
+addModifier(mixedStackCube, 'element_copy').nodes = [
+  { uid: 'mixed-copy-node', position: [10, 0, 0], rotation: [0, 0, 0] }
+];
+const mixedStackProject = new CubeBricksProject({ elements: [mixedStackCube], outliner: [mixedStackCube.uid] });
+assert.deepEqual(exportBlockbench(mixedStackProject).elements.map(element => element.from[0]).sort((a, b) => a - b),
+  [-3, 2, 7, 12], 'a copy modifier consumes both source and reflected cube in export');
+const mixedPivotCube = new Cube({ uid: 'mixed-pivot-cube', position: [2, 0, 0],
+  size: [1, 1, 1], pivot: [2, 0, 0] });
+addModifier(mixedPivotCube, 'symmetry', { enabled: true,
+  axes: { x: true, y: false, z: false }, wrapParent: false,
+  anchor: { position: [0, 0, 0] } });
+addModifier(mixedPivotCube, 'element_copy').nodes = [
+  { uid: 'mixed-pivot-copy-node', position: [10, 0, 0], rotation: [0, 0, 0] }
+];
+const mixedPivotProject = new CubeBricksProject({ elements: [mixedPivotCube], outliner: [mixedPivotCube.uid] });
+assert.deepEqual(exportBlockbench(mixedPivotProject).elements.map(element => element.from[0]).sort((a, b) => a - b),
+  [-3, 2, 5, 10], 'a later copy uses the original pivot frame for every earlier symmetry result');
+const mixedPivotBake = new CubeBricksProject(structuredClone({ ...mixedPivotProject }));
+const mixedPivotOwner = mixedPivotBake.getNode(mixedPivotCube.uid);
+bakeModifier(mixedPivotBake, mixedPivotOwner, mixedPivotOwner.modifiers[0].uid);
+assert.deepEqual(exportBlockbench(mixedPivotBake).elements.map(element => element.from[0]).sort((a, b) => a - b),
+  [-3, 2, 5, 10], 'manual baking keeps the remaining copy modifier aligned across the entire result');
+const copyThenMirrorCube = new Cube({ uid: 'copy-then-mirror', position: [2, 0, 0],
+  size: [1, 1, 1], pivot: [2, 0, 0] });
+addModifier(copyThenMirrorCube, 'element_copy').nodes = [
+  { uid: 'copy-then-mirror-node', position: [10, 0, 0], rotation: [0, 0, 0] }
+];
+addModifier(copyThenMirrorCube, 'symmetry', { enabled: true,
+  axes: { x: true, y: false, z: false }, wrapParent: false,
+  anchor: { position: [0, 0, 0] } });
+const copyThenMirrorProject = new CubeBricksProject({ elements: [copyThenMirrorCube], outliner: [copyThenMirrorCube.uid] });
+assert.deepEqual(exportBlockbench(copyThenMirrorProject).elements.map(element => element.from[0]).sort((a, b) => a - b),
+  [-11, -3, 2, 10], 'a later mirror consumes both source and copied cube in export');
+const laterMirrorBake = new CubeBricksProject(structuredClone({ ...copyThenMirrorProject }));
+const laterMirrorOwner = laterMirrorBake.getNode(copyThenMirrorCube.uid);
+bakeModifier(laterMirrorBake, laterMirrorOwner, laterMirrorOwner.modifiers[1].uid);
+assert.deepEqual(exportBlockbench(laterMirrorBake).elements.map(element => element.from[0]).sort((a, b) => a - b),
+  [-11, -3, 2, 10], 'baking a later mirror keeps the earlier copy in its original evaluation order');
+const twoMirrorBake = new CubeBricksProject(structuredClone({ ...orderedStackProject }));
+const twoMirrorOwner = twoMirrorBake.getNode(orderedStackCube.uid);
+const twoMirrorExpected = exportBlockbench(twoMirrorBake).elements.map(element => element.from[0]).sort((a, b) => a - b);
+bakeModifier(twoMirrorBake, twoMirrorOwner, twoMirrorOwner.modifiers[1].uid);
+assert.deepEqual(exportBlockbench(twoMirrorBake).elements.map(element => element.from[0]).sort((a, b) => a - b),
+  twoMirrorExpected, 'baking a later mirror preserves the preceding mirror world space');
 
 const bakeSource = new Cube({ uid: 'bake-source', name: 'bake_source', position: [2, 0, 0], size: [2, 2, 2], pivot: [0, 0, 0] });
 const bakedFirstModifier = addModifier(bakeSource, 'symmetry', {

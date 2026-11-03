@@ -85,14 +85,31 @@ export function blendLayerImageData(lower, upper, opacity, mode) {
   const strength = Math.max(0, Math.min(1, Number(opacity) / 100));
   if (!strength) return lower;
   const componentMode = mode === 'hue' || mode === 'value' || mode === 'saturation' || mode === 'grayscale';
+  let componentCache = componentMode ? new Map() : null;
+  let componentLookups = 0, componentHits = 0;
   for (let index = 0; index < lower.length; index += 4) {
     const sourceAlpha = upper[index + 3] / 255 * strength;
     if (!sourceAlpha) continue;
     const baseAlpha = lower[index + 3] / 255;
     const outputAlpha = sourceAlpha + baseAlpha * (1 - sourceAlpha);
-    const blend = componentMode ? blendLayerRgb(
-      [lower[index], lower[index + 1], lower[index + 2]],
-      [upper[index], upper[index + 1], upper[index + 2]], mode) : null;
+    let blend = null;
+    if (componentMode) {
+      const key = componentCache
+        ? ((lower[index] * 256 + lower[index + 1]) * 256 + lower[index + 2]) * 16777216
+          + (upper[index] * 256 + upper[index + 1]) * 256 + upper[index + 2]
+        : null;
+      blend = componentCache?.get(key);
+      if (blend) componentHits++;
+      else {
+        blend = blendLayerRgb(
+          [lower[index], lower[index + 1], lower[index + 2]],
+          [upper[index], upper[index + 1], upper[index + 2]], mode);
+        if (componentCache?.size < 4096) componentCache.set(key, blend);
+      }
+      // Repeated pixel-art colours benefit from memoization. On a gradient
+      // with nearly unique pairs, stop paying for Map lookups after a sample.
+      if (++componentLookups === 256 && componentHits < 16) componentCache = null;
+    }
     for (let channel = 0; channel < 3; channel++) {
       const base = lower[index + channel], source = upper[index + channel];
       let blended = source;

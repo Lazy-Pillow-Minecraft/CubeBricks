@@ -1,4 +1,4 @@
-import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../render/webgl-renderer.js';
+import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
 import { normalize3 } from '../utils/math/vector3.js';
 import { UV_FACE_LABELS, CULLED_FACE_TEXTURE_KEY } from '../texture/face-constants.js';
 
@@ -483,15 +483,22 @@ function stopUvPreviewAnimation() {
 }
 
 function scheduleUvPreviewAnimation() {
-  if (!uvPreviewIsActive() || !state.uvPreviewAutoRotate || !uvPreviewElements().length) {
+  if (uvPreviewAnimationFrame !== null) return;
+  if (!state.uvPreviewAutoRotate || !uvPreviewIsActive() || !uvPreviewElements().length) {
     stopUvPreviewAnimation();
     return;
   }
-  if (uvPreviewAnimationFrame !== null) return;
   const tick = now => {
     uvPreviewAnimationFrame = null;
     if (!uvPreviewIsActive() || !state.uvPreviewAutoRotate) {
       stopUvPreviewAnimation();
+      return;
+    }
+    if (state.dragging?.type === 'pan' || state.dragging?.type === 'orbit') {
+      // The preview is purely visual. Give the main camera's frame the GPU
+      // while it is being dragged, then resume rotation from this angle.
+      uvPreviewLastFrame = now;
+      uvPreviewAnimationFrame = requestAnimationFrame(tick);
       return;
     }
     if (!uvPreviewLastFrame) uvPreviewLastFrame = now;

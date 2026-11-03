@@ -1,7 +1,7 @@
 // Paint selections are pixel masks indexed by texture asset. They are editor
 // state, never baked into a model or its textures.
 import { tiledFaceRaster } from '../common/core/texture-features.js';
-import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv } from '../render/webgl-renderer.js';
+import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv } from '../common/core/geometry-utils.js';
 import { selectionBounds, transformSelectedPixels } from './selection-transform.js';
 import { SELECTION_STRIPE_SIZE, SELECTION_STRIPE_PIXELS, selectionStripePhase } from '../utils/selection-stripes.js';
 
@@ -430,6 +430,7 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
   }
   function renderOverlay() {
     if (renderFrame !== null) return;
+    if (state.mode === 'paint' && state.paintSelection.active) ensureAnimation();
     renderFrame = window.setTimeout(() => { renderFrame = null; renderOverlayNow(); }, drag ? 90 : 0);
   }
   function ensureAnimation() {
@@ -441,7 +442,12 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
         sceneGesture.hidden = true;
         sceneGesture.replaceChildren();
       }
-      if (!state.paintSelection.active || state.mode !== 'paint') return;
+      if (!state.paintSelection.active || state.mode !== 'paint') {
+        clearInterval(animation);
+        animation = null;
+        return;
+      }
+      if (state.dragging?.type === 'pan' || state.dragging?.type === 'orbit') return;
       if (sceneGesture && !sceneGesture.hidden) drawSceneGesture();
       if (edges.length < 20000) drawBorder();
       // The 3D marching border does not need to rebuild the whole scene here.

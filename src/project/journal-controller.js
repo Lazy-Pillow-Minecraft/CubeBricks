@@ -4,6 +4,7 @@ import { operationDefinition, operationIndex, requireOperation } from '../common
 import { normalizeTextureLayers } from '../common/core/texture-features.js';
 import { PROJECT_SESSION_KEYS } from './tabs-controller.js';
 import { ConfigKey, configRegistry } from '../common/config/app-config.js';
+import { performanceMonitor } from '../utils/performance-monitor.js';
 
 export function createProjectJournalController({ state, projectTabsController, textureCanvas,
   isBezierElement, textureUid, clearSubdivisionSession, renderAll, toast,
@@ -61,11 +62,13 @@ function snapshot(operationId = 'core.element.property') {
   }
 }
 
-function restoredProjectSession(session, data, restoreTextures = false) {
+function restoredProjectSession(session, data, restoreTextures = false, changedUids = null) {
   const previousSelectedUids = new Set(session.selectedUids);
   const previousSelectedUid = session.selectedUid;
   const previousSelectionAnchorUid = session.selectionAnchorUid;
-  const restored = { ...session, project: new CubeBricksProject(data), selectedGenerated: null, dirty: true };
+  const restored = { ...session, project: new CubeBricksProject(data, {
+    reuseElementsFrom: session.project, changedUids
+  }), selectedGenerated: null, dirty: true };
   restored.selectedUids = new Set([...previousSelectedUids].filter(uidValue => restored.project.getNode(uidValue)));
   restored.selectedUid = previousSelectedUid && restored.selectedUids.has(previousSelectedUid)
     ? previousSelectedUid
@@ -89,6 +92,7 @@ function restoredProjectSession(session, data, restoreTextures = false) {
     restored.textureAssets = (data.textures || []).map(asset => ({
       ...asset, _uid: textureUid(asset), uvWidth: asset.uv_width,
       uvHeight: asset.uv_height, useAsDefault: asset.use_as_default === true,
+      templateUvIndependent: asset.template_uv_independent ?? null,
       groupId: asset.group_id || null, activeLayerUid: asset.active_layer_uid || null,
       layers: normalizeTextureLayers(asset)
     }));
@@ -157,14 +161,22 @@ async function navigateProjectJournal(direction) {
   const requestedRevision = tab.journalEditRevision || 0;
   const previousWrite = tab.journalWrites || Promise.resolve();
   const navigationSerial = tab.journalNavigationSerial = (tab.journalNavigationSerial || 0) + 1;
+  const queuedAt = performanceMonitor.enabled ? performance.now() : 0;
   let diskCheckoutApplied = false;
   const navigate = async () => {
+    const profile = performanceMonitor.enabled;
+    if (profile) performanceMonitor.record('journal.queue', performance.now() - queuedAt);
+    const waitStart = profile ? performance.now() : 0;
     await tab.journalReady;
     if ((tab.journalEditRevision || 0) !== requestedRevision) return;
     if (tab.journalPending) throw new Error('目前變更尚未寫入工作記錄');
     const headBefore = tab.journalHead ?? (await window.cubeBricksDesktop.projectJournalState?.({ journalId: tab.journalId }))?.activeHead;
     if ((tab.journalEditRevision || 0) !== requestedRevision) return;
+    const checkoutStart = profile ? performance.now() : 0;
+    if (profile) performanceMonitor.record('journal.waitPending', checkoutStart - waitStart);
     const result = await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId, direction });
+    const parseStart = profile ? performance.now() : 0;
+    if (profile) performanceMonitor.record('journal.diskCheckout', parseStart - checkoutStart);
     if (!result) {
       toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作');
       return;
@@ -190,15 +202,22 @@ async function navigateProjectJournal(direction) {
     if (navigationSerial !== tab.journalNavigationSerial) return;
     if (tab.id === projectTabsController.activeId) syncActiveProjectTab();
     const resultData = JSON.parse(result.content);
-    tab.session = restoredProjectSession(tab.session, resultData, true);
+    const hydrateStart = profile ? performance.now() : 0;
+    if (profile) performanceMonitor.record('journal.parse', hydrateStart - parseStart);
+    const textureChanged = result.textureChanged !== false;
+    const previousProject = tab.session.project;
+    tab.session = restoredProjectSession(tab.session, resultData, textureChanged, result.changedUids);
+    const renderStart = profile ? performance.now() : 0;
+    if (profile) performanceMonitor.record('journal.hydrate', renderStart - hydrateStart);
     if (tab.id !== projectTabsController.activeId) { renderProjectTabs(); return; }
     suppressJournalRecording = true;
     try {
       clearSubdivisionSession();
       for (const key of PROJECT_SESSION_KEYS) state[key] = tab.session[key];
       markDirty(true, { constrain: false });
-      restoreProjectTextureView({ preserveAtlas: true });
-      renderAll();
+      if (textureChanged) restoreProjectTextureView({ preserveAtlas: true });
+      renderAll('journal', result.changedUids, previousProject);
+      if (profile) performanceMonitor.record('journal.render', performance.now() - renderStart);
       diskCheckoutApplied = false;
     } finally { suppressJournalRecording = false; }
   };
@@ -282,7 +301,7 @@ function startProjectJournal(tab, operationId = 'core.project.create', existingI
       journalId: tab.journalId,
       operationId,
       operationIndex: operationIndex(),
-      content: serializeCbmodel(textures, JSON.parse(projectContent), textureGroups)
+      content: serializeCbmodel(textures, JSON.parse(projectContent), textureGroups, { snapshotOwned: true })
     }));
   tab.journalReady.catch(error => toast(`工作目錄建立失敗：${error.message}`));
 }
@@ -292,7 +311,10 @@ function scheduleProjectJournal(tab) {
   clearTimeout(journalTimers.get(tab.id));
   journalTimers.set(tab.id, setTimeout(() => {
     journalTimers.delete(tab.id);
-    if (tab.id === projectTabsController.activeId && (state.dragging || getTexturePaintDrag() || getTextureUvDrag() || referenceImages.drag)) {
+    performanceMonitor.mark('journal.autosaveWake');
+    const editingDrag = state.dragging && !['pan', 'orbit', 'selection-box'].includes(state.dragging.type);
+    if (tab.id === projectTabsController.activeId
+      && (editingDrag || getTexturePaintDrag() || getTextureUvDrag() || referenceImages.drag)) {
       scheduleProjectJournal(tab);
       return;
     }
@@ -326,7 +348,7 @@ async function flushProjectJournal(tab = projectTabById(projectTabsController.ac
     await tab.journalReady;
     if (tab.journalWriteBlocked) throw new Error('歷史指針未能安全恢復，請先另存目前模型並重新開啟');
     const textures = await textureSnapshot;
-    const content = serializeCbmodel(textures, JSON.parse(projectContent), textureGroups);
+    const content = serializeCbmodel(textures, JSON.parse(projectContent), textureGroups, { snapshotOwned: true });
     const result = await window.cubeBricksDesktop.commitProjectJournal({
       journalId: tab.journalId, content, operationId,
       operationLabel: operationDefinition(operationId).label,

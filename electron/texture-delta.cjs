@@ -121,15 +121,30 @@ function tryDecodePng(source) {
   catch { return null; }
 }
 const fingerprintCache = new Map();
+const FINGERPRINT_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+let fingerprintCacheBytes = 0;
 function textureSourceFingerprint(source) {
-  const sourceHash = crypto.createHash('sha256').update(`source:${source}`).digest('hex');
-  if (fingerprintCache.has(sourceHash)) return fingerprintCache.get(sourceHash);
+  // Texture sources are immutable strings within a journal session. Hashing
+  // multi-megabyte PNG strings just to look up their cached pixel hash made
+  // geometry-only commits scan every texture again.
+  if (fingerprintCache.has(source)) return fingerprintCache.get(source);
   const hash = crypto.createHash('sha256');
   const image = tryDecodePng(source);
   const result = image ? hash.update(`rgba:${image.width}:${image.height}:`).update(image.rgba).digest('hex')
     : hash.update(`source:${JSON.stringify(source)}`).digest('hex');
-  fingerprintCache.set(sourceHash, result);
-  if (fingerprintCache.size > 128) fingerprintCache.delete(fingerprintCache.keys().next().value);
+  // A fixed 16-entry cap thrashed on projects with many textures: every
+  // geometry-only commit decoded the same PNGs again. Bound by source bytes
+  // instead, retaining many small images without pinning huge projects.
+  const sourceBytes = typeof source === 'string' ? source.length * 2 : 0;
+  if (sourceBytes <= FINGERPRINT_CACHE_MAX_BYTES) {
+    fingerprintCache.set(source, result);
+    fingerprintCacheBytes += sourceBytes;
+    while (fingerprintCache.size > 256 || fingerprintCacheBytes > FINGERPRINT_CACHE_MAX_BYTES) {
+      const oldest = fingerprintCache.keys().next().value;
+      fingerprintCache.delete(oldest);
+      fingerprintCacheBytes -= typeof oldest === 'string' ? oldest.length * 2 : 0;
+    }
+  }
   return result;
 }
 function createTextureDelta(before, after) {

@@ -461,7 +461,7 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .element-color-chip { width: 45px; height: 24px; border: 1px solid var(--line-strong); border-radius: 3px; }
 .texture-layers-panel { min-height: 180px; }
 .texture-layer-panel-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px; font-size: .65rem; }
-.texture-layer-control-strip { display: flex; align-items: center; gap: 5px; margin-bottom: 6px; }
+.texture-layer-control-strip { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 5px; margin-bottom: 6px; padding: 5px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
 .texture-layer-control-strip button { min-height: 26px; padding: 4px 7px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--accent); }
 .texture-layer-control-strip button:hover { background: rgba(var(--accent-rgb), .1); }
 .texture-layer-control-strip [data-open-layer-editor] { width: 29px; display: grid; place-items: center; padding: 3px; }
@@ -758,6 +758,7 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .palette-row-card.selected { border-color:rgba(var(--accent-rgb),.4); background:rgba(var(--accent-rgb),.045); }
 .palette-row-controls { min-width: 0; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px; }
 .palette-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: .61rem; }
+.palette-rename-input { min-width: 0; width: 100%; height: 22px; padding: 2px 4px; border: 1px solid var(--accent); border-radius: 3px; outline: 0; background: var(--panel-2); color: var(--text); font: .61rem var(--ui-font); }
 .row-gradient-toggle { display: flex; align-items: center; gap: 3px; color: var(--subtle); font-size: .55rem; cursor: pointer; }
 .row-gradient-toggle input { accent-color: var(--accent); width: 11px; height: 11px; margin: 0; }
 .delete-palette-row { color: var(--subtle); width: 17px; height: 17px; border-radius: 4px; font-size: .65rem; }

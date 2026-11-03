@@ -18,7 +18,13 @@ async function application(root, options = {}) {
       commandLine: { appendSwitch() {} }, once() {}, on() {},
       whenReady: () => ({ then() {} })
     },
-    BrowserWindow: { fromWebContents: () => ({ approveProjectClose() { closed = true; } }) },
+    BrowserWindow: { fromWebContents: () => ({
+      approveProjectClose() { closed = true; },
+      isDestroyed: () => false,
+      isFocused: () => options.focused !== false,
+      getContentBounds: () => options.contentBounds || { x: 100, y: 200 }
+    }) },
+    screen: { getCursorScreenPoint: () => options.cursorPoint || { x: 125, y: 235 } },
     dialog: {
       showOpenDialog: async () => ({ canceled: !options.openFile, filePaths: options.openFile ? [options.openFile] : [] }),
       showSaveDialog: async () => ({ canceled: !options.saveFile, filePath: options.saveFile || null }),
@@ -33,12 +39,46 @@ async function application(root, options = {}) {
     __dirname: path.dirname(mainFile), process, Buffer, structuredClone, console, setTimeout
   });
   vm.runInContext(await fs.readFile(mainFile, 'utf8'), context, { filename: mainFile });
+  const sender = {
+    isDestroyed: () => false,
+    once() {},
+    removeListener() {},
+    send(channel, request) {
+      if (channel !== 'app:prompt-request') return;
+      options.messages?.push(request.options);
+      queueMicrotask(() => handlers.get('app:prompt-response')({ sender }, {
+        id: request.id,
+        index: options.choice ?? 0,
+        checked: options.keepHistory !== false
+      }));
+    }
+  };
   return {
-    call: (name, payload) => handlers.get(name)({ sender: {} }, payload),
+    call: (name, payload) => handlers.get(name)({ sender }, payload),
     isClosed: () => closed,
     release: () => vm.runInContext('journalOwnership.releaseAll()', context)
   };
 }
+
+test('native cursor position is returned in the focused window client coordinates', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.cursor-ipc-test-'));
+  const app = await application(root);
+  try {
+    const point = app.call('app:cursor-client-point');
+    assert.equal(point.x, 25);
+    assert.equal(point.y, 35);
+    assert.ok(point.mainDurationMs >= 0);
+    assert.ok(app.call('app:perf-start').startedAt > 0);
+    await new Promise(resolve => setTimeout(resolve, 25));
+    const profile = app.call('app:perf-stop');
+    assert.ok(profile.endedAt >= profile.startedAt);
+    assert.ok(profile.cpuMs >= 0);
+  } finally {
+    await app.release();
+    assert.equal(path.dirname(root), path.resolve(__dirname, '..'));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 test('a supplied cbmodel path opens directly and its home cover stays outside the archive', async () => {
   const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-cover-test-'));
@@ -52,6 +92,9 @@ test('a supplied cbmodel path opens directly and its home cover stays outside th
     await app.call('project:cover-save', { journalId: id, dataUrl: `data:image/png;base64,${png}` });
     const listing = await app.call('project:list-workspace');
     assert.ok(listing.find(project => project.journalId === id)?.cover?.startsWith('data:image/png;base64,'));
+    assert.equal((await app.call('project:list-workspace', { includeCovers: false }))
+      .find(project => project.journalId === id)?.cover, null);
+    assert.equal(await app.call('project:cover-get', { journalId: id }), `data:image/png;base64,${png}`);
     await app.call('project:save', { journalId: id, filePath, content });
     const opened = await app.call('project:open', { filePath });
     assert.equal(opened.journalId, id);
@@ -84,18 +127,27 @@ test('cbmodel export offers full history or current-state snapshot without trunc
     apps.push(app);
     await app.call('project:journal-init', { journalId: id, content: content(0) });
     await app.call('project:journal-commit', { journalId: id, content: content(1), operationId: 'core.element.move' });
-    await app.call('project:export', { journalId: id, name: 'export-choice', cbmodelContent: content(1), bbmodelContent: '{}' });
+    assert.equal((await app.call('project:export', { journalId: id, filePath: snapshotPath,
+      includeHistory: false })).requiresContent, true,
+    'cbmodel export waits for the selected format before requesting model content');
+    await assert.rejects(fs.stat(snapshotPath), { code: 'ENOENT' });
+    const bbPath = path.join(root, 'deferred.bbmodel');
+    assert.equal((await app.call('project:export', { journalId: id, filePath: bbPath })).requiresContent, true);
+    await assert.rejects(fs.stat(bbPath), { code: 'ENOENT' });
+    await app.call('project:export', { journalId: id, name: 'export-choice', cbmodelContent: content(1),
+      bbmodelContent: '{}', includeHistory: false });
     const snapshot = await ProjectJournal.fromArchive(await fs.readFile(snapshotPath), path.join(root, 'snapshot'));
     assert.equal(snapshot.state.activeHead, 1);
     assert.equal(JSON.parse(await snapshot.content()).elements[0].position[0], 1);
     assert.equal((await app.call('project:journal-state', { journalId: id })).activeHead, 2);
     options.saveFile = fullPath;
     options.keepHistory = true;
-    await app.call('project:export', { journalId: id, name: 'export-choice', cbmodelContent: content(1), bbmodelContent: '{}' });
+    await app.call('project:export', { journalId: id, name: 'export-choice', cbmodelContent: content(1),
+      bbmodelContent: '{}', includeHistory: true });
     const full = await ProjectJournal.fromArchive(await fs.readFile(fullPath), path.join(root, 'full'));
     assert.equal(full.state.activeHead, 2);
     assert.equal(JSON.parse((await full.navigate('undo')).content).elements[0].position[0], 0);
-    assert.ok(messages.some(message => message.checkboxLabel === '保留操作歷史'));
+    assert.equal(messages.length, 0, 'the export choice is handled by the renderer');
   } finally {
     await Promise.all(apps.map(app => app.release()));
     await fs.rm(root, { recursive: true, force: true });

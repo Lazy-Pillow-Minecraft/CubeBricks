@@ -1,4 +1,4 @@
-import { getBlockbenchBoxUv, isCubeFaceCulled } from '../render/webgl-renderer.js';
+import { getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
 import { compositeLayers, imageCanvas, layerRasterCache, loadRaster, normalizeTextureLayers,
   tiledFaceRaster, faceTileSize } from '../common/core/texture-features.js';
 import { formatRules } from '../common/core/format-constraints.js';
@@ -259,7 +259,6 @@ async function createTextureTemplate(options) {
     snapshot('core.uv.cull_face');
     invalidFaces.forEach(({ target, faceName }) => setCubeFaceCulled(target.cube, faceName, true));
     syncGeneratedTemplateEdits(targets);
-    invalidateAllRenderGeometry();
     markDirty();
     renderAll('all');
     return toast(cleanedFaceCount ? `已清理 ${cleanedFaceCount} 個無效面；沒有可建立模板的面` : '目前沒有可建立模板的面');
@@ -280,7 +279,7 @@ async function createTextureTemplate(options) {
     const sourceUv = Array.isArray(face?.uv) && face.uv.length >= 4 ? [...face.uv] : [...getBlockbenchBoxUv(cube, faceName)];
     const sourceAsset = textureAssetForReference(face?.texture);
     if (sourceAsset) sourceAssets.add(sourceAsset);
-    const duplicateKey = !options.keepMultiTexture && !boxEntry
+    const duplicateKey = options.keepMultiTexture === false && !boxEntry
       ? `${sourceAsset?._uid || 'color'}:${faceName}:${sourceAsset?.mode === 'tiled' ? JSON.stringify([faceTileSize(cube, faceName), face?.tiling]) : sourceUv.join(',')}:${width}x${height}` : null;
     let entry = duplicateKey ? sharedEntries.get(duplicateKey) : null;
     if (!entry) {
@@ -399,6 +398,7 @@ async function createTextureTemplate(options) {
   }
   const asset = registerGeneratedTexture(canvas, options.name, 'TEMPLATE',
     preserved?.layers || null, preserved?.activeLayerUid || null);
+  asset.templateUvIndependent = options.keepMultiTexture !== false;
   state.project.uvMode = options.boxUv ? 'box' : 'face';
   for (const target of targets) {
     target.cube.uvMode = options.boxUv ? 'box' : 'face';
@@ -421,7 +421,6 @@ async function createTextureTemplate(options) {
   syncGeneratedTemplateEdits(targets);
   markDirty();
   invalidateUvPreviewTextureState();
-  invalidateAllRenderGeometry();
   renderAll('all');
   toast(`已建立 ${side} × ${side} 紋理模板${cleanedFaceCount ? `，並清理 ${cleanedFaceCount} 個無效面` : ''}`);
   } finally {

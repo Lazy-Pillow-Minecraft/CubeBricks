@@ -295,11 +295,11 @@
           <svg class="paint-selection-gesture" id="paintSelectionGesture" aria-hidden="true" hidden></svg>
           <div class="selection-marquee" id="selectionMarquee" aria-hidden="true" hidden></div>
           <svg class="paint-gradient-overlay" id="paintGradientOverlay" aria-label="漸變預覽" aria-hidden="true" hidden></svg>
-          <svg class="locator-overlay" id="locatorOverlay" aria-label="Locator 標記" hidden></svg>
-          <svg class="face-selection-overlay" id="faceSelectionOverlay" aria-label="選中面標記" hidden></svg>
+          <svg class="locator-overlay" id="locatorOverlay" aria-hidden="true" focusable="false" hidden></svg>
+          <svg class="face-selection-overlay" id="faceSelectionOverlay" aria-hidden="true" focusable="false" hidden></svg>
           <svg class="texture-drop-face-overlay" id="sceneTextureDropFaceOverlay" aria-hidden="true" hidden></svg>
-          <svg class="mirror-guide-overlay" id="mirrorGuideOverlay" aria-label="對稱修改器輔助網格" hidden></svg>
-          <svg class="transform-gizmo" id="transformGizmo" aria-label="變換手柄" hidden></svg>
+          <svg class="mirror-guide-overlay" id="mirrorGuideOverlay" aria-hidden="true" focusable="false" hidden></svg>
+          <svg class="transform-gizmo" id="transformGizmo" aria-hidden="true" focusable="false" hidden></svg>
           <div class="transform-tooltip" id="transformTooltip" role="status" hidden></div>
           <div class="viewport-render-menu" id="viewportRenderMenu">
             <button class="render-mode-current" id="renderModeButton" type="button" data-mode="textured" data-tooltip="目前：紋理" aria-label="目前渲染模式：紋理" aria-expanded="false" aria-controls="renderModeMenu">
@@ -513,6 +513,7 @@
               <label class="config-number-label"><span>鼠標虛化 Alpha<small>viewport.locked-hover-alpha · 0–100</small></span><input type="number" min="0" max="100" step="1" data-config-key="viewport.locked-hover-alpha" /></label>
               <label class="config-number-label"><span>鼠標虛化半徑<small>viewport.locked-hover-radius · px</small></span><input type="number" min="8" max="2048" step="1" data-config-key="viewport.locked-hover-radius" /></label>
               <label class="config-number-label"><span>繪畫展開組間距<small>paint.explode-gap · 模型單位；0 代表貼邊</small></span><input type="number" min="0" max="1000" step="0.25" data-config-key="paint.explode-gap" /></label>
+              <label class="config-number-label"><span>屏幕空間虛擬高度<small>按住 Ctrl 繪畫時，屏幕高度對應的像素數</small></span><input type="number" min="32" max="4096" step="1" data-config-key="paint.screen-height" /></label>
             </div>
           </section>
           <section class="settings-page" data-settings-panel="snapping">
@@ -572,7 +573,7 @@
           <label class="config-toggle-label"><span>清理無效面<small>將任一邊長為 0 的面設為剔除</small></span><input id="textureTemplateCleanInvalid" type="checkbox" /></label>
           <label class="config-toggle-label"><span>啟用箱型 UV<small>按 Cube 建立連續六面展開</small></span><input id="textureTemplateBoxUv" type="checkbox" /></label>
           <label class="config-toggle-label"><span>使用 2 冪尺寸<small>默認開啟</small></span><input id="textureTemplatePowerOfTwo" type="checkbox" checked /></label>
-          <label class="config-toggle-label"><span>保持多紋理佔用<small>不同來源的面維持獨立佔位</small></span><input id="textureTemplateKeepMulti" type="checkbox" checked /></label>
+          <label class="config-toggle-label"><span>不共用 UV<small>勾選後每個面獨立排布；取消可複用相同來源的 UV</small></span><input id="textureTemplateKeepMulti" type="checkbox" checked /></label>
           <label class="config-toggle-label"><span>保留圖層結構<small>依新 UV 重排各圖層像素，保留組與混合設定</small></span><input id="textureTemplateKeepLayers" type="checkbox" checked /></label>
           <label class="config-toggle-label"><span>填充間隔<small>UV 面之間保留像素</small></span><input id="textureTemplatePaddingEnabled" type="checkbox" checked /></label>
           <label class="config-number-label"><span>間隔像素</span><input id="textureTemplatePadding" type="number" min="0" max="64" step="1" value="1" /></label>

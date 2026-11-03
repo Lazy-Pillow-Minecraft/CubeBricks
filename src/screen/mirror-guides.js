@@ -1,4 +1,4 @@
-import { applyGroupTransforms } from '../render/webgl-renderer.js';
+import { applyGroupTransforms } from '../common/core/geometry-utils.js';
 import { cross3, normalize3 } from '../utils/math/vector3.js';
 import { rotateVector } from '../utils/math/rotation.js';
 
@@ -8,6 +8,13 @@ let mirrorGuideGroupUid = null;
 let mirrorGuideEntryUid = null;
 let mirrorGuideHoldTimer = null;
 let mirrorGuideHideTimer = null;
+let lastGuideMarkup = '';
+const guideLimit = 2048;
+const positiveGuideDistances = [0,
+  ...Array.from({ length: 29 }, (_, index) => .125 * 2 ** (index / 2)),
+  ...Array.from({ length: 13 }, (_, index) => guideLimit * (.7 + index * .025))]
+  .filter(value => value <= guideLimit);
+const guideDistances = [...new Set(positiveGuideDistances)].sort((a, b) => a - b);
 
 function visibleMirrorGuidePage() {
   const paintMode = state.mode === 'paint';
@@ -69,7 +76,7 @@ function mirrorProjectedSegment(start, end) {
   return `M${first.x.toFixed(1)},${first.y.toFixed(1)}L${second.x.toFixed(1)},${second.y.toFixed(1)}`;
 }
 
-function mirrorGridPlaneMarkup(origin, firstAxis, secondAxis, className) {
+function mirrorGridPlaneMarkup(origin, firstAxis, secondAxis, className, collector = null) {
   const size = 24, step = 4;
   const minor = [], major = [];
   for (let offset = -size; offset <= size + .001; offset += step) {
@@ -83,48 +90,66 @@ function mirrorGridPlaneMarkup(origin, firstAxis, secondAxis, className) {
     if (firstPath) target.push(firstPath);
     if (secondPath) target.push(secondPath);
   }
+  if (collector) {
+    for (const [kind, paths] of [['minor', minor], ['major', major]]) {
+      if (!paths.length) continue;
+      const key = `${className}\u0000${kind}`;
+      collector.set(key, (collector.get(key) || '') + paths.join(''));
+    }
+    return '';
+  }
   return `<g class="mirror-guide ${className}">
     <path class="mirror-grid-minor" d="${minor.join('')}"/>
     <path class="mirror-grid-major" d="${major.join('')}"/>
   </g>`;
 }
 
-function mirrorInfiniteLineMarkup(origin, direction, width, height, className, ray = false) {
-  return finiteWorldGuideMarkup(origin, direction, `mirror-guide ${className} ${ray ? 'mirror-ray' : 'mirror-axis-line'}`, ray);
+function mirrorInfiniteLineMarkup(origin, direction, width, height, className, ray = false, collector = null) {
+  return finiteWorldGuideMarkup(origin, direction, `mirror-guide ${className} ${ray ? 'mirror-ray' : 'mirror-axis-line'}`, ray, collector);
 }
 
-function finiteWorldGuideMarkup(origin, direction, className, ray = false) {
+function finiteWorldGuideMarkup(origin, direction, className, ray = false, collector = null) {
   if (!origin || !direction) return '';
   const cameraForward = sceneRenderer.getCameraFrame()?.forward;
   const viewFade = cameraForward ? clamp(Math.hypot(...cross3(normalize3(direction), cameraForward)) * 20, 0, 1) : 1;
-  const limit = 2048;
-  const positive = [0, ...Array.from({ length: 29 }, (_, index) => .125 * 2 ** (index / 2)), ...Array.from({ length: 13 }, (_, index) => limit * (.7 + index * .025))];
-  const distances = [...new Set(positive.filter(value => value <= limit))].sort((a, b) => a - b);
-  const samples = ray ? distances : [...distances.slice(1).reverse().map(value => -value), ...distances];
+  const samples = ray ? guideDistances : [...guideDistances.slice(1).reverse().map(value => -value), ...guideDistances];
   const projected = samples.map(distance => ({ distance, point: projectViewportPoint(addScaled3(origin, direction, distance)) }));
-  const lines = [];
+  const paths = Array.from({ length: 12 }, () => []);
   for (let index = 1; index < projected.length; index++) {
     const first = projected[index - 1], second = projected[index];
     if (first.point.behind || second.point.behind || first.point.depth < -1 || second.point.depth < -1) continue;
     if (!Number.isFinite(first.point.x + first.point.y + second.point.x + second.point.y)) continue;
     if (Math.hypot(second.point.x - first.point.x, second.point.y - first.point.y) < .05) continue;
     const distance = Math.max(Math.abs(first.distance), Math.abs(second.distance));
-    const opacity = clamp((limit - distance) / (limit * .3), 0, 1) * viewFade;
-    lines.push(`<line class="${className}" style="opacity:${opacity}" x1="${first.point.x}" y1="${first.point.y}" x2="${second.point.x}" y2="${second.point.y}"/>`);
+    const opacity = clamp((guideLimit - distance) / (guideLimit * .3), 0, 1) * viewFade;
+    if (opacity < .01) continue;
+    const bucket = Math.max(0, Math.min(11, Math.ceil(opacity * 12) - 1));
+    paths[bucket].push(`M${first.point.x},${first.point.y}L${second.point.x},${second.point.y}`);
   }
-  return lines.join('');
+  if (collector) {
+    paths.forEach((parts, bucket) => {
+      if (!parts.length) return;
+      const key = `${className}\u0000${bucket}`;
+      collector.set(key, (collector.get(key) || '') + parts.join(''));
+    });
+    return '';
+  }
+  return paths.map((parts, bucket) => parts.length
+    ? `<path class="${className}" style="opacity:${(bucket + 1) / 12}" d="${parts.join('')}"/>` : '').join('');
 }
 
 function renderMirrorGuide(entry) {
   const overlay = $('#mirrorGuideOverlay');
   const { owner, modifier } = entry;
   const frame = mirrorControllerWorldFrame(owner, modifier);
-  if (!frame) { overlay.innerHTML = ''; return false; }
-  const rect = sceneCanvas.getBoundingClientRect();
+  if (!frame) { overlay.innerHTML = ''; lastGuideMarkup = ''; return false; }
+  const rect = sceneRenderer.lastCanvasRect || sceneCanvas.getBoundingClientRect();
   const width = rect.width, height = rect.height;
   overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
   const [xAxis, yAxis, zAxis] = frame.axes;
   const markup = [];
+  const gridPaths = new Map();
+  const linePaths = new Map();
   if (modifier.mode === 'axes') {
     const definitions = [
       ['x', xAxis, yAxis, zAxis],
@@ -133,26 +158,41 @@ function renderMirrorGuide(entry) {
     ];
     for (const [axisName, normal, first, second] of definitions) {
       if (!modifier.axes[axisName]) continue;
-      markup.push(mirrorGridPlaneMarkup(frame.origin, first, second, `axis-${axisName}`));
-      markup.push(mirrorInfiniteLineMarkup(frame.origin, normal, width, height, `axis-${axisName}`));
+      mirrorGridPlaneMarkup(frame.origin, first, second, `axis-${axisName}`, gridPaths);
+      mirrorInfiniteLineMarkup(frame.origin, normal, width, height, `axis-${axisName}`, false, linePaths);
     }
   } else {
-    markup.push(mirrorInfiniteLineMarkup(frame.origin, yAxis, width, height, 'radial-axis'));
+    mirrorInfiniteLineMarkup(frame.origin, yAxis, width, height, 'radial-axis', false, linePaths);
     const angles = symmetryModifierAngles(modifier);
     for (const degrees of angles) {
       const radians = degrees * Math.PI / 180;
       const radial = normalize3(xAxis.map((value, axis) => value * Math.cos(radians) + zAxis[axis] * Math.sin(radians)));
-      markup.push(mirrorGridPlaneMarkup(frame.origin, yAxis, radial, 'radial-plane'));
-      markup.push(mirrorInfiniteLineMarkup(frame.origin, radial, width, height, 'radial-ray', true));
+      mirrorGridPlaneMarkup(frame.origin, yAxis, radial, 'radial-plane', gridPaths);
+      mirrorInfiniteLineMarkup(frame.origin, radial, width, height, 'radial-ray', true, linePaths);
     }
   }
-  overlay.innerHTML = markup.join('');
+  for (const [key, points] of gridPaths) {
+    const [className, kind] = key.split('\u0000');
+    markup.push(`<path class="mirror-guide ${className} mirror-grid-${kind}" d="${points}"/>`);
+  }
+  for (const [key, points] of linePaths) {
+    const [className, bucket] = key.split('\u0000');
+    markup.push(`<path class="${className}" style="opacity:${(Number(bucket) + 1) / 12}" d="${points}"/>`);
+  }
+  const nextMarkup = markup.join('');
+  if (nextMarkup !== lastGuideMarkup) {
+    overlay.innerHTML = nextMarkup;
+    lastGuideMarkup = nextMarkup;
+  }
   return Boolean(markup.length);
 }
 
 function updateMirrorGuideOverlay() {
   const overlay = $('#mirrorGuideOverlay');
   if (!visibleMirrorGuidePage()) {
+    if (!mirrorGuideHoldTimer && !mirrorGuideHideTimer && !mirrorGuideGroupUid
+      && overlay.hasAttribute('hidden') && !lastGuideMarkup
+      && !overlay.classList.contains('visible')) return;
     clearTimeout(mirrorGuideHoldTimer);
     clearTimeout(mirrorGuideHideTimer);
     mirrorGuideHoldTimer = null;
@@ -162,6 +202,7 @@ function updateMirrorGuideOverlay() {
     overlay.classList.remove('visible');
     overlay.setAttribute('hidden', '');
     overlay.innerHTML = '';
+    lastGuideMarkup = '';
     return;
   }
   const activeGroup = selectedMirrorGuideGroup();
@@ -174,16 +215,19 @@ function updateMirrorGuideOverlay() {
     mirrorGuideEntryUid = activeGroup.modifier.uid;
     const visible = renderMirrorGuide(activeGroup);
     overlay.toggleAttribute('hidden', !visible);
-    if (visible) requestAnimationFrame(() => overlay.classList.add('visible'));
+    if (visible && !overlay.classList.contains('visible')) requestAnimationFrame(() => overlay.classList.add('visible'));
     return;
   }
   const previousOwner = mirrorGuideGroupUid && state.project.getNode(mirrorGuideGroupUid);
   const previousModifier = [...(previousOwner?.modifiers || []), ...(previousOwner?.operators || [])]
     .find(entry => entry.uid === mirrorGuideEntryUid);
   if (!previousModifier?.enabled) {
+    if (!mirrorGuideGroupUid && overlay.hasAttribute('hidden') && !lastGuideMarkup
+      && !overlay.classList.contains('visible')) return;
     overlay.classList.remove('visible');
     overlay.setAttribute('hidden', '');
     overlay.innerHTML = '';
+    lastGuideMarkup = '';
     mirrorGuideGroupUid = null;
     mirrorGuideEntryUid = null;
     return;
@@ -198,6 +242,7 @@ function updateMirrorGuideOverlay() {
       if (selectedMirrorGuideGroup()) return;
       overlay.setAttribute('hidden', '');
       overlay.innerHTML = '';
+      lastGuideMarkup = '';
       mirrorGuideGroupUid = null;
       mirrorGuideEntryUid = null;
     }, 340);

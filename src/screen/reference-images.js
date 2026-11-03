@@ -5,6 +5,9 @@ let referenceImageEditing = false;
 let referenceImageDrag = null;
 let referenceControlsProject = null;
 let referenceControlsKey = '';
+let referenceLayerProject = null;
+let referenceLayerKey = '';
+let referenceLayerSources = new Map();
 let referenceImportViewKey = 'general';
 const sampleCanvases = new WeakMap();
 
@@ -108,6 +111,21 @@ function updateReferenceImageLayer() {
   const key = referenceViewKey();
   const records = referenceImagesForView(key);
   const selected = currentReferenceImage(key);
+  const emptyKey = records.length ? null : `empty:${key}:${referenceImageEditing}:${selected?.uid || ''}`;
+  if (emptyKey && referenceLayerProject === state.project && referenceLayerKey === emptyKey
+    && referenceImageLayer.hidden) return;
+  // General-view references are screen anchored. Camera orbit and pan do not
+  // alter their transform, so avoid touching every image DOM node each frame.
+  const generalKey = records.length && key === 'general' ? JSON.stringify([
+    viewport.clientWidth, viewport.clientHeight, referenceImageEditing, selected?.uid,
+    records.map(record => [record.uid, record.naturalWidth,
+      record.naturalHeight, record.scale, record.offset])
+  ]) : null;
+  if (generalKey && referenceLayerProject === state.project && referenceLayerKey === generalKey
+    && records.every(record => referenceLayerSources.get(record.uid) === record.source)) return;
+  referenceLayerProject = state.project;
+  referenceLayerKey = emptyKey || generalKey;
+  referenceLayerSources = new Map(records.map(record => [record.uid, record.source]));
   if (!records.length) {
     if (!referenceImageLayer.hidden) {
       referenceImageLayer.hidden = true;
@@ -119,6 +137,7 @@ function updateReferenceImageLayer() {
   referenceImageLayer.hidden = false;
   referenceImageLayer.classList.toggle('editing', referenceImageEditing && Boolean(selected));
   const existing = new Map([...referenceImageLayer.querySelectorAll('img')].map(image => [image.dataset.referenceUid, image]));
+  const rendered = new Map();
   for (const record of records) {
     let image = existing.get(record.uid);
     if (!image) {
@@ -129,16 +148,23 @@ function updateReferenceImageLayer() {
       referenceImageLayer.insertBefore(image, referenceImageHint);
     }
     existing.delete(record.uid);
+    rendered.set(record.uid, image);
     if (image.getAttribute('src') !== record.source) image.src = record.source;
-    image.width = record.naturalWidth;
-    image.height = record.naturalHeight;
+    if (image.width !== record.naturalWidth) image.width = record.naturalWidth;
+    if (image.height !== record.naturalHeight) image.height = record.naturalHeight;
     image.classList.toggle('selected', record === selected);
     applyReferenceImageTransform(image, record, key);
-    // DOM order is the visual stacking order. Keep it aligned with the list
-    // after reordering without recreating images or losing decoded pixels.
-    referenceImageLayer.insertBefore(image, referenceImageHint);
   }
   existing.forEach(image => image.remove());
+  // Reorder only when the layer stack changes. Moving every image node on
+  // every camera frame caused needless layout and paint work.
+  let nextSibling = referenceImageHint;
+  for (let index = records.length - 1; index >= 0; index--) {
+    const image = rendered.get(records[index].uid);
+    if (!image) continue;
+    if (image.nextSibling !== nextSibling) referenceImageLayer.insertBefore(image, nextSibling);
+    nextSibling = image;
+  }
   updateReferenceImageControls();
 }
 

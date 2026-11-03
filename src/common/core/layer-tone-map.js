@@ -21,9 +21,15 @@ export function toneMapStops(settings) {
   });
 }
 
-export function mapLayerTonePixels(pixels, settings) {
+const toneMapLookupCache = new WeakMap();
+
+function toneMapLookup(settings) {
+  if (!settings || typeof settings !== 'object') return null;
+  const signature = JSON.stringify(settings);
+  const cached = toneMapLookupCache.get(settings);
+  if (cached?.signature === signature) return cached.lookup;
   const stops = toneMapStops(settings);
-  if (!stops.length) return pixels;
+  if (!stops.length) return null;
   const minimum = 0, maximum = 255;
   const anchor = settings?.anchorEnabled === true && stops.length > 1;
   const anchorIndex = settings.paletteType === 'continuous'
@@ -39,18 +45,26 @@ export function mapLayerTonePixels(pixels, settings) {
     if (index <= anchorIndex) return maximum - (maximum - anchorGray) * index / Math.max(1, anchorIndex);
     return anchorGray - (anchorGray - minimum) * (index - anchorIndex) / Math.max(1, stops.length - 1 - anchorIndex);
   });
-  const lookup = Array.from({ length: 256 }, (_, brightness) => {
+  const lookup = new Uint8Array(256 * 3);
+  for (let brightness = 0; brightness < 256; brightness++) {
     let nearest = 0, distance = Infinity;
     for (let index = 0; index < grayStops.length; index++) {
       const next = Math.abs(grayStops[index] - brightness);
       if (next < distance) { distance = next; nearest = index; }
     }
-    return stops[nearest];
-  });
+    lookup.set(stops[nearest], brightness * 3);
+  }
+  toneMapLookupCache.set(settings, { signature, lookup });
+  return lookup;
+}
+
+export function mapLayerTonePixels(pixels, settings) {
+  const lookup = toneMapLookup(settings);
+  if (!lookup) return pixels;
   for (let offset = 0; offset < pixels.length; offset += 4) {
     if (!pixels[offset + 3]) continue;
-    const color = lookup[clamp(Math.round(gray(pixels[offset], pixels[offset + 1], pixels[offset + 2])), 0, 255)];
-    pixels[offset] = color[0]; pixels[offset + 1] = color[1]; pixels[offset + 2] = color[2];
+    const colorOffset = clamp(Math.round(gray(pixels[offset], pixels[offset + 1], pixels[offset + 2])), 0, 255) * 3;
+    pixels[offset] = lookup[colorOffset]; pixels[offset + 1] = lookup[colorOffset + 1]; pixels[offset + 2] = lookup[colorOffset + 2];
   }
   return pixels;
 }

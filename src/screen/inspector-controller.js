@@ -111,7 +111,6 @@ function enterSubdivisionEdit(owner) {
   state.selectedUids = new Set([cubes[0].uid]);
   state.selectionAnchorUid = cubes[0].uid;
   state.selectedUvFaces = new Set();
-  invalidateAllRenderGeometry();
   renderAll('all');
   updateToolVisibility();
   toast('已進入細分編輯；其他物件已虛化');
@@ -130,9 +129,9 @@ function exitSubdivisionEdit(render = true) {
   state.selectedUids = new Set(state.selectedUid ? [state.selectedUid] : []);
   state.selectionAnchorUid = state.selectedUid;
   state.selectedUvFaces = new Set();
-  invalidateAllRenderGeometry();
   updateToolVisibility();
   if (render) renderAll('all');
+  else invalidateAllRenderGeometry();
 }
 
 function discardSubdivisionEdits(target) {
@@ -727,8 +726,6 @@ function bindInspector(root = null) {
     state.selectedUid = bakedSelection[0] || null;
     state.selectedUids = new Set(bakedSelection);
     state.selectionAnchorUid = state.selectedUid;
-    sceneRenderer.invalidateMirrorGeometry();
-    invalidateAllRenderGeometry();
     markDirty(); renderAll(); toast('已烘焙選中的修改器');
   }));
   $$('[data-edit-modifier-anchor]', inspector).forEach(button => button.addEventListener('click', () => {

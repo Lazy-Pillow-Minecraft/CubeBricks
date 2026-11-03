@@ -26,6 +26,8 @@ export function createTextureAssetController({
 let textureLoadRevision = 0;
 let pendingTextureImage = null;
 const layerRefreshRevision = new WeakMap();
+let tiledEntryIndexSource = null;
+let tiledEntryIndex = new Map();
 let layerDrag = null;
 let layerDragBound = false;
 let layerEditSession = null;
@@ -50,7 +52,7 @@ function finishLayerEdit() {
   const session = layerEditSession;
   if (!session) return;
   layerEditSession = null;
-  refreshLayeredTexture(session.asset).then(() => {
+  return refreshLayeredTexture(session.asset).then(() => {
     renderTextureFeatureControls();
     layerEditor.render();
   }).catch(error => toast(error.message));
@@ -117,7 +119,7 @@ function addTextureGroup() {
   toast('已新增貼圖組');
 }
 
-function updateLayerCompositePreview(asset, canvas) {
+function updateLayerCompositePreview(asset, canvas, dirty = null) {
   if (asset && asset._uid !== state.activeTextureUid) return;
   const preview = $('#textureLayerComposite');
   const showComposite = Boolean(asset?.layers?.length && canvas?.width && canvas?.height);
@@ -125,10 +127,17 @@ function updateLayerCompositePreview(asset, canvas) {
   textureCanvas.style.opacity = showComposite ? '0' : '';
   if (!asset) textureCanvas.style.visibility = '';
   if (showComposite) {
-    preview.width = canvas.width; preview.height = canvas.height;
+    const patch = dirty && preview.width === canvas.width && preview.height === canvas.height;
+    if (!patch) { preview.width = canvas.width; preview.height = canvas.height; }
     const context = preview.getContext('2d');
     context.imageSmoothingEnabled = false;
-    context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(canvas, 0, 0);
+    if (patch) {
+      context.clearRect(dirty.x, dirty.y, dirty.width, dirty.height);
+      context.drawImage(canvas, dirty.x, dirty.y, dirty.width, dirty.height,
+        dirty.x, dirty.y, dirty.width, dirty.height);
+    } else {
+      context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(canvas, 0, 0);
+    }
   }
 }
 
@@ -175,9 +184,22 @@ function renderTextureTileControls() {
 }
 
 function refreshDerivedTileEntries(asset, source) {
-  for (const entry of getTextureAtlasEntries()) {
-    if (entry.tileSourceUid !== asset._uid || !entry.tileCube) continue;
-    const canvas = tiledFaceRaster(entry.tileCube, entry.tileFaceName, imageCanvas(source), entry.tileRegion);
+  const atlasEntries = getTextureAtlasEntries();
+  if (atlasEntries !== tiledEntryIndexSource) {
+    tiledEntryIndexSource = atlasEntries;
+    tiledEntryIndex = new Map();
+    for (const entry of atlasEntries) {
+      if (!entry.tileSourceUid || !entry.tileCube) continue;
+      if (!tiledEntryIndex.has(entry.tileSourceUid)) tiledEntryIndex.set(entry.tileSourceUid, []);
+      tiledEntryIndex.get(entry.tileSourceUid).push(entry);
+    }
+  }
+  const entries = tiledEntryIndex.get(asset._uid) || [];
+  if (!entries.length) return;
+  const sourceCanvas = typeof source.getContext === 'function' ? source : imageCanvas(source);
+  const sourcePixels = sourceCanvas.getContext('2d').getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+  for (const entry of entries) {
+    const canvas = tiledFaceRaster(entry.tileCube, entry.tileFaceName, sourceCanvas, entry.tileRegion, null, sourcePixels);
     if (canvas.width !== entry.width || canvas.height !== entry.height) { rebuildTextureAtlas(); continue; }
     drawTextureAtlasEntry(canvas, entry);
     const patch = textureAtlasPatch(entry);
@@ -637,15 +659,17 @@ function removeTexture(asset = activeTextureAsset(), operation = 'core.texture.d
   return true;
 }
 
-async function removeActiveLayer() {
+async function removeTextureLayer(uid) {
   const asset = activeTextureAsset();
-  const selected = selectedLayerEntry(asset);
+  const selected = asset?.layers?.find(layer => layer.uid === uid);
   if (!asset || !selected) return false;
+  await finishLayerEdit();
   pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
   const removed = selected.type === 'group'
     ? new Set([selected.uid, ...layerDescendantUids(asset.layers, selected.uid)])
     : new Set([selected.uid]);
   asset.layers = asset.layers.filter(layer => !removed.has(layer.uid));
+  for (const removedUid of removed) layerRasterCache.delete(removedUid);
   discardMissingLayerMasks(asset);
   if (!asset.layers.some(layer => layer.type !== 'group')) {
     const canvas = document.createElement('canvas');
@@ -657,6 +681,42 @@ async function removeActiveLayer() {
     asset.layers.push(replacement);
   }
   asset.activeLayerUid = activeLayer(asset)?.uid || null;
+  await refreshLayeredTexture(asset);
+  renderTextureFeatureControls();
+  layerEditor.render();
+  return true;
+}
+
+function removeActiveLayer() {
+  return removeTextureLayer(selectedLayerEntry(activeTextureAsset())?.uid);
+}
+
+async function mergeTextureLayerDown(uid) {
+  const asset = activeTextureAsset();
+  const upper = asset?.layers?.find(layer => layer.uid === uid);
+  if (!upper) return false;
+  const parent = upper.parentUid || null;
+  const siblings = asset.layers.filter(layer => (layer.parentUid || null) === parent);
+  const lower = siblings[siblings.indexOf(upper) - 1];
+  if (!lower) return false;
+  await finishLayerEdit();
+  await prepareLayers(asset);
+  const removed = new Set([upper.uid, lower.uid,
+    ...layerDescendantUids(asset.layers, upper.uid), ...layerDescendantUids(asset.layers, lower.uid)]);
+  const shadow = { ...asset, layers: asset.layers.map(layer => ({ ...layer,
+    parentUid: layer.uid === upper.uid || layer.uid === lower.uid ? null : layer.parentUid,
+    visible: removed.has(layer.uid) ? layer.visible : false })) };
+  const merged = compositeLayers(shadow);
+  if (!merged) return false;
+  pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
+  const source = merged.toDataURL('image/png');
+  asset.layers = asset.layers.filter(layer => !removed.has(layer.uid) || layer.uid === lower.uid);
+  for (const removedUid of removed) if (removedUid !== lower.uid) layerRasterCache.delete(removedUid);
+  Object.assign(lower, { type: 'layer', source, visible: true, opacity: 100,
+    blendMode: 'normal', maskLayerUid: null, toneMap: null });
+  layerRasterCache.set(lower.uid, { canvas: merged, savedSource: source });
+  discardMissingLayerMasks(asset);
+  asset.activeLayerUid = lower.uid;
   await refreshLayeredTexture(asset);
   renderTextureFeatureControls();
   layerEditor.render();
@@ -739,6 +799,7 @@ function openTextureCreateDialog() {
   $('#textureTemplateBoxUv').disabled = !rules.allowBoxUv || !rules.allowFaceUv;
   $('#textureTemplateBoxUv').closest('label').hidden = !rules.allowBoxUv || !rules.allowFaceUv;
   $('#textureTemplateSelectedOnly').checked = false;
+  $('#textureTemplateKeepMulti').checked = true;
   $('#textureTemplateKeepLayers').checked = true;
   $('#textureTemplateSelectedOnly').disabled = selectedElementUids().length === 0;
   const subdivisions = activeSnapSubdivisions();
@@ -891,7 +952,7 @@ return {
   get pendingTextureImage() { return pendingTextureImage; },
   set pendingTextureImage(value) { pendingTextureImage = value; },
   textureUid, renderTextureList, addTextureGroup, updateLayerCompositePreview, renderTextureTileControls, refreshDerivedTileEntries, scheduleTextureAnimation, textureAssetForReference, isFaceTiled, remapNumericFaceTextureReferences, loadTextureAssetImage, createSimpleTexture, updateTextureCreateDialog, openTextureCreateDialog, importTexture, loadTextureSource, installProjectTextures, activateProjectTexture, invalidateUvPreviewTextureState,
-  copyTexture, cutTexture, pasteTexture, removeTexture, removeActiveLayer,
+  copyTexture, cutTexture, pasteTexture, removeTexture, removeActiveLayer, removeTextureLayer, mergeTextureLayerDown,
   syncToneMappedPalettes
 };
 }

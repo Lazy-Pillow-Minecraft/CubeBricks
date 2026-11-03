@@ -2,6 +2,7 @@ import { ConfigRegistry, ConfigScope, ConfigType } from '../core/config-registry
 import { translateEnglishUiText } from '../i18n/english.js';
 import { UI_MESSAGES } from '../i18n/messages.js';
 import { toSimplified } from '../i18n/simplified.js';
+import { performanceMonitor } from '../../utils/performance-monitor.js';
 
 export const AppLanguage = Object.freeze({
   TRADITIONAL_CHINESE: 'zh-Hant',
@@ -18,6 +19,7 @@ export const ConfigKey = Object.freeze({
   SNAP: 'editor.snap-subdivisions',
   ALLOW_NEGATIVE_SIZE: 'editor.allow-negative-size',
   PAINT_EXPLODE_GAP: 'paint.explode-gap',
+  PAINT_SCREEN_HEIGHT: 'paint.screen-height',
   SHIFT_SNAP_MODE: 'editor.snap-shift-mode',
   SHIFT_SNAP_VALUE: 'editor.snap-shift-value',
   CTRL_SNAP_MODE: 'editor.snap-ctrl-mode',
@@ -140,6 +142,9 @@ configRegistry.registerMany([
   { id: ConfigKey.PAINT_EXPLODE_GAP, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 2,
     validate: value => Number.isFinite(value) && value >= 0 && value <= 1000,
     description: 'Minimum world-space clearance between exploded paint groups.' },
+  { id: ConfigKey.PAINT_SCREEN_HEIGHT, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 512,
+    validate: value => Number.isInteger(value) && value >= 32 && value <= 4096,
+    description: 'Virtual pixel height of the Ctrl screen-space painting plane.' },
   { id: ConfigKey.SHIFT_SNAP_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'multiplier', options: [{ value: 'value', label: '數值' }, { value: 'multiplier', label: '乘數' }], description: 'How Shift modifies snap subdivisions.' },
   { id: ConfigKey.SHIFT_SNAP_VALUE, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 4, validate: value => value > 0, description: 'Shift snap value or multiplier.' },
   { id: ConfigKey.CTRL_SNAP_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'multiplier', options: [{ value: 'value', label: '數值' }, { value: 'multiplier', label: '乘數' }], description: 'How Ctrl modifies snap subdivisions.' },
@@ -247,28 +252,29 @@ function translateTextNode(node) {
   const current = node.nodeValue || '';
   const trimmed = current.trim();
   if (!trimmed) return;
-  const previousSource = textSources.get(node);
-  const knownTranslation = previousSource !== undefined && LANGUAGE_OPTIONS.map(option => option.value)
-    .some(language => translateUiText(previousSource, language) === trimmed);
-  const source = previousSource === undefined || !knownTranslation ? trimmed : previousSource;
-  textSources.set(node, source);
+  const previous = textSources.get(node);
+  const source = previous && (previous.translated === trimmed
+    || LANGUAGE_OPTIONS.some(option => translateUiText(previous.source, option.value) === trimmed))
+    ? previous.source : trimmed;
   const translated = translateUiText(source, activeLanguage);
+  textSources.set(node, { source, translated });
   const next = current.replace(trimmed, translated);
   if (next !== current) node.nodeValue = next;
 }
 
 function translateElementAttributes(element) {
+  if (!TRANSLATED_ATTRIBUTES.some(attribute => element.hasAttribute(attribute))) return;
   let sources = attributeSources.get(element);
   if (!sources) { sources = {}; attributeSources.set(element, sources); }
   for (const attribute of TRANSLATED_ATTRIBUTES) {
     if (!element.hasAttribute(attribute)) continue;
     const current = element.getAttribute(attribute);
-    const previousSource = sources[attribute];
-    const knownTranslation = previousSource !== undefined && LANGUAGE_OPTIONS.map(option => option.value)
-      .some(language => translateUiText(previousSource, language) === current);
-    const source = previousSource === undefined || !knownTranslation ? current : previousSource;
-    sources[attribute] = source;
+    const previous = sources[attribute];
+    const source = previous && (previous.translated === current
+      || LANGUAGE_OPTIONS.some(option => translateUiText(previous.source, option.value) === current))
+      ? previous.source : current;
     const translated = translateUiText(source, activeLanguage);
+    sources[attribute] = { source, translated };
     if (translated !== current) element.setAttribute(attribute, translated);
   }
 }
@@ -277,6 +283,18 @@ function translateSubtree(root) {
   if (!root) return;
   if (root.nodeType === 3) { translateTextNode(root); return; }
   if (root.nodeType !== 1 && root.nodeType !== 9) return;
+  if (root.nodeType === 1 && root.namespaceURI === 'http://www.w3.org/2000/svg'
+    && root.closest('#transformGizmo,#mirrorGuideOverlay,#locatorOverlay')) {
+    // The viewport recreates visual SVG paths as the camera moves. Most of
+    // those nodes contain no language content; avoid walking each path in JS.
+    translateElementAttributes(root);
+    for (const element of root.querySelectorAll('text,tspan,title,[title],[aria-label],[data-tooltip]')) {
+      translateElementAttributes(element);
+      if (element.localName === 'text' || element.localName === 'tspan' || element.localName === 'title')
+        for (const child of element.childNodes) if (child.nodeType === 3) translateTextNode(child);
+    }
+    return;
+  }
   if (root.nodeType === 1) translateElementAttributes(root);
   const walker = document.createTreeWalker(root, 5);
   let node;
@@ -294,11 +312,14 @@ export function applyLanguage(language = configRegistry.get(ConfigKey.LANGUAGE))
   translateSubtree(document);
   if (!languageObserver && typeof MutationObserver !== 'undefined') {
     languageObserver = new MutationObserver(mutations => {
+      const start = performanceMonitor.enabled ? performance.now() : 0;
       for (const mutation of mutations) {
         if (mutation.type === 'characterData') translateTextNode(mutation.target);
         else if (mutation.type === 'attributes') translateElementAttributes(mutation.target);
         else mutation.addedNodes.forEach(translateSubtree);
       }
+      if (performanceMonitor.enabled)
+        performanceMonitor.record('ui.translationObserver', performance.now() - start);
     });
     languageObserver.observe(document.documentElement, {
       subtree: true,

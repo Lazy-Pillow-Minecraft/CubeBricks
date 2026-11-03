@@ -25,14 +25,16 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 ## UVs, textures, and layers
 
 - Cubes may use per-face or box UVs. In per-face mode, faces can independently choose a texture, rotate or mirror UVs, be culled, and have UV coordinates edited. The texture-mode dropdown currently allows only ordinary textures; Tiled and Flipbook appear as disabled “Coming Soon” choices. Existing data remains readable.
-- Texture layers support image layers and groups, reordering, visibility, opacity, blend modes, tone mapping, and independent mask sources. A dedicated layer editor shows the full texture beside the selected layer.
+- Texture layers support image layers and groups, reordering, visibility, opacity, blend modes, tone mapping, and independent mask sources. Context menus offer Merge Down and Delete; merging applies the upper layer's blend result. Creation controls remain visible while scrolling. A dedicated layer editor shows the full texture beside the selected layer.
 - New textures can be generated as texture templates, solid-color templates, or blank images. Template generation uses the project's base snap resolution for UV allocation, assigns at least 1 px to nonzero edges, can cull zero-area faces, and offers box UVs, padding, power-of-two dimensions, or custom size multiples.
 - **Preserve layer structure** is enabled by default for texture templates. It remaps each source layer's pixels into the newly assigned UVs while retaining groups, order, visibility, blend settings, and mask relationships. Multiple source textures become separate groups. Turning the option off uses the previous flattened-image workflow. Box UVs default to off where per-face UVs are allowed; formats that require box UVs still enforce that rule.
+- **Do Not Share UVs** defaults to on and assigns each face its own region. Disabling it allows matching source/old-UV faces to reuse regions across cubes.
 - The texture view supports face multiselection and UV movement or resizing. UV Preview shows selected content, face-direction coloring, and rotation/mirror markers.
 
 ## Painting and color
 
 - Paint on a 2D texture or directly on 3D model faces with Brush, Shape Drawing, Fill, Gradient, Eyedropper, and Selection. Brushes support square or round tips, antialiasing, opacity, continuous cross-face strokes, and brush depth. Faces without an assigned texture do not silently acquire one.
+- Hold `Ctrl` while painting in 3D to project virtual screen pixels onto visible faces. The virtual pixel height is configurable in Settings. Live previews update layer composites and the texture atlas in affected regions.
 - Paint Selection supports rectangle, brush, and freehand lasso modes. Shift adds and Ctrl subtracts. Selections constrain painting and can be moved, copied, or rotated in the 2D texture view.
 - Palettes support discrete colors, gradients, and 3D color-space curves. A single palette can be imported or exported as `.cbcmap`. The color picker offers square, circular, and triangular HSV interfaces.
 - In Paint mode, the hierarchy still supports finding, selecting, focusing, and toggling visibility/lock state. Model geometry changes require Edit mode.

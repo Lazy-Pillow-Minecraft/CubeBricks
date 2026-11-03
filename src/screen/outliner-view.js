@@ -48,13 +48,18 @@ function updateSelectionLabels() {
 
 function renderOutliner() {
   const filter = $('#outlinerSearch').value.trim().toLowerCase();
+  const matchCache = new Map();
   const matches = uidValue => {
+    if (matchCache.has(uidValue)) return matchCache.get(uidValue);
     const node = state.project.getNode(uidValue);
     if (!node) return false;
-    if (!filter || node.name.toLowerCase().includes(filter) || node.uid.toLowerCase().includes(filter)) return true;
-    if (node.type === 'group') return node.children.some(matches);
-    return isBezierElement(node) && node.nodes.some((curveNode, index) => curveNode.uid.toLowerCase().includes(filter)
-      || `節點 ${index + 1}`.includes(filter));
+    matchCache.set(uidValue, false);
+    const matched = !filter || node.name.toLowerCase().includes(filter) || node.uid.toLowerCase().includes(filter)
+      || node.type === 'group' && node.children.some(matches)
+      || isBezierElement(node) && node.nodes.some((curveNode, index) => curveNode.uid.toLowerCase().includes(filter)
+        || `節點 ${index + 1}`.includes(filter));
+    matchCache.set(uidValue, matched);
+    return matched;
   };
   const rows = [];
   const collectNode = (uidValue, depth = 0, ancestors = []) => {

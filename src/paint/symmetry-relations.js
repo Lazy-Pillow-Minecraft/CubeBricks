@@ -1,4 +1,4 @@
-import { isCubeFaceCulled } from '../render/webgl-renderer.js';
+import { isCubeFaceCulled } from '../common/core/geometry-utils.js';
 import { dot3 } from '../utils/math/vector3.js';
 
 export const paintSymmetryRelationCache = new Map();

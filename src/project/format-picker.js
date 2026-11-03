@@ -6,6 +6,7 @@ export function createModelFormatPicker({
   $, newProjectDialog, escapeHtml, escapeAttribute, formatNumber,
   addProjectTab, markDirty, toast, configRegistry, loadProjectContent
 }) {
+let homeCoverObserver = null;
 const MODEL_FORMAT_ICONS = Object.freeze({
   generic: '<path d="M4 12 12 8l8 4-8 4-8-4Z" stroke="none"/>',
   image: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5" fill="none" stroke-width="1.8"/><circle cx="8.3" cy="9" r="1.7" stroke="none"/><path d="m5.5 17 4.4-4.4 3.1 3 2.5-2.4 3 3.8" fill="none" stroke-width="1.8"/>',
@@ -70,8 +71,27 @@ async function renderProjectHome(refresh = false) {
     return;
   }
   try {
-    const projects = await window.cubeBricksDesktop.listWorkspaceProjects({ refresh });
+    const deferredCovers = Boolean(window.cubeBricksDesktop.loadProjectCover && window.IntersectionObserver);
+    const projects = await window.cubeBricksDesktop.listWorkspaceProjects({ refresh, includeCovers: !deferredCovers });
+    homeCoverObserver?.disconnect();
     container.innerHTML = projects.length ? projects.map(project => `<button type="button" class="project-home-card" data-home-project="${escapeAttribute(project.journalId)}"><span class="project-home-cover">${project.cover ? `<img src="${escapeAttribute(project.cover)}" alt="" />` : '<span aria-hidden="true">封面待生成</span>'}</span><strong>${escapeHtml(project.name || '未命名')}</strong><small>${escapeHtml(project.filePath || '未保存的工作項目')}</small><small>${escapeHtml(project.modifiedAt ? new Date(project.modifiedAt).toLocaleString() : '')} · ${project.elementCount || 0} 個元素</small></button>`).join('') : '<p class="project-home-empty">尚無工作項目。從左側選擇模型格式開始吧。</p>';
+    if (deferredCovers) {
+      const observer = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const card = entry.target;
+          observer.unobserve(card);
+          const journalId = card.dataset.homeProject;
+          void window.cubeBricksDesktop.loadProjectCover({ journalId }).then(cover => {
+            if (!cover || !card.isConnected || card.dataset.homeProject !== journalId) return;
+            const preview = card.querySelector('.project-home-cover');
+            if (preview) preview.innerHTML = `<img src="${escapeAttribute(cover)}" alt="" />`;
+          }).catch(error => console.warn('項目封面讀取失敗', error));
+        }
+      }, { root: container.closest('.project-home-projects'), rootMargin: '160px 0px' });
+      homeCoverObserver = observer;
+      container.querySelectorAll('[data-home-project]').forEach(card => observer.observe(card));
+    }
   } catch (error) { container.textContent = `項目列表讀取失敗：${error.message}`; }
 }
 

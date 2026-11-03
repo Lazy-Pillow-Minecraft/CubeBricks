@@ -1,12 +1,14 @@
-import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../render/webgl-renderer.js';
+import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
 import { activeLayer, faceTileSize, layerRasterCache, prepareLayers } from '../common/core/texture-features.js';
 import { barycentric2d } from '../screen/color-picker/math.js';
 import { dot3 } from '../utils/math/vector3.js';
 import { PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
 import { paintSelectionAllows } from './selection-controller.js';
+import { rasterScreenPaint, rasterScreenUvFootprint, screenPaintClientPoint, screenPaintGrid, screenPaintPoint } from './screen-space.js';
 
 export function sceneBrushHitKey(hit) {
-  return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.faceName}::${hit.instanceKey || 'source'}` : '';
+  return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.cubeIndex ?? ''}`
+    + `::${hit.faceName}::${hit.instanceKey || 'source'}` : '';
 }
 
 export function sceneBrushBranchKey(sourceHit, targetHit, assetUid) {
@@ -25,8 +27,9 @@ export function createScenePaintController({
   clamp, paintToolOpacity, paletteRows, palette, samplePaletteGradient,
   hexToRgb, paintSymmetryRelatedHits, paintSymmetryFaceKey,
   pushTexturePaintHistory, paintUvBounds, commitPaintedTextureAsset,
-  queuePaintedTextureSync, syncPaintedTextureNow, drawPaintSegment,
-  drawPaintShape, paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
+  queuePaintedTextureSync, syncPaintedTextureNow, discardPaintedTextureSync, drawPaintSegment,
+  drawPaintShape, drawScreenPaintPixel, flushScreenPaintSurface, resetScreenPaintPreview,
+  paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
   loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
   activateProjectTexture, sampleReferenceImage
@@ -89,28 +92,61 @@ function facePaintUvPoint(hit, target, canvas) {
     return [Math.floor(fraction((u + (Number(face.tiling?.offsetX) || 0)) / Math.max(.0001, Number(face.tiling?.width) || 16)) * canvas.width),
       Math.floor(fraction((v + (Number(face.tiling?.offsetY) || 0)) / Math.max(.0001, Number(face.tiling?.height) || 16)) * canvas.height)];
   }
-  const rectangle = Array.isArray(face.uv) && face.uv.length >= 4
+  const rectangle = target.cube.uvMode !== 'box' && Array.isArray(face.uv) && face.uv.length >= 4
     ? face.uv
     : getBlockbenchBoxUv(target.cube, target.faceName);
   if (!rectangle) return null;
   const slots = createBlockbenchFaceUvSlots(rectangle, face.rotation || 0);
+  const scaleU = canvas.width / Math.max(1, target.asset?.uvWidth || canvas.width);
+  const scaleV = canvas.height / Math.max(1, target.asset?.uvHeight || canvas.height);
+  const limits = [
+    [Math.floor(Math.min(rectangle[0], rectangle[2]) * scaleU),
+      Math.ceil(Math.max(rectangle[0], rectangle[2]) * scaleU) - 1],
+    [Math.floor(Math.min(rectangle[1], rectangle[3]) * scaleV),
+      Math.ceil(Math.max(rectangle[1], rectangle[3]) * scaleV) - 1]
+  ];
   const triangles = [[0, 2, 1], [2, 3, 1]];
   for (const indices of triangles) {
     const weights = barycentricPoint(hit.point,
       hit.facePoints[indices[0]], hit.facePoints[indices[1]], hit.facePoints[indices[2]]);
     if (!weights) continue;
     const uv = [0, 1].map(axis => indices.reduce((sum, slot, index) => sum + slots[slot][axis] * weights[index], 0));
-    const point = [Math.floor(uv[0] * canvas.width / Math.max(1, target.asset?.uvWidth || canvas.width)),
-      Math.floor(uv[1] * canvas.height / Math.max(1, target.asset?.uvHeight || canvas.height))];
+    const point = [Math.max(limits[0][0], Math.min(limits[0][1], Math.floor(uv[0] * scaleU))),
+      Math.max(limits[1][0], Math.min(limits[1][1], Math.floor(uv[1] * scaleV)))];
     if (point[0] >= 0 && point[1] >= 0 && point[0] < canvas.width && point[1] < canvas.height) return point;
   }
   return null;
 }
 
+function facePaintUvContinuous(hit, target, canvas) {
+  if (!hit?.point || hit.facePoints?.length !== 4 || !target || !canvas) return null;
+  const face = target.cube.faces?.[target.faceName] || {};
+  if (isFaceTiled(face)) return null;
+  const rectangle = target.cube.uvMode !== 'box' && Array.isArray(face.uv) && face.uv.length >= 4
+    ? face.uv : getBlockbenchBoxUv(target.cube, target.faceName);
+  if (!rectangle) return null;
+  const slots = createBlockbenchFaceUvSlots(rectangle, face.rotation || 0);
+  const origin = hit.facePoints[0];
+  const uAxis = hit.facePoints[1].map((value, axis) => value - origin[axis]);
+  const vAxis = hit.facePoints[2].map((value, axis) => value - origin[axis]);
+  const offset = hit.point.map((value, axis) => value - origin[axis]);
+  const uu = dot3(uAxis, uAxis), uv = dot3(uAxis, vAxis), vv = dot3(vAxis, vAxis);
+  const determinant = uu * vv - uv * uv;
+  if (Math.abs(determinant) < 1e-12) return null;
+  const alongU = (dot3(offset, uAxis) * vv - dot3(offset, vAxis) * uv) / determinant;
+  const alongV = (dot3(offset, vAxis) * uu - dot3(offset, uAxis) * uv) / determinant;
+  return [0, 1].map(axis => (slots[0][axis]
+    + alongU * (slots[1][axis] - slots[0][axis])
+    + alongV * (slots[2][axis] - slots[0][axis]))
+    * canvas[axis === 0 ? 'width' : 'height']
+    / Math.max(1, target.asset?.[axis === 0 ? 'uvWidth' : 'uvHeight'] || canvas[axis === 0 ? 'width' : 'height']));
+}
+
 function faceUvWorldPoint(cube, faceName, facePoints, point) {
   if (!cube || !faceName || facePoints?.length !== 4) return null;
   const face = cube.faces?.[faceName] || {};
-  const rectangle = Array.isArray(face.uv) && face.uv.length >= 4 ? face.uv : getBlockbenchBoxUv(cube, faceName);
+  const rectangle = cube.uvMode !== 'box' && Array.isArray(face.uv) && face.uv.length >= 4
+    ? face.uv : getBlockbenchBoxUv(cube, faceName);
   if (!rectangle) return null;
   const slots = createBlockbenchFaceUvSlots(rectangle, face.rotation || 0);
   const asset = textureAssetForReference(face.texture);
@@ -213,6 +249,22 @@ function renderPaintGradientPreview() {
   const overlay = $('#paintGradientOverlay');
   const anchor = state.paintGradientAnchor;
   const hover = state.paintGradientHover;
+  if (overlay && anchor?.screenSpace && hover?.screenPoint) {
+    const [startX, startY] = anchor.screenPoint, [endX, endY] = hover.screenPoint;
+    const faces = state.paintGradientMode === 'face' ? [anchor.hit]
+      : sceneRenderer.getCubeFaceQuads(anchor.hit.uid, anchor.hit.cubeUid || anchor.hit.uid);
+    const paths = faces.filter(face => facePaintTarget(face)).flatMap(face => {
+      const points = face.facePoints?.map(point => sceneRenderer.projectPoint(point));
+      return points?.length === 4 && points.every(point => !point.behind)
+        ? [`<path class="gradient-preview-face" d="M${[0, 1, 3, 2].map(index => `${points[index].x},${points[index].y}`).join(' L')} Z"/>`] : [];
+    });
+    overlay.setAttribute('viewBox', `0 0 ${sceneCanvas.clientWidth} ${sceneCanvas.clientHeight}`);
+    overlay.innerHTML = `<defs><linearGradient id="paintGradientPreviewFill" gradientUnits="userSpaceOnUse" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}">${paintGradientSvgStops()}</linearGradient></defs>
+      ${paths.join('')}<line class="gradient-preview-line" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>
+      <circle class="gradient-preview-point start" cx="${startX}" cy="${startY}" r="4"/><circle class="gradient-preview-point" cx="${endX}" cy="${endY}" r="4"/>`;
+    overlay.hidden = false;
+    return;
+  }
   if (!overlay || !anchor?.hit || !hover?.faceName) {
     if (overlay) { overlay.innerHTML = ''; overlay.hidden = true; }
     return;
@@ -259,9 +311,20 @@ function renderPaintGradientPreview() {
 function updatePaintGradientHover(event) {
   if (!state.paintGradientAnchor || state.paintGradientAnchor.fixed || state.tool !== 'gradient') return;
   const rect = sceneCanvas.getBoundingClientRect();
+  if (state.paintGradientAnchor.screenSpace) {
+    state.paintGradientHover = { screenPoint: snappedScreenPoint(state.paintGradientAnchor.screenGrid,
+      event.clientX - rect.left, event.clientY - rect.top) };
+    renderPaintGradientPreview();
+    return;
+  }
   state.paintGradientHover = sceneRenderer.pickDetailed(state.project,
     event.clientX - rect.left, event.clientY - rect.top, true);
   renderPaintGradientPreview();
+}
+
+function snappedScreenPoint(grid, x, y) {
+  return [(Math.floor(x * grid.scaleX) + .5) / grid.scaleX,
+    (Math.floor(y * grid.scaleY) + .5) / grid.scaleY];
 }
 
 async function bakePaintGradient(anchorHit, endHit) {
@@ -358,6 +421,89 @@ async function bakePaintGradient(anchorHit, endHit) {
   renderScene();
 }
 
+async function bakeScreenPaintGradient(anchor, endPoint) {
+  const startPoint = anchor.screenPoint;
+  const direction = [endPoint[0] - startPoint[0], endPoint[1] - startPoint[1]];
+  const lengthSquared = direction[0] ** 2 + direction[1] ** 2;
+  if (lengthSquared < 1) return;
+  const hits = state.paintGradientMode === 'face' ? [anchor.hit]
+    : sceneRenderer.getCubeFaceQuads(anchor.hit.uid, anchor.hit.cubeUid || anchor.hit.uid);
+  const projections = hits.flatMap(hit => hit.facePoints || []).map(point => sceneRenderer.projectPoint(point))
+    .filter(point => !point.behind).map(point => {
+      const [x, y] = snappedScreenPoint(anchor.screenGrid, point.x, point.y);
+      return (x - startPoint[0]) * direction[0] + (y - startPoint[1]) * direction[1];
+    });
+  if (!projections.length) return;
+  const minimum = Math.min(...projections), span = Math.max(...projections) - minimum;
+  if (span < 1e-8) return;
+  const visibility = new Map();
+  const surfaces = new Map(), stops = activePaintGradientStops();
+  const historyGroup = crypto.randomUUID();
+  for (const hit of hits) {
+    const target = facePaintTarget(hit);
+    if (!target) continue;
+    let surface = surfaces.get(target.asset._uid);
+    if (!surface) {
+      const result = await paintCanvasForAsset(target.asset);
+      if (!result) continue;
+      surface = { ...result, asset: target.asset,
+        image: result.context.getImageData(0, 0, result.canvas.width, result.canvas.height) };
+      surfaces.set(target.asset._uid, surface);
+    }
+    const bounds = paintUvBounds(target.cube, target.faceName, surface.canvas);
+    let touched = false;
+    for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
+      if (!paintSelectionAllows(state, target.asset._uid, x, y, surface.canvas.width, surface.canvas.height)) continue;
+      const world = facePixelWorldPoint(target.cube, target.faceName, hit.facePoints, x, y);
+      if (!world) continue;
+      const projected = sceneRenderer.projectPoint(world);
+      if (projected.behind) continue;
+      if (screenVisibleFaceKey(anchor.screenGrid, projected.x, projected.y, visibility)
+        !== sceneBrushHitKey(hit)) continue;
+      if (!surface.touched && !touched) pushTexturePaintHistory(target.asset, surface.canvas, historyGroup);
+      touched = true;
+      const [screenX, screenY] = snappedScreenPoint(anchor.screenGrid, projected.x, projected.y);
+      const projection = (screenX - startPoint[0]) * direction[0]
+        + (screenY - startPoint[1]) * direction[1];
+      blendRgbaPixel(surface.image.data, (y * surface.canvas.width + x) * 4,
+        samplePaintGradient((projection - minimum) / span, stops), paintToolOpacity('gradient'));
+    }
+    surface.touched ||= touched;
+  }
+  for (const surface of surfaces.values()) {
+    if (!surface.touched) continue;
+    surface.context.putImageData(surface.image, 0, 0);
+    commitPaintedTextureAsset(surface.asset, surface.canvas);
+    queuePaintedTextureSync(surface.asset, surface.canvas);
+  }
+  syncPaintedTextureNow();
+  renderScene();
+}
+
+function useScreenPaintGradient(hit, event) {
+  const rect = sceneCanvas.getBoundingClientRect();
+  const grid = state.paintGradientAnchor?.screenGrid
+    || screenPaintGrid(rect, state.paintScreenHeight);
+  const screenPoint = snappedScreenPoint(grid, event.clientX - rect.left, event.clientY - rect.top);
+  if (!state.paintGradientAnchor?.screenSpace) {
+    state.paintGradientAnchor = { hit, screenPoint, screenGrid: grid, screenSpace: true };
+    state.paintGradientHover = { screenPoint };
+    renderPaintGradientPreview();
+    toast('選擇屏幕空間漸變終點');
+    return;
+  }
+  const anchor = state.paintGradientAnchor;
+  const sameCube = (hit.cubeUid || hit.uid) === (anchor.hit.cubeUid || anchor.hit.uid);
+  if (!sameCube || state.paintGradientMode === 'face' && hit.faceName !== anchor.hit.faceName) {
+    toast('漸變終點須在相同面或物體上');
+    return;
+  }
+  anchor.fixed = true;
+  state.paintGradientHover = { screenPoint };
+  renderPaintGradientPreview();
+  bakeScreenPaintGradient(anchor, screenPoint).catch(error => toast(error.message)).finally(clearPaintGradientSelection);
+}
+
 function useScenePaintGradient(hit) {
   if (!state.paintGradientAnchor?.hit) {
     state.paintGradientAnchor = { hit };
@@ -402,8 +548,8 @@ function paintHitVisibleAtStart(hit, drag = null) {
   const target = facePaintTarget(hit);
   if (!target) return true;
   const layer = activeLayer(target.asset);
-  const raster = (layer && layerRasterCache.get(layer.uid)?.canvas)
-    || animationRasterCache.get(target.asset._uid)?.canvas;
+  const raster = animationRasterCache.get(target.asset._uid)?.canvas
+    || (layer && layerRasterCache.get(layer.uid)?.canvas);
   if (!raster) return true;
   const snapshot = drag?.paintHitAlphaSnapshots || paintHitAlphaCache;
   let cached = snapshot.get(target.asset._uid);
@@ -420,8 +566,8 @@ function paintHitAlphaSnapshot() {
   return new Map([...paintHitAlphaCache].filter(([uid, cached]) => {
     const asset = state.textureAssets.find(entry => entry._uid === uid);
     const layer = activeLayer(asset);
-    return cached.canvas === ((layer && layerRasterCache.get(layer.uid)?.canvas)
-      || animationRasterCache.get(uid)?.canvas);
+    return cached.canvas === (animationRasterCache.get(uid)?.canvas
+      || (layer && layerRasterCache.get(layer.uid)?.canvas));
   }));
 }
 
@@ -484,6 +630,10 @@ async function sceneBrushSurfaceForHit(drag, hit) {
     }
     return null;
   }
+  const cacheKey = `${target.asset._uid}:${hit.cubeUid || target.cube.uid}`
+    + `:${hit.cubeIndex ?? ''}:${target.faceName}:${hit.instanceKey || ''}`;
+  const cached = drag.brushSurfaceCache?.get(cacheKey);
+  if (cached) return cached;
   const base = await ensureScenePaintAssetSurface(drag, target.asset);
   if (!base) return null;
   const clip = paintUvBounds(target.cube, target.faceName, base.canvas);
@@ -503,12 +653,12 @@ async function sceneBrushSurfaceForHit(drag, hit) {
       if (neighborSurface) surface.depthEdges.push({ ...neighbor, surface: neighborSurface });
     }
   }
+  (drag.brushSurfaceCache ||= new Map()).set(cacheKey, surface);
   return surface;
 }
 
 
-function queueSceneBrushHit(drag, hit) {
-  drag.queue = drag.queue.then(async () => {
+async function applySceneBrushHit(drag, hit) {
     if (drag.canceled || !hit?.faceName) {
       drag.lastByFace.clear();
       return;
@@ -544,7 +694,10 @@ function queueSceneBrushHit(drag, hit) {
       activeKeys.add(faceKey);
     }
     for (const key of [...drag.lastByFace.keys()]) if (!activeKeys.has(key)) drag.lastByFace.delete(key);
-  });
+}
+
+function queueSceneBrushHit(drag, hit) {
+  drag.queue = drag.queue.then(() => applySceneBrushHit(drag, hit)).catch(error => toast(error.message));
   return drag.queue;
 }
 
@@ -562,18 +715,18 @@ function sceneBrushBoundary(from, to, drag) {
   return { before: left.hit, after: right.hit };
 }
 
-function queueSceneBrushPointer(drag, clientX, clientY) {
+async function paintSceneBrushPointerSegment(drag, previous, clientX, clientY) {
   const current = { x: clientX, y: clientY, hit: scenePaintHit(clientX, clientY, drag) };
-  const previous = drag.lastPointerSample;
   if (!previous) {
-    drag.lastPointerSample = current;
-    queueSceneBrushHit(drag, current.hit);
-    return;
+    await applySceneBrushHit(drag, current.hit);
+    return current;
   }
   const distance = Math.hypot(clientX - previous.x, clientY - previous.y);
   const sampleCount = Math.max(1, Math.min(128, Math.ceil(distance / 6)));
   let prior = previous;
+  let lastYield = performance.now();
   for (let index = 1; index <= sampleCount; index++) {
+    if (drag.canceled) return current;
     const ratio = index / sampleCount;
     const sample = index === sampleCount ? current : {
       x: previous.x + (clientX - previous.x) * ratio,
@@ -583,19 +736,428 @@ function queueSceneBrushPointer(drag, clientX, clientY) {
     if (sceneBrushHitKey(prior.hit) !== sceneBrushHitKey(sample.hit)) {
       const boundary = sceneBrushBoundary(prior, sample, drag);
       if (boundary) {
-        queueSceneBrushHit(drag, boundary.before);
-        queueSceneBrushHit(drag, boundary.after);
-      } else if (index !== sampleCount) queueSceneBrushHit(drag, sample.hit);
+        await applySceneBrushHit(drag, boundary.before);
+        await applySceneBrushHit(drag, boundary.after);
+      } else if (index !== sampleCount) await applySceneBrushHit(drag, sample.hit);
     }
-    if (index === sampleCount) queueSceneBrushHit(drag, sample.hit);
+    if (index === sampleCount) await applySceneBrushHit(drag, sample.hit);
     prior = sample;
+    if (index < sampleCount && performance.now() - lastYield > 8) {
+      await paintFrameOpportunity();
+      lastYield = performance.now();
+    }
   }
-  drag.lastPointerSample = current;
+  return current;
+}
+
+function paintFrameOpportunity() {
+  return new Promise(resolve => {
+    // Resume after the frame's render callbacks, so a long stroke cannot
+    // immediately consume the frame that should display its current pixels.
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
+    else setTimeout(resolve, 0);
+  });
+}
+
+function queueSceneBrushPointer(drag, clientX, clientY) {
+  const pending = drag.pendingBrushPointers ||= [];
+  const last = pending.at(-1);
+  if (!last || last[0] !== clientX || last[1] !== clientY) pending.push([clientX, clientY]);
+  if (drag.brushPointerWorkerActive) return drag.queue;
+  drag.brushPointerWorkerActive = true;
+  drag.queue = drag.queue.then(async () => {
+    let previous = drag.lastPointerSample;
+    let nextIndex = 0;
+    let lastYield = performance.now();
+    try {
+      while (nextIndex < pending.length && !drag.canceled) {
+        const [x, y] = pending[nextIndex++];
+        previous = await paintSceneBrushPointerSegment(drag, previous, x, y);
+        drag.lastPointerSample = previous;
+        if (nextIndex < pending.length && performance.now() - lastYield > 8) {
+          await paintFrameOpportunity();
+          lastYield = performance.now();
+        }
+      }
+    } finally {
+      pending.length = 0;
+      drag.brushPointerWorkerActive = false;
+    }
+  }).catch(error => toast(error.message));
+  return drag.queue;
+}
+
+function screenCellTouchesFaceEdge(drag, index, hit) {
+  if (hit.facePoints?.length !== 4) return true;
+  const key = sceneBrushHitKey(hit);
+  const polygons = drag.screenFacePolygons ||= new Map();
+  let polygon = polygons.get(key);
+  if (!polygon) {
+    polygon = [0, 1, 3, 2].map(slot => sceneRenderer.projectPoint(hit.facePoints[slot]));
+    polygons.set(key, polygon);
+  }
+  if (polygon.some(point => !point || point.behind)) return true;
+  const cellX = index % drag.screenGrid.width, cellY = Math.floor(index / drag.screenGrid.width);
+  const inside = (x, y) => {
+    let sign = 0;
+    for (let edge = 0; edge < 4; edge++) {
+      const first = polygon[edge], second = polygon[(edge + 1) % 4];
+      const cross = (second.x - first.x) * (y - first.y) - (second.y - first.y) * (x - first.x);
+      if (Math.abs(cross) < 1e-8) continue;
+      if (sign && Math.sign(cross) !== sign) return false;
+      sign = Math.sign(cross);
+    }
+    return true;
+  };
+  for (const dx of [0, 1]) for (const dy of [0, 1]) {
+    if (!inside((cellX + dx) / drag.screenGrid.scaleX,
+      (cellY + dy) / drag.screenGrid.scaleY)) return true;
+  }
+  return false;
+}
+
+async function paintScreenSpacePixels(drag, from, to, preview, generation, fromEndpoint, toEndpoint) {
+    if (drag.canceled || preview && generation !== drag.screenGeneration) return;
+    if (preview) resetScreenPaintPreview(drag);
+    const pixels = rasterScreenPaint(drag.tool, from, to, drag.screenGrid, {
+      size: drag.screenSize, brushShape: drag.screenBrushShape,
+      antialias: drag.screenBrushAa, filled: drag.screenFilled
+    });
+    const byAsset = new Map();
+    for (const [index, coverage] of pixels) {
+      if (preview && generation !== drag.screenGeneration) return;
+      const endpointHits = [...new Set([fromEndpoint, toEndpoint]
+        .filter(endpoint => endpoint?.index === index && endpoint.hit))];
+      let hits = drag.screenHits.get(index);
+      if (!hits) {
+        const [clientX, clientY] = screenPaintClientPoint(drag.screenGrid,
+          index % drag.screenGrid.width, Math.floor(index / drag.screenGrid.width));
+        const centerHit = scenePaintHit(clientX, clientY, drag);
+        const sources = [];
+        const seen = new Set();
+        const addSource = hit => {
+          for (const source of hit?.coincidentHits?.length && drag.tool === 'brush' && state.paintBrushOverlay
+            ? hit.coincidentHits : hit ? [hit] : []) {
+            const key = sceneBrushHitKey(source);
+            if (key && !seen.has(key)) { seen.add(key); sources.push(source); }
+          }
+        };
+        addSource(centerHit);
+        if (!centerHit || screenCellTouchesFaceEdge(drag, index, centerHit)) {
+          const cellX = index % drag.screenGrid.width, cellY = Math.floor(index / drag.screenGrid.width);
+          for (const [offsetX, offsetY] of [[.15, .15], [.85, .15], [.15, .85], [.85, .85],
+            [.5, .15], [.85, .5], [.5, .85], [.15, .5]]) {
+            const sampleX = drag.screenGrid.left + (cellX + offsetX) / drag.screenGrid.scaleX;
+            const sampleY = drag.screenGrid.top + (cellY + offsetY) / drag.screenGrid.scaleY;
+            addSource(scenePaintHit(sampleX, sampleY, drag));
+          }
+        }
+        hits = sources.flatMap(source => paintSymmetryRelatedHits(source, drag)
+          .filter(paintHit => paintHit === source || screenPaintHitIsVisible(paintHit))
+          .map(paintHit => ({ paintHit, sourceHit: source })));
+        drag.screenHits.set(index, hits);
+      }
+      if (endpointHits.length) {
+        const seen = new Set(hits.map(({ sourceHit }) => sceneBrushHitKey(sourceHit)));
+        for (const endpoint of endpointHits) {
+          const key = sceneBrushHitKey(endpoint.hit);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          hits = [...hits, ...paintSymmetryRelatedHits(endpoint.hit, drag)
+            .filter(paintHit => paintHit === endpoint.hit || screenPaintHitIsVisible(paintHit))
+            .map(paintHit => ({ paintHit, sourceHit: endpoint.hit }))];
+        }
+      }
+      for (const { paintHit: hit, sourceHit } of hits) {
+        let target = drag.screenTargets.get(hit);
+        if (target === undefined) {
+          target = facePaintTarget(hit) || null;
+          drag.screenTargets.set(hit, target);
+        }
+        if (!target) {
+          if (hit?.faceName && !drag.warnedUntextured) {
+            drag.warnedUntextured = true;
+            toast('這個面尚未分配貼圖，無法繪製');
+          }
+          continue;
+        }
+        let group = byAsset.get(target.asset._uid);
+        if (!group) { group = { asset: target.asset, samples: [] }; byAsset.set(target.asset._uid, group); }
+        group.samples.push({ hit, sourceHit, target, coverage, index });
+      }
+    }
+    for (const group of byAsset.values()) {
+      const base = await ensureScenePaintAssetSurface(drag, group.asset);
+      if (!base || drag.canceled || preview && generation !== drag.screenGeneration) continue;
+      let lastYield = performance.now();
+      for (const { hit, sourceHit, target, coverage, index } of group.samples) {
+        const point = facePaintUvPoint(hit, target, base.canvas);
+        if (!point) continue;
+        const surfaceKey = `${group.asset._uid}:${hit.cubeUid || target.cube.uid}:${hit.cubeIndex ?? ''}:${target.faceName}`;
+        let surface = drag.screenSurfaces.get(surfaceKey);
+        if (!surface || surface.canvas !== base.canvas) {
+          surface = { ...base, baseSurface: base, rootDrag: drag, tool: drag.tool,
+            clip: paintUvBounds(target.cube, target.faceName, base.canvas) };
+          drag.screenSurfaces.set(surfaceKey, surface);
+        }
+        let footprint = sourceHit === hit ? drag.screenFootprints.get(hit) : null;
+        if (sourceHit === hit && (!footprint || footprint.index !== index || footprint.canvas !== base.canvas)) {
+          footprint = { index, canvas: base.canvas,
+            points: screenCellUvFootprint(drag.screenGrid, index, hit, target, base.canvas, point, surface.clip) };
+          drag.screenFootprints.set(hit, footprint);
+        }
+        const points = sourceHit === hit ? footprint.points : [point];
+        for (const [x, y] of points) drawScreenPaintPixel(surface, x, y, coverage);
+        if (!preview && drag.tool === 'brush' && performance.now() - lastYield > 8) {
+          flushScreenPaintSurface(base);
+          await paintFrameOpportunity();
+          if (drag.canceled) return;
+          lastYield = performance.now();
+        }
+      }
+      if (drag.touchedSurfaces.has(base)) flushScreenPaintSurface(base);
+    }
+}
+
+function queueScreenSpacePaint(drag, from, to, preview = false, toEndpoint = null) {
+  const generation = ++drag.screenGeneration;
+  if (!preview && drag.tool === 'brush') {
+    const pendingStrokes = drag.screenPendingStrokes ||= [];
+    pendingStrokes.push({ point: to, endpoint: toEndpoint });
+    if (drag.screenBrushWorkerActive) return drag.queue;
+    drag.screenBrushWorkerActive = true;
+    drag.queue = drag.queue.then(async () => {
+      let lastPoint = drag.screenPaintedPoint || from;
+      let lastEndpoint = drag.screenPaintedEndpoint || toEndpoint;
+      let lastYield = performance.now();
+      let nextIndex = 0;
+      try {
+        while (nextIndex < pendingStrokes.length && !drag.canceled) {
+          const pending = pendingStrokes[nextIndex++];
+          await paintScreenSpacePixels(drag, lastPoint, pending.point, false, generation,
+            lastEndpoint, pending.endpoint);
+          lastPoint = pending.point;
+          lastEndpoint = pending.endpoint;
+          if (nextIndex < pendingStrokes.length && performance.now() - lastYield > 8) {
+            await paintFrameOpportunity();
+            lastYield = performance.now();
+          }
+        }
+      } finally {
+        pendingStrokes.length = 0;
+        drag.screenBrushWorkerActive = false;
+      }
+      drag.screenPaintedPoint = lastPoint;
+      drag.screenPaintedEndpoint = lastEndpoint;
+    }).catch(error => { drag.screenBrushWorkerActive = false; toast(error.message); });
+    return drag.queue;
+  }
+  drag.queue = drag.queue.then(() => paintScreenSpacePixels(drag, from, to, preview,
+    generation, drag.screenStartEndpoint, toEndpoint)).catch(error => toast(error.message));
+  return drag.queue;
+}
+
+function screenPointerEndpoint(drag, clientX, clientY, point) {
+  return { index: point[1] * drag.screenGrid.width + point[0],
+    hit: scenePaintHit(clientX, clientY, drag) };
+}
+
+function screenPaintHitIsVisible(hit) {
+  if (!hit?.point) return false;
+  const projected = sceneRenderer.projectPoint(hit.point);
+  const rect = sceneCanvas.getBoundingClientRect();
+  if (projected.behind || projected.x < 0 || projected.y < 0
+    || projected.x >= rect.width || projected.y >= rect.height) return false;
+  return sceneBrushHitKey(scenePaintHit(rect.left + projected.x, rect.top + projected.y))
+    === sceneBrushHitKey(hit);
+}
+
+function screenVisibleFaceKey(grid, x, y, cache, drag = null) {
+  const cellX = Math.floor(x * grid.scaleX), cellY = Math.floor(y * grid.scaleY);
+  if (cellX < 0 || cellY < 0 || cellX >= grid.width || cellY >= grid.height) return '';
+  const index = cellY * grid.width + cellX;
+  if (!cache.has(index)) {
+    const [clientX, clientY] = screenPaintClientPoint(grid, cellX, cellY);
+    cache.set(index, sceneBrushHitKey(scenePaintHit(clientX, clientY, drag)));
+  }
+  return cache.get(index);
+}
+
+function screenCellUvFootprint(grid, index, hit, target, canvas, center, bounds = null) {
+  if (isFaceTiled(target.cube.faces?.[target.faceName])) return [center];
+  const points = hit.facePoints;
+  if (!points || points.length !== 4) return [center];
+  const edgeU = points[1].map((value, axis) => value - points[0][axis]);
+  const edgeV = points[2].map((value, axis) => value - points[0][axis]);
+  const normal = [edgeU[1] * edgeV[2] - edgeU[2] * edgeV[1],
+    edgeU[2] * edgeV[0] - edgeU[0] * edgeV[2], edgeU[0] * edgeV[1] - edgeU[1] * edgeV[0]];
+  const cellX = index % grid.width, cellY = Math.floor(index / grid.width);
+  const corners = [];
+  for (const [offsetX, offsetY] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    const screenX = (cellX + offsetX) / grid.scaleX;
+    const screenY = (cellY + offsetY) / grid.scaleY;
+    const ray = sceneRenderer.rayAt(screenX, screenY);
+    if (!ray) return [center];
+    const denominator = dot3(normal, ray.direction);
+    if (Math.abs(denominator) < 1e-9) return [center];
+    const distance = dot3(normal, points[0].map((value, axis) => value - ray.origin[axis])) / denominator;
+    if (distance <= 0) return [center];
+    const world = ray.origin.map((value, axis) => value + ray.direction[axis] * distance);
+    const uv = facePaintUvContinuous({ ...hit, point: world }, target, canvas);
+    if (!uv) return [center];
+    corners.push(uv);
+  }
+  return rasterScreenUvFootprint(corners, center, bounds);
+}
+
+function startScreenSpacePaint(event) {
+  event.preventDefault();
+  sceneCanvas.setPointerCapture(event.pointerId);
+  const grid = screenPaintGrid(sceneCanvas.getBoundingClientRect(), state.paintScreenHeight);
+  const start = screenPaintPoint(grid, event.clientX, event.clientY);
+  const tool = state.tool;
+  const drag = {
+    type: 'texture-paint-3d', screenSpace: true, multiSurface: true,
+    pointerId: event.pointerId, tool, ready: true, ended: false, canceled: false, finished: false,
+    screenGrid: grid, screenStart: start, screenLast: start, screenEnd: start,
+    latestBucketClient: [event.clientX, event.clientY],
+    screenGeneration: 0, screenHits: new Map(), screenTargets: new WeakMap(),
+    screenFootprints: new WeakMap(), screenSurfaces: new Map(),
+    screenVisibility: new Map(),
+    screenBucket: tool === 'fill', screenBucketSeen: new Set(), screenOriginalPixels: new Map(),
+    screenSize: tool === 'brush' ? state.paintBrushSize : state.paintToolSettings[tool]?.size || 1,
+    screenBrushShape: state.paintBrushShape, screenBrushAa: state.paintBrushAa,
+    screenFilled: state.paintShapeFilled,
+    latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
+    assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(),
+    touchedSurfaces: new Set(), paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
+    historyGroup: crypto.randomUUID(), paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
+    holisticStroke: true
+  };
+  drag.screenStartEndpoint = screenPointerEndpoint(drag, event.clientX, event.clientY, start);
+  drag.screenPaintedEndpoint = drag.screenStartEndpoint;
+  drag.screenLastEndpoint = drag.screenStartEndpoint;
+  drag.screenPaintedPoint = start;
+  drag.screenLastClient = [event.clientX, event.clientY];
+  state.dragging = drag;
+  if (drag.screenBucket) queueScreenSpaceBucket(drag, event.clientX, event.clientY);
+  else queueScreenSpacePaint(drag, start, start, tool !== 'brush', drag.screenStartEndpoint);
+  return true;
+}
+
+function queueScreenSpaceBucket(drag, clientX, clientY, mirror = true) {
+  const hit = scenePaintHit(clientX, clientY, drag);
+  const target = facePaintTarget(hit);
+  if (!target) return;
+  const scope = state.paintBucketScope;
+  const key = `${scope}:${sceneBrushHitKey(hit)}${['color', 'contiguous'].includes(scope)
+    ? `:${Math.floor(clientX / 4)}:${Math.floor(clientY / 4)}` : ''}`;
+  if (drag.screenBucketSeen.has(key)) return;
+  drag.screenBucketSeen.add(key);
+  if (mirror) for (const related of paintSymmetryRelatedHits(hit, drag).slice(1)) {
+    if (!screenPaintHitIsVisible(related)) continue;
+    const projected = sceneRenderer.projectPoint(related.point);
+    const rect = sceneCanvas.getBoundingClientRect();
+    queueScreenSpaceBucket(drag, rect.left + projected.x, rect.top + projected.y, false);
+  }
+  drag.queue = drag.queue.then(async () => {
+    const seed = await ensureScenePaintAssetSurface(drag, target.asset);
+    if (!seed) return;
+    const point = facePaintUvPoint(hit, target, seed.canvas);
+    if (!point) return;
+    const original = asset => {
+      if (!drag.screenOriginalPixels.has(asset._uid)) {
+        const base = drag.assetSurfaces.get(asset._uid);
+        drag.screenOriginalPixels.set(asset._uid,
+          new Uint8ClampedArray(base.context.getImageData(0, 0, base.canvas.width, base.canvas.height).data));
+      }
+      return drag.screenOriginalPixels.get(asset._uid);
+    };
+    const seedPixels = original(target.asset);
+    const seedOffset = (point[1] * seed.canvas.width + point[0]) * 4;
+    const seedColor = seedPixels.slice(seedOffset, seedOffset + 4);
+    const faceQuads = scope === 'face' || state.paintBucketSingleFace && ['color', 'contiguous'].includes(scope)
+      ? [hit] : scope === 'element'
+        ? sceneRenderer.getCubeFaceQuads(hit.uid, hit.cubeUid || hit.uid)
+        : sceneRenderer.getFaceQuadsForUids(new Set(state.project.elements.map(element => element.uid)));
+    const candidates = new Map();
+    const rect = sceneCanvas.getBoundingClientRect();
+    let examined = 0;
+    for (const faceHit of faceQuads) {
+      const faceTarget = facePaintTarget(faceHit);
+      if (!faceTarget || ['color', 'contiguous'].includes(scope)
+        && faceTarget.asset._uid !== target.asset._uid) continue;
+      const base = await ensureScenePaintAssetSurface(drag, faceTarget.asset);
+      if (!base) continue;
+      const pixels = original(faceTarget.asset);
+      const bounds = paintUvBounds(faceTarget.cube, faceTarget.faceName, base.canvas);
+      for (let y = bounds.minV; y < bounds.maxV; y++) for (let x = bounds.minU; x < bounds.maxU; x++) {
+        if (++examined % 4096 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+          if (drag.canceled) return;
+        }
+        if (!paintSelectionAllows(state, faceTarget.asset._uid, x, y, base.canvas.width, base.canvas.height)) continue;
+        const pixel = y * base.canvas.width + x, offset = pixel * 4;
+        if (['color', 'contiguous'].includes(scope)
+          && (pixels[offset] !== seedColor[0] || pixels[offset + 1] !== seedColor[1]
+            || pixels[offset + 2] !== seedColor[2] || pixels[offset + 3] !== seedColor[3])) continue;
+        const world = facePixelWorldPoint(faceTarget.cube, faceTarget.faceName, faceHit.facePoints, x, y);
+        if (!world) continue;
+        const projected = sceneRenderer.projectPoint(world);
+        if (projected.behind || projected.x < 0 || projected.y < 0
+          || projected.x >= rect.width || projected.y >= rect.height) continue;
+        if (screenVisibleFaceKey(drag.screenGrid, projected.x, projected.y,
+          drag.screenVisibility, drag) !== sceneBrushHitKey(faceHit)) continue;
+        candidates.set(`${faceTarget.asset._uid}:${pixel}`, { base, target: faceTarget, x, y, pixel });
+      }
+    }
+    let entries = [...candidates.values()];
+    if (scope === 'contiguous') {
+      const start = point[1] * seed.canvas.width + point[0];
+      const pending = [start], visited = new Set(), connected = new Set();
+      while (pending.length) {
+        const pixel = pending.pop();
+        if (visited.has(pixel)) continue;
+        visited.add(pixel);
+        const entry = candidates.get(`${target.asset._uid}:${pixel}`);
+        if (!entry) continue;
+        connected.add(pixel);
+        const x = pixel % seed.canvas.width, y = Math.floor(pixel / seed.canvas.width);
+        if (x > 0) pending.push(pixel - 1);
+        if (x + 1 < seed.canvas.width) pending.push(pixel + 1);
+        if (y > 0) pending.push(pixel - seed.canvas.width);
+        if (y + 1 < seed.canvas.height) pending.push(pixel + seed.canvas.width);
+      }
+      entries = entries.filter(entry => connected.has(entry.pixel));
+    }
+    const touched = new Set();
+    for (const entry of entries) {
+      const surface = { ...entry.base, baseSurface: entry.base, rootDrag: drag,
+        tool: 'fill', clip: paintUvBounds(entry.target.cube, entry.target.faceName, entry.base.canvas) };
+      drawScreenPaintPixel(surface, entry.x, entry.y, 1);
+      touched.add(entry.base);
+    }
+    for (const base of touched) flushScreenPaintSurface(base);
+  }).catch(error => toast(error.message));
 }
 
 function finishScenePaintDrag(drag) {
   if (!drag || drag.finished) return;
   drag.finished = true;
+  if (drag.screenSpace) {
+    drag.queue.then(() => {
+      if (drag.canceled || !drag.touchedSurfaces.size) return;
+      discardPaintedTextureSync([...drag.touchedSurfaces].map(surface => surface.asset));
+      for (const surface of drag.touchedSurfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
+      const lastSurface = [...drag.touchedSurfaces].at(-1);
+      if (lastSurface && state.activeTextureUid !== lastSurface.asset._uid) {
+        const index = state.textureAssets.findIndex(asset => asset._uid === lastSurface.asset._uid);
+        if (index >= 0) activateProjectTexture(index);
+      }
+      renderScene();
+    });
+    return;
+  }
   if (drag.bucketDrag) {
     drag.queue.then(() => finishTextureBucketStroke(drag.history)).catch(error => toast(error.message));
     return;
@@ -608,7 +1170,7 @@ function finishScenePaintDrag(drag) {
     drag.queue.then(() => {
       if (drag.canceled) return;
       if (!drag.touchedSurfaces.size) return;
-      syncPaintedTextureNow();
+      discardPaintedTextureSync([...drag.touchedSurfaces].map(surface => surface.asset));
       for (const surface of drag.touchedSurfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
       const lastSurface = [...drag.touchedSurfaces].at(-1);
       if (lastSurface && state.activeTextureUid !== lastSurface.asset._uid) {
@@ -624,7 +1186,7 @@ function finishScenePaintDrag(drag) {
     return;
   }
   if (!drag.canvas) return;
-  syncPaintedTextureNow();
+  discardPaintedTextureSync([drag.asset]);
   commitPaintedTextureAsset(drag.asset, drag.canvas);
   if (state.activeTextureUid !== drag.asset._uid) {
     const index = state.textureAssets.findIndex(asset => asset._uid === drag.asset._uid);
@@ -676,8 +1238,7 @@ async function finalizeScenePaintShapeSymmetry(drag) {
   }
   for (const group of assets.values()) {
     group.context.putImageData(group.baseImage, 0, 0);
-    group.strokeImage = null;
-    group.strokeCoverage = null;
+    group.strokeTiles = null;
     const rootDrag = { holisticStroke: true, historyAssets: new Set([group.asset._uid]), touchedSurfaces: new Set(), historyGroup: null };
     group.rootDrag = rootDrag;
     group.baseSurface = group;
@@ -695,7 +1256,42 @@ async function finalizeScenePaintShapeSymmetry(drag) {
 
 function moveScenePaintDrag(event, drag = state.dragging) {
   if (!drag || drag.type !== 'texture-paint-3d') return false;
+  if ((drag.multiSurface || drag.screenSpace && drag.tool === 'brush')
+    && typeof event.getCoalescedEvents === 'function') {
+    const samples = event.getCoalescedEvents();
+    for (const sample of samples) {
+      if (Number.isFinite(sample.clientX) && Number.isFinite(sample.clientY))
+        moveScenePaintDrag({ clientX: sample.clientX, clientY: sample.clientY }, drag);
+    }
+    if (samples.length && samples.at(-1).clientX === event.clientX
+      && samples.at(-1).clientY === event.clientY) return true;
+  }
   drag.latestClient = [event.clientX, event.clientY];
+  if (drag.screenSpace) {
+    if (drag.screenBucket) {
+      const previous = drag.latestBucketClient;
+      const steps = Math.max(1, Math.min(128, Math.ceil(Math.hypot(event.clientX - previous[0], event.clientY - previous[1]) / 6)));
+      for (let index = 1; index <= steps; index++) {
+        const ratio = index / steps;
+        queueScreenSpaceBucket(drag, previous[0] + (event.clientX - previous[0]) * ratio,
+          previous[1] + (event.clientY - previous[1]) * ratio);
+      }
+      drag.latestBucketClient = [event.clientX, event.clientY];
+      return true;
+    }
+    const point = screenPaintPoint(drag.screenGrid, event.clientX, event.clientY);
+    const sameCell = point[0] === drag.screenEnd[0] && point[1] === drag.screenEnd[1];
+    if (sameCell && event.clientX === drag.screenLastClient[0]
+      && event.clientY === drag.screenLastClient[1]) return true;
+    const endpoint = screenPointerEndpoint(drag, event.clientX, event.clientY, point);
+    if (drag.tool === 'brush') queueScreenSpacePaint(drag, drag.screenLast, point, false, endpoint);
+    else queueScreenSpacePaint(drag, drag.screenStart, point, true, endpoint);
+    drag.screenLast = point;
+    drag.screenEnd = point;
+    drag.screenLastEndpoint = endpoint;
+    drag.screenLastClient = [event.clientX, event.clientY];
+    return true;
+  }
   if (drag.bucketDrag) {
     const previous = drag.lastBucketClient;
     const steps = Math.max(1, Math.min(256, Math.ceil(Math.hypot(event.clientX - previous[0], event.clientY - previous[1]) / 6)));
@@ -758,6 +1354,8 @@ function queueSceneBucketAt(drag, clientX, clientY) {
 }
 
 function startScenePaintPointer(event, x, y) {
+  if (event.ctrlKey && (state.tool === 'brush' || state.tool === 'fill' || PAINT_SHAPE_TOOLS.includes(state.tool)))
+    return startScreenSpacePaint(event);
   const hit = scenePaintHit(event.clientX, event.clientY);
   if (state.tool === 'eyedropper' && !hit) {
     const color = sampleReferenceImage?.(event.clientX, event.clientY);
@@ -774,7 +1372,8 @@ function startScenePaintPointer(event, x, y) {
     const faceAsset = textureAssetForReference(cube?.faces?.[hit.faceName]?.texture);
     if (!faceAsset) { toast('這個面尚未分配貼圖，無法繪製'); return true; }
     event.preventDefault();
-    useScenePaintGradient(hit);
+    if (event.ctrlKey || state.paintGradientAnchor?.screenSpace) useScreenPaintGradient(hit, event);
+    else useScenePaintGradient(hit);
     return true;
   }
   if (state.tool === 'brush') {
@@ -842,7 +1441,7 @@ function startScenePaintPointer(event, x, y) {
   drag.rootDrag = drag;
   drag.baseSurface = drag;
   const face = target.cube.faces?.[target.faceName] || {};
-  const faceUv = Array.isArray(face.uv) && face.uv.length >= 4
+  const faceUv = target.cube.uvMode !== 'box' && Array.isArray(face.uv) && face.uv.length >= 4
     ? face.uv : getBlockbenchBoxUv(target.cube, target.faceName);
   drag.clip = {
     minU: Math.floor(Math.min(faceUv[0], faceUv[2])), minV: Math.floor(Math.min(faceUv[1], faceUv[3])),

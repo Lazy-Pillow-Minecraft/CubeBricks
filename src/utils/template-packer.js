@@ -17,6 +17,7 @@ export function packTemplateRectangles(rectangles, padding, fixedSide = null) {
     || Math.max(right.width, right.height) - Math.max(left.width, left.height));
   const paddedWidth = entry => Math.max(1, entry.width) + padding;
   const paddedHeight = entry => Math.max(1, entry.height) + padding;
+  const dimensions = new Map(sorted.map(entry => [entry, { width: paddedWidth(entry), height: paddedHeight(entry) }]));
   const totalArea = sorted.reduce((sum, entry) => sum + paddedWidth(entry) * paddedHeight(entry), 0);
   const widest = Math.max(...sorted.map(paddedWidth));
   const tallest = Math.max(...sorted.map(paddedHeight));
@@ -25,26 +26,26 @@ export function packTemplateRectangles(rectangles, padding, fixedSide = null) {
   const upperBound = Math.max(totalWidth, tallest);
 
   const strategies = ['diagonal', 'area'];
+  const scoreLess = (left, right) => {
+    for (let index = 0; index < left.length; index++) {
+      if (left[index] !== right[index]) return left[index] < right[index];
+    }
+    return false;
+  };
   const packIntoSquare = (side, strategy) => {
     const freeRectangles = [{ x: 0, y: 0, width: side, height: side }];
     const placements = new Map();
     for (const entry of sorted) {
-      const width = paddedWidth(entry), height = paddedHeight(entry);
+      const { width, height } = dimensions.get(entry);
       let choice = null;
       for (const free of freeRectangles) {
         if (width > free.width || height > free.height) continue;
         const areaWaste = free.width * free.height - width * height;
         const shortWaste = Math.min(free.width - width, free.height - height);
-        const longWaste = Math.max(free.width - width, free.height - height);
-        const scores = {
-          area: [areaWaste, shortWaste, Math.max(free.x, free.y), free.y, free.x],
-          'short-side': [shortWaste, longWaste, areaWaste, free.y, free.x],
-          diagonal: [Math.max(free.x, free.y), free.x + free.y, areaWaste, shortWaste],
-          'top-left': [free.y, free.x, areaWaste, shortWaste]
-        };
-        const score = scores[strategy];
-        if (!choice || score.some((value, index) => value < choice.score[index]
-          && score.slice(0, index).every((prior, priorIndex) => prior === choice.score[priorIndex]))) {
+        const score = strategy === 'area'
+          ? [areaWaste, shortWaste, Math.max(free.x, free.y), free.y, free.x]
+          : [Math.max(free.x, free.y), free.x + free.y, areaWaste, shortWaste];
+        if (!choice || scoreLess(score, choice.score)) {
           choice = { free, score };
         }
       }
@@ -88,7 +89,7 @@ export function packTemplateRectangles(rectangles, padding, fixedSide = null) {
     }
     const compactness = sorted.reduce((score, entry) => {
       const placement = placements.get(entry);
-      const width = paddedWidth(entry), height = paddedHeight(entry);
+      const { width, height } = dimensions.get(entry);
       return score + (placement.y * side + placement.x) * width * height;
     }, 0);
     return { placements, side, score: side * side, compactness };

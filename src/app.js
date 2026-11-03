@@ -5,7 +5,8 @@ import { modifierRegistry } from './common/config/modifiers.js';
 import { operatorRegistry } from './common/config/operators.js';
 import { allocateGroupName, refreshAutomaticNodeName, setNodeName, setNodeUnnamed } from './model.js';
 import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerRasterCache, loadRaster, prepareLayers, tiledFaceRaster, tiledFaceReference, tiledFaceRegions, faceTileSize } from './common/core/texture-features.js';
-import { WebGLSceneRenderer, applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, getMinecraftRenderType, isCubeFaceCulled } from './render/webgl-renderer.js';
+import { WebGLSceneRenderer, getMinecraftRenderType } from './render/webgl-renderer.js';
+import { applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from './common/core/geometry-utils.js';
 import { DockManager } from './screen/dock-manager.js';
 import { DEFAULT_PLAYER_REFERENCE_TEXTURE, createPlayerReferenceProject } from './assets/player-reference.js';
 import { operationDefinition, operationIndex, requireOperation } from './common/core/operation-registry.js';
@@ -145,7 +146,7 @@ const { referenceViewKey, updateReferenceImageLayer, setReferenceImageEditing, s
   beginReferenceImageDrag, moveReferenceImageDrag, endReferenceImageDrag, scaleReferenceImage } = referenceImages;
 const cameraController = createCameraController({
   state, $, $$, sceneCanvas, sceneRenderer, viewport,
-  renderScene, toast, mapProjectionZoom, setReferenceImageEditing
+  renderScene, scheduleSceneRender, toast, mapProjectionZoom, setReferenceImageEditing
 });
 const { bakeCameraPan, cancelCameraFocus, focusSelected, focusSceneOrigin, currentProjection,
   updateProjectionControls, enterAxisView, exitAxisView, updateAxisWidget,
@@ -166,7 +167,8 @@ const projectTabsController = createProjectTabsController({
   onProjectActivated: tab => projectCoverController?.schedule(tab),
   onProjectClosing: tab => projectCoverController?.flush(tab)
 });
-projectCoverController = createProjectCoverController({ projectTabsController, captureProjectCover });
+projectCoverController = createProjectCoverController({ projectTabsController, captureProjectCover,
+  isInteracting: () => Boolean(state.dragging || sceneCanvas.classList.contains('is-orbiting')) });
 window.addEventListener('cubebricks:texture-change', () => {
   projectCoverController.schedule(projectTabsController.tabs.find(tab => tab.id === projectTabsController.activeId));
 });
@@ -477,9 +479,9 @@ const paintStrokeController = createPaintStrokeController({
   CUBE_FACE_NAMES, textureAtlasReferences, effectiveFaceTextureReference,
   textureAssetForReference, getTextureAtlasEntries: () => textureAtlasController.textureAtlasEntries,
   paintCanvasForAsset, syncRendererTextureAsset,
-  scheduleSceneRender, uvPreviewIsActive, renderUvPreview,
+  scheduleSceneRender,
   updateTexturePreviewFrame, noteJournalOperation, markDirty, toast,
-  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache
+  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache, animationRasterCache
 });
 function paintPointFromEvent(...args) { return paintStrokeController.paintPointFromEvent(...args); }
 function paintPointInside(...args) { return paintStrokeController.paintPointInside(...args); }
@@ -487,9 +489,13 @@ function faceUvPixelSlots(...args) { return paintStrokeController.faceUvPixelSlo
 function paintFaceDepthNeighbors(...args) { return paintStrokeController.paintFaceDepthNeighbors(...args); }
 function updateTextureBrushCursor(...args) { return paintStrokeController.updateTextureBrushCursor(...args); }
 function syncPaintedTextureNow(...args) { return paintStrokeController.syncPaintedTextureNow(...args); }
+function discardPaintedTextureSync(...args) { return paintStrokeController.discardPaintedTextureSync(...args); }
 function queuePaintedTextureSync(...args) { return paintStrokeController.queuePaintedTextureSync(...args); }
 function drawPaintSegment(...args) { return paintStrokeController.drawPaintSegment(...args); }
 function drawPaintShape(...args) { return paintStrokeController.drawPaintShape(...args); }
+function drawScreenPaintPixel(...args) { return paintStrokeController.drawScreenPaintPixel(...args); }
+function flushScreenPaintSurface(...args) { return paintStrokeController.flushScreenPaintSurface(...args); }
+function resetScreenPaintPreview(...args) { return paintStrokeController.resetScreenPaintPreview(...args); }
 function paintUvBounds(...args) { return paintStrokeController.paintUvBounds(...args); }
 function allTextureUvEntriesForAsset(...args) { return paintStrokeController.allTextureUvEntriesForAsset(...args); }
 function applyTextureBucket(...args) { return paintStrokeController.applyTextureBucket(...args); }
@@ -535,8 +541,9 @@ const scenePaintController = createScenePaintController({
   clamp, paintToolOpacity, paletteRows, palette, samplePaletteGradient,
   hexToRgb, paintSymmetryRelatedHits, paintSymmetryFaceKey,
   pushTexturePaintHistory, paintUvBounds, commitPaintedTextureAsset,
-  queuePaintedTextureSync, syncPaintedTextureNow, drawPaintSegment,
-  drawPaintShape, paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
+  queuePaintedTextureSync, syncPaintedTextureNow, discardPaintedTextureSync, drawPaintSegment,
+  drawPaintShape, drawScreenPaintPixel, flushScreenPaintSurface, resetScreenPaintPreview,
+  paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
   loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
   activateProjectTexture, sampleReferenceImage: referenceImages.sampleReferenceImage
@@ -646,6 +653,8 @@ function cutTexture(...args) { return textureAssetController.cutTexture(...args)
 function pasteTexture(...args) { return textureAssetController.pasteTexture(...args); }
 function removeTexture(...args) { return textureAssetController.removeTexture(...args); }
 function removeActiveLayer(...args) { return textureAssetController.removeActiveLayer(...args); }
+function removeTextureLayer(...args) { return textureAssetController.removeTextureLayer(...args); }
+function mergeTextureLayerDown(...args) { return textureAssetController.mergeTextureLayerDown(...args); }
 
 const toolModeController = createToolModeController({
   state, $, $$, inspectorController, exitSubdivisionEdit, renderOutliner,
@@ -731,7 +740,7 @@ const contextMenuController = createContextMenuController({
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
-  copyTexture, cutTexture, pasteTexture, removeTexture
+  copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown
 });
 function closeContextMenu(...args) { return contextMenuController.closeContextMenu(...args); }
 function showContextMenu(...args) { return contextMenuController.showContextMenu(...args); }
@@ -961,17 +970,14 @@ updateToolVisibility();
 renderAll();
 markDirty(false);
 shapePacksReady = loadExternalShapePacks();
+const projectHomeReady = modelFormatPicker.renderProjectHome();
 void (async () => {
   try {
     await shapePacksReady;
     await packsController.refresh();
   } catch (error) { console.warn('資源包載入失敗', error); }
-  try {
-    await modelFormatPicker.renderProjectHome();
-    await document.fonts.ready;
-  } finally {
-    // Keep the first paint covered until the home page and its project list
-    // have been laid out. The cover is a plain background-color rectangle.
-    requestAnimationFrame(() => $('#startupCover')?.remove());
-  }
 })();
+void projectHomeReady.catch(error => console.warn('項目首頁載入失敗', error)).finally(() => {
+  // External packs and optional fonts must not delay the first usable home page.
+  requestAnimationFrame(() => $('#startupCover')?.remove());
+});

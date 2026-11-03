@@ -1,4 +1,4 @@
-import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../render/webgl-renderer.js';
+import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
 import { activeLayer, compositeLayers } from '../common/core/texture-features.js';
 import { requireOperation } from '../common/core/operation-registry.js';
 import { PAINT_TOOLS, PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
@@ -10,17 +10,20 @@ export function createPaintStrokeController({
   paintSetting, paintToolErasing, paintToolOpacity, PAINT_FACE_EDGES,
   CUBE_FACE_NAMES, textureAtlasReferences, effectiveFaceTextureReference,
   textureAssetForReference, getTextureAtlasEntries, paintCanvasForAsset, syncRendererTextureAsset,
-  scheduleSceneRender, uvPreviewIsActive, renderUvPreview,
+  scheduleSceneRender,
   updateTexturePreviewFrame, noteJournalOperation, markDirty, toast,
-  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache
+  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache, animationRasterCache
 }) {
 const paintBrushOffsetCache = new Map();
 const PAINT_FACE_LAYOUTS = Object.freeze({
   south: [7, 6, 4, 5], north: [2, 3, 1, 0], east: [6, 2, 5, 1],
   west: [3, 7, 0, 4], up: [3, 2, 7, 6], down: [4, 5, 0, 1]
 });
+let texturePaintSyncQueued = false;
 let texturePaintSyncFrame = null;
 const texturePaintSyncTargets = new Map();
+let cachedPaintColor = null;
+let cachedPaintColorBytes = null;
 
 function paintBrushOffsets(size, shape = state.paintBrushShape, antialias = state.paintBrushAa) {
   const normalized = clamp(Math.round(size) || 1, 1, 64);
@@ -128,15 +131,35 @@ function paintFaceDepthNeighbors(hit, target) {
   return neighbors;
 }
 
-function prepareHolisticPaintSurface(surface) {
+const STROKE_TILE_SIZE = 64;
+
+function prepareHolisticPaintSurface(surface, x, y) {
   const base = surface?.baseSurface || surface;
   if (!base?.canvas || !base.context) return null;
-  if (base.strokeImage && base.strokeImage.width === base.canvas.width && base.strokeImage.height === base.canvas.height) return base;
-  base.strokeImage = base.context.getImageData(0, 0, base.canvas.width, base.canvas.height);
-  base.strokeBasePixels = new Uint8ClampedArray(base.strokeImage.data);
-  base.strokeCoverage = new Uint8Array(base.canvas.width * base.canvas.height);
-  base.strokeDirty = null;
-  return base;
+  if (!base.strokeTiles || base.strokeTileWidth !== base.canvas.width
+    || base.strokeTileHeight !== base.canvas.height) {
+    base.strokeTiles = new Map();
+    base.strokeDirtyTiles = new Set();
+    base.strokeAppliedTiles = new Set();
+    base.strokeTileWidth = base.canvas.width;
+    base.strokeTileHeight = base.canvas.height;
+    base.strokeDirty = null;
+    base.strokeAppliedBounds = null;
+  }
+  const tileX = Math.floor(x / STROKE_TILE_SIZE) * STROKE_TILE_SIZE;
+  const tileY = Math.floor(y / STROKE_TILE_SIZE) * STROKE_TILE_SIZE;
+  const key = `${tileX}:${tileY}`;
+  let tile = base.strokeTiles.get(key);
+  if (!tile) {
+    const width = Math.min(STROKE_TILE_SIZE, base.canvas.width - tileX);
+    const height = Math.min(STROKE_TILE_SIZE, base.canvas.height - tileY);
+    const image = base.context.getImageData(tileX, tileY, width, height);
+    tile = { x: tileX, y: tileY, width, height, image,
+      original: new Uint8ClampedArray(image.data), coverage: new Uint8Array(width * height),
+      dirty: null, applied: false };
+    base.strokeTiles.set(key, tile);
+  }
+  return { base, tile };
 }
 
 function extendPaintDirtyRect(surface, x, y) {
@@ -148,28 +171,62 @@ function extendPaintDirtyRect(surface, x, y) {
   }
 }
 
+function extendCanvasPendingDirty(canvas, x, y) {
+  const dirty = canvas.pendingSyncDirty;
+  if (!dirty) canvas.pendingSyncDirty = { minX: x, minY: y, maxX: x, maxY: y };
+  else {
+    dirty.minX = Math.min(dirty.minX, x); dirty.minY = Math.min(dirty.minY, y);
+    dirty.maxX = Math.max(dirty.maxX, x); dirty.maxY = Math.max(dirty.maxY, y);
+  }
+}
+
 function flushHolisticPaintSurface(surface) {
   const base = surface?.baseSurface || surface;
   const dirty = base?.strokeDirty;
-  if (!base?.strokeImage || !dirty) return;
-  base.context.putImageData(base.strokeImage, 0, 0,
-    dirty.minX, dirty.minY, dirty.maxX - dirty.minX + 1, dirty.maxY - dirty.minY + 1);
+  if (!base?.strokeTiles || !dirty) return false;
+  for (const tile of base.strokeDirtyTiles) {
+    const region = tile.dirty;
+    if (!region) continue;
+    base.context.putImageData(tile.image, tile.x, tile.y,
+      region.minX, region.minY, region.maxX - region.minX + 1, region.maxY - region.minY + 1);
+    tile.dirty = null;
+    tile.applied = true;
+    base.strokeAppliedTiles.add(tile);
+  }
+  base.strokeDirtyTiles.clear();
+  const pending = base.canvas.pendingSyncDirty;
+  if (pending) {
+    pending.minX = Math.min(pending.minX, dirty.minX);
+    pending.minY = Math.min(pending.minY, dirty.minY);
+    pending.maxX = Math.max(pending.maxX, dirty.maxX);
+    pending.maxY = Math.max(pending.maxY, dirty.maxY);
+  } else base.canvas.pendingSyncDirty = { ...dirty };
+  const applied = base.strokeAppliedBounds;
+  if (applied) {
+    applied.minX = Math.min(applied.minX, dirty.minX);
+    applied.minY = Math.min(applied.minY, dirty.minY);
+    applied.maxX = Math.max(applied.maxX, dirty.maxX);
+    applied.maxY = Math.max(applied.maxY, dirty.maxY);
+  } else base.strokeAppliedBounds = { ...dirty };
   base.strokeDirty = null;
+  return true;
 }
 
 function compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity) {
-  const base = prepareHolisticPaintSurface(surface);
-  if (!base) return false;
-  const pixel = y * base.canvas.width + x;
+  const prepared = prepareHolisticPaintSurface(surface, x, y);
+  if (!prepared) return false;
+  const { base, tile } = prepared;
+  const localX = x - tile.x, localY = y - tile.y;
+  const pixel = localY * tile.width + localX;
   const offset = pixel * 4;
-  const source = base.strokeBasePixels;
-  if (state.paintIgnoreTransparent && source[offset + 3] === 0) return true;
+  const source = tile.original;
+  if (state.paintIgnoreTransparent && !paintCompositeVisibleAtStart(surface, x, y)) return true;
   if (paintToolErasing(tool) && state.alphaLock) return true;
   const coverageByte = Math.round(clamp(coverage, 0, 1) * 255);
-  if (coverageByte <= base.strokeCoverage[pixel]) return true;
-  base.strokeCoverage[pixel] = coverageByte;
+  if (coverageByte <= tile.coverage[pixel]) return true;
+  tile.coverage[pixel] = coverageByte;
   const blend = opacity * coverageByte / 255;
-  const output = base.strokeImage.data;
+  const output = tile.image.data;
   const sourceAlpha = source[offset + 3] / 255;
   if (paintToolErasing(tool)) {
     output[offset] = source[offset]; output[offset + 1] = source[offset + 1]; output[offset + 2] = source[offset + 2];
@@ -185,8 +242,32 @@ function compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity) {
       (color[channel] * blend + source[offset + channel] * sourceAlpha * (1 - blend)) / outputAlpha);
     output[offset + 3] = Math.round(outputAlpha * 255);
   }
+  const tileDirty = tile.dirty;
+  if (!tileDirty) tile.dirty = { minX: localX, minY: localY, maxX: localX, maxY: localY };
+  else {
+    tileDirty.minX = Math.min(tileDirty.minX, localX); tileDirty.minY = Math.min(tileDirty.minY, localY);
+    tileDirty.maxX = Math.max(tileDirty.maxX, localX); tileDirty.maxY = Math.max(tileDirty.maxY, localY);
+  }
+  base.strokeDirtyTiles.add(tile);
   extendPaintDirtyRect(base, x, y);
   return true;
+}
+
+function paintCompositeVisibleAtStart(surface, x, y) {
+  const root = surface.rootDrag || surface;
+  const snapshot = root.paintHitAlphaSnapshots ||= new Map();
+  let cached = snapshot.get(surface.asset?._uid);
+  if (!cached) {
+    const raster = animationRasterCache?.get(surface.asset?._uid)?.canvas
+      || (surface.asset?.layers?.length ? compositeLayers(surface.asset) : surface.canvas);
+    if (!raster) return true;
+    cached = { canvas: raster,
+      pixels: raster.getContext('2d').getImageData(0, 0, raster.width, raster.height).data };
+    snapshot.set(surface.asset._uid, cached);
+  }
+  const width = cached.canvas.width, height = cached.canvas.height;
+  if (x < 0 || y < 0 || x >= width || y >= height) return false;
+  return cached.pixels[(y * width + x) * 4 + 3] !== 0;
 }
 
 function drawPaintPixel(surface, x, y, coverage, tool, opacity) {
@@ -195,12 +276,13 @@ function drawPaintPixel(surface, x, y, coverage, tool, opacity) {
   if (surface.rootDrag?.holisticStroke && compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity)) return;
   const context = surface.context;
   if (paintToolErasing(tool) && state.alphaLock) return;
-  if (state.paintIgnoreTransparent && context.getImageData(x, y, 1, 1).data[3] === 0) return;
+  if (state.paintIgnoreTransparent && !paintCompositeVisibleAtStart(surface, x, y)) return;
   context.globalAlpha = opacity * coverage;
   context.globalCompositeOperation = paintToolErasing(tool)
     ? 'destination-out' : state.alphaLock ? 'source-atop' : 'source-over';
   context.fillStyle = state.paintColor;
   context.fillRect(x, y, 1, 1);
+  extendCanvasPendingDirty(surface.canvas, x, y);
 }
 
 function touchScenePaintSurface(surface) {
@@ -208,7 +290,8 @@ function touchScenePaintSurface(surface) {
   if (!root || root.historyAssets.has(surface.asset._uid)) return;
   root.historyAssets.add(surface.asset._uid);
   root.touchedSurfaces.add(surface.baseSurface || surface);
-  pushTexturePaintHistory(surface.asset, surface.canvas, root.historyGroup);
+  pushTexturePaintHistory(surface.asset, surface.canvas, root.historyGroup,
+    root.tool ? `core.texture.${root.tool}` : null);
 }
 
 function paintBrushDepthStamp(drag, centerX, centerY, offsets, opacity) {
@@ -271,21 +354,56 @@ function updateTextureBrushCursor(event) {
   preview.style.cursor = 'none';
 }
 
-function syncPaintedTextureNow() {
+function syncPaintedTextureNow(renderInFrame = false) {
   if (texturePaintSyncFrame !== null) cancelAnimationFrame(texturePaintSyncFrame);
   texturePaintSyncFrame = null;
+  texturePaintSyncQueued = false;
   const targets = [...texturePaintSyncTargets.values()];
   texturePaintSyncTargets.clear();
   if (!targets.length) return;
-  targets.forEach(target => syncRendererTextureAsset(target.asset, target.canvas));
-  scheduleSceneRender();
-  if (uvPreviewIsActive()) renderUvPreview();
+  targets.forEach(target => syncRendererTextureAsset(target.asset, target.canvas, false, target.dirty));
+  // renderScene refreshes the UV preview after the main viewport. Rendering
+  // the preview here blocks the first visible model update of a live stroke.
+  if (renderInFrame) renderScene();
+  else scheduleSceneRender();
+}
+
+function discardPaintedTextureSync(assets) {
+  for (const asset of assets) texturePaintSyncTargets.delete(typeof asset === 'string' ? asset : asset?._uid);
+  if (!texturePaintSyncTargets.size) {
+    if (texturePaintSyncFrame !== null) cancelAnimationFrame(texturePaintSyncFrame);
+    texturePaintSyncFrame = null;
+    texturePaintSyncQueued = false;
+  }
 }
 
 function queuePaintedTextureSync(asset, canvas) {
-  texturePaintSyncTargets.set(asset._uid, { asset, canvas });
-  if (texturePaintSyncFrame !== null) return;
-  texturePaintSyncFrame = requestAnimationFrame(syncPaintedTextureNow);
+  const pending = canvas?.pendingSyncDirty;
+  const dirty = pending ? { x: pending.minX, y: pending.minY,
+    width: pending.maxX - pending.minX + 1, height: pending.maxY - pending.minY + 1 } : null;
+  if (pending) canvas.pendingSyncDirty = null;
+  const previous = texturePaintSyncTargets.get(asset._uid);
+  const combined = previous && dirty
+    ? { x: Math.min(previous.dirty?.x ?? dirty.x, dirty.x), y: Math.min(previous.dirty?.y ?? dirty.y, dirty.y),
+      width: 0, height: 0 } : dirty;
+  if (combined && previous?.dirty) {
+    combined.width = Math.max(previous.dirty.x + previous.dirty.width, dirty.x + dirty.width) - combined.x;
+    combined.height = Math.max(previous.dirty.y + previous.dirty.height, dirty.y + dirty.height) - combined.y;
+  }
+  texturePaintSyncTargets.set(asset._uid, { asset, canvas, dirty: previous && (!previous.dirty || !dirty) ? null : combined });
+  if (texturePaintSyncQueued) return;
+  texturePaintSyncQueued = true;
+  if (typeof requestAnimationFrame !== 'function') {
+    queueMicrotask(() => { if (texturePaintSyncQueued) syncPaintedTextureNow(); });
+    return;
+  }
+  // Several pointer samples can arrive before one visible frame. Composite
+  // their union once, then draw the model in that same frame so the brush
+  // remains live without uploading the same atlas repeatedly.
+  texturePaintSyncFrame = requestAnimationFrame(() => {
+    texturePaintSyncFrame = null;
+    if (texturePaintSyncQueued) syncPaintedTextureNow(true);
+  });
 }
 
 function drawPaintSegment(drag, from, to, sync = true) {
@@ -312,14 +430,45 @@ function drawPaintSegment(drag, from, to, sync = true) {
     paintBrushDepthStamp(drag, centerX, centerY, offsets, opacity);
   }
   context.restore();
-  flushHolisticPaintSurface(drag);
+  const changed = flushHolisticPaintSurface(drag);
   const depthSurfaces = new Set((drag.depthEdges || []).map(edge => edge.surface).filter(Boolean));
-  for (const surface of depthSurfaces) flushHolisticPaintSurface(surface);
-  if (sync) queuePaintedTextureSync(asset, canvas);
+  const changedDepth = [...depthSurfaces].filter(surface => flushHolisticPaintSurface(surface));
+  if (sync && (changed || !drag.rootDrag?.holisticStroke)) queuePaintedTextureSync(asset, canvas);
   if (sync) {
-    for (const surface of depthSurfaces) {
+    for (const surface of changedDepth) {
       if (drag.rootDrag?.historyAssets.has(surface.asset._uid)) queuePaintedTextureSync(surface.asset, surface.canvas);
     }
+  }
+}
+
+function drawScreenPaintPixel(surface, x, y, coverage) {
+  const clip = surface.clip;
+  if (clip && (x < clip.minU || y < clip.minV || x >= clip.maxU || y >= clip.maxV)) return;
+  touchScenePaintSurface(surface);
+  drawPaintPixel(surface, x, y, coverage, surface.tool, paintToolOpacity(surface.tool));
+}
+
+function flushScreenPaintSurface(surface) {
+  if (flushHolisticPaintSurface(surface)) queuePaintedTextureSync(surface.asset, surface.canvas);
+}
+
+function resetScreenPaintPreview(root) {
+  for (const surface of root.touchedSurfaces) {
+    const dirty = surface.strokeAppliedBounds;
+    if (!surface.strokeTiles || !dirty) continue;
+    for (const tile of surface.strokeAppliedTiles) {
+      tile.image.data.set(tile.original);
+      tile.coverage.fill(0);
+      tile.dirty = null;
+      tile.applied = false;
+      surface.context.putImageData(tile.image, tile.x, tile.y);
+    }
+    surface.strokeDirty = null;
+    surface.strokeDirtyTiles.clear();
+    surface.strokeAppliedTiles.clear();
+    surface.strokeAppliedBounds = null;
+    surface.canvas.pendingSyncDirty = { ...dirty };
+    queuePaintedTextureSync(surface.asset, surface.canvas);
   }
 }
 
@@ -328,8 +477,7 @@ function drawPaintShape(drag, to, restoreBase = true) {
   if (restoreBase) {
     drag.context.putImageData(drag.baseImage, 0, 0);
     const base = drag.baseSurface || drag;
-    base.strokeImage = null;
-    base.strokeCoverage = null;
+    base.strokeTiles = null;
   }
   const [startX, startY] = drag.start;
   const [endX, endY] = to;
@@ -366,6 +514,9 @@ function drawPaintShape(drag, to, restoreBase = true) {
       previous = next;
     }
   }
+  // Shape previews restore the previous preview before drawing the new one.
+  // Both the removed and new pixels must be recomposited.
+  drag.canvas.pendingSyncDirty = null;
   queuePaintedTextureSync(drag.asset, drag.canvas);
 }
 
@@ -405,8 +556,12 @@ function fillPaintRects(result, asset, rectangles, stroke = null) {
 }
 
 function paintColorBytes() {
-  const value = state.paintColor.slice(1);
-  return [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16));
+  if (state.paintColor !== cachedPaintColor) {
+    cachedPaintColor = state.paintColor;
+    const value = cachedPaintColor.slice(1);
+    cachedPaintColorBytes = [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16));
+  }
+  return cachedPaintColorBytes;
 }
 
 function blendPaintPixel(data, offset, color, opacity, tool = 'fill') {
@@ -657,9 +812,11 @@ function replayTexturePaintPoints(drag) {
 function finishTexturePaintDrag(drag) {
   if (!drag || drag.finished) return;
   drag.finished = true;
-  syncPaintedTextureNow();
   const surfaces = drag.touchedSurfaces?.size ? [...drag.touchedSurfaces] : [drag];
+  // Committing uploads the final composited texture. A queued live patch for
+  // the same assets would upload twice and could race behind that final image.
+  discardPaintedTextureSync(surfaces.map(surface => surface.asset));
   for (const surface of surfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
 }
-return { paintPointFromEvent, paintPointInside, faceUvPixelSlots, paintFaceDepthNeighbors, updateTextureBrushCursor, syncPaintedTextureNow, queuePaintedTextureSync, drawPaintSegment, drawPaintShape, paintUvBounds, allTextureUvEntriesForAsset, applyTextureBucket, finishTextureBucketStroke, pushTexturePaintHistory, commitPaintedTextureAsset, replayTexturePaintPoints, finishTexturePaintDrag };
+return { paintPointFromEvent, paintPointInside, faceUvPixelSlots, paintFaceDepthNeighbors, updateTextureBrushCursor, syncPaintedTextureNow, discardPaintedTextureSync, queuePaintedTextureSync, drawPaintSegment, drawPaintShape, drawScreenPaintPixel, flushScreenPaintSurface, resetScreenPaintPreview, paintUvBounds, allTextureUvEntriesForAsset, applyTextureBucket, finishTextureBucketStroke, pushTexturePaintHistory, commitPaintedTextureAsset, replayTexturePaintPoints, finishTexturePaintDrag };
 }

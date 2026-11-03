@@ -182,6 +182,16 @@ function startTexturePaintPointer(event) {
 function moveTexturePaintPointer(event) {
   if (!texturePaintDrag) { updateTextureGradientPreview(event); return false; }
   if (texturePaintDrag.pointerId !== event.pointerId) return false;
+  if (texturePaintDrag.tool === 'brush' && typeof event.getCoalescedEvents === 'function') {
+    const samples = event.getCoalescedEvents();
+    for (const sample of samples) {
+      if (Number.isFinite(sample.clientX) && Number.isFinite(sample.clientY))
+        moveTexturePaintPointer({ clientX: sample.clientX, clientY: sample.clientY,
+          pointerId: event.pointerId });
+    }
+    if (samples.length && samples.at(-1).clientX === event.clientX
+      && samples.at(-1).clientY === event.clientY) return true;
+  }
   if (texturePaintDrag.tool === 'fill') {
     queueBucketPath(texturePaintDrag, event.clientX, event.clientY);
     return true;

@@ -19,14 +19,42 @@ export function createContextMenuController({
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
-  copyTexture, cutTexture, pasteTexture, removeTexture
+  copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown
 }) {
 let contextMenuSource = null;
+const contextMenuHome = $('#contextMenu').parentNode;
 
 function closeContextMenu() {
-  $('#contextMenu').hidden = true;
+  const menu = $('#contextMenu');
+  menu.hidden = true;
+  if (menu.parentNode !== contextMenuHome) contextMenuHome.append(menu);
   contextMenuSource?.classList.remove('context-active');
   contextMenuSource = null;
+}
+
+function editPaletteName(row, rowNode) {
+  const label = rowNode.querySelector('.palette-row-name, .palette-compact-name');
+  if (!label) return;
+  const input = document.createElement('input');
+  input.className = 'palette-rename-input';
+  input.type = 'text';
+  input.maxLength = 100;
+  input.value = row.name || '';
+  label.replaceWith(input);
+  input.focus({ preventScroll: true });
+  input.select();
+  let finished = false;
+  const finish = save => {
+    if (finished) return;
+    finished = true;
+    if (save && input.value.trim()) row.name = input.value.trim();
+    renderPalette();
+  };
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+    if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true), { once: true });
 }
 
 function showContextMenu(event, { title = '', source = null, items = [] } = {}) {
@@ -34,6 +62,8 @@ function showContextMenu(event, { title = '', source = null, items = [] } = {}) 
   event.stopPropagation();
   closeContextMenu();
   const menu = $('#contextMenu');
+  const modal = source?.closest('dialog[open]');
+  if (modal) modal.append(menu);
   contextMenuSource = source;
   source?.classList.add('context-active');
   menu.innerHTML = `${title ? `<div class="context-menu-title">${escapeHtml(title)}</div>` : ''}`;
@@ -387,8 +417,20 @@ function bindContextMenus() {
     { icon: '◒', label: '在繪畫模式打開', action: () => setMode('paint') },
     { icon: '＋', label: '導入新貼圖', action: () => textureInput.click() }
   ] }));
+  $('#textureFeatureControls').addEventListener('contextmenu', event => {
+    const rowNode = event.target.closest('[data-layer-row]');
+    if (!rowNode) return;
+    const asset = state.textureAssets.find(entry => entry._uid === state.activeTextureUid);
+    const layer = asset?.layers?.find(entry => entry.uid === rowNode.dataset.layerRow);
+    if (!layer) return;
+    const siblings = asset.layers.filter(entry => (entry.parentUid || null) === (layer.parentUid || null));
+    const canMerge = siblings.indexOf(layer) > 0;
+    showContextMenu(event, { title: layer.name, source: rowNode, items: [
+      ...(canMerge ? [{ icon: '▣', label: '向下合併圖層', action: () => mergeTextureLayerDown(layer.uid).catch(error => toast(error.message)) }] : []),
+      { icon: '×', label: '刪除圖層', danger: true, action: () => removeTextureLayer(layer.uid).catch(error => toast(error.message)) }
+    ] });
+  });
   $('#paletteRows').addEventListener('contextmenu', event => {
-    if (palette.compact) { event.preventDefault(); return; }
     const rowNode = event.target.closest('.palette-row-card');
     if (!rowNode) return;
     const index = paletteRows.findIndex(row => row.id === rowNode.dataset.paletteId);
@@ -402,6 +444,8 @@ function bindContextMenus() {
       palette.selectedColorIndex = Number(swatch.dataset.paletteColorIndex ?? swatch.dataset.gradientNode);
     }
     showContextMenu(event, { title: row.name, source: rowNode, items: [
+      { icon: '✎', label: '編輯色卡名稱', action: () => editPaletteName(row, rowNode) },
+      ...(palette.compact ? [] : [
       ...(swatch ? [{ icon: '×', label: '刪除顏色', action: () => {
         deleteSelectedPaletteColor(row.id, Number(swatch.dataset.paletteColorIndex ?? swatch.dataset.gradientNode));
       } }] : []),
@@ -414,6 +458,7 @@ function bindContextMenus() {
       } },
       ...(row.colorSpaceGradient ? [{ icon: '◇', label: '編輯色彩曲線', action: () => openColorSpaceCurveEditor(row) }] : []),
       { icon: '＋', label: '新增色卡行', action: addPaletteRow }
+      ])
     ] });
   });
   $('#paletteRows').addEventListener('pointerdown', () => $('#paletteRows').focus({ preventScroll: true }), true);

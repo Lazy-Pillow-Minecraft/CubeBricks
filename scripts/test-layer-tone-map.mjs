@@ -13,6 +13,12 @@ const partialRange = new Uint8ClampedArray([200, 200, 200, 255, 100, 100, 100, 2
 mapLayerTonePixels(partialRange, discrete);
 assert.deepEqual([partialRange[0], partialRange[4]], [255, 128],
   'the brightest and darkest pixels of a layer do not redefine the mapping endpoints');
+discrete.paletteSamples[0] = '#ff0000';
+const afterPaletteEdit = new Uint8ClampedArray([255, 255, 255, 255]);
+mapLayerTonePixels(afterPaletteEdit, discrete);
+assert.deepEqual([...afterPaletteEdit], [255, 0, 0, 255],
+  'editing a palette in place invalidates the cached tone-map lookup');
+discrete.paletteSamples[0] = '#ffffff';
 
 const anchored = new Uint8ClampedArray([255, 255, 255, 255, 128, 128, 128, 255, 0, 0, 0, 255]);
 mapLayerTonePixels(anchored, { ...discrete, anchorEnabled: true, anchorColorIndex: 1, anchorGray: 50, grayUnit: 'percent' });

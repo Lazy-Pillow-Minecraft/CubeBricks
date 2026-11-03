@@ -1,5 +1,5 @@
 import { BezierElement, CurveNode, chooseKnifeCutAxis, getKnifeFaceAxes, splitCubeAt } from '../model.js';
-import { getEffectiveInflate } from '../render/webgl-renderer.js';
+import { getEffectiveInflate } from '../common/core/geometry-utils.js';
 
 export function createKnifeController({ state, sceneCanvas, sceneRenderer, worldPointToCubeLocal,
   cubeLocalPointToWorld, snapValue, clamp, updateToolOptions, renderScene, renderAll,

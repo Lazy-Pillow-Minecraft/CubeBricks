@@ -110,6 +110,7 @@ function applyRegisteredConfig(id, value, notify = false) {
   }
   if (id === ConfigKey.ALLOW_NEGATIVE_SIZE) { state.allowNegativeSize = value; $('#negativeShapeToggle').checked = value; }
   if (id === ConfigKey.PAINT_EXPLODE_GAP) state.paintExplodeGap = value;
+  if (id === ConfigKey.PAINT_SCREEN_HEIGHT) state.paintScreenHeight = value;
   if (id === ConfigKey.SHIFT_SNAP_MODE) state.modifierSnap.shift.mode = value;
   if (id === ConfigKey.SHIFT_SNAP_VALUE) state.modifierSnap.shift.value = value;
   if (id === ConfigKey.CTRL_SNAP_MODE) state.modifierSnap.ctrl.mode = value;

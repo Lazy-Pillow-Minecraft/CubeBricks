@@ -1,4 +1,4 @@
-import { getBlockbenchBoxUv } from '../render/webgl-renderer.js';
+import { getBlockbenchBoxUv } from '../common/core/geometry-utils.js';
 import { setPivotPreservingGeometry } from '../model.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { inverseRotateVector, quaternionFromAxisAngle, quaternionMultiply, quaternionFromEuler, eulerFromQuaternion } from '../utils/math/rotation.js';
@@ -32,7 +32,6 @@ function centerSelectedPivots() {
   nodes.forEach(node => setNodePivotAtWorldPoint(node, center));
   clearSelectionTransformContext();
   markDirty();
-  invalidateAllRenderGeometry();
   renderAll();
 }
 function freezeCubeUvs(cube, disableAutoUv = false) {
@@ -206,7 +205,6 @@ function useVertexSnapPoint(pointEntry) {
   const movedPivotOnly = completedMode === 'move' && state.vertexSnapSource.pointType === 'pivot';
   state.vertexSnapSource = null;
   markDirty();
-  invalidateAllRenderGeometry();
   renderAll();
   toast(movedPivotOnly ? '已將樞軸移至目標頂點（幾何保持不動）'
     : { move: '已移動至目標頂點', scale: '已縮放至目標頂點', rotate: '已旋轉對齊目標頂點' }[completedMode]);

@@ -715,6 +715,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "选择图层",
     "en": "Choose layer"
   },
+  "ui.choose-screen-space-gradient-endpoint": {
+    "zhHant": "選擇屏幕空間漸變終點",
+    "zhHans": "选择屏幕空间渐变终点",
+    "en": "Choose the screen-space gradient endpoint"
+  },
   "ui.choose-source-object": {
     "zhHant": "選擇來源物件",
     "zhHans": "选择来源对象",
@@ -949,6 +954,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "複製到剪切板",
     "zhHans": "复制到剪切板",
     "en": "Copy to clipboard"
+  },
+  "ui.copynodeindex-1": {
+    "zhHant": "拷貝節點 ${copyNodeIndex + 1}",
+    "zhHans": "拷贝节点 ${copyNodeIndex + 1}",
+    "en": "拷貝節點 ${copyNodeIndex + 1}"
   },
   "ui.corner-radius": {
     "zhHant": "圓角",
@@ -1840,6 +1850,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "元素",
     "en": "Element"
   },
+  "ui.element-copy": {
+    "zhHant": "元素拷貝",
+    "zhHans": "元素拷贝",
+    "en": "Element copy"
+  },
   "ui.elements": {
     "zhHant": "個元素",
     "zhHans": "个元素",
@@ -2405,6 +2420,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "渐变",
     "en": "Gradient"
   },
+  "ui.gradient-endpoint-same-face-or-object": {
+    "zhHant": "漸變終點須在相同面或物體上",
+    "zhHans": "渐变终点须在相同面或物体上",
+    "en": "The gradient endpoint must be on the same face or object"
+  },
   "ui.gradient-fill": {
     "zhHant": "漸變填充",
     "zhHans": "渐变填充",
@@ -2695,11 +2715,6 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "Java 方块／物品版本",
     "en": "Java block/item version"
   },
-  "ui.keep-faces-from-different-sources-in-separate-slots": {
-    "zhHant": "不同來源的面維持獨立佔位",
-    "zhHans": "不同来源的面维持独立占位",
-    "en": "Keep faces from different sources in separate slots"
-  },
   "ui.keep-operation-history": {
     "zhHant": "保留操作歷史",
     "zhHans": "保留操作历史",
@@ -2899,6 +2914,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "材質色",
     "zhHans": "材质色",
     "en": "Material color"
+  },
+  "ui.merge-layer-down": {
+    "zhHant": "向下合併圖層",
+    "zhHans": "向下合并图层",
+    "en": "Merge layer down"
   },
   "ui.message": {
     "zhHant": "工作記錄尚未寫入，請稍後重試",
@@ -3905,11 +3925,6 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "绘画时锁定透明度",
     "en": "Preserve alpha while painting"
   },
-  "ui.preserve-multi-texture-occupancy": {
-    "zhHant": "保持多紋理佔用",
-    "zhHans": "保持多纹理占用",
-    "en": "Preserve multi-texture occupancy"
-  },
   "ui.preserve-original-uv-pixels": {
     "zhHant": "保留原 UV 像素",
     "zhHans": "保留原 UV 像素",
@@ -4109,6 +4124,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "全部面已剔除，已刪除 ${removed.size} 個 Cube",
     "zhHans": "全部面已剔除，已删除 ${removed.size} 个 Cube",
     "en": "全部面已剔除，已刪除 ${removed.size} 個 Cube"
+  },
+  "ui.rename-palette": {
+    "zhHant": "編輯色卡名稱",
+    "zhHans": "编辑色卡名称",
+    "en": "Rename palette"
   },
   "ui.rendering-model-offscreen": {
     "zhHant": "正在離屏渲染模型…",
@@ -4374,6 +4394,16 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "屏幕截圖",
     "zhHans": "屏幕截图",
     "en": "Screen capture"
+  },
+  "ui.screen-space-virtual-height": {
+    "zhHant": "屏幕空間虛擬高度",
+    "zhHans": "屏幕空间虚拟高度",
+    "en": "Screen-space virtual height"
+  },
+  "ui.screen-space-virtual-height-help": {
+    "zhHant": "按住 Ctrl 繪畫時，屏幕高度對應的像素數",
+    "zhHans": "按住 Ctrl 绘画时，屏幕高度对应的像素数",
+    "en": "Virtual pixels across the viewport height while painting with Ctrl"
   },
   "ui.search-objects-or-uid": {
     "zhHant": "搜尋物件或 UID",
@@ -4935,6 +4965,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "起始角",
     "en": "Start angle"
   },
+  "ui.state-collapsedcopynodes-has-node-uid": {
+    "zhHant": "${state.collapsedCopyNodes.has(node.uid) ? '展開拷貝節點' : '折疊拷貝節點'}",
+    "zhHans": "${state.collapsedCopyNodes.has(node.uid) ? '展开拷贝节点' : '折叠拷贝节点'}",
+    "en": "${state.collapsedCopyNodes.has(node.uid) ? '展開拷貝節點' : '折疊拷貝節點'}"
+  },
   "ui.state-paintselectioncopy": {
     "zhHant": "複製像素：${state.paintSelectionCopy ? '開' : '關'}",
     "zhHans": "复制像素：${state.paintSelectionCopy ? '开' : '关'}",
@@ -5059,6 +5094,16 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "紋理模板",
     "zhHans": "纹理模板",
     "en": "Texture template"
+  },
+  "ui.texture-template-do-not-share-uv": {
+    "zhHant": "不共用 UV",
+    "zhHans": "不共用 UV",
+    "en": "Do Not Share UVs"
+  },
+  "ui.texture-template-do-not-share-uv-description": {
+    "zhHant": "勾選後每個面獨立排布；取消可複用相同來源的 UV",
+    "zhHans": "勾选后每个面独立排布；取消可复用相同来源的 UV",
+    "en": "Check to place every face separately; uncheck to reuse matching source UVs"
   },
   "ui.texture-width": {
     "zhHant": "貼圖寬度",

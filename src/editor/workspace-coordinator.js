@@ -16,6 +16,30 @@ export function selectionAffectsModifierResults(project, selectedIds) {
     && project.getGroupChain(owner.uid).some(parent => selectedSet.has(parent.uid)));
 }
 
+export function canReuseJournalOutliner(previousProject, project, changedUids, rows) {
+  if (!previousProject || !Array.isArray(changedUids) || !Array.isArray(rows)
+    || previousProject.formatId !== project.formatId
+    || previousProject.elements.length !== project.elements.length
+    || previousProject.groups.length !== project.groups.length
+    || previousProject.outliner.length !== project.outliner.length
+    || previousProject.outliner.some((uid, index) => uid !== project.outliner[index])) return false;
+  for (let index = 0; index < project.groups.length; index++) {
+    const before = previousProject.groups[index], after = project.groups[index];
+    if (before.uid !== after.uid || before.children.length !== after.children.length
+      || before.children.some((uid, child) => uid !== after.children[child])) return false;
+  }
+  for (let index = 0; index < project.elements.length; index++)
+    if (previousProject.elements[index].uid !== project.elements[index].uid) return false;
+  for (const uid of changedUids) {
+    const before = previousProject.getNode(uid), after = project.getNode(uid);
+    if (before?.type !== 'cube' || after?.type !== 'cube'
+      || ['name', 'visible', 'locked', 'exported', 'autoUv', 'uvNormalized', 'uvMode', 'subdivisionOwnerUid']
+        .some(key => before[key] !== after[key])
+      || [before, after].some(node => node.modifiers?.some(modifier => modifier.type === 'element_copy' && modifier.enabled))) return false;
+  }
+  return true;
+}
+
 export function createWorkspaceCoordinator({
   state, $, sceneRenderer, uvPreviewRenderer,
   getTextureAssetController, getTextureAtlasController,
@@ -61,8 +85,14 @@ function toast(message) {
   toastTimer = setTimeout(() => node.classList.remove('show'), 2100);
 }
 
-function renderAll(geometryScope = 'all') {
+function renderAll(geometryScope = 'all', changedUids = null, previousProject = null) {
   if (geometryScope === 'selection') invalidateSelectionRenderGeometry();
+  else if (geometryScope === 'journal' && sceneRenderer.restoreJournalGeometry(state.project, changedUids, state.selectedUids, state.mode)) {
+    getUvPreviewController().uvPreviewRenderDirty = true;
+    getUvEditorController().textureUvEntryCache = null;
+    getTransformContext().clearCache();
+    uvPreviewRenderer.invalidateGeometry();
+  }
   else invalidateAllRenderGeometry();
   const javaBlock = state.project.formatId === 'java_block_item';
   const modeButton = document.querySelector('.mode-tab[data-mode="animate"], .mode-tab[data-mode="display"]');
@@ -78,7 +108,12 @@ function renderAll(geometryScope = 'all') {
   updateSnapButton();
   updateRenderModeControl();
   updateToolOptions();
-  renderOutliner();
+  if (geometryScope === 'journal' && canReuseJournalOutliner(previousProject, state.project, changedUids, state.outlinerRows)) {
+    // Visible rows are already correct. Only their model references need to
+    // follow the new project, avoiding a full tree walk and DOM replacement.
+    for (const row of state.outlinerRows) if (row.node && !row.curveNode && !row.copyNode)
+      row.node = state.project.getNode(row.node.uid);
+  } else renderOutliner();
   renderInspector();
   renderScene();
   updateTextureStageTransform();

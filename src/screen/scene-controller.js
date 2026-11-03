@@ -1,3 +1,5 @@
+import { performanceMonitor } from '../utils/performance-monitor.js';
+
 export function createSceneController({
   state, $, $$, sceneCanvas, sceneRenderer, inspectorController,
   uvPreviewController, LOCATOR_ICON_SHAPES, getSelectionExpansion,
@@ -9,26 +11,68 @@ let lockedHoverFrame = null;
 let lockedHoverPickFrame = null;
 let lockedHoverPointer = null;
 let sceneRenderFrame = null;
+let sceneRenderQueuedAt = 0;
+let lastProfiledSceneFrame = 0;
+let lastProfiledCameraFrame = 0;
+let lastProfiledSession = 0;
+const emptyPaintSelection = new Set();
+let locatorCandidatesCache = null;
 function renderScene() {
   if (sceneRenderFrame !== null) cancelAnimationFrame(sceneRenderFrame);
   sceneRenderFrame = null;
   const hidePaintSelection = state.mode === 'paint';
+  const profile = performanceMonitor.enabled;
+  if (profile && lastProfiledSession !== performanceMonitor.session) {
+    lastProfiledSession = performanceMonitor.session;
+    lastProfiledSceneFrame = lastProfiledCameraFrame = 0;
+  }
+  const frameStart = profile ? performance.now() : 0;
+  if (profile && lastProfiledSceneFrame
+    && (frameStart - lastProfiledSceneFrame < 250 || state.dragging))
+    performanceMonitor.record('scene.frameInterval', frameStart - lastProfiledSceneFrame);
+  lastProfiledSceneFrame = frameStart;
+  // The general frame interval excludes time spent idle. Keep a separate
+  // camera-drag series without that cutoff: otherwise a periodic 250+ ms
+  // hitch disappears from the very profile used to diagnose it.
+  const cameraDrag = state.dragging?.type === 'orbit' || state.dragging?.type === 'pan'
+    || sceneCanvas.classList.contains('is-orbiting');
+  if (profile && cameraDrag && lastProfiledCameraFrame)
+    performanceMonitor.record('scene.cameraFrameInterval', frameStart - lastProfiledCameraFrame);
+  lastProfiledCameraFrame = profile && cameraDrag ? frameStart : 0;
   sceneRenderer.render(state.project, hidePaintSelection ? null : state.selectedUid, {
     ...state,
-    selectedUids: hidePaintSelection ? new Set() : state.selectedUids,
-    selectedUvFaces: hidePaintSelection ? new Set() : state.selectedUvFaces,
+    selectedUids: hidePaintSelection ? emptyPaintSelection : state.selectedUids,
+    selectedUvFaces: hidePaintSelection ? emptyPaintSelection : state.selectedUvFaces,
     projection: currentProjection(),
     subdivisionEditOwnerUid: inspectorController.subdivisionSession?.ownerUid || null,
     lockedDefaultAlpha: inspectorController.subdivisionSession ? 12 : state.lockedDefaultAlpha,
     lockedHoverFade: inspectorController.subdivisionSession ? false : state.lockedHoverFade,
     editorOverlayLines: buildEditorOverlayLines()
   });
+  const sceneEnd = profile ? performance.now() : 0;
   updateLocatorOverlay();
+  const locatorEnd = profile ? performance.now() : 0;
   updateMirrorGuideOverlay();
-  updateTransformGizmo();
+  const mirrorEnd = profile ? performance.now() : 0;
+  updateTransformGizmo(sceneRenderer.lastCanvasRect);
+  const gizmoEnd = profile ? performance.now() : 0;
   updateAxisWidget();
+  const axisEnd = profile ? performance.now() : 0;
   updateReferenceImageLayer();
+  const overlaysEnd = profile ? performance.now() : 0;
   refreshUvPreview(false);
+  if (profile) {
+    const frameEnd = performance.now();
+    performanceMonitor.record('scene.webglSubmit', sceneEnd - frameStart);
+    performanceMonitor.record('scene.locators', locatorEnd - sceneEnd);
+    performanceMonitor.record('scene.mirrorGuides', mirrorEnd - locatorEnd);
+    performanceMonitor.record('scene.gizmo', gizmoEnd - mirrorEnd);
+    performanceMonitor.record('scene.axisWidget', axisEnd - gizmoEnd);
+    performanceMonitor.record('scene.referenceImages', overlaysEnd - axisEnd);
+    performanceMonitor.record('scene.overlays', overlaysEnd - sceneEnd);
+    performanceMonitor.record('scene.uvPreview', frameEnd - overlaysEnd);
+    performanceMonitor.record('scene.totalCpu', frameEnd - frameStart);
+  }
   if (sceneRenderer.hasActiveCubeTransitions()) scheduleSceneRender();
 }
 
@@ -50,8 +94,12 @@ function updateFaceSelectionOverlay() {
 
 function scheduleSceneRender() {
   if (sceneRenderFrame !== null) return;
+  sceneRenderQueuedAt = performanceMonitor.enabled ? performance.now() : 0;
   sceneRenderFrame = requestAnimationFrame(() => {
     sceneRenderFrame = null;
+    if (performanceMonitor.enabled && sceneRenderQueuedAt)
+      performanceMonitor.record('scheduler.sceneQueue', performance.now() - sceneRenderQueuedAt);
+    sceneRenderQueuedAt = 0;
     renderScene();
   });
 }
@@ -63,18 +111,35 @@ function renderLockedHoverFrame() {
 
 function updateLocatorOverlay() {
   const overlay = $('#locatorOverlay');
-  const selectedElements = state.mode === 'paint' ? new Set() : getSelectionExpansion().elementSet;
-  const rect = sceneCanvas.getBoundingClientRect();
-  const width = rect.width;
-  const height = rect.height;
-  overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
   if (state.geometryOnly) {
     if (overlay.childElementCount) overlay.replaceChildren();
     overlay.setAttribute('hidden', '');
     return;
   }
-  const icons = state.project.elements
-    .filter(element => element.type === 'locator' && element.visible !== false)
+  const project = state.project;
+  if (locatorCandidatesCache?.project !== project
+    || locatorCandidatesCache.elements !== project.elements
+    || locatorCandidatesCache.length !== project.elements.length
+    || locatorCandidatesCache.revision !== project.hierarchyRevision) {
+    locatorCandidatesCache = {
+      project, elements: project.elements, length: project.elements.length,
+      revision: project.hierarchyRevision,
+      locators: project.elements.filter(element => element.type === 'locator')
+    };
+  }
+  const locators = locatorCandidatesCache.locators;
+  if (!locators.length) {
+    if (overlay.childElementCount) overlay.replaceChildren();
+    overlay.setAttribute('hidden', '');
+    return;
+  }
+  const selectedElements = state.mode === 'paint' ? emptyPaintSelection : getSelectionExpansion().elementSet;
+  const rect = sceneRenderer.lastCanvasRect || sceneCanvas.getBoundingClientRect();
+  const width = rect.width;
+  const height = rect.height;
+  overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  const icons = locators
+    .filter(element => element.visible !== false)
     .flatMap(element => {
       let world = getTransformPivot(element);
       if (selectedElements.has(element.uid)) world = sceneRenderer.transformSelectionPreviewPoint(world);
@@ -179,6 +244,18 @@ function scheduleLockedHover(event) {
   if (!state.lockedHoverFade || !sceneRenderer.hasLockedObjects()) {
     lockedHoverPointer = null;
     if (state.lockedHoverStrength > 0) animateLockedHoverStrength(false);
+    return;
+  }
+  if (state.dragging?.type === 'pan' || state.dragging?.type === 'orbit') {
+    // The camera frame already redraws the locked layer. A separate hover
+    // redraw here repeats the expensive scene pass for every pointer event.
+    if (lockedHoverPickFrame !== null) cancelAnimationFrame(lockedHoverPickFrame);
+    lockedHoverPickFrame = null;
+    if (lockedHoverFrame !== null) cancelAnimationFrame(lockedHoverFrame);
+    lockedHoverFrame = null;
+    const rect = sceneCanvas.getBoundingClientRect();
+    state.lockedHoverPoint = [event.clientX - rect.left, event.clientY - rect.top];
+    state.lockedHoverStrength = 1;
     return;
   }
   lockedHoverPointer = { clientX: event.clientX, clientY: event.clientY };

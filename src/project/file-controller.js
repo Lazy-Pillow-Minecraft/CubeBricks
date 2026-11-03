@@ -67,23 +67,26 @@ async function serializableTextureAssets(assets = state.textureAssets) {
   }));
 }
 
-function serializeCbmodel(textureAssets = [], project = state.project, textureGroups = state.textureGroups) {
-  const data = typeof project.serialize === 'function' ? JSON.parse(project.serialize()) : structuredClone(project);
-  data.textureGroups = structuredClone(textureGroups || []);
+function serializeCbmodel(textureAssets = [], project = state.project, textureGroups = state.textureGroups,
+  { snapshotOwned = false } = {}) {
+  const data = typeof project.serialize === 'function' ? JSON.parse(project.serialize())
+    : snapshotOwned ? project : structuredClone(project);
+  data.textureGroups = snapshotOwned ? textureGroups || [] : structuredClone(textureGroups || []);
   data.textures = textureAssets.map((texture, index) => ({
     uuid: texture.uuid || texture._uid || `texture_${index + 1}`,
     id: texture.id || String(index),
     name: texture.name || `texture_${index + 1}.png`,
     source: texture.source,
     mode: texture.mode || 'default',
-    layers: texture.layers ? structuredClone(texture.layers) : null,
+    layers: texture.layers ? snapshotOwned ? texture.layers : structuredClone(texture.layers) : null,
     active_layer_uid: texture.activeLayerUid || null,
     animation: texture.animation ? Object.fromEntries(Object.entries(texture.animation).filter(([key]) => !key.startsWith('_'))) : null,
     uv_width: texture.uvWidth || data.textureSize[0],
     uv_height: texture.uvHeight || data.textureSize[1],
     use_as_default: texture.useAsDefault === true,
     group_id: texture.groupId || null,
-    kind: texture.kind || 'IMAGE'
+    kind: texture.kind || 'IMAGE',
+    template_uv_independent: texture.templateUvIndependent ?? null
   }));
   return JSON.stringify(data, null, 2);
 }
@@ -99,6 +102,7 @@ function loadProjectContent(content, filePath = '', resolvedTextures = [], journ
     uuid: texture.uuid, id: texture.id, name: texture.name || 'embedded_texture.png', source: texture.source,
     uvWidth: texture.uv_width, uvHeight: texture.uv_height, useAsDefault: texture.use_as_default === true,
     groupId: texture.group_id || null, kind: texture.kind || 'IMAGE',
+    templateUvIndependent: texture.template_uv_independent ?? null,
     mode: texture.mode || 'default',
     layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null
   }));
@@ -182,28 +186,34 @@ async function saveProject() {
 async function exportProject() {
   try {
     const activeTab = projectTabById(projectTabsController.activeId);
-    await flushProjectJournal(activeTab);
-    await activeTab?.journalWrites;
-    const textureAssets = await serializableTextureAssets();
-    const cbmodelContent = serializeCbmodel(textureAssets);
-    const exportModel = new CubeBricksProject(JSON.parse(state.project.serialize()));
-    constrainProject(exportModel);
-    const bbmodelContent = JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2);
     if (window.cubeBricksDesktop?.exportProject) {
       const payload = {
-        name: state.project.name, cbmodelContent, bbmodelContent, journalId: activeTab?.journalId,
+        name: state.project.name, journalId: activeTab?.journalId,
         historyLimit: state.project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT)
       };
       let result = await window.cubeBricksDesktop.exportProject(payload);
+      if (!result) return;
+      let includeHistory = null;
       if (result?.requiresHistoryChoice) {
         const choice = await showAppChoice({ title: 'CubeBricks 導出選項', message: '導出 .cbmodel',
           detail: '不保留歷史時只保存目前完整模型；工作目錄中的撤回記錄不受影響。',
           checkboxLabel: '保留操作歷史', checkboxChecked: true,
           buttons: ['導出', '取消'] });
         if (choice.index !== 0) return;
-        result = await window.cubeBricksDesktop.exportProject({ ...payload,
-          filePath: result.filePath, includeHistory: choice.checked });
+        includeHistory = choice.checked;
       }
+      await flushProjectJournal(activeTab);
+      await activeTab?.journalWrites;
+      const textureAssets = await serializableTextureAssets();
+      const content = result.extension === '.cbmodel'
+        ? { cbmodelContent: serializeCbmodel(textureAssets) }
+        : (() => {
+          const exportModel = new CubeBricksProject(JSON.parse(state.project.serialize()));
+          constrainProject(exportModel);
+          return { bbmodelContent: JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2) };
+        })();
+      result = await window.cubeBricksDesktop.exportProject({ ...payload, ...content,
+        filePath: result.filePath, ...(includeHistory === null ? {} : { includeHistory }) });
       if (!result) return;
       toast(result.extension === '.cbmodel'
         ? '已導出 .cbmodel'
@@ -217,11 +227,21 @@ async function exportProject() {
         ]
       });
       const extension = handle.name.toLowerCase().endsWith('.cbmodel') ? '.cbmodel' : '.bbmodel';
+      const textureAssets = await serializableTextureAssets();
+      const content = extension === '.cbmodel' ? serializeCbmodel(textureAssets) : (() => {
+        const exportModel = new CubeBricksProject(JSON.parse(state.project.serialize()));
+        constrainProject(exportModel);
+        return JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2);
+      })();
       const writable = await handle.createWritable();
-      await writable.write(extension === '.cbmodel' ? cbmodelContent : bbmodelContent);
+      await writable.write(content);
       await writable.close();
       toast(`已導出 ${extension}`);
     } else {
+      const textureAssets = await serializableTextureAssets();
+      const exportModel = new CubeBricksProject(JSON.parse(state.project.serialize()));
+      constrainProject(exportModel);
+      const bbmodelContent = JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2);
       download(bbmodelContent, `${state.project.name}.bbmodel`, 'application/json');
       toast('已導出 .bbmodel（目前瀏覽器不支援格式選擇）');
     }

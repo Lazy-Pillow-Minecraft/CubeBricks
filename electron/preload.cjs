@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
     return () => ipcRenderer.removeListener('project:external-open', handler);
   },
   saveProjectCover: payload => ipcRenderer.invoke('project:cover-save', payload),
+  loadProjectCover: payload => ipcRenderer.invoke('project:cover-get', payload),
   onProjectOpenProgress: listener => {
     const handler = (_event, progress) => listener(progress);
     ipcRenderer.on('project:open-progress', handler);
@@ -48,6 +49,9 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
   setProjectWorkspaceRoot: (directory) => ipcRenderer.invoke('project:set-workspace-root', directory),
   onCloseRequested: (listener) => ipcRenderer.on('app:request-close', () => listener()),
   windowControl: action => ipcRenderer.invoke('app:window-control', action),
+  getCursorClientPoint: () => ipcRenderer.invoke('app:cursor-client-point'),
+  beginMainPerfCapture: () => ipcRenderer.invoke('app:perf-start'),
+  endMainPerfCapture: () => ipcRenderer.invoke('app:perf-stop'),
   onWindowState: listener => {
     const handler = (_event, state) => listener(state);
     ipcRenderer.on('app:window-state', handler);

@@ -1,5 +1,6 @@
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { findVertexSnapIntersections } from '../common/core/vertex-intersections.js';
+import { syncSvgMarkup } from '../utils/dom/svg-markup.js';
 
 export function createGizmoController({
   state, $, sceneCanvas, sceneRenderer, selected, isBezierElement,
@@ -25,7 +26,8 @@ function intersectRayPlane(ray, planePoint, planeNormal) {
 
 function projectViewportPoint(point) {
   const projected = sceneRenderer.projectPoint(point);
-  return { ...projected, worldPerPixel: sceneRenderer.getCameraFrame()?.worldPerPixel || .08 };
+  projected.worldPerPixel = sceneRenderer.getCameraFrame()?.worldPerPixel || .08;
+  return projected;
 }
 
 function axisBasis(axis) {
@@ -64,7 +66,12 @@ function sortGizmoControlsByDepth(gizmo) {
     // painted first and the nearer control remains visible on top.
     return Number(right.dataset.hitDepth || 1) - Number(left.dataset.hitDepth || 1);
   });
-  controls.forEach(control => gizmo.insertBefore(control, anchor));
+  let next = anchor;
+  for (let index = controls.length - 1; index >= 0; index--) {
+    const control = controls[index];
+    if (control.nextSibling !== next) gizmo.insertBefore(control, next);
+    next = control;
+  }
 }
 
 function parseGizmoDepthGroups(control) {
@@ -419,7 +426,7 @@ function infiniteGuideMarkup(handle, width, height, axisClass) {
   return finiteWorldGuideMarkup(state.gizmoOrigin, handle.vector, `drag-infinite-line ${axisClass}`);
 }
 
-function renderVertexSnapGizmo(gizmo, width, height) {
+function renderVertexSnapGizmo(gizmo, width, height, editorOverlay = '') {
   const item = selected();
   const points = [];
   const generatedSourceUids = item.type === 'group'
@@ -504,8 +511,8 @@ function renderVertexSnapGizmo(gizmo, width, height) {
     </g>`;
     else if (!source.behind) sourceMarkup = `<path class="vertex-snap-source-marker" d="M${source.x},${source.y - 9} L${source.x + 9},${source.y} L${source.x},${source.y + 9} L${source.x - 9},${source.y} Z"/>`;
   }
-  gizmo.innerHTML = pointMarkup + sourceMarkup;
-  sortGizmoControlsByDepth(gizmo);
+  syncSvgMarkup(gizmo, `<g data-vertex-controls>${pointMarkup}${sourceMarkup}</g>${editorOverlay}`);
+  sortGizmoControlsByDepth(gizmo.querySelector('[data-vertex-controls]'));
   gizmo.removeAttribute('hidden');
 }
 
@@ -524,28 +531,34 @@ function renderRotationPivotVertices(gizmo, width, height, selectionContext, ite
     .sort((left, right) => right.projected.depth - left.projected.depth);
   state.rotationPivotVertices = vertices;
   gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  gizmo.innerHTML = vertices.map((entry, index) => `<g class="gizmo-control rotation-pivot-vertex" data-kind="rotation-pivot-vertex"
+  syncSvgMarkup(gizmo, vertices.map((entry, index) => `<g class="gizmo-control rotation-pivot-vertex" data-kind="rotation-pivot-vertex"
       data-vertex-index="${index}" ${gizmoDepthAttributes('point', [entry.projected])}>
       <circle class="gizmo-hit-point" cx="${entry.projected.x}" cy="${entry.projected.y}" r="14"/>
       <path class="gizmo-visible rotation-pivot-vertex-mark" d="M${entry.projected.x},${entry.projected.y - 6}
         L${entry.projected.x + 6},${entry.projected.y} L${entry.projected.x},${entry.projected.y + 6}
         L${entry.projected.x - 6},${entry.projected.y} Z"/>
-    </g>`).join('');
+    </g>`).join(''));
   sortGizmoControlsByDepth(gizmo);
   gizmo.toggleAttribute('hidden', vertices.length === 0);
 }
 
-function updateTransformGizmo() {
+function updateTransformGizmo(cachedCanvasRect = null) {
   const gizmo = $('#transformGizmo');
   state.rotationPivotVertices = [];
   if (state.mode === 'paint') {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
-    gizmo.setAttribute('hidden', '');
-    gizmo.innerHTML = '';
+    if (!gizmo.hasAttribute('hidden')) gizmo.setAttribute('hidden', '');
+    if (gizmo.childElementCount) gizmo.replaceChildren();
     return;
   }
   const item = selected();
-  const rect = sceneCanvas.getBoundingClientRect();
+  if (!item) {
+    state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
+    if (!gizmo.hasAttribute('hidden')) gizmo.setAttribute('hidden', '');
+    if (gizmo.childElementCount) gizmo.replaceChildren();
+    return;
+  }
+  const rect = cachedCanvasRect || sceneCanvas.getBoundingClientRect();
   const width = rect.width, height = rect.height;
   const curveOverlay = curveEditorOverlayMarkup(item);
   const symmetryEntry = selectedMirrorGuideGroup();
@@ -566,7 +579,7 @@ function updateTransformGizmo() {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
     if (editorOverlay && item && !isEffectivelyLocked(item.uid)) {
       gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-      gizmo.innerHTML = editorOverlay;
+      syncSvgMarkup(gizmo, editorOverlay);
       gizmo.removeAttribute('hidden');
     } else { gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; }
     return;
@@ -582,14 +595,13 @@ function updateTransformGizmo() {
     state.gizmoAxes = null; state.gizmoCenter = null; state.gizmoOrigin = null;
     if (editorOverlay) {
       gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
-      gizmo.innerHTML = editorOverlay;
+      syncSvgMarkup(gizmo, editorOverlay);
       gizmo.removeAttribute('hidden');
     } else { gizmo.setAttribute('hidden', ''); gizmo.innerHTML = ''; }
     return;
   }
   if (state.tool === 'vertexSnap') {
-    renderVertexSnapGizmo(gizmo, width, height);
-    gizmo.insertAdjacentHTML('beforeend', editorOverlay);
+    renderVertexSnapGizmo(gizmo, width, height, editorOverlay);
     return;
   }
   const transformItem = item;
@@ -646,6 +658,7 @@ function updateTransformGizmo() {
   });
   state.gizmoAxes = handles.map(handle => ({ ...handle, centerX: center.x, centerY: center.y }));
   gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  let markup;
   if (state.tool === 'rotate') {
     const pixelsPerUnit = 1 / pixelWorld;
     const radius = 87 / pixelsPerUnit;
@@ -664,10 +677,10 @@ function updateTransformGizmo() {
     const viewRing = curveNodeContext?.curve.dimension === 2 ? '' : `<g class="gizmo-control sphere-control" data-axis="view" data-kind="rotate-view" ${gizmoDepthAttributes('polyline', sphere.points)}>
       <path class="gizmo-hit rotate-hit" d="${sphere.path}"/><path class="gizmo-visible rotation-sphere" d="${sphere.path}"/>
     </g>`;
-    gizmo.innerHTML = `${viewRing}${rings}<circle class="gizmo-visible rotation-pivot" cx="${center.x}" cy="${center.y}" r="5"/>`;
+    markup = `${viewRing}${rings}<circle class="gizmo-visible rotation-pivot" cx="${center.x}" cy="${center.y}" r="5"/>`;
   } else if (state.tool === 'move' || state.tool === 'pivot') {
     const planes = GIZMO_PLANES.map(plane => planeMarkup(handles, gizmoOrigin, plane, pixelWorld)).join('');
-    gizmo.innerHTML = `${planes}${handles.map(handle => coneMarkup({ ...handle, centerX: center.x, centerY: center.y }, gizmoOrigin, `axis-${classes[handle.axis]}`, pixelWorld)).join('')}
+    markup = `${planes}${handles.map(handle => coneMarkup({ ...handle, centerX: center.x, centerY: center.y }, gizmoOrigin, `axis-${classes[handle.axis]}`, pixelWorld)).join('')}
       ${centerCubeMarkup(gizmoOrigin, axes, pixelWorld, { axisKey: 'free', kind: 'free', className: 'center-control' })}
       ${state.tool === 'pivot' && !curveNodeContext && item.type !== 'node' ? pivotMarkerMarkup(gizmoOrigin) : ''}`;
   } else {
@@ -680,16 +693,17 @@ function updateTransformGizmo() {
     const planeCorners = GIZMO_PLANES.map(plane => planeScaleCornerMarkup(handles, gizmoOrigin, plane, pixelWorld,
       plane.axes.map(axisIndex => closestSigns[axisIndex]))).join('');
     const axesMarkup = handles.flatMap(handle => [-1, 1].map(sign => prismMarkup({ ...handle, centerX: center.x, centerY: center.y }, gizmoOrigin, `axis-${classes[handle.axis]}`, pixelWorld, sign))).join('');
-    gizmo.innerHTML = `${planes}${axesMarkup}${planeCorners}${centerCubeMarkup(gizmoOrigin, axes, pixelWorld)}`;
+    markup = `${planes}${axesMarkup}${planeCorners}${centerCubeMarkup(gizmoOrigin, axes, pixelWorld)}`;
   }
-  sortGizmoControlsByDepth(gizmo);
+  let guides = '';
   if (state.dragging?.type === 'transform' && ['move', 'resize', 'pivot'].includes(state.dragging.tool)) {
     const guideAxes = state.dragging.kind.startsWith('plane')
       ? state.dragging.axisIndices
       : state.dragging.axisIndex === null ? [] : [state.dragging.axisIndex];
-    const guides = guideAxes.map(axisIndex => infiniteGuideMarkup(state.gizmoAxes[axisIndex], width, height, `axis-${classes[axisIndex]}`)).join('');
-    gizmo.innerHTML = guides + gizmo.innerHTML;
+    guides = guideAxes.map(axisIndex => infiniteGuideMarkup(state.gizmoAxes[axisIndex], width, height, `axis-${classes[axisIndex]}`)).join('');
   }
+  syncSvgMarkup(gizmo, `${guides}<g data-gizmo-controls>${markup}</g>${editorOverlay}`);
+  sortGizmoControlsByDepth(gizmo.querySelector('[data-gizmo-controls]'));
   if (state.dragging?.type === 'transform') {
     const axis = state.dragging.axisKey;
     const sign = state.dragging.axisIndex === null ? '' : `[data-sign="${state.dragging.sign}"]`;
@@ -697,7 +711,6 @@ function updateTransformGizmo() {
     active?.classList.add('active');
     state.dragging.handleElement = active;
   }
-  gizmo.insertAdjacentHTML('beforeend', editorOverlay);
   gizmo.removeAttribute('hidden');
 }
 return {

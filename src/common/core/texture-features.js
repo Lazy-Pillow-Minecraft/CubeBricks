@@ -79,22 +79,28 @@ export function activeLayer(asset) {
 
 export function layerDescendantUids(layers, uid) {
   const found = new Set();
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const layer of layers) if (!found.has(layer.uid) && (layer.parentUid === uid || found.has(layer.parentUid))) {
-      found.add(layer.uid); changed = true;
-    }
+  const children = new Map();
+  for (const layer of layers) {
+    if (!children.has(layer.parentUid)) children.set(layer.parentUid, []);
+    children.get(layer.parentUid).push(layer.uid);
+  }
+  const pending = [...(children.get(uid) || [])];
+  for (let index = 0; index < pending.length; index++) {
+    const child = pending[index];
+    if (child === uid || found.has(child)) continue;
+    found.add(child);
+    pending.push(...(children.get(child) || []));
   }
   return found;
 }
 
 export function layerDisplayRows(layers) {
-  const groups = new Set(layers.filter(layer => layer.type === 'group').map(layer => layer.uid));
+  const { childrenByParent } = layerTreeIndex(layers);
   const rows = [];
   const visit = (parentUid, depth, ancestors) => {
-    const siblings = layers.filter(layer => (groups.has(layer.parentUid) ? layer.parentUid : null) === parentUid);
-    for (const layer of siblings.reverse()) {
+    const siblings = childrenByParent.get(parentUid) || [];
+    for (let index = siblings.length - 1; index >= 0; index--) {
+      const layer = siblings[index];
       if (ancestors.has(layer.uid)) continue;
       rows.push({ layer, depth });
       if (layer.type === 'group' && !layer.collapsed) visit(layer.uid, depth + 1, new Set([...ancestors, layer.uid]));
@@ -107,11 +113,12 @@ export function layerDisplayRows(layers) {
 // A group footer belongs to the group whose rail it closes. Keep this tree
 // description separate from the flat paint/compositing order.
 export function layerTreeItems(layers) {
-  const groups = new Set(layers.filter(layer => layer.type === 'group').map(layer => layer.uid));
+  const { childrenByParent } = layerTreeIndex(layers);
   const items = [];
   const visit = (parentUid, depth, ancestors) => {
-    const siblings = layers.filter(layer => (groups.has(layer.parentUid) ? layer.parentUid : null) === parentUid);
-    for (const layer of siblings.reverse()) {
+    const siblings = childrenByParent.get(parentUid) || [];
+    for (let index = siblings.length - 1; index >= 0; index--) {
+      const layer = siblings[index];
       if (ancestors.some(ancestor => ancestor.uid === layer.uid)) continue;
       items.push({ layer, depth, ancestors });
       if (layer.type === 'group') {
@@ -171,25 +178,74 @@ export function reorderLayerStack(layers, draggedUid, targetUid, position) {
   return moveLayerEntry(layers, draggedUid, targetUid, position);
 }
 
-export function compositeLayers(asset, liveCanvas = null, rootUid = null) {
+const layerTreeIndexCache = new WeakMap();
+function layerTreeIndex(layers) {
+  const cached = layerTreeIndexCache.get(layers);
+  if (cached && cached.structure.length === layers.length && cached.structure.every(([entry, uid, parentUid, type], index) =>
+    entry === layers[index] && uid === entry.uid && parentUid === entry.parentUid && type === entry.type)) return cached;
+  const groups = new Set(layers.filter(layer => layer.type === 'group').map(layer => layer.uid));
+  const entries = new Map(layers.map(layer => [layer.uid, layer]));
+  const childrenByParent = new Map();
+  for (const layer of layers) {
+    const parentUid = groups.has(layer.parentUid) ? layer.parentUid : null;
+    if (!childrenByParent.has(parentUid)) childrenByParent.set(parentUid, []);
+    childrenByParent.get(parentUid).push(layer);
+  }
+  const index = { groups, entries, childrenByParent,
+    structure: layers.map(layer => [layer, layer.uid, layer.parentUid, layer.type]) };
+  layerTreeIndexCache.set(layers, index);
+  return index;
+}
+
+export function compositeLayers(asset, liveCanvas = null, rootUid = null, region = null) {
   if (!asset?.layers?.length) return liveCanvas;
   const selected = activeLayer(asset);
   // The editable texture canvas is reused when the active layer changes.
   // Caching that DOM canvas by reference makes the previous layer vanish as
   // soon as showEditableLayer clears it for the next layer.
-  if (liveCanvas && selected) layerRasterCache.set(selected.uid, {
+  if (liveCanvas && selected && !region) layerRasterCache.set(selected.uid, {
     canvas: imageCanvas(liveCanvas), savedSource: selected.source
   });
   const canvas = document.createElement('canvas');
-  const rasters = asset.layers.filter(layer => layer.type !== 'group').map(layer => layerRasterCache.get(layer.uid)?.canvas).filter(Boolean);
-  canvas.width = Math.max(1, liveCanvas?.width || Math.max(0, ...rasters.map(raster => raster.width)) || asset.uvWidth || 16);
-  canvas.height = Math.max(1, liveCanvas?.height || Math.max(0, ...rasters.map(raster => raster.height)) || asset.uvHeight || 16);
+  let rasterWidth = 0, rasterHeight = 0;
+  if (!region && !liveCanvas) for (const layer of asset.layers) {
+    if (layer.type === 'group') continue;
+    const raster = layerRasterCache.get(layer.uid)?.canvas;
+    if (raster) { rasterWidth = Math.max(rasterWidth, raster.width); rasterHeight = Math.max(rasterHeight, raster.height); }
+  }
+  canvas.width = region?.width || Math.max(1, liveCanvas?.width || rasterWidth || asset.uvWidth || 16);
+  canvas.height = region?.height || Math.max(1, liveCanvas?.height || rasterHeight || asset.uvHeight || 16);
   const context = canvas.getContext('2d');
-  const groups = new Set(asset.layers.filter(layer => layer.type === 'group').map(layer => layer.uid));
-  const entries = new Map(asset.layers.map(layer => [layer.uid, layer]));
+  const { entries, childrenByParent } = layerTreeIndex(asset.layers);
+  const passThroughCache = new Map();
+  function canPassThroughGroup(uid, visiting = new Set()) {
+    if (passThroughCache.has(uid)) return passThroughCache.get(uid);
+    if (visiting.has(uid)) return false;
+    visiting.add(uid);
+    const group = entries.get(uid);
+    let safe = group?.type === 'group' && Number(group.opacity ?? 100) === 100
+      && (!group.blendMode || group.blendMode === 'normal') && !group.maskLayerUid;
+    if (safe) for (const child of childrenByParent.get(uid) || []) {
+      if (child.maskLayerUid || child.blendMode && child.blendMode !== 'normal'
+        || child.type === 'group' && !canPassThroughGroup(child.uid, visiting)) {
+        safe = false;
+        break;
+      }
+    }
+    visiting.delete(uid);
+    passThroughCache.set(uid, safe);
+    return safe;
+  }
   const blankCanvas = () => {
     const result = document.createElement('canvas');
     result.width = canvas.width; result.height = canvas.height;
+    return result;
+  };
+  const localRaster = raster => {
+    if (!raster || !region) return raster;
+    const result = blankCanvas();
+    result.getContext('2d').drawImage(raster, region.x, region.y, region.width, region.height,
+      0, 0, region.width, region.height);
     return result;
   };
   function maskRaster(uid, trail) {
@@ -202,13 +258,19 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null) {
       renderChildren(uid, children.getContext('2d'), new Set([uid]), true, sourceTrail);
       blend(output.getContext('2d'), source, children, sourceTrail);
     } else {
-      blend(output.getContext('2d'), source, layerRasterCache.get(uid)?.canvas, sourceTrail);
+      blend(output.getContext('2d'), source, layerRasterCache.get(uid)?.canvas, sourceTrail, region);
     }
     return output;
   }
-  function blend(context, layer, raster, trail = new Set()) {
+  function blend(context, layer, raster, trail = new Set(), sourceRegion = null) {
     if (!raster) return;
+    const drawRaster = destination => {
+      if (sourceRegion) destination.drawImage(raster, sourceRegion.x, sourceRegion.y,
+        sourceRegion.width, sourceRegion.height, 0, 0, canvas.width, canvas.height);
+      else destination.drawImage(raster, 0, 0);
+    };
     if (layer.maskLayerUid) {
+      if (sourceRegion) { raster = localRaster(raster); sourceRegion = null; }
       const mask = maskRaster(layer.maskLayerUid, new Set([...trail, layer.uid]));
       if (mask) {
         const clipped = blankCanvas();
@@ -222,6 +284,7 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null) {
       }
     }
     if (layer.blendMode === 'tone_map') {
+      if (sourceRegion) { raster = localRaster(raster); sourceRegion = null; }
       const mapped = document.createElement('canvas');
       mapped.width = canvas.width; mapped.height = canvas.height;
       const mappedContext = mapped.getContext('2d');
@@ -235,16 +298,17 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null) {
     }
     if (!layer.blendMode || layer.blendMode === 'normal') {
       context.globalAlpha = Math.max(0, Math.min(1, Number(layer.opacity ?? 100) / 100));
-      context.drawImage(raster, 0, 0);
+      drawRaster(context);
       return;
     }
     if (layer.blendMode === 'multiply' || layer.blendMode === 'screen') {
       context.globalAlpha = Math.max(0, Math.min(1, Number(layer.opacity ?? 100) / 100));
       context.globalCompositeOperation = layer.blendMode;
-      context.drawImage(raster, 0, 0);
+      drawRaster(context);
       context.globalCompositeOperation = 'source-over';
       return;
     }
+    if (sourceRegion) { raster = localRaster(raster); sourceRegion = null; }
     const source = document.createElement('canvas');
     source.width = canvas.width; source.height = canvas.height;
     const sourceContext = source.getContext('2d');
@@ -255,15 +319,18 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null) {
     context.putImageData(lower, 0, 0);
   }
   function renderChildren(parentUid, context, ancestors = new Set(), ignoreVisibility = false, trail = new Set()) {
-    for (const layer of asset.layers) {
-      if ((groups.has(layer.parentUid) ? layer.parentUid : null) !== parentUid) continue;
+    for (const layer of childrenByParent.get(parentUid) || []) {
       if (layer.type === 'group') {
         if (ancestors.has(layer.uid)) continue;
         if (!ignoreVisibility && layer.visible === false) continue;
+        if (canPassThroughGroup(layer.uid)) {
+          renderChildren(layer.uid, context, new Set([...ancestors, layer.uid]), ignoreVisibility, trail);
+          continue;
+        }
         const nested = blankCanvas();
         renderChildren(layer.uid, nested.getContext('2d'), new Set([...ancestors, layer.uid]), ignoreVisibility, trail);
         blend(context, layer, nested, trail);
-      } else if (ignoreVisibility || layer.visible !== false) blend(context, layer, layerRasterCache.get(layer.uid)?.canvas, trail);
+      } else if (ignoreVisibility || layer.visible !== false) blend(context, layer, layerRasterCache.get(layer.uid)?.canvas, trail, region);
     }
   }
   renderChildren(rootUid, context);
@@ -313,14 +380,14 @@ export function tiledFaceRegions(cube, faceName, sourceWidth, sourceHeight) {
   return regions;
 }
 
-export function tiledFaceRaster(cube, faceName, source, region = null, outputSize = null) {
+export function tiledFaceRaster(cube, faceName, source, region = null, outputSize = null, sourcePixels = null) {
   const tile = cube.faces[faceName].tiling || {};
   const size = region ? [region.width, region.height] : faceTileSize(cube, faceName);
   const repeat = [size[0] / Math.max(.0001, Number(tile.width) || 16), size[1] / Math.max(.0001, Number(tile.height) || 16)];
   const canvas = document.createElement('canvas');
   canvas.width = outputSize?.[0] || Math.max(1, Math.min(1024, Math.ceil(repeat[0] * source.width)));
   canvas.height = outputSize?.[1] || Math.max(1, Math.min(1024, Math.ceil(repeat[1] * source.height)));
-  const input = source.getContext('2d').getImageData(0, 0, source.width, source.height);
+  const input = sourcePixels || source.getContext('2d').getImageData(0, 0, source.width, source.height);
   const context = canvas.getContext('2d'), output = context.createImageData(canvas.width, canvas.height);
   const offset = [(Number(tile.offsetX) || 0) + (region?.x || 0), (Number(tile.offsetY) || 0) + (region?.y || 0)];
   const fraction = value => ((value % 1) + 1) % 1;

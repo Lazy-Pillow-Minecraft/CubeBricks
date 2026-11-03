@@ -930,7 +930,7 @@ export function chooseKnifeCutAxis(firstPoint, secondPoint, faceName, cube = nul
 }
 
 export class CubeBricksProject {
-  constructor(data = {}) {
+  constructor(data = {}, { reuseElementsFrom = null, changedUids = null } = {}) {
     this.projectUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.projectUuid || '')
       ? data.projectUuid.toLowerCase() : crypto.randomUUID();
     this.formatVersion = Math.max(3, data.formatVersion || 0);
@@ -949,7 +949,16 @@ export class CubeBricksProject {
     this.historyLimit = Number.isInteger(data.historyLimit) && data.historyLimit >= 0 && data.historyLimit <= 10000
       ? data.historyLimit : null;
     this.referenceImages = normalizeReferenceImages(data.referenceImages);
+    const unchangedElements = reuseElementsFrom && Array.isArray(changedUids)
+      ? new Map(reuseElementsFrom.elements.map(element => [element.uid, element])) : null;
+    const changedElementUids = unchangedElements ? new Set(changedUids) : null;
     this.elements = (data.elements || []).map(item => {
+      // Journal checkout already compared the content hashes. Reuse the
+      // unchanged element instances so a one-Cube undo does not normalize
+      // every Shape, curve and modifier again. Groups are rebuilt because
+      // hierarchy normalization may replace their children arrays.
+      const unchanged = !changedElementUids?.has(item.uid) && unchangedElements?.get(item.uid);
+      if (unchanged && unchanged.type === item.type && !unchanged.mirrorControllerFor) return unchanged;
       if (item.type === 'shape' || shapeRegistry.has(item.shapeType || item.type) && !['bezier2d', 'bezier3d'].includes(item.type)
         || item.shapeType && !['cube', 'group', 'locator', 'node', 'bezier2d', 'bezier3d'].includes(item.type)) return new Shape(item);
       if (item.type === 'locator') return new Locator(item);
@@ -961,10 +970,14 @@ export class CubeBricksProject {
     this.groups = (data.groups || []).map(group => new Group(group));
     this.outliner = [...(data.outliner || [])];
     const legacyControllerUids = new Set();
+    const legacyControllersByUid = new Map(this.elements.map(element => [element.uid, element]));
+    const legacyControllersByOwner = new Map(this.elements
+      .filter(element => element.mirrorControllerFor)
+      .map(element => [element.mirrorControllerFor, element]));
     for (const group of this.groups) {
       const modifier = getModifier(group, 'symmetry');
       const legacyUid = modifier?._legacyControllerUid;
-      const controller = this.elements.find(element => element.uid === legacyUid || element.mirrorControllerFor === group.uid);
+      const controller = legacyControllersByUid.get(legacyUid) || legacyControllersByOwner.get(group.uid);
       if (modifier && controller) {
         modifier.anchor = { position: vector3(controller.position, group.pivot), rotation: vector3(controller.rotation) };
         legacyControllerUids.add(controller.uid);
@@ -1562,6 +1575,12 @@ function affineCompose(after, before) {
   };
 }
 
+function affineInverse(affine) {
+  const matrix = matrixTranspose(affine.matrix);
+  const moved = matrixVector(matrix, affine.translation);
+  return { matrix, translation: moved.map(value => -value) };
+}
+
 function affinePoint(affine, point) {
   return matrixVector(affine.matrix, point).map((value, axis) => value + affine.translation[axis]);
 }
@@ -1587,8 +1606,14 @@ function copyNodeAffine(project, owner, node) {
   return { matrix, translation: target.center.map((value, axis) => value - transformedPivot[axis]) };
 }
 
-function rebaseCopyNode(project, oldOwner, newOwner, node, parentChain) {
-  const operation = copyNodeAffine(project, oldOwner, node);
+function rebaseCopyNode(project, oldOwner, newOwner, node, parentChain, bakedAfter = null) {
+  const original = copyNodeAffine(project, oldOwner, node);
+  // Baking a later modifier moves it into the physical Cube. A preceding
+  // modifier must be conjugated through that baked transform so its effect
+  // still occurs before the baked one in world space.
+  const operation = bakedAfter
+    ? affineCompose(bakedAfter, affineCompose(original, affineInverse(bakedAfter)))
+    : original;
   const ownerChain = [...parentChain, modifierOwnerTransform(newOwner)];
   const base = { center: applyGroupChainPoint(newOwner.pivot, ownerChain),
     matrix: groupChainMatrix(ownerChain) };
@@ -1601,27 +1626,51 @@ function rebaseCopyNode(project, oldOwner, newOwner, node, parentChain) {
 function sourceCubeEntries(project, element) {
   if (element.type === 'locator' || element.type === 'node') return [];
   const cubes = typeof element.toCubes === 'function' ? element.toCubes() : element.type === 'cube' ? [element] : [];
+  const chain = project.getGroupChain(element.uid);
+  const chainFrames = [...chain].reverse().map(group => ({ pivot: group.pivot, matrix: rotationMatrix(group.rotation || [0, 0, 0]) }));
+  const groupInflate = chain.reduce((sum, group) => sum + (Number(group.inflate) || 0), 0);
+  const offset = element.type === 'cube' ? [0, 0, 0] : element.origin || [0, 0, 0];
+  const ownerRotation = element.type === 'cube' ? [0, 0, 0] : element.rotation || [0, 0, 0];
+  const ownerOrigin = element.type === 'cube' ? element.pivot : element.pivot || element.origin || [0, 0, 0];
   return cubes.map((cube, index) => ({
-    cube, index, offset: element.type === 'cube' ? [0, 0, 0] : element.origin || [0, 0, 0],
-    ownerRotation: element.type === 'cube' ? [0, 0, 0] : element.rotation || [0, 0, 0],
-    ownerOrigin: element.type === 'cube' ? element.pivot : element.pivot || element.origin || [0, 0, 0],
-    chain: project.getGroupChain(element.uid)
+    cube, index, offset, ownerRotation, ownerOrigin, chain, chainFrames, groupInflate
   }));
 }
 
-function cubeVertexKey(source, affine = affineIdentity()) {
+function sourceWorldVertices(source) {
+  if (source.worldVertices) return source.worldVertices;
   const { cube, offset, ownerRotation, ownerOrigin, chain } = source;
-  const inflate = (Number(cube.inflate) || 0) + chain.reduce((sum, group) => sum + (Number(group.inflate) || 0), 0);
+  const inflate = (Number(cube.inflate) || 0) + (source.groupInflate
+    ?? chain.reduce((sum, group) => sum + (Number(group.inflate) || 0), 0));
   const from = cube.position.map((value, axis) => value + offset[axis] - inflate);
   const to = cube.position.map((value, axis) => value + offset[axis] + cube.size[axis] + inflate);
   const pivot = cube.pivot.map((value, axis) => value + offset[axis]);
+  const cubeMatrix = rotationMatrix(cube.rotation || [0, 0, 0]);
+  const ownerMatrix = rotationMatrix(ownerRotation);
+  const groupFrames = source.chainFrames
+    || [...chain].reverse().map(group => ({ pivot: group.pivot, matrix: rotationMatrix(group.rotation || [0, 0, 0]) }));
+  let transform = affineCompose(affineAround(ownerMatrix, ownerOrigin), affineAround(cubeMatrix, pivot));
+  for (const frame of groupFrames) transform = affineCompose(affineAround(frame.matrix, frame.pivot), transform);
   const points = [];
   for (const x of [from[0], to[0]]) for (const y of [from[1], to[1]]) for (const z of [from[2], to[2]]) {
-    const point = applyGroupChainPoint(transformAround(transformAround([x, y, z], pivot,
-      rotationMatrix(cube.rotation || [0, 0, 0])), ownerOrigin, rotationMatrix(ownerRotation)), chain);
-    points.push(affinePoint(affine, point).map(value => Math.round(value * 100000) / 100000).join(','));
+    points.push(affinePoint(transform, [x, y, z]));
   }
-  return points.sort().join('|');
+  source.worldVertices = points;
+  return points;
+}
+
+function cubeVertexKey(source, affine = null) {
+  const points = sourceWorldVertices(source);
+  const keys = new Array(points.length);
+  const matrix = affine?.matrix, translation = affine?.translation;
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index];
+    const x = matrix ? matrix[0][0] * point[0] + matrix[0][1] * point[1] + matrix[0][2] * point[2] + translation[0] : point[0];
+    const y = matrix ? matrix[1][0] * point[0] + matrix[1][1] * point[1] + matrix[1][2] * point[2] + translation[1] : point[1];
+    const z = matrix ? matrix[2][0] * point[0] + matrix[2][1] * point[1] + matrix[2][2] * point[2] + translation[2] : point[2];
+    keys[index] = `${Math.round(x * 100000) / 100000},${Math.round(y * 100000) / 100000},${Math.round(z * 100000) / 100000}`;
+  }
+  return keys.sort().join('|');
 }
 
 function originalCubeKeys(project, sourcesByUid = null, excludedUids = null) {
@@ -1692,6 +1741,7 @@ export function buildModifierRenderInstances(project) {
   if (![...project.elements, ...project.groups].some(owner =>
     owner.modifiers?.some(modifier => modifier?.enabled && ['symmetry', 'element_copy'].includes(modifier.type)))) return [];
   const byTransform = new Map();
+  const sourceUidsByInstance = new WeakMap();
   const sourcesByUid = new Map();
   const deduplicate = [...project.elements, ...project.groups].some(owner =>
     owner.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry' && modifier.ignoreDuplicateCubes));
@@ -1719,6 +1769,7 @@ export function buildModifierRenderInstances(project) {
           reflected: matrixDeterminant(variant.affine.matrix) < 0
         };
         byTransform.set(key, instance);
+        sourceUidsByInstance.set(instance, new Set());
       }
       let sources = sourcesByUid.get(element.uid);
       if (!sources) {
@@ -1734,7 +1785,11 @@ export function buildModifierRenderInstances(project) {
         return true;
       }).map(source => source.index);
       if (!sources.length || include.length) {
-        if (!instance.sourceUids.includes(element.uid)) instance.sourceUids.push(element.uid);
+        const sourceUidSet = sourceUidsByInstance.get(instance);
+        if (!sourceUidSet.has(element.uid)) {
+          sourceUidSet.add(element.uid);
+          instance.sourceUids.push(element.uid);
+        }
         if (sources.length && occupied) instance.cubeIndices[element.uid] = [...new Set([
           ...(instance.cubeIndices[element.uid] || []), ...include
         ])];
@@ -1927,8 +1982,10 @@ export function bakeModifier(project, owner, modifierUid) {
   const selectedVariants = evaluateModifierStack(project, [{ ...owner, modifiers: [modifier] }]);
   if (owner.type === 'cube') {
     const source = sourceCubeEntries(project, owner)[0];
+    const bakedIndex = owner.modifiers.findIndex(entry => entry.uid === modifierUid);
     const remaining = (owner.modifiers || []).filter(entry => entry.uid !== modifierUid);
-    const remainingFrames = remaining.map(entry => symmetryWorldFrame(project, owner, entry));
+    const remainingFrames = remaining.map(entry => entry.type === 'symmetry'
+      ? symmetryWorldFrame(project, owner, entry) : null);
     const generated = [];
     for (const variant of selectedVariants) {
       const vertexKey = occupied ? cubeVertexKey(source, variant.affine) : null;
@@ -1938,12 +1995,28 @@ export function bakeModifier(project, owner, modifierUid) {
       const cube = bakedCubeFromWorld(source, variant.affine, parentChain);
       const worldOrientation = matrixMultiply(groupChainMatrix(parentChain), rotationMatrix(cube.rotation));
       cube.modifiers = remaining.map((entry, index) => {
-        const frame = remainingFrames[index];
+        if (entry.type === 'element_copy') return {
+          ...cloneData(entry),
+          nodes: (entry.nodes || []).map(node => rebaseCopyNode(project, owner, cube, node,
+            parentChain, index < bakedIndex ? variant.affine : null))
+        };
+        if (entry.type !== 'symmetry') return cloneData(entry);
+        const originalFrame = remainingFrames[index];
+        const bakedBefore = index < bakedIndex;
+        const mirroredFrame = bakedBefore && matrixDeterminant(variant.affine.matrix) < 0;
+        const frame = bakedBefore ? {
+          center: affinePoint(variant.affine, originalFrame.center),
+          matrix: matrixMultiply(matrixMultiply(variant.affine.matrix, originalFrame.matrix),
+            mirroredFrame ? [[-1, 0, 0], [0, 1, 0], [0, 0, 1]] : matrixIdentity())
+        } : originalFrame;
         const anchorInParent = inverseGroupChainPoint(frame.center, parentChain);
         const anchorPosition = transformAround(anchorInParent, cube.pivot,
           matrixTranspose(rotationMatrix(cube.rotation)));
         return {
           ...cloneData(entry),
+          ...(mirroredFrame && entry.distribution === 'range' && entry.mode !== 'axes'
+            ? { rangeStart: -(Number(entry.rangeStart) || 0), rangeEnd: -(Number(entry.rangeEnd) || 0) }
+            : {}),
           anchor: {
             position: anchorPosition,
             rotation: matrixEuler(matrixMultiply(matrixTranspose(worldOrientation), frame.matrix))

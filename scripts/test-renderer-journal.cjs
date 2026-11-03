@@ -30,6 +30,7 @@ function setup() {
   let finish;
   const context = vm.createContext({
     structuredClone, Set, Map, Promise, JSON,
+    performanceMonitor: { enabled: false, record() {} },
     state, projectTabs: tabs, activeProjectTabId: 'a', suppressJournalRecording: false,
     subdivisionSession: null, PROJECT_SESSION_KEYS: Object.keys(state), CubeBricksProject: Project,
     isBezierElement: () => false, textureUid: asset => asset.uuid,
@@ -81,6 +82,20 @@ test('undo keeps the existing atlas visible until replacement textures load', as
   finish(result(5));
   await pending;
   assert.equal(options?.preserveAtlas, true);
+});
+
+test('geometry-only undo keeps the existing texture assets and atlas', async () => {
+  const { context, tabs, finish } = setup();
+  const assets = [{ _uid: 'texture_a', source: 'unchanged' }];
+  tabs[0].session.textureAssets = assets;
+  context.state.textureAssets = assets;
+  context.restoreProjectTextureView = () => { throw new Error('unexpected atlas rebuild'); };
+  const pending = context.navigateProjectJournal('undo');
+  await turn();
+  finish({ ...result(5), textureChanged: false });
+  await pending;
+  assert.equal(context.state.textureAssets, assets);
+  assert.equal(context.state.project.elements[0].position[0], 5);
 });
 
 test('rapid undo requests execute in order', async () => {
@@ -172,6 +187,7 @@ test('dragging a texture onto multiple cube faces records one operation before m
   const context = vm.createContext({
     CUBE_FACE_NAMES: ['north'], CULLED_FACE_TEXTURE_KEY: 'culledTexture', UV_FACE_LABELS: {},
     uvPreviewController: { uvPreviewProjectCache: {} },
+    uvEditorController: { textureUvEntryCache: {} },
     textureDropCubes: () => cubes, faceTextureReference: () => 'new',
     snapshot(id) { records.push({ id, before: structuredClone(cubes) }); },
     ensureCubeFaceRecord: (cube, name) => cube.faces[name], persistGeneratedPaintCube() {}, markDirty() {},

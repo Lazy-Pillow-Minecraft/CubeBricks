@@ -395,10 +395,14 @@ test('paint and model edits undo and redo in one chronological history', () => w
   const journal = await new ProjectJournal(root).initialize(model([cube], [texture]));
   await journal.commit(model([cube], [{ ...texture, source: image(80) }]), 'core.paint.stroke');
   await journal.commit(model([{ ...cube, position: [5, 0, 0] }], [{ ...texture, source: image(80) }]), 'core.element.move');
-  let restored = JSON.parse((await journal.navigate('undo')).content);
+  const modelUndo = await journal.navigate('undo');
+  assert.equal(modelUndo.textureChanged, false);
+  let restored = JSON.parse(modelUndo.content);
   assert.equal(restored.elements[0].position[0], 0);
   assert.equal(restored.textures[0].source, image(80));
-  restored = JSON.parse((await journal.navigate('undo')).content);
+  const paintUndo = await journal.navigate('undo');
+  assert.equal(paintUndo.textureChanged, true);
+  restored = JSON.parse(paintUndo.content);
   assert.equal(restored.elements[0].position[0], 0);
   assert.equal(restored.textures[0].source, image(10));
   restored = JSON.parse((await journal.navigate('redo')).content);
@@ -417,6 +421,20 @@ test('batched cube restoration retains outliner order and validates every snapsh
   const restored = JSON.parse((await journal.navigate('undo')).content);
   assert.deepEqual(restored.elements.map(cube => cube.uid), cubes.map(cube => cube.uid));
   assert.equal(restored.elements[80].position[0], 80);
+}));
+
+test('first undo after reopening reads only changed Cube snapshots', () => withJournal(async root => {
+  const cubes = Array.from({ length: 80 }, (_, index) => ({
+    uid: `cube_${index}`, type: 'cube', position: [index, 0, 0]
+  }));
+  const journal = await new ProjectJournal(root).initialize(model(cubes));
+  await journal.commit(model(cubes.map((cube, index) => index === 40
+    ? { ...cube, position: [999, 0, 0] } : cube)), 'core.element.move');
+  const reopened = await new ProjectJournal(root).load();
+  reopened.readNodes = () => { throw new Error('unexpected full node scan'); };
+  const restored = JSON.parse((await reopened.navigate('undo')).content);
+  assert.equal(restored.elements[40].position[0], 40);
+  assert.equal(restored.elements.length, 80);
 }));
 
 test('duplicate node IDs are rejected rather than overwriting a different snapshot', () => withJournal(async root => {
@@ -446,6 +464,46 @@ test('reencoded PNG after undo does not create a false edit or destroy redo', ()
   assert.notEqual(JSON.parse(undone.content).textures[0].source, texture.source);
   assert.equal((await journal.commit(undone.content, 'core.element.property')).changed, false);
   assert.equal((await journal.navigate('redo')).sequence, 2);
+}));
+
+test('undo preserves source-less layer groups and empty image sources', () => withJournal(async root => {
+  const texture = { uuid: 'texture_a', source: image(10), layers: [
+    { uid: 'group_a', type: 'group', name: 'group' },
+    { uid: 'layer_a', parentUid: 'group_a', source: '' }
+  ] };
+  const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
+  const journal = await new ProjectJournal(root).initialize(model([cube], [texture]));
+  await journal.commit(model([{ ...cube, position: [1, 0, 0] }], [{
+    ...texture, layers: [texture.layers[0], { ...texture.layers[1], source: image(70) }]
+  }]), 'core.paint.stroke');
+  const undone = JSON.parse((await journal.navigate('undo')).content);
+  assert.deepEqual(undone.textures[0], texture);
+  const redone = JSON.parse((await journal.navigate('redo')).content);
+  assert.equal(redone.textures[0].layers[1].source, image(70));
+}));
+
+test('undo keeps a texture without a top-level image source absent', () => withJournal(async root => {
+  const texture = { uuid: 'texture_a', layers: [{ uid: 'group_a', type: 'group' }] };
+  const journal = await new ProjectJournal(root).initialize(model([], [texture]));
+  await journal.commit(model([], [{ ...texture, name: 'renamed' }]), 'core.texture.property');
+  assert.deepEqual(JSON.parse((await journal.navigate('undo')).content).textures[0], texture);
+}));
+
+test('older layer deltas do not invent a source for group layers', () => withJournal(async root => {
+  const texture = { uuid: 'texture_a', source: image(10), layers: [
+    { uid: 'group_a', type: 'group', name: 'group' },
+    { uid: 'layer_a', parentUid: 'group_a', source: image(10) }
+  ] };
+  const journal = await new ProjectJournal(root).initialize(model([], [texture]));
+  await journal.commit(model([], [{ ...texture, layers: [
+    { ...texture.layers[0], name: 'renamed' }, texture.layers[1]
+  ] }]), 'core.texture.property');
+  const filename = path.join(root, 'texture_changes', '2', 'texture_a.json');
+  const older = JSON.parse(await fs.readFile(filename, 'utf8'));
+  delete older.layerSourcePresence;
+  delete older.imageSourcePresence;
+  await fs.writeFile(filename, JSON.stringify(older));
+  assert.deepEqual(JSON.parse((await journal.navigate('undo')).content).textures[0], texture);
 }));
 
 test('legacy texture hashes compare actual pixels instead of creating false history', () => withJournal(async root => {

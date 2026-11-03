@@ -186,6 +186,8 @@ function applyViewportBoxSelection(hitUids, drag) {
 function startCameraDrag(event, captureTarget, forcedMode = null) {
   event.preventDefault();
   cancelCameraFocus();
+  sceneCanvas.ownerDocument.getElementById('transformGizmo')?.querySelectorAll('.depth-hover')
+    .forEach(handle => handle.classList.remove('depth-hover'));
   if (Number.isFinite(event.pointerId)) captureTarget.setPointerCapture(event.pointerId);
   bakeCameraPan();
   const frame = sceneRenderer.getCameraFrame();
@@ -201,6 +203,7 @@ function startCameraDrag(event, captureTarget, forcedMode = null) {
   state.dragging.pressY = event.clientY;
   state.dragging.lastX = event.clientX;
   state.dragging.lastY = event.clientY;
+  state.dragging.lastEventStamp = event.timeStamp;
   state.dragging.moved = false;
   sceneCanvas.classList.add(pan ? 'is-panning' : 'is-orbiting');
 }

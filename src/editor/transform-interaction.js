@@ -437,6 +437,7 @@ function onPointerMove(event) {
     }
     drag.lastX = event.clientX;
     drag.lastY = event.clientY;
+    drag.lastEventStamp = event.timeStamp;
   } else {
     const fullTurn = Math.PI * 2;
     state.yaw = ((state.dragging.yaw - dx * .01) % fullTurn + fullTurn) % fullTurn;
@@ -454,6 +455,8 @@ function onScenePointerMove(event) {
     if (samples.length) {
       event.preventDefault();
       for (const sample of samples) moveScenePaintDrag(sample);
+      const last = samples.at(-1);
+      if (last.clientX !== event.clientX || last.clientY !== event.clientY) moveScenePaintDrag(event);
       return;
     }
   }
@@ -523,7 +526,8 @@ function endPointerDrag(event) {
   if (finishedDrag.type === 'texture-paint-3d') {
     if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
       finishedDrag.latestClient = [event.clientX, event.clientY];
-      if (finishedDrag.multiSurface) queueSceneBrushPointer(finishedDrag, event.clientX, event.clientY);
+      if (finishedDrag.screenSpace) moveScenePaintDrag(event, finishedDrag);
+      else if (finishedDrag.multiSurface) queueSceneBrushPointer(finishedDrag, event.clientX, event.clientY);
       else if (finishedDrag.ready) moveScenePaintDrag(event, finishedDrag);
     }
     state.dragging = null;

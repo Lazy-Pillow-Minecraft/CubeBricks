@@ -11,7 +11,7 @@
 | `src/common/` | Cross-feature configuration, registries, format constraints, and shared mechanisms. |
 | `src/screen/` | Docking, reference images, lists, color picker, palettes, and other visible UI behavior. |
 | `src/project/` | Project tabs, session switching, history, and journal coordination. |
-| `src/utils/` | Math, shared Shape geometry, and packing algorithms that do not read the DOM or project state. `index.js` exposes the public API to external Shape packs. |
+| `src/utils/` | Math, shared Shape geometry, packing, and performance tools. `dom/` contains UI helpers without project-state dependencies. `index.js` exposes public calculation tools to external Shape packs. |
 | `src/editor/` | Shared editor state, tool registration, knife, and modeling interactions. |
 | `src/paint/` | Strokes, selection, paint symmetry relations, and other painting-domain logic. |
 | `src/texture/` | Texture generation, layers, and pixel processing. |
@@ -23,7 +23,7 @@
 
 ## Conventions for new code
 
-1. Choose `common`, `screen`, `utils`, or the relevant domain directory before adding a module. Avoid vague `misc.js` files. Put only genuinely cross-feature pure calculations in `utils/`.
+1. Choose `common`, `screen`, `utils`, or the relevant domain directory before adding a module. Avoid vague `misc.js` files. Keep shared calculations and DOM helpers in separate directories; DOM helpers must not read editor project state.
 2. The dependency direction is `utils/common/model → feature modules and screen → app.js`. Feature modules must not import `app.js` in reverse. Inject explicit callbacks at the entry point when a UI controller needs editor operations.
 3. Keep mutable feature-specific state inside its controller and expose only necessary accessors. Shared editor state belongs in `src/editor/state.js`; do not create a second copy.
 4. Separate data calculations from UI event wiring and test pure calculations directly. Project-affecting actions still need registered operation IDs and journal coverage.
@@ -36,3 +36,9 @@
 ## Texture templates and layers
 
 `src/texture/template-controller.js` gathers cube faces, packs new UVs, draws the template, and updates face assignments. It should not reimplement layer compositing. With layer preservation enabled, it copies the source layer/group tree, remaps image-layer pixels, and redirects mask UIDs to the new layer IDs. Final compositing still uses the layer pipeline in `src/common/core/texture-features.js`. With preservation off, the original flattened-template path remains available. `src/texture/asset-controller.js` owns loading, activation, and preview refresh for texture assets.
+
+## Journal worker and viewport updates
+
+`electron/main.cjs` owns windows, project ownership, and per-project operation queues. `journal-service.cjs` forwards journal calls to `journal-worker.cjs`; snapshots, file operations, undo, and archiving retain the implementation in `project-journal.cjs`. Completion or failure returns updated state and errors. Background execution preserves confirmation order, atomic writes, and recovery checks.
+
+Gizmos use `src/utils/dom/svg-markup.js` to retain SVG nodes and update coordinates and paths, rebuilding only when topology changes. `src/utils/performance-monitor.js` provides short captures, and `electron/main-performance.cjs` records main-thread delays and active operations. `scripts/profile-viewport-input.cjs` runs automated benchmarks using temporary projects. Detailed measurements are in the [performance investigation record](docs/CODE_AUDIT_2026-11-01.md), currently in Chinese.

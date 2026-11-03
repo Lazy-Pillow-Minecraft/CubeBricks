@@ -1,4 +1,4 @@
-import { applyGroupTransforms } from '../render/webgl-renderer.js';
+import { applyGroupTransforms } from '../common/core/geometry-utils.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { rotateVector, inverseRotateVector, quaternionMultiply, quaternionFromEuler, quaternionFromAxisAngle, eulerFromQuaternion } from '../utils/math/rotation.js';
 

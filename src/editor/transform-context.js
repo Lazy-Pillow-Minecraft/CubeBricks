@@ -1,4 +1,4 @@
-import { applyGroupTransforms } from '../render/webgl-renderer.js';
+import { applyGroupTransforms } from '../common/core/geometry-utils.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { rotateVector, inverseRotateVector } from '../utils/math/rotation.js';
 
@@ -8,7 +8,8 @@ export function createTransformContext({
   selectedTopLevelNodes, subdivisionOwner
 }) {
 let selectionTransformContextCache = null;
-function clearCache() { selectionTransformContextCache = null; }
+let selectionTransformAxesCache = null;
+function clearCache() { selectionTransformContextCache = null; selectionTransformAxesCache = null; }
 function updateTransformSpaceButtons() {
   $$('[data-transform-space]').forEach(button => {
     const active = button.dataset.transformSpace === state.transformSpace;
@@ -72,13 +73,22 @@ function selectedWorldPoints() {
 function selectionGeometryCenter() {
   const cachedBounds = sceneRenderer.getSelectionBounds(state.project, state.selectedUids);
   if (cachedBounds) return cachedBounds.center;
-  let points = selectedWorldPoints();
-  if (!points.length) points = selectedTopLevelNodes().map(getTransformPivot).filter(Boolean);
-  if (!points.length) return null;
-  return [0, 1, 2].map(axis => {
-    const values = points.map(point => point[axis]);
-    return (Math.min(...values) + Math.max(...values)) / 2;
-  });
+  const minimum = [Infinity, Infinity, Infinity];
+  const maximum = [-Infinity, -Infinity, -Infinity];
+  let found = false;
+  const include = point => {
+    if (!point) return;
+    found = true;
+    for (let axis = 0; axis < 3; axis++) {
+      if (point[axis] < minimum[axis]) minimum[axis] = point[axis];
+      if (point[axis] > maximum[axis]) maximum[axis] = point[axis];
+    }
+  };
+  for (const uidValue of selectedElementUids()) {
+    for (const entry of sceneRenderer.getWorldVertices(state.project, uidValue)) include(entry.point);
+  }
+  if (!found) for (const node of selectedTopLevelNodes()) include(getTransformPivot(node));
+  return found ? minimum.map((value, axis) => (value + maximum[axis]) / 2) : null;
 }
 
 function getSelectionTransformContext() {
@@ -93,8 +103,15 @@ function getSelectionTransformContext() {
   const multiple = nodes.length > 1;
   const commonGroup = multiple ? deepestCommonSelectionGroup() : null;
   const center = multiple ? selectionGeometryCenter() : null;
-  const averagePivot = multiple ? [0, 1, 2].map(axis =>
-    nodes.reduce((sum, node) => sum + getTransformPivot(node)[axis], 0) / nodes.length) : null;
+  let averagePivot = null;
+  if (multiple) {
+    averagePivot = [0, 0, 0];
+    for (const node of nodes) {
+      const pivot = getTransformPivot(node);
+      for (let axis = 0; axis < 3; axis++) averagePivot[axis] += pivot[axis];
+    }
+    for (let axis = 0; axis < 3; axis++) averagePivot[axis] /= nodes.length;
+  }
   const context = {
     nodes,
     multiple,
@@ -141,6 +158,12 @@ function getTransformAxes(item) {
 }
 
 function getSelectionTransformAxes(context, fallbackItem) {
+  const cacheKey = `${state.tool}:${state.transformSpace}:${state.rotationMode}:${sceneRenderer.selectionRevision}`;
+  if (state.dragging?.type !== 'transform'
+    && selectionTransformAxesCache?.context === context
+    && selectionTransformAxesCache.item === fallbackItem
+    && selectionTransformAxesCache.key === cacheKey) return selectionTransformAxesCache.axes;
+  let axes;
   if (state.tool === 'resize') {
     const elements = selectedElementUids().map(uidValue => state.project.getNode(uidValue))
       .filter(node => node?.type === 'cube' || isShapeElement(node));
@@ -154,12 +177,14 @@ function getSelectionTransformAxes(context, fallbackItem) {
       if (Math.hypot(...y) < 1e-6) y = normalize3(cross3(Math.abs(x[1]) < .9 ? [0, 1, 0] : [0, 0, 1], x));
       let z = normalize3(cross3(x, y));
       if (dot3(z, mean[2]) < 0) { y = y.map(value => -value); z = z.map(value => -value); }
-      return [x, y, z];
+      axes = [x, y, z];
     }
   }
-  if (!context.multiple) return getTransformAxes(fallbackItem);
-  if (context.commonGroup) return getTransformAxes(context.commonGroup);
-  return [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  axes ||= !context.multiple ? getTransformAxes(fallbackItem)
+    : context.commonGroup ? getTransformAxes(context.commonGroup)
+      : [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  selectionTransformAxesCache = { context, item: fallbackItem, key: cacheKey, axes };
+  return axes;
 }
 
 function activeCurveNodeContext() {

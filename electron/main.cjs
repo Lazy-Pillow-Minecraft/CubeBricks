@@ -1,9 +1,12 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen } = require('electron');
+const { startMainPerformanceCapture, stopMainPerformanceCapture, trackMainOperation } = require('./main-performance.cjs');
+const handleIpc = (name, handler) => ipcMain.handle(name, trackMainOperation(name, handler));
 const path = require('path');
 const fs = require('fs/promises');
 const syncFs = require('fs');
 const crypto = require('crypto');
-const { ProjectJournal, atomicWrite } = require('./project-journal.cjs');
+const { atomicWrite } = require('./project-journal.cjs');
+const { WorkerProjectJournal: ProjectJournal } = require('./journal-service.cjs');
 const { isArchiveV2, unpackArchiveWithProgress } = require('./archive-codec.cjs');
 const { JournalOwnership } = require('./journal-ownership.cjs');
 const { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder, readFontPack } = require('./resource-packs.cjs');
@@ -36,7 +39,7 @@ function requestUiChoice(sender, options) {
     sender.send('app:prompt-request', { id, options });
   });
 }
-ipcMain.handle('app:prompt-response', (event, response) => {
+handleIpc('app:prompt-response', (event, response) => {
   const pending = pendingUiPrompts.get(response?.id);
   if (!pending || pending.sender !== event.sender) return false;
   pending.finish({ index: Number(response.index), checked: response.checked === true });
@@ -174,6 +177,7 @@ async function openWorkingJournal(id, loader) {
     await indexWorkingJournal(journal);
     return journal;
   } catch (error) {
+    await journals.get(id)?.dispose?.().catch(() => {});
     journals.delete(id);
     await journalOwnership.release(directory);
     throw error;
@@ -285,6 +289,7 @@ async function discardOwnedJournal(id) {
   await fs.rm(target, { recursive: true, force: true });
   await fs.rm(coverPath(id), { force: true });
   journals.delete(id);
+  await journal.dispose().catch(() => {});
   await journalOwnership.release(target);
   await removeRetainedJournal(id);
   return true;
@@ -369,7 +374,7 @@ const createWindow = () => {
   win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
 };
 
-ipcMain.handle('app:window-control', (event, action) => {
+handleIpc('app:window-control', (event, action) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || win.isDestroyed()) return null;
   if (action === 'minimize') win.minimize();
@@ -380,7 +385,20 @@ ipcMain.handle('app:window-control', (event, action) => {
   return { maximized: win.isMaximized() };
 });
 
-ipcMain.handle('app:retained-tabs', async () => {
+handleIpc('app:cursor-client-point', event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed() || !win.isFocused()) return null;
+  const started = process.hrtime.bigint();
+  const cursor = screen.getCursorScreenPoint();
+  const content = win.getContentBounds();
+  return { x: cursor.x - content.x, y: cursor.y - content.y,
+    mainDurationMs: Number(process.hrtime.bigint() - started) / 1e6 };
+});
+
+handleIpc('app:perf-start', () => startMainPerformanceCapture());
+handleIpc('app:perf-stop', () => stopMainPerformanceCapture());
+
+handleIpc('app:retained-tabs', async () => {
   try {
     const tabs = JSON.parse(await fs.readFile(retainedTabsPath(), 'utf8'));
     if (!Array.isArray(tabs)) return [];
@@ -396,7 +414,7 @@ ipcMain.handle('app:retained-tabs', async () => {
   } catch { return []; }
 });
 
-ipcMain.handle('app:confirm-close', async (event, payload) => {
+handleIpc('app:confirm-close', async (event, payload) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) throw new Error('關閉視窗已不存在');
   const retained = (payload.retained || []).map(tab => ({
@@ -434,7 +452,7 @@ ipcMain.handle('app:confirm-close', async (event, payload) => {
   return true;
 });
 
-ipcMain.handle('project:open', async (event, options = {}) => {
+handleIpc('project:open', async (event, options = {}) => {
   const suppliedPath = typeof options?.filePath === 'string' ? options.filePath : null;
   if (suppliedPath && (!path.isAbsolute(suppliedPath) || !/\.(?:cbmodel|bbmodel|json)$/i.test(suppliedPath)))
     throw new Error('不支援的項目文件路徑');
@@ -533,13 +551,13 @@ ipcMain.handle('project:open', async (event, options = {}) => {
   return { filePath, content, textureAssets: await readTextureAssets(content, filePath) };
 });
 
-ipcMain.handle('project:external-ready', event => {
+handleIpc('project:external-ready', event => {
   externalOpenReceiver = event.sender;
   while (pendingExternalProjects.length) externalOpenReceiver.send?.('project:external-open', pendingExternalProjects.shift());
   return true;
 });
 
-ipcMain.handle('project:cover-save', async (_event, payload) => {
+handleIpc('project:cover-save', async (_event, payload) => {
   const id = safeSessionId(payload?.journalId);
   return queueJournal(id, async () => {
     if (!journals.has(id)) return false;
@@ -553,7 +571,7 @@ ipcMain.handle('project:cover-save', async (_event, payload) => {
   });
 });
 
-ipcMain.handle('project:journal-init', async (_event, payload) => {
+handleIpc('project:journal-init', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
     await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.content, payload.operationId || 'core.project.create', payload.operationIndex || []));
@@ -561,12 +579,12 @@ ipcMain.handle('project:journal-init', async (_event, payload) => {
   });
 });
 
-ipcMain.handle('project:journal-discard', async (_event, payload) => {
+handleIpc('project:journal-discard', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, () => discardOwnedJournal(id));
 });
 
-ipcMain.handle('project:journal-commit', async (_event, payload) => {
+handleIpc('project:journal-commit', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
     const journal = journals.get(id);
@@ -579,7 +597,7 @@ ipcMain.handle('project:journal-commit', async (_event, payload) => {
     return result;
   });
 });
-ipcMain.handle('project:journal-compact', async (_event, payload) => {
+handleIpc('project:journal-compact', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
     const journal = journals.get(id);
@@ -588,17 +606,18 @@ ipcMain.handle('project:journal-compact', async (_event, payload) => {
   });
 });
 
-ipcMain.handle('project:journal-checkout', async (_event, payload) => {
+handleIpc('project:journal-checkout', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
     const journal = journals.get(id);
     if (!journal) throw new Error('項目工作目錄尚未建立');
     if (payload.direction) return journal.navigate(payload.direction);
-    return { content: await journal.checkout(payload.sequence), sequence: Number(payload.sequence) };
+    return { content: await journal.checkout(payload.sequence), sequence: Number(payload.sequence),
+      changedUids: journal.lastCheckoutChangedUids, textureChanged: journal.lastCheckoutTextureChanged };
   });
 });
 
-ipcMain.handle('project:journal-state', async (_event, payload) => {
+handleIpc('project:journal-state', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
     const journal = journals.get(id);
@@ -606,7 +625,7 @@ ipcMain.handle('project:journal-state', async (_event, payload) => {
   });
 });
 
-ipcMain.handle('project:journal-list-recoverable', async () => {
+handleIpc('project:journal-list-recoverable', async () => {
   const recoverable = [];
   const { catalog } = await workspaceCatalog();
   for (const entry of catalog.projects) {
@@ -624,7 +643,7 @@ ipcMain.handle('project:journal-list-recoverable', async () => {
   return recoverable.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
 });
 
-ipcMain.handle('project:list-workspace', async (_event, options = {}) => {
+handleIpc('project:list-workspace', async (_event, options = {}) => {
   if (options.refresh === true) {
     const { root, projects } = await ensureWorkspaceLayout();
     await mutateWorkspaceCatalog(async catalog => {
@@ -641,6 +660,7 @@ ipcMain.handle('project:list-workspace', async (_event, options = {}) => {
   }
   const { catalog } = await workspaceCatalog();
   const ordered = [...catalog.projects].sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
+  if (options.includeCovers === false) return ordered.map(project => ({ ...project, cover: null }));
   const result = [];
   for (let index = 0; index < ordered.length; index += 8) {
     result.push(...await Promise.all(ordered.slice(index, index + 8).map(async project => {
@@ -653,7 +673,13 @@ ipcMain.handle('project:list-workspace', async (_event, options = {}) => {
   return result;
 });
 
-ipcMain.handle('project:journal-recover', async (_event, payload) => {
+handleIpc('project:cover-get', async (_event, payload) => {
+  const id = safeSessionId(payload?.journalId);
+  try { return `data:image/png;base64,${(await fs.readFile(coverPath(id))).toString('base64')}`; }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+});
+
+handleIpc('project:journal-recover', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
     const journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).load());
@@ -665,11 +691,11 @@ ipcMain.handle('project:journal-recover', async (_event, payload) => {
   });
 });
 
-ipcMain.handle('project:workspace-root', async () => (await ensureWorkspaceLayout()).root);
-ipcMain.handle('shape-packs:list', async () => orderedShapePacks((await ensureWorkspaceLayout()).root));
-ipcMain.handle('packs:list', async () => listResourcePacks((await ensureWorkspaceLayout()).root));
-ipcMain.handle('packs:font-data', async (_event, id) => readFontPack((await ensureWorkspaceLayout()).root, id));
-ipcMain.handle('packs:install', async (_event, kind) => {
+handleIpc('project:workspace-root', async () => (await ensureWorkspaceLayout()).root);
+handleIpc('shape-packs:list', async () => orderedShapePacks((await ensureWorkspaceLayout()).root));
+handleIpc('packs:list', async () => listResourcePacks((await ensureWorkspaceLayout()).root));
+handleIpc('packs:font-data', async (_event, id) => readFontPack((await ensureWorkspaceLayout()).root, id));
+handleIpc('packs:install', async (_event, kind) => {
   const filters = {
     shape: [{ name: 'Shape ZIP', extensions: ['zip'] }],
     language: [{ name: 'Language pack', extensions: ['json', 'zip'] }],
@@ -680,9 +706,9 @@ ipcMain.handle('packs:install', async (_event, kind) => {
   if (picked.canceled || !picked.filePaths[0]) return null;
   return installPack((await ensureWorkspaceLayout()).root, kind, picked.filePaths[0]);
 });
-ipcMain.handle('packs:remove', async (_event, id) => removePack((await ensureWorkspaceLayout()).root, id));
-ipcMain.handle('packs:order', async (_event, order) => savePackOrder((await ensureWorkspaceLayout()).root, order));
-ipcMain.handle('project:choose-workspace-root', async () => {
+handleIpc('packs:remove', async (_event, id) => removePack((await ensureWorkspaceLayout()).root, id));
+handleIpc('packs:order', async (_event, order) => savePackOrder((await ensureWorkspaceLayout()).root, order));
+handleIpc('project:choose-workspace-root', async () => {
   const picked = await dialog.showOpenDialog({ title: '選擇項目工作目錄', properties: ['openDirectory', 'createDirectory'] });
   if (picked.canceled || !picked.filePaths[0]) return null;
   const directory = picked.filePaths[0];
@@ -691,7 +717,7 @@ ipcMain.handle('project:choose-workspace-root', async () => {
   await ensureWorkspaceLayout();
   return directory;
 });
-ipcMain.handle('project:set-workspace-root', async (_event, directory) => {
+handleIpc('project:set-workspace-root', async (_event, directory) => {
   if (typeof directory !== 'string' || !path.isAbsolute(directory)) throw new Error('請選擇絕對路徑');
   await fs.mkdir(directory, { recursive: true });
   await atomicWrite(workspaceSettingsPath(), JSON.stringify({ directory }, null, 2));
@@ -732,6 +758,7 @@ async function readTextureAssets(content, modelPath) {
       useAsDefault: texture.use_as_default === true,
       groupId: texture.group_id || null,
       kind: texture.kind || 'IMAGE',
+      templateUvIndependent: texture.template_uv_independent ?? null,
       mode: texture.mode || 'default',
       layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null
     });
@@ -739,7 +766,7 @@ async function readTextureAssets(content, modelPath) {
   return assets;
 }
 
-ipcMain.handle('project:save', async (_event, payload) => {
+handleIpc('project:save', async (_event, payload) => {
   let filePath = payload.filePath;
   if (!filePath) {
     const picked = await dialog.showSaveDialog({
@@ -762,7 +789,7 @@ ipcMain.handle('project:save', async (_event, payload) => {
   return { filePath };
 });
 
-ipcMain.handle('project:export', async (_event, payload) => {
+handleIpc('project:export', async (_event, payload) => {
   const picked = payload.filePath ? { canceled: false, filePath: payload.filePath } : await dialog.showSaveDialog({
     title: '導出模型',
     defaultPath: `${payload.name || 'untitled'}.bbmodel`,
@@ -780,6 +807,7 @@ ipcMain.handle('project:export', async (_event, payload) => {
   }
   if (extension === '.cbmodel') {
     if (typeof payload.includeHistory !== 'boolean') return { filePath, extension, requiresHistoryChoice: true };
+    if (typeof payload.cbmodelContent !== 'string') return { filePath, extension, requiresContent: true };
     const id = payload.journalId ? safeSessionId(payload.journalId) : `project_${crypto.randomUUID()}`;
     await queueJournal(id, async () => {
       let journal = journals.get(id);
@@ -788,7 +816,10 @@ ipcMain.handle('project:export', async (_event, payload) => {
       } else await journal.commit(payload.cbmodelContent, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
       await journal.archive(filePath, { includeHistory: payload.includeHistory, markSaved: false });
     });
-  } else await atomicWrite(filePath, payload.bbmodelContent);
+  } else {
+    if (typeof payload.bbmodelContent !== 'string') return { filePath, extension, requiresContent: true };
+    await atomicWrite(filePath, payload.bbmodelContent);
+  }
   return { filePath, extension };
 });
 
@@ -802,7 +833,7 @@ function validatedColorMap(content) {
   return content;
 }
 let colorMapSaveQueue = Promise.resolve();
-ipcMain.handle('palette:load', async () => {
+handleIpc('palette:load', async () => {
   try {
     const filePath = colorMapSettingsPath();
     if ((await fs.stat(filePath)).size > 2 * 1024 * 1024) throw new Error('色卡檔案不能超過 2 MB');
@@ -812,12 +843,12 @@ ipcMain.handle('palette:load', async () => {
     throw error;
   }
 });
-ipcMain.handle('palette:save', (_event, content) => {
+handleIpc('palette:save', (_event, content) => {
   const data = validatedColorMap(content);
   colorMapSaveQueue = colorMapSaveQueue.catch(() => {}).then(() => atomicWrite(colorMapSettingsPath(), data));
   return colorMapSaveQueue;
 });
-ipcMain.handle('palette:export', async (_event, payload) => {
+handleIpc('palette:export', async (_event, payload) => {
   const data = String(payload?.content || '');
   if (Buffer.byteLength(data, 'utf8') > 2 * 1024 * 1024) throw new Error('色卡檔案不能超過 2 MB');
   const value = JSON.parse(data);
@@ -846,7 +877,7 @@ function capturePngBuffer(dataUrl) {
   return buffer;
 }
 
-ipcMain.handle('image:save-capture', async (_event, payload) => {
+handleIpc('image:save-capture', async (_event, payload) => {
   const image = capturePngBuffer(payload?.dataUrl);
   const safeName = path.basename(String(payload?.name || 'model-capture.png')).replace(/[<>:"/\\|?*]/g, '_');
   const picked = await dialog.showSaveDialog({
@@ -860,7 +891,7 @@ ipcMain.handle('image:save-capture', async (_event, payload) => {
   return { filePath };
 });
 
-ipcMain.handle('image:copy-capture', (_event, dataUrl) => {
+handleIpc('image:copy-capture', (_event, dataUrl) => {
   const image = nativeImage.createFromBuffer(capturePngBuffer(dataUrl));
   if (image.isEmpty()) throw new Error('無法讀取模型截圖');
   clipboard.writeImage(image);

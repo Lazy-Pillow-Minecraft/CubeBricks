@@ -1,10 +1,14 @@
 import { dot3 } from '../utils/math/vector3.js';
 
 export function createCameraController({ state, $, $$, sceneCanvas, sceneRenderer, viewport,
-  renderScene, toast, mapProjectionZoom, setReferenceImageEditing }) {
+  renderScene, scheduleSceneRender = renderScene, toast, mapProjectionZoom, setReferenceImageEditing }) {
 let cameraFocusFrame = null;
 let axisWidgetDrag = null;
 let suppressAxisWidgetClick = false;
+let projectionControlsKey = '';
+let axisWidgetNodes = null;
+let axisLineOrder = '';
+let axisWidgetFrameKey = '';
 
 function bakeCameraPan() {
   const frame = sceneRenderer.getCameraFrame();
@@ -80,6 +84,9 @@ function axisViewOrientation(axis, sign = 1) {
 
 function updateProjectionControls() {
   const projection = currentProjection();
+  const key = `${projection}:${Boolean(state.axisView)}`;
+  if (projectionControlsKey === key) return;
+  projectionControlsKey = key;
   $$('[data-projection]').forEach(button => {
     button.classList.toggle('active', button.dataset.projection === projection);
     button.disabled = Boolean(state.axisView);
@@ -133,26 +140,40 @@ function exitAxisView({ render = true } = {}) {
 function updateAxisWidget() {
   const frame = sceneRenderer.getCameraFrame();
   if (!frame) return;
+  updateProjectionControls();
   const { forward, right, up } = frame;
   const axes = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
   const widget = $('.axis-widget');
-  const endpoints = $$('[data-view-axis]', widget).map(button => {
-    const name = button.dataset.viewAxis;
-    const sign = Number(button.dataset.axisSign) < 0 ? -1 : 1;
+  if (!axisWidgetNodes || axisWidgetNodes.widget !== widget) {
+    axisWidgetNodes = { widget, entries: $$('[data-view-axis]', widget).map(button => {
+      const name = button.dataset.viewAxis;
+      const sign = Number(button.dataset.axisSign) < 0 ? -1 : 1;
+      return { button, name, sign,
+        line: $(`[data-axis-line="${name}"][data-axis-sign="${sign}"]`, widget) };
+    }) };
+    axisLineOrder = '';
+    axisWidgetFrameKey = '';
+  }
+  const frameKey = `${state.yaw}:${state.pitch}:${state.axisView}:${state.axisViewSign}:${state.mode}:${state.blockbenchControls}`;
+  if (axisWidgetFrameKey === frameKey) return;
+  axisWidgetFrameKey = frameKey;
+  const endpoints = axisWidgetNodes.entries.map(({ button, name, sign, line }) => {
     const axis = axes[name].map(value => value * sign);
     const x = 33 + dot3(axis, right) * 22;
     const y = 33 - dot3(axis, up) * 22;
     const depth = dot3(axis, forward);
-    return { button, name, sign, x, y, depth };
+    return { button, line, name, sign, x, y, depth };
   }).sort((first, second) => second.depth - first.depth);
   // Camera-forward depth increases away from the viewer. Draw the far end
   // first, including pointer hit testing when the projected circles overlap.
+  const nextLineOrder = endpoints.map(entry => `${entry.name}${entry.sign}`).join('|');
+  const reorderLines = axisLineOrder !== nextLineOrder;
+  axisLineOrder = nextLineOrder;
   for (let index = 0; index < endpoints.length; index++) {
-    const { button, name, sign, x, y, depth } = endpoints[index];
-    const line = $(`[data-axis-line="${name}"][data-axis-sign="${sign}"]`, widget);
+    const { button, name, sign, x, y, depth, line } = endpoints[index];
     line.setAttribute('x2', x); line.setAttribute('y2', y);
     line.style.opacity = String(.65 - depth * .25);
-    line.parentNode.appendChild(line);
+    if (reorderLines) line.parentNode.appendChild(line);
     button.style.left = `${x}px`; button.style.top = `${y}px`;
     button.style.zIndex = String(index + 1);
     button.style.setProperty('--axis-tone', `color-mix(in srgb, var(--axis-color) ${Math.round(75 - depth * 25)}%, var(--panel))`);
@@ -160,12 +181,12 @@ function updateAxisWidget() {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   }
-  $('#viewHint').innerHTML = state.axisView
+  const viewHint = state.axisView
     ? '<kbd>中鍵</kbd> 平移 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>拖動輪盤</kbd> 一般視圖'
     : state.blockbenchControls && state.mode !== 'paint'
       ? '<kbd>左鍵拖動</kbd> 旋轉 <kbd>右鍵拖動</kbd> 平移 <kbd>Shift + 左鍵</kbd> 框選 <kbd>中鍵</kbd> 旋轉／平移'
     : '<kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心';
-  updateProjectionControls();
+  if ($('#viewHint').innerHTML !== viewHint) $('#viewHint').innerHTML = viewHint;
 }
 
 function beginAxisWidgetDrag(event) {
@@ -205,7 +226,7 @@ function moveAxisWidgetDrag(event) {
   const fullTurn = Math.PI * 2;
   state.yaw = ((drag.yaw - dx * .01) % fullTurn + fullTurn) % fullTurn;
   state.pitch = Math.max(-Math.PI / 2 + .001, Math.min(Math.PI / 2 - .001, drag.pitch + dy * .01));
-  renderScene();
+  scheduleSceneRender();
 }
 
 function endAxisWidgetDrag(event) {

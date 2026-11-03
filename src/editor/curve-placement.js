@@ -1,5 +1,5 @@
 import { CurveNode } from '../model.js';
-import { applyGroupTransforms } from '../render/webgl-renderer.js';
+import { applyGroupTransforms } from '../common/core/geometry-utils.js';
 import { rotateVector, inverseRotateVector } from '../utils/math/rotation.js';
 import { normalize3 } from '../utils/math/vector3.js';
 

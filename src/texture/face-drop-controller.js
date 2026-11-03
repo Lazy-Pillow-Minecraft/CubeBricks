@@ -1,4 +1,4 @@
-import { getBlockbenchBoxUv } from '../render/webgl-renderer.js';
+import { getBlockbenchBoxUv } from '../common/core/geometry-utils.js';
 import { CULLED_FACE_TEXTURE_KEY, UV_FACE_LABELS } from './face-constants.js';
 
 export function createTextureFaceDropController({

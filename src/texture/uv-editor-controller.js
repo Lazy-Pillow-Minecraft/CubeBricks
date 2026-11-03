@@ -1,4 +1,4 @@
-import { getBlockbenchBoxUv, isCubeFaceCulled } from '../render/webgl-renderer.js';
+import { getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
 
 const CUBE_FACE_NAMES = ['north', 'east', 'south', 'west', 'up', 'down'];
 
