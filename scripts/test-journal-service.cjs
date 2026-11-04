@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { WorkerProjectJournal } = require('../electron/journal-service.cjs');
+const { WorkerProjectJournal, onHistoryProgress } = require('../electron/journal-service.cjs');
 
 async function workspace(t) {
   const workspaceRoot = path.resolve(__dirname, '..');
@@ -54,4 +54,21 @@ test('journal worker returns validation failures and recovers without changing c
   assert.equal(JSON.parse(await journal.content()).elements[0].position[0], 0);
   await journal.commit(content(5), 'core.element.move');
   assert.equal(JSON.parse(await journal.content()).elements[0].position[0], 5);
+});
+
+test('history import reports background progress while current elements and undo remain available', async t => {
+  const store=await workspace(t),journal=store.journal('history-source');
+  await journal.initialize(content(0),'core.project.create');
+  for(let i=1;i<5;i++)await journal.commit(content(i),'core.element.move');
+  const archive=path.join(store.root,'history.cbmodel');await journal.archive(archive);
+  const progress=[];
+  const stop=onHistoryProgress(event=>{if(event.directory===path.join(store.root,'staged-history'))progress.push(event);});
+  t.after(stop);
+  const restored=store.track(await WorkerProjectJournal.fromArchive(await fs.readFile(archive),
+    path.join(store.root,'staged-history'),null,null,{deferHistory:true,historyThreshold:1}));
+  assert.equal(JSON.parse(await restored.content()).elements[0].position[0],4);
+  assert.equal(JSON.parse((await restored.navigate('undo')).content).elements[0].position[0],3);
+  await restored.finishHistoryImport();
+  assert.ok(progress.some(event=>event.value===0));
+  assert.ok(progress.some(event=>event.value===1));
 });

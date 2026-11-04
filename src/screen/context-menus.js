@@ -75,6 +75,8 @@ function showContextMenu(event, { title = '', source = null, items = [] } = {}) 
     const button = document.createElement('button');
     button.type = 'button';
     button.role = 'menuitem';
+    button.disabled = Boolean(item.disabled);
+    if (item.title) button.title = item.title;
     if (item.danger) button.classList.add('danger');
     button.innerHTML = `${item.icon ? `<span>${item.icon}</span>` : ''}<span>${escapeHtml(item.label)}</span>`;
     if (item.children?.length) {

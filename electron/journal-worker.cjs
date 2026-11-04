@@ -8,10 +8,11 @@ const metadata = journal => journal && ({
   lastCheckoutTextureChanged: journal.lastCheckoutTextureChanged
 });
 const methods = new Set(['initialize', 'load', 'ensureReady', 'commit', 'content',
-  'checkout', 'navigate', 'compactHistory', 'archive']);
+  'checkout', 'navigate', 'compactHistory', 'setHistoryLimit', 'archive', 'finishHistoryImport', 'historyGraph', 'setHistoryMark', 'pruneHistoryBranch']);
 parentPort.on('message', async ({ request, journalId, directory, method, args }) => {
   try {
     if (method === 'dispose') {
+      await journals.get(journalId)?.dispose();
       journals.delete(journalId);
       parentPort.postMessage({ request, result: null });
       return;
@@ -20,12 +21,14 @@ parentPort.on('message', async ({ request, journalId, directory, method, args })
     if (method === 'fromArchive') {
       const entries = args[1] && new Map([...args[1]].map(([key, bytes]) => [key, Buffer.from(bytes)]));
       journal = await ProjectJournal.fromArchive(Buffer.from(args[0]), directory, entries,
-        (value, label) => parentPort.postMessage({ request, progress: { value, label } }));
+        (value, label) => parentPort.postMessage({ request, progress: { value, label } }), args[2] || {},
+        progress => parentPort.postMessage({ historyProgress: { directory, ...progress } }));
       journals.set(journalId, journal);
     } else {
       if (!methods.has(method)) throw new Error('Unknown journal worker operation');
       if (!journal || method === 'load' || method === 'initialize') {
         journal = new ProjectJournal(directory);
+        journal.onHistoryProgress = progress => parentPort.postMessage({ historyProgress: { directory, ...progress } });
         journals.set(journalId, journal);
         if (!['load', 'initialize'].includes(method)) await journal.load();
       }

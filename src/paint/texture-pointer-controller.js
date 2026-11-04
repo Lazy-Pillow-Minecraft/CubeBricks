@@ -1,5 +1,8 @@
 import { PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
 import { paintSelectionAllows } from './selection-controller.js';
+import { activeLayer } from '../common/core/texture-features.js';
+import { eyedropperCanvas, opaqueTextureColor } from './eyedropper.js';
+import { bindPaintCanvas, releasePaintCanvas } from './canvas-layer-binding.js';
 
 export function createTexturePaintPointerController({
   state, $, textureCanvas, textureCtx, toast, pushTexturePaintHistory,
@@ -141,8 +144,16 @@ function startTexturePaintPointer(event) {
   const logicalPoint = [point[0] * (asset.uvWidth || textureCanvas.width) / textureCanvas.width,
     point[1] * (asset.uvHeight || textureCanvas.height) / textureCanvas.height];
   const hit = textureUvHit(allTextureUvEntriesForAsset(asset), logicalPoint);
+  if(state.tool==='eyedropper'){
+    eyedropperCanvas(asset,{composite:event.ctrlKey,liveCanvas:textureCanvas}).then(canvas=>{
+      const color=opaqueTextureColor(canvas,point);if(color){setPaintColor(color,true);updateToolOptions();}
+    }).catch(error=>toast(error.message));return;
+  }
+  if(asset.animation?.enabled&&!activeLayer(asset)){toast('當前幀沒有可編輯圖層');return;}
+  bindPaintCanvas(asset,textureCanvas,activeLayer(asset)?.uid);
   if (state.tool === 'gradient') {
     useTexturePaintGradient(asset, point, hit);
+    releasePaintCanvas(textureCanvas);
     return;
   }
   if (state.tool === 'fill') {
@@ -156,17 +167,12 @@ function startTexturePaintPointer(event) {
     queueBucketAt(texturePaintDrag, event.clientX, event.clientY);
     return;
   }
-  if (state.tool === 'eyedropper') {
-    const pixel = textureCtx.getImageData(point[0], point[1], 1, 1).data;
-    setPaintColor(`#${[pixel[0], pixel[1], pixel[2]].map(value => value.toString(16).padStart(2, '0')).join('')}`, true);
-    updateToolOptions();
-    return;
-  }
   const historyGroup = crypto.randomUUID();
   pushTexturePaintHistory(asset, textureCanvas, historyGroup);
   texturePaintDrag = {
     pointerId: event.pointerId, uid: asset._uid, asset,
     canvas: textureCanvas, context: textureCtx, tool: state.tool, start: point, last: point,
+    wrapTexture:state.tool==='brush'&&asset.mode==='tiled',
     baseImage: PAINT_SHAPE_TOOLS.includes(state.tool) ? textureCtx.getImageData(0, 0, textureCanvas.width, textureCanvas.height) : null,
     historyGroup, historyAssets: new Set([asset._uid]), touchedSurfaces: new Set(), pendingPoints: [point],
     holisticStroke: true,
@@ -229,7 +235,7 @@ function endTexturePaintPointer(event) {
   if (preview.hasPointerCapture?.(event.pointerId)) preview.releasePointerCapture(event.pointerId);
   drag.ended = true;
   if (drag.tool === 'fill') {
-    drag.queue.then(() => finishTextureBucketStroke(drag.history)).catch(error => toast(error.message));
+    drag.queue.then(() => finishTextureBucketStroke(drag.history)).catch(error => toast(error.message)).finally(()=>releasePaintCanvas(textureCanvas));
     return true;
   }
   // A lost capture ends at the last received sample. Keeping that partial

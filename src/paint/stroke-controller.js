@@ -3,6 +3,7 @@ import { activeLayer, compositeLayers } from '../common/core/texture-features.js
 import { requireOperation } from '../common/core/operation-registry.js';
 import { PAINT_TOOLS, PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
 import { paintSelectionAllows } from './selection-controller.js';
+import { bindPaintCanvas, boundPaintLayer, releasePaintCanvas } from './canvas-layer-binding.js';
 
 export function createPaintStrokeController({
   state, $, $$, textureCanvas, textureCtx, uvEditorController,
@@ -271,6 +272,12 @@ function paintCompositeVisibleAtStart(surface, x, y) {
 }
 
 function drawPaintPixel(surface, x, y, coverage, tool, opacity) {
+  if (surface?.tiledFaceBounds||surface?.wrapTexture) {
+    const bounds = surface.tiledFaceBounds;
+    if (!surface.wrapTexture&&(x < bounds.minU || y < bounds.minV || x >= bounds.maxU || y >= bounds.maxV)) return;
+    x = ((x % surface.canvas.width) + surface.canvas.width) % surface.canvas.width;
+    y = ((y % surface.canvas.height) + surface.canvas.height) % surface.canvas.height;
+  }
   if (!surface?.canvas || !surface.context || x < 0 || y < 0 || x >= surface.canvas.width || y >= surface.canvas.height) return;
   if (!paintSelectionAllows(state, surface.asset?._uid, x, y, surface.canvas.width, surface.canvas.height)) return;
   if (surface.rootDrag?.holisticStroke && compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity)) return;
@@ -422,8 +429,9 @@ function drawPaintSegment(drag, from, to, sync = true) {
     const centerY = Math.round(from[1] + dy * ratio);
     for (const [offsetX, offsetY, coverage] of offsets) {
       const x = centerX + offsetX, y = centerY + offsetY;
-      const insideClip = !drag.clip || (x >= drag.clip.minU && y >= drag.clip.minV && x < drag.clip.maxU && y < drag.clip.maxV);
-      if (insideClip && x >= 0 && y >= 0 && x < canvas.width && y < canvas.height) {
+      const clip = drag.tiledFaceBounds || drag.clip;
+      const insideClip = drag.wrapTexture || !clip || (x >= clip.minU && y >= clip.minV && x < clip.maxU && y < clip.maxV);
+      if (insideClip && (drag.tiledFaceBounds || drag.wrapTexture || (x >= 0 && y >= 0 && x < canvas.width && y < canvas.height))) {
         drawPaintPixel(drag, x, y, coverage, tool, opacity);
       }
     }
@@ -442,7 +450,7 @@ function drawPaintSegment(drag, from, to, sync = true) {
 }
 
 function drawScreenPaintPixel(surface, x, y, coverage) {
-  const clip = surface.clip;
+  const clip = surface.tiledFaceBounds || surface.clip;
   if (clip && (x < clip.minU || y < clip.minV || x >= clip.maxU || y >= clip.maxV)) return;
   touchScenePaintSurface(surface);
   drawPaintPixel(surface, x, y, coverage, surface.tool, paintToolOpacity(surface.tool));
@@ -482,10 +490,15 @@ function drawPaintShape(drag, to, restoreBase = true) {
   const [startX, startY] = drag.start;
   const [endX, endY] = to;
   if (state.paintShapeFilled && (drag.tool === 'rectangle' || drag.tool === 'ellipse')) {
-    const minX = Math.max(0, Math.floor(Math.min(startX, endX)), drag.clip?.minU ?? 0);
-    const maxX = Math.min(drag.canvas.width - 1, Math.ceil(Math.max(startX, endX)), (drag.clip?.maxU ?? drag.canvas.width) - 1);
-    const minY = Math.max(0, Math.floor(Math.min(startY, endY)), drag.clip?.minV ?? 0);
-    const maxY = Math.min(drag.canvas.height - 1, Math.ceil(Math.max(startY, endY)), (drag.clip?.maxV ?? drag.canvas.height) - 1);
+    const clip = drag.tiledFaceBounds || {
+      minU: Math.max(0, drag.clip?.minU ?? 0), minV: Math.max(0, drag.clip?.minV ?? 0),
+      maxU: Math.min(drag.canvas.width, drag.clip?.maxU ?? drag.canvas.width),
+      maxV: Math.min(drag.canvas.height, drag.clip?.maxV ?? drag.canvas.height)
+    };
+    const minX = Math.max(Math.floor(Math.min(startX, endX)), clip.minU);
+    const maxX = Math.min(Math.ceil(Math.max(startX, endX)), clip.maxU - 1);
+    const minY = Math.max(Math.floor(Math.min(startY, endY)), clip.minV);
+    const maxY = Math.min(Math.ceil(Math.max(startY, endY)), clip.maxV - 1);
     const centerX = (startX + endX) / 2, centerY = (startY + endY) / 2;
     const radiusX = Math.max(.5, Math.abs(endX - startX) / 2);
     const radiusY = Math.max(.5, Math.abs(endY - startY) / 2);
@@ -671,11 +684,11 @@ function finishTextureBucketStroke(stroke) {
 }
 
 async function bucketCanvasForAsset(asset, stroke = null) {
+  if(asset?.animation?.enabled&&!boundPaintLayer(asset,textureCanvas)&&!activeLayer(asset))return null;
   const cached = stroke?.canvases?.get(asset._uid);
   if (cached) return { canvas: cached.canvas, context: cached.canvas.getContext('2d') };
-  return asset._uid === state.activeTextureUid
-    ? { canvas: textureCanvas, context: textureCtx }
-    : paintCanvasForAsset(asset);
+  if(asset._uid===state.activeTextureUid){if(!boundPaintLayer(asset,textureCanvas))bindPaintCanvas(asset,textureCanvas,activeLayer(asset)?.uid);return {canvas:textureCanvas,context:textureCtx};}
+  return paintCanvasForAsset(asset);
 }
 
 async function paintBucketAsset(asset, point, rectangles = null, contiguous = false, clip = null, stroke = null) {
@@ -775,10 +788,11 @@ function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null, op
 
 function commitPaintedTextureAsset(asset, canvas) {
   if (!asset || !canvas) return;
+  if(asset.animation?.enabled&&!boundPaintLayer(asset,canvas)&&!activeLayer(asset))return;
   paintHitAlphaCache.delete(asset._uid);
-  const layer = activeLayer(asset);
+  const layer = boundPaintLayer(asset,canvas)||activeLayer(asset);
   if (layer) layer.source = canvas.toDataURL('image/png');
-  const composite = layer ? compositeLayers(asset, canvas) : canvas;
+  const composite = layer ? compositeLayers(asset, canvas,null,null,null,layer.uid) : canvas;
   asset.source = composite.toDataURL('image/png');
   // UV units are independent of the PNG's physical pixel density. Painting
   // must not silently rewrite imported Blockbench uv_width/uv_height.
@@ -793,11 +807,11 @@ function commitPaintedTextureAsset(asset, canvas) {
     textureCtx.drawImage(canvas, 0, 0);
     updateTexturePreviewFrame(asset.uvWidth, asset.uvHeight);
   }
-  syncRendererTextureAsset(asset, composite, true);
+  syncRendererTextureAsset(asset, composite, true,null,layer?.uid);
   const item = $$('.texture-item').find(node => node.dataset.textureUid === asset._uid);
   const thumbnail = item?.querySelector('.texture-thumb');
   if (thumbnail) thumbnail.style.backgroundImage = `url("${asset.source}")`;
-  markDirty();
+  markDirty();releasePaintCanvas(canvas);
 }
 
 function replayTexturePaintPoints(drag) {

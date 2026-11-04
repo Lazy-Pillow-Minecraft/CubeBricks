@@ -6,9 +6,11 @@ const fs = require('fs/promises');
 const syncFs = require('fs');
 const crypto = require('crypto');
 const { atomicWrite } = require('./project-journal.cjs');
-const { WorkerProjectJournal: ProjectJournal } = require('./journal-service.cjs');
+const { WorkerProjectJournal: ProjectJournal, onHistoryProgress } = require('./journal-service.cjs');
 const { isArchiveV2, unpackArchiveWithProgress } = require('./archive-codec.cjs');
+const { openIndexedArchive } = require('./archive-index.cjs');
 const { JournalOwnership } = require('./journal-ownership.cjs');
+const { readProjectRetention, initializeProjectRetention, retainProject } = require('./project-retention.cjs');
 const { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder, readFontPack } = require('./resource-packs.cjs');
 const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform === 'win32' ? 'shortcut-icon.ico' : 'shortcut-icon.png');
 const journals = new Map();
@@ -21,6 +23,10 @@ const workspaceSettingsPath = () => path.join(app.getPath('userData'), 'project-
 const colorMapSettingsPath = () => path.join(app.getPath('userData'), 'palettes.cbcmap');
 const retainedTabsPath = () => path.join(app.getPath('userData'), 'retained-project-tabs.json');
 const coverPath = id => path.join(app.getPath('userData'), 'project-covers', `${safeSessionId(id)}.png`);
+onHistoryProgress(({ directory, ...progress }) => {
+  for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed())
+    win.webContents.send('project:history-progress', { journalId: path.basename(directory), ...progress });
+});
 const pendingExternalProjects = [];
 let externalOpenReceiver = null;
 const pendingUiPrompts = new Map();
@@ -113,9 +119,10 @@ async function projectSummary(id, directory) {
     .then(JSON.parse).catch(() => null);
   if (!manifest) return null;
   const saved = await fs.readFile(path.join(directory, 'saved_state'), 'utf8').then(JSON.parse).catch(() => null);
+  const retention = await readProjectRetention(directory);
   return { journalId: id, name: manifest.information?.name || '未命名',
     modifiedAt: manifest.timestamp || '', sequence: state.activeHead,
-    savedSequence: saved?.sequence ?? null, filePath: saved?.filePath || null,
+    savedSequence: retention.savedSequence ?? saved?.sequence ?? null, persistent: retention.persistent, filePath: saved?.filePath || null,
     elementCount: manifest.elementOrder?.length || 0, textureCount: manifest.textureIds?.length || 0 };
 }
 async function workspaceCatalog() {
@@ -280,24 +287,26 @@ async function removeRetainedJournal(id) {
   if (!Array.isArray(previous) || !previous.some(tab => tab.journalId === id)) return;
   await atomicWrite(retainedTabsPath(), JSON.stringify(previous.filter(tab => tab.journalId !== id)));
 }
-async function discardOwnedJournal(id) {
+async function discardOwnedJournal(id, { explicit = false } = {}) {
   const journal = journals.get(id);
   if (!journal) return false;
   await journalOwnership.assertOwned(journal.directory);
+  if (!explicit && (await readProjectRetention(journal.directory)).persistent) return false;
   const target = path.resolve(journal.directory);
   if (path.basename(target) !== id || path.dirname(target) === target) throw new Error('工作目錄不在項目根目錄內');
+  await journal.dispose();
   await fs.rm(target, { recursive: true, force: true });
   await fs.rm(coverPath(id), { force: true });
   journals.delete(id);
-  await journal.dispose().catch(() => {});
   await journalOwnership.release(target);
   await removeRetainedJournal(id);
   return true;
 }
-async function discardIdleJournal(candidate) {
+async function discardIdleJournal(candidate, { explicit = false } = {}) {
   if (journals.has(candidate.id)) return false;
   await journalOwnership.acquire(candidate.directory);
   try {
+    if (!explicit && (await readProjectRetention(candidate.directory)).persistent) return false;
     const saved = await fs.readFile(path.join(candidate.directory, 'saved_state'), 'utf8').then(JSON.parse);
     if (!sameFilePath(saved.filePath, candidate.saved.filePath)) return false;
     const state = await fs.readFile(path.join(candidate.directory, 'current_state'), 'utf8').then(JSON.parse);
@@ -434,13 +443,20 @@ handleIpc('app:confirm-close', async (event, payload) => {
     await queueJournal(id, async () => {
       // Use the directory claimed when opening, even if settings now point to
       // another workspace. Never delete a different instance's directory.
-      const target = path.resolve(journals.get(id).directory);
-      if (path.basename(target) !== id || path.dirname(target) === target) throw new Error('工作目錄不在項目根目錄內');
-      await fs.rm(target, { recursive: true, force: true });
-      journals.delete(id);
-      await journalOwnership.release(target);
+      if (!await discardOwnedJournal(id)) retained.push({ journalId: id, filePath: null, dirty: true, active: false });
     });
   }
+  for (const tab of retained) {
+    const journal = journals.get(tab.journalId);
+    if (journal) await queueJournal(tab.journalId, async () => {
+      await journal.finishHistoryImport();
+      await retainProject(journal.directory, journal.state.activeHead);
+    });
+  }
+  // Closed project tabs can still own a background history import. Finish
+  // those writes before releasing ownership to another app instance.
+  for (const [id, journal] of journals) if (!retained.some(tab => tab.journalId === id))
+    await queueJournal(id, () => journal.finishHistoryImport());
   // Keep tabs belonging to other app instances when this one closes.
   let previousTabs = [];
   try { previousTabs = JSON.parse(await fs.readFile(retainedTabsPath(), 'utf8')); } catch { /* First close. */ }
@@ -474,11 +490,12 @@ handleIpc('project:open', async (event, options = {}) => {
     lastReportValue = value;
     event?.sender?.send?.('project:open-progress', { value: Math.max(0, Math.min(1, value)), label });
   };
-  if (filePath.toLowerCase().endsWith('.cbmodel')) report(0, '正在讀取項目檔案');
+  report(0, '正在讀取項目檔案');
   const bytes = await fs.readFile(filePath);
   if (bytes.subarray(0, 2).toString('ascii') === 'PK' || isArchiveV2(bytes)) {
     report(0.04, '正在解壓項目');
-    const entries = await unpackArchiveWithProgress(bytes, (value, label) => report(0.04 + value * 0.66, label));
+    const entries = isArchiveV2(bytes) ? openIndexedArchive(bytes)
+      : await unpackArchiveWithProgress(bytes, (value, label) => report(0.04 + value * 0.66, label));
     const archive = ProjectJournal.inspectArchive(bytes, entries);
     report(0.72, '正在比對工作記錄');
     archive.fileHash = fileHash(bytes);
@@ -510,6 +527,7 @@ handleIpc('project:open', async (event, options = {}) => {
       && matched.candidate.saved.sequence === matched.candidate.state.activeHead
       && matched.candidate.state.lastCommitted === matched.candidate.state.activeHead
       ? matched.candidate : null;
+    let explicitReplacement = false;
     if (!matched && divergent) {
       const active = journals.has(divergent.id);
       const choice = await requestUiChoice(event.sender, {
@@ -529,11 +547,11 @@ handleIpc('project:open', async (event, options = {}) => {
         return { filePath, content, journalId: divergent.id, dirty: true,
           textureAssets: await readTextureAssets(content, filePath) };
       }
-      if (choice.index === 1) replace = divergent;
+      if (choice.index === 1) { replace = divergent; explicitReplacement = true; }
     }
     const journalId = `project_${crypto.randomUUID()}`;
     const journal = await openWorkingJournal(journalId, directory => ProjectJournal.fromArchive(bytes, directory,
-      archive.entries, (value, label) => report(0.74 + value * 0.2, label)));
+      isArchiveV2(bytes) ? null : archive.entries, (value, label) => report(0.74 + value * 0.2, label), { deferHistory: true }));
     await atomicWrite(path.join(journal.directory, 'saved_state'), JSON.stringify({
       sequence: journal.state.activeHead, filePath, projectUuid: journal.projectUuid,
       fileHash: archive.fileHash, savedAt: new Date().toISOString()
@@ -542,13 +560,16 @@ handleIpc('project:open', async (event, options = {}) => {
     report(0.95, '正在載入模型與貼圖');
     const content = await journal.content();
     if (replace && !journals.has(replace.id)) {
-      try { await discardIdleJournal(replace); }
+      try { await discardIdleJournal(replace, { explicit: explicitReplacement }); }
       catch { /* Keep the old copy if another window claimed it meanwhile. */ }
     }
     return { filePath, content, journalId, textureAssets: await readTextureAssets(content, filePath) };
   }
   const content = bytes.toString('utf8');
-  return { filePath, content, textureAssets: await readTextureAssets(content, filePath) };
+  report(.6, '正在載入模型與貼圖');
+  const textureAssets = await readTextureAssets(content, filePath);
+  report(1, '項目已載入');
+  return { filePath, content, textureAssets };
 });
 
 handleIpc('project:external-ready', event => {
@@ -574,8 +595,42 @@ handleIpc('project:cover-save', async (_event, payload) => {
 handleIpc('project:journal-init', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
-    await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.content, payload.operationId || 'core.project.create', payload.operationIndex || []));
-    return { journalId: id };
+    const journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.content, payload.operationId || 'core.project.create', payload.operationIndex || []));
+    const retention = await initializeProjectRetention(journal.directory, payload.imported === true, journal.state.activeHead);
+    return { journalId: id, persistent: retention.persistent };
+  });
+});
+
+handleIpc('project:journal-save', async (_event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  return queueJournal(id, async () => {
+    const journal = journals.get(id);
+    if (!journal) throw new Error('項目工作目錄尚未建立');
+    return retainProject(journal.directory, journal.state.activeHead);
+  });
+});
+
+handleIpc('project:delete-workspace', async (event, payload) => {
+  const id = safeSessionId(payload.journalId);
+  const { catalog } = await workspaceCatalog();
+  const entry = catalog.projects.find(project => project.journalId === id);
+  if (!entry) throw new Error('工作項目已不存在');
+  const directory = journals.get(id)?.directory || await journalDirectory(id);
+  const choice = await requestUiChoice(event.sender, { title: '刪除項目',
+    message: `確定刪除「${entry.name}」？`, detail: '將刪除這個項目的本機文件夾及全部歷史記錄，無法撤銷。已導出的模型文件不受影響。',
+    buttons: ['刪除項目', '取消'], defaultIndex: 1, cancelIndex: 1 });
+  if (choice.index !== 0) return false;
+  return queueJournal(id, async () => {
+    if (journals.has(id)) return discardOwnedJournal(id, { explicit: true });
+    const target = path.resolve(directory);
+    if (path.basename(target) !== id || path.dirname(target) === target) throw new Error('工作目錄不在項目根目錄內');
+    await journalOwnership.acquire(target);
+    try {
+      await fs.rm(target, { recursive: true, force: true });
+      await fs.rm(coverPath(id), { force: true });
+      await removeRetainedJournal(id);
+      return true;
+    } finally { await journalOwnership.release(target); }
   });
 });
 
@@ -606,6 +661,15 @@ handleIpc('project:journal-compact', async (_event, payload) => {
   });
 });
 
+handleIpc('project:journal-settings',async(_event,payload)=>{
+  const id=safeSessionId(payload.journalId);
+  return queueJournal(id,async()=>{
+    const journal=journals.get(id);
+    if(!journal)throw new Error('項目工作目錄尚未建立');
+    return journal.setHistoryLimit(payload.historyLimit);
+  });
+});
+
 handleIpc('project:journal-checkout', async (_event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
@@ -622,6 +686,31 @@ handleIpc('project:journal-state', async (_event, payload) => {
   return queueJournal(id, async () => {
     const journal = journals.get(id);
     return journal ? { ...journal.state } : null;
+  });
+});
+
+handleIpc('project:history-graph', async (_event,payload) => {
+  const id=safeSessionId(payload.journalId);
+  return queueJournal(id,async()=>{
+    const journal=journals.get(id);
+    if(!journal)throw Error('項目工作目錄尚未建立');
+    return journal.historyGraph();
+  });
+});
+handleIpc('project:history-prune', async (_event,payload) => {
+  const id=safeSessionId(payload.journalId);
+  return queueJournal(id,async()=>{
+    const journal=journals.get(id);
+    if(!journal)throw Error('項目工作目錄尚未建立');
+    return journal.pruneHistoryBranch(Number(payload.sequence),{single:payload.single===true});
+  });
+});
+handleIpc('project:history-mark',async(_event,payload)=>{
+  const id=safeSessionId(payload.journalId);
+  return queueJournal(id,async()=>{
+    const journal=journals.get(id);
+    if(!journal)throw Error('項目工作目錄尚未建立');
+    return journal.setHistoryMark(Number(payload.sequence),payload.mark);
   });
 });
 
@@ -679,14 +768,18 @@ handleIpc('project:cover-get', async (_event, payload) => {
   catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 });
 
-handleIpc('project:journal-recover', async (_event, payload) => {
+handleIpc('project:journal-recover', async (event, payload) => {
   const id = safeSessionId(payload.journalId);
   return queueJournal(id, async () => {
+    event.sender.send('project:open-progress', { value: .05, label: '正在讀取工作項目' });
     const journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).load());
+    event.sender.send('project:open-progress', { value: .8, label: '正在還原模型與貼圖' });
     const content = await journal.content();
     const { catalog } = await workspaceCatalog();
     const entry = catalog.projects.find(project => project.journalId === id);
-    return { journalId: id, content, filePath: payload.filePath || entry?.filePath || null,
+    const retention = await readProjectRetention(journal.directory);
+    event.sender.send('project:open-progress', { value: 1, label: '項目已載入' });
+    return { journalId: id, content, persistent: retention.persistent, filePath: payload.filePath || entry?.filePath || null,
       dirty: entry?.savedSequence !== journal.state.activeHead };
   });
 });
@@ -724,6 +817,8 @@ handleIpc('project:set-workspace-root', async (_event, directory) => {
   await ensureWorkspaceLayout();
   return directory;
 });
+
+handleIpc('texture:animation-metadata',(_event,payload)=>require('./texture-animation-metadata.cjs').readTextureAnimationMetadata(payload));
 
 async function readTextureAssets(content, modelPath) {
   let model;

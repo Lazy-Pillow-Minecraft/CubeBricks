@@ -50,7 +50,7 @@ export function createEventBinder({
   setRenderModeMenu, setThemeVar, setTool, setUvCoordinate, snapshot,
   startCameraDrag, startTexturePointer, startTransformDrag, stopTimeline,
   stopUvPreviewAnimation, syncTexturePreviewPriority, textureUid,
-  textureUvEntries, toast, topLevelSelectedUids, undo,
+  textureUvEntries, textureFaceEntries, textureAssetForReference, activateProjectTexture, toast, topLevelSelectedUids, undo,
   updateFaceSelectionOverlay, updateGizmoDepthHover,
   updateMultiTransformModeButtons, updateRenderModeControl,
   updateRotationModeButtons, updateScaleHandleModeButtons,
@@ -357,7 +357,7 @@ function bindEvents() {
     projectTabsController.draggingInsertIndex = null;
     projectTabsNode.querySelectorAll('.is-dragging,.drop-before,.drop-after').forEach(node => node.classList.remove('is-dragging', 'drop-before', 'drop-after'));
   });
-  $('#newProjectTab').addEventListener('click', openNewProjectDialog);
+  $('#newProjectTab').addEventListener('click', () => projectTabsController.addHomeTab());
   $('#projectInfoForm').addEventListener('submit', event => {
     event.preventDefault();
     applyProjectInfo();
@@ -571,6 +571,12 @@ function bindEvents() {
         points: hit.facePoints.map(point => [...point])
       };
       if (state.uvPreviewSelectedFace) {
+        if (state.uvPreviewAutoFocusTexture) {
+          const selection = state.uvPreviewSelectedFace;
+          const asset = textureAssetForReference(state.project.getNode(selection.uid)?.faces?.[selection.faceName]?.texture);
+          if (asset && state.activeTextureUid !== asset._uid)
+            activateProjectTexture(state.textureAssets.indexOf(asset));
+        }
         state.selectedUvFaces = new Set([uvFaceKey(state.uvPreviewSelectedFace.uid, state.uvPreviewSelectedFace.faceName)]);
         renderTextureUvOverlay(true);
         updateFaceSelectionOverlay();
@@ -606,7 +612,7 @@ function bindEvents() {
   $$('[data-texture-face]').forEach(button => button.addEventListener('click', event => {
     event.stopPropagation();
     setDockHotspotFocus('texture');
-    const matching = textureUvEntries().filter(entry => entry.faceName === button.dataset.textureFace);
+    const matching = textureFaceEntries().filter(entry => entry.faceName === button.dataset.textureFace);
     const next = event.shiftKey || event.ctrlKey || event.metaKey
       ? new Set(state.selectedUvFaces)
       : new Set();
@@ -1346,6 +1352,7 @@ function bindEvents() {
   window.addEventListener('resize', renderScene);
   document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
+    if (state.projectHomeActive) return;
     const key = event.key.toLowerCase();
     if (!event.repeat && event.ctrlKey && event.shiftKey && key === 'f12') {
       event.preventDefault();

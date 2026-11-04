@@ -9,6 +9,8 @@ const fileSource = fs.readFileSync(path.join(__dirname, '../src/project/file-con
 const faceDropSource = fs.readFileSync(path.join(__dirname, '../src/texture/face-drop-controller.js'), 'utf8');
 
 function install(context, names) {
+  context.CustomEvent ||= CustomEvent;
+  if(context.window)context.window.dispatchEvent ||= ()=>{};
   for (const name of names) {
     const expression = new RegExp(`(?:async )?function ${name}\\([^]*?\\n}`);
     const match = journalSource.match(expression) || fileSource.match(expression)
@@ -96,6 +98,16 @@ test('geometry-only undo keeps the existing texture assets and atlas', async () 
   await pending;
   assert.equal(context.state.textureAssets, assets);
   assert.equal(context.state.project.elements[0].position[0], 5);
+});
+
+test('undo restores model state while preserving the current project history-limit setting',async()=>{
+  const {context,state,finish}=setup();
+  state.project.historyLimit=300;
+  const pending=context.navigateProjectJournal('undo');await turn();
+  const previous=result(5),data=JSON.parse(previous.content);data.historyLimit=10;
+  finish({...previous,content:JSON.stringify(data)});await pending;
+  assert.equal(state.project.historyLimit,300);
+  assert.equal(state.project.elements[0].position[0],5);
 });
 
 test('rapid undo requests execute in order', async () => {

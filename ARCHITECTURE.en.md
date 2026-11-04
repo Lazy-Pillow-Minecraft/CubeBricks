@@ -31,14 +31,30 @@
 
 ## Entry-point boundary
 
+`texture/export-bake.js` processes the existing geometry bake result. `export-plan.js` resolves references, shares periodic tiled regions, computes frame-count LCMs, and packs atlases or box nets; `export-raster.js` composites private snapshots and bakes pixels; `export-progress.js` owns the delayed progress dialog. Format definitions declare merging through `singleTexture`. Export does not depend on frame selection, the global layer raster cache, or editable canvases, and never writes baked results into the source project.
+
 `app.js` retains a few forwarding functions to handle initialization order and callback cycles. Implementations should not flow back into the entry point. When moving code, preserve operation IDs and import/export and journal test coverage. The operation-ID audit scans all of `src/`, so moving a feature out of the entry point does not hide it from the audit.
 
 ## Texture templates and layers
 
 `src/texture/template-controller.js` gathers cube faces, packs new UVs, draws the template, and updates face assignments. It should not reimplement layer compositing. With layer preservation enabled, it copies the source layer/group tree, remaps image-layer pixels, and redirects mask UIDs to the new layer IDs. Final compositing still uses the layer pipeline in `src/common/core/texture-features.js`. With preservation off, the original flattened-template path remains available. `src/texture/asset-controller.js` owns loading, activation, and preview refresh for texture assets.
 
+`src/texture/frame-elements.js` manages independent frames; `layerUids`, `visibility`, and `paintLayerUid` within `animation.frames` store links, frame-local visibility, and paint targets. `frame-links.js` resolves root/group membership. Separate controllers own lists, connections, and playback. Playback position is runtime state; FPS and interpolation are texture settings. Display composition caches at most four frames and reuses dirty-region updates, blending precomposited images for interpolation without rewriting original pixels or mask sources. `src/paint/eyedropper.js` shares unlit sampling, with 3D rays continuing past fully transparent hits.
+
 ## Journal worker and viewport updates
 
 `electron/main.cjs` owns windows, project ownership, and per-project operation queues. `journal-service.cjs` forwards journal calls to `journal-worker.cjs`; snapshots, file operations, undo, and archiving retain the implementation in `project-journal.cjs`. Completion or failure returns updated state and errors. Background execution preserves confirmation order, atomic writes, and recovery checks.
+
+`project-retention.cjs` atomically stores durable retention in the working folder's `workspace_state`, independently of edit history and excluded from exports. Main-process automatic-discard paths recheck this flag; missing or damaged metadata defaults to retention. Home and model tabs have distinct types; home tabs create no journal and capture no model session.
+
+`project_settings` stores the project history limit and is included in both archive modes. Project Information separates model changes from retention settings. The latter use a dedicated settings API on the existing project write queue, without adding transactions or clearing redo. History comparisons ignore the limit in older snapshots, and model restoration preserves the current setting.
+
+`electron/history-marks.cjs` validates and atomically saves node marks through the existing project write queue. Frontend `history-mark-shapes.js` shares geometric paths; `history-mark-editor.js` manages the form and reuses the color picker. Inverse view scaling keeps marks and labels at fixed screen sizes, and labels render as literal user text. History focus shortcuts apply only to the topmost history dialog, and animation scheduling stops when focus settles.
+
+`journal-import.cjs` stages large archives: current transactions, element snapshots, textures, and required counters come first; remaining immutable history is written in the background. Undo can read pending records directly. A durable archive copy and recovery marker allow interrupted imports to resume, and are removed when finished. Closing and exporting wait for required writes; history pruning is deferred while an import remains active.
+
+`archive-index.cjs` reads and validates only the CBM2 blocks, files, and images currently needed, with a bounded decompressed-block cache. New archives group the current snapshot before historical files, avoiding full-history decompression before displaying the model. File contents and integrity checks remain unchanged.
+
+`journal-history.cjs` reads the full history forest and handles chronological capping plus single-node/subtree deletion. `journal-history-storage.cjs` handles routes between roots and content-addressed texture baselines. Recovery data is prepared before committing the removal index; loading also normalizes parent pointers whose physical cleanup was interrupted. `src/project/history-layout.js` iteratively allocates circular sectors by terminal count and evenly spaces nodes within each straight segment. `history-dialog.js` redraws only when history changes, sizes ordinary dots at twice the screen-space line width, uses a spatial hit index built from final positions, and connects detached roots to a virtual center with dashed lines.
 
 Gizmos use `src/utils/dom/svg-markup.js` to retain SVG nodes and update coordinates and paths, rebuilding only when topology changes. `src/utils/performance-monitor.js` provides short captures, and `electron/main-performance.cjs` records main-thread delays and active operations. `scripts/profile-viewport-input.cjs` runs automated benchmarks using temporary projects. Detailed measurements are in the [performance investigation record](docs/CODE_AUDIT_2026-11-01.md), currently in Chinese.

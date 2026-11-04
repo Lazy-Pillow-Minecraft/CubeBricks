@@ -4,7 +4,7 @@ import { createModelProjectData, modelFormatRegistry } from '../common/config/mo
 
 export function createModelFormatPicker({
   $, newProjectDialog, escapeHtml, escapeAttribute, formatNumber,
-  addProjectTab, markDirty, toast, configRegistry, loadProjectContent
+  addProjectTab, markDirty, toast, configRegistry, openWorkspaceProject, deleteWorkspaceProject, showContextMenu
 }) {
 let homeCoverObserver = null;
 const MODEL_FORMAT_ICONS = Object.freeze({
@@ -74,7 +74,7 @@ async function renderProjectHome(refresh = false) {
     const deferredCovers = Boolean(window.cubeBricksDesktop.loadProjectCover && window.IntersectionObserver);
     const projects = await window.cubeBricksDesktop.listWorkspaceProjects({ refresh, includeCovers: !deferredCovers });
     homeCoverObserver?.disconnect();
-    container.innerHTML = projects.length ? projects.map(project => `<button type="button" class="project-home-card" data-home-project="${escapeAttribute(project.journalId)}"><span class="project-home-cover">${project.cover ? `<img src="${escapeAttribute(project.cover)}" alt="" />` : '<span aria-hidden="true">封面待生成</span>'}</span><strong>${escapeHtml(project.name || '未命名')}</strong><small>${escapeHtml(project.filePath || '未保存的工作項目')}</small><small>${escapeHtml(project.modifiedAt ? new Date(project.modifiedAt).toLocaleString() : '')} · ${project.elementCount || 0} 個元素</small></button>`).join('') : '<p class="project-home-empty">尚無工作項目。從左側選擇模型格式開始吧。</p>';
+    container.innerHTML = projects.length ? projects.map(project => `<button type="button" class="project-home-card" data-home-project="${escapeAttribute(project.journalId)}"><span class="project-home-cover">${project.cover ? `<img src="${escapeAttribute(project.cover)}" alt="" />` : '<span aria-hidden="true">封面待生成</span>'}</span><strong>${escapeHtml(project.name || '未命名')}</strong><small>${escapeHtml(project.filePath || (project.persistent ? '已保存的工作項目' : '從未保存的工作項目'))}</small><small>${escapeHtml(project.modifiedAt ? new Date(project.modifiedAt).toLocaleString() : '')} · ${project.elementCount || 0} 個元素</small></button>`).join('') : '<p class="project-home-empty">尚無工作項目。從左側選擇模型格式開始吧。</p>';
     if (deferredCovers) {
       const observer = new IntersectionObserver(entries => {
         for (const entry of entries) {
@@ -106,10 +106,17 @@ function bindProjectHome() {
     if (!button) return;
     button.disabled = true;
     try {
-      const result = await window.cubeBricksDesktop.recoverProjectJournal({ journalId: button.dataset.homeProject });
-      loadProjectContent(result.content, result.filePath || '', [], result.journalId,
-        { dirty: result.dirty ?? !result.filePath });
+      await openWorkspaceProject(button.dataset.homeProject);
     } catch (error) { toast(`打開工作項目失敗：${error.message}`); button.disabled = false; }
+  });
+  $('#homeProjectList')?.addEventListener('contextmenu', event => {
+    const card = event.target.closest('[data-home-project]');
+    if (!card) return;
+    showContextMenu(event, { title: card.querySelector('strong')?.textContent || '項目', source: card,
+      items: [{ label: '刪除項目', danger: true, action: async () => {
+        try { if (await deleteWorkspaceProject(card.dataset.homeProject)) await renderProjectHome(); }
+        catch (error) { toast(`刪除項目失敗：${error.message}`); }
+      } }] });
   });
   window.addEventListener('cubebricks:project-home', () => void renderProjectHome());
   window.addEventListener('cubebricks:project-cover-updated', () => {

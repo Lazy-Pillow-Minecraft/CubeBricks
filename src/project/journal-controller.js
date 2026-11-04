@@ -50,6 +50,7 @@ function expandProjectHistorySnapshot(serialized, sources) {
 }
 
 function snapshot(operationId = 'core.element.property') {
+  if (state.projectHomeActive) return;
   requireOperation(operationId);
   const tab = projectTabById(projectTabsController.activeId);
   if (tab) tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
@@ -69,6 +70,8 @@ function restoredProjectSession(session, data, restoreTextures = false, changedU
   const restored = { ...session, project: new CubeBricksProject(data, {
     reuseElementsFrom: session.project, changedUids
   }), selectedGenerated: null, dirty: true };
+  // History retention is project configuration, never an undoable model field.
+  restored.project.historyLimit=session.project.historyLimit??null;
   restored.selectedUids = new Set([...previousSelectedUids].filter(uidValue => restored.project.getNode(uidValue)));
   restored.selectedUid = previousSelectedUid && restored.selectedUids.has(previousSelectedUid)
     ? previousSelectedUid
@@ -152,7 +155,7 @@ function restoreTexturePaintHistory(sourceStack, targetStack) {
   return false;
 }
 
-async function navigateProjectJournal(direction) {
+async function navigateProjectJournal(direction, request = {}) {
   const tab = projectTabById(projectTabsController.activeId);
   if (!tab?.journalId || !window.cubeBricksDesktop?.checkoutProjectJournal) return false;
   // Reserve a place in the same queue as commits before yielding. Rapid undo /
@@ -174,11 +177,21 @@ async function navigateProjectJournal(direction) {
     if ((tab.journalEditRevision || 0) !== requestedRevision) return;
     const checkoutStart = profile ? performance.now() : 0;
     if (profile) performanceMonitor.record('journal.waitPending', checkoutStart - waitStart);
-    const result = await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId, direction });
+    const result = request.prune
+      ? await window.cubeBricksDesktop.pruneProjectHistoryBranch({journalId:tab.journalId,sequence:request.sequence,single:request.single===true})
+      : await window.cubeBricksDesktop.checkoutProjectJournal({ journalId: tab.journalId,
+        ...(direction ? {direction} : {sequence:request.sequence}) });
+    request.result = result;
     const parseStart = profile ? performance.now() : 0;
     if (profile) performanceMonitor.record('journal.diskCheckout', parseStart - checkoutStart);
     if (!result) {
       toast(direction === 'undo' ? '沒有可撤銷的操作' : '沒有可重做的操作');
+      return;
+    }
+    if (request.prune && !result.content) {
+      tab.journalHead = result.sequence;
+      if(result.cleanupWarning)toast(`歷史清理未完成：${result.cleanupWarning}`);
+      window.dispatchEvent(new CustomEvent('cubebricks:history-change',{detail:{tabId:tab.id}}));
       return;
     }
     diskCheckoutApplied = true;
@@ -220,6 +233,8 @@ async function navigateProjectJournal(direction) {
       if (profile) performanceMonitor.record('journal.render', performance.now() - renderStart);
       diskCheckoutApplied = false;
     } finally { suppressJournalRecording = false; }
+    if (request.prune && result.cleanupWarning)toast(`歷史清理未完成：${result.cleanupWarning}`);
+    window.dispatchEvent(new CustomEvent('cubebricks:history-change',{detail:{tabId:tab.id}}));
   };
   const navigation = previousWrite.catch(() => {}).then(navigate);
   tab.journalWrites = navigation;
@@ -232,7 +247,44 @@ async function navigateProjectJournal(direction) {
   return true;
 }
 
+async function getProjectHistoryGraph() {
+  const tab=projectTabById(projectTabsController.activeId);
+  if(!tab?.journalId||!window.cubeBricksDesktop?.projectHistoryGraph)return null;
+  void flushProjectJournal(tab);
+  const read=(tab.journalWrites||Promise.resolve()).catch(()=>{}).then(async()=>{
+    await tab.journalReady;
+    if(tab.journalPending)throw Error('目前變更尚未寫入工作記錄');
+    const graph=await window.cubeBricksDesktop.projectHistoryGraph({journalId:tab.journalId});
+    tab.journalHead=graph.current;
+    return graph;
+  });
+  tab.journalWrites=read;
+  return read;
+}
+
+async function checkoutProjectHistory(sequence) {
+  requireOperation('core.history.checkout');
+  const request={sequence};await navigateProjectJournal(null,request);return request.result;
+}
+async function setProjectHistoryMark(sequence,mark) {
+  requireOperation('core.history.mark');
+  const tab=projectTabById(projectTabsController.activeId);
+  if(!tab?.journalId||!window.cubeBricksDesktop?.setProjectHistoryMark)return;
+  const save=(tab.journalWrites||Promise.resolve()).catch(()=>{}).then(async()=>{
+    await tab.journalReady;
+    const result=await window.cubeBricksDesktop.setProjectHistoryMark({journalId:tab.journalId,sequence,mark});
+    window.dispatchEvent(new CustomEvent('cubebricks:history-change',{detail:{tabId:tab.id}}));
+    return result;
+  });
+  tab.journalWrites=save;return save;
+}
+async function pruneProjectHistoryBranch(sequence, {single=false}={}) {
+  requireOperation(single?'core.history.delete':'core.history.prune');
+  const request={sequence,prune:true,single};await navigateProjectJournal(null,request);return request.result;
+}
+
 async function undo() {
+  if (state.projectHomeActive) return;
   // Desktop projects have one ordered journal for geometry, UVs and pixels.
   // The paint-only stack is a browser fallback; using it here makes Ctrl+Z
   // skip newer modelling edits and turns an undo into a fresh journal commit.
@@ -251,6 +303,7 @@ async function undo() {
 }
 
 async function redo() {
+  if (state.projectHomeActive) return;
   if (!window.cubeBricksDesktop?.checkoutProjectJournal && state.mode === 'paint' && state.paintFuture.length) {
     restoreTexturePaintHistory(state.paintFuture, state.paintHistory);
     return;
@@ -266,6 +319,7 @@ async function redo() {
 }
 
 function markDirty(value = true, { constrain = true } = {}) {
+  if (state.projectHomeActive) return;
   if (value && constrain && !suppressJournalRecording && state.mode === 'edit') {
     const rules = formatRules(state.project);
     if (rules.javaBlock || rules.moddedEntity) {
@@ -300,9 +354,10 @@ function startProjectJournal(tab, operationId = 'core.project.create', existingI
     .then(textures => window.cubeBricksDesktop.initProjectJournal({
       journalId: tab.journalId,
       operationId,
+      imported: tab.persistedWorkingCopy,
       operationIndex: operationIndex(),
       content: serializeCbmodel(textures, JSON.parse(projectContent), textureGroups, { snapshotOwned: true })
-    }));
+    })).then(result => { if (result?.persistent !== undefined) tab.persistedWorkingCopy = result.persistent; });
   tab.journalReady.catch(error => toast(`工作目錄建立失敗：${error.message}`));
 }
 
@@ -323,9 +378,10 @@ function scheduleProjectJournal(tab) {
 }
 
 function noteJournalOperation(operationId) {
+  if (state.projectHomeActive) return;
   const id = requireOperation(operationId);
   const tab = projectTabById(projectTabsController.activeId);
-  if (!tab) return;
+  if (!tab || tab.kind === 'home') return;
   tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
   if (tab.journalPending && tab.journalPending !== id) void flushProjectJournal(tab);
   tab.journalPending = id;
@@ -356,6 +412,7 @@ async function flushProjectJournal(tab = projectTabById(projectTabsController.ac
       historyLimit: session.project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT)
     });
     if (result?.sequence) tab.journalHead = result.sequence;
+    window.dispatchEvent(new CustomEvent('cubebricks:history-change',{detail:{tabId:tab.id}}));
     if (result?.sequence) scheduleProjectCover?.(tab);
     if (result?.historyWarning) toast(`歷史裁剪未完成：${result.historyWarning}`);
     return result;
@@ -368,6 +425,7 @@ return {
   get suppressRecording() { return suppressJournalRecording; },
   set suppressRecording(value) { suppressJournalRecording = Boolean(value); },
   compactProjectHistorySnapshot, snapshot, restore, undo, redo, markDirty,
-  startProjectJournal, scheduleProjectJournal, noteJournalOperation, flushProjectJournal
+  startProjectJournal, scheduleProjectJournal, noteJournalOperation, flushProjectJournal,
+  getProjectHistoryGraph, checkoutProjectHistory, pruneProjectHistoryBranch, setProjectHistoryMark
 };
 }

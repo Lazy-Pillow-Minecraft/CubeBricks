@@ -18,7 +18,7 @@ async function application(root, options = {}) {
       commandLine: { appendSwitch() {} }, once() {}, on() {},
       whenReady: () => ({ then() {} })
     },
-    BrowserWindow: { fromWebContents: () => ({
+    BrowserWindow: { getAllWindows: () => [], fromWebContents: () => ({
       approveProjectClose() { closed = true; },
       isDestroyed: () => false,
       isFocused: () => options.focused !== false,
@@ -102,13 +102,37 @@ test('a supplied cbmodel path opens directly and its home cover stays outside th
     assert.ok(![...unpackArchive(await fs.readFile(filePath)).keys()].some(name => name.includes('cover')));
     await app.call('project:cover-save', { journalId: id, dataUrl: null });
     assert.equal((await app.call('project:list-workspace')).find(project => project.journalId === id).cover, null);
-    await app.call('project:journal-discard', { journalId: id });
+    assert.equal(await app.call('project:journal-discard', { journalId: id }), false);
+    await app.call('project:delete-workspace', { journalId: id });
     assert.equal(await app.call('project:cover-save', { journalId: id, dataUrl: `data:image/png;base64,${png}` }), false);
     await assert.rejects(fs.stat(path.join(root, 'profile', 'project-covers', `${id}.png`)), { code: 'ENOENT' });
   } finally {
     await app.release();
     await fs.rm(root, { recursive: true, force: true });
   }
+});
+
+test('saved retention survives reopen and rejects a stale automatic-discard request', async () => {
+  const root=await fs.mkdtemp(path.join(__dirname,'..','.retention-ipc-test-'));
+  const apps=[];
+  const id='project_12345678-1234-1234-1234-123456789066';
+  const content=x=>JSON.stringify({name:'saved',elements:[{uid:'cube_a',type:'cube',position:[x,0,0]}],groups:[],textures:[],outliner:['cube_a']});
+  try {
+    const first=await application(root);apps.push(first);
+    await first.call('project:journal-init',{journalId:id,content:content(0)});
+    await first.call('project:journal-save',{journalId:id});
+    await first.call('project:journal-commit',{journalId:id,content:content(3),operationId:'core.element.move'});
+    assert.equal(await first.call('project:journal-discard',{journalId:id}),false);
+    await first.call('app:confirm-close',{retained:[],discarded:[id]});
+    const second=await application(root);apps.push(second);
+    const restored=await second.call('project:journal-recover',{journalId:id});
+    assert.equal(restored.persistent,true);
+    assert.equal(JSON.parse(restored.content).elements[0].position[0],3);
+    const temporary='project_12345678-1234-1234-1234-123456789067';
+    await second.call('project:journal-init',{journalId:temporary,content:content(0)});
+    assert.equal(await second.call('project:journal-discard',{journalId:temporary}),true,
+      'explicitly discarded never-saved projects can still be removed');
+  }finally{await Promise.all(apps.map(app=>app.release()));await fs.rm(root,{recursive:true,force:true});}
 });
 
 test('cbmodel export offers full history or current-state snapshot without truncating the working journal', async () => {
@@ -203,7 +227,7 @@ test('IPC cannot recover or delete a journal already open in another application
     await fs.mkdir(decoy);
     await fs.writeFile(path.join(decoy, 'keep.txt'), 'unrelated');
     await second.call('app:confirm-close', { discarded: [id], retained: [] });
-    await assert.rejects(fs.access(path.join(root, 'profile', 'working-projects', 'projects', id)), { code: 'ENOENT' });
+    await fs.access(path.join(root, 'profile', 'working-projects', 'projects', id));
     assert.equal(await fs.readFile(path.join(decoy, 'keep.txt'), 'utf8'), 'unrelated');
   } finally {
     await Promise.all(apps.map(app => app.release()));
@@ -310,7 +334,7 @@ test('project UUID survives archive reopening and the same file reuses its worki
   }
 });
 
-test('a newer archive on the same history replaces only an idle, saved working copy', async () => {
+test('opening a newer archive preserves the previously saved working folder', async () => {
   const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-newer-test-'));
   const apps = [];
   try {
@@ -334,7 +358,7 @@ test('a newer archive on the same history replaces only an idle, saved working c
     assert.equal(JSON.parse(reopened.content).projectUuid, source.projectUuid);
     assert.equal(JSON.parse(reopened.content).elements[0].position[0], 7);
     const folders = await fs.readdir(path.join(root, 'profile', 'working-projects', 'projects'), { withFileTypes: true });
-    assert.equal(folders.filter(entry => entry.isDirectory() && entry.name.startsWith('project_')).length, 1);
+    assert.equal(folders.filter(entry => entry.isDirectory() && entry.name.startsWith('project_')).length, 2);
   } finally {
     await Promise.all(apps.map(app => app.release()));
     await fs.rm(root, { recursive: true, force: true });

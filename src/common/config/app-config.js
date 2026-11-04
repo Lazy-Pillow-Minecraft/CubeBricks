@@ -249,6 +249,7 @@ const attributeSources = new WeakMap();
 const TRANSLATED_ATTRIBUTES = ['title', 'aria-label', 'placeholder', 'data-tooltip'];
 
 function translateTextNode(node) {
+  if(node.parentElement?.closest('[translate="no"]'))return;
   const current = node.nodeValue || '';
   const trimmed = current.trim();
   if (!trimmed) return;

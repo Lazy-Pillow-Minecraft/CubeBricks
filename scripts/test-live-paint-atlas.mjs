@@ -90,8 +90,11 @@ const savedDocument = globalThis.document;
 const savedWindow = globalThis.window;
 const savedRequestAnimationFrame = globalThis.requestAnimationFrame;
 const savedCancelAnimationFrame = globalThis.cancelAnimationFrame;
-globalThis.document = { createElement: () => new Canvas(), querySelectorAll: () => [] };
+globalThis.document = { createElement: () => new Canvas(), querySelectorAll: () => [], querySelector: () => null };
 globalThis.window = { dispatchEvent() {} };
+// Thumbnail refreshes share the browser's next frame with live painting.
+const thumbnailFrames = [];
+globalThis.requestAnimationFrame = callback => thumbnailFrames.push(callback);
 try {
   const base = new Canvas(4, 4), editable = new Canvas(4, 4);
   base.pixels.set([30, 40, 50, 255], (1 * 4 + 1) * 4);

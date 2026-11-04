@@ -1,5 +1,7 @@
 import { applyLayerMaskPixels, blendLayerImageData, LAYER_BLEND_MODES } from './layer-blend.js';
 import { mapLayerTonePixels } from './layer-tone-map.js';
+import { faceTilingRegion, faceTilingSettings } from './face-tiling.js';
+import { activeTextureFrame, frameLayerUids, framePaintLayer, textureFrameSample } from './frame-links.js';
 
 export const layerRasterCache = new Map();
 
@@ -66,6 +68,7 @@ export function selectedLayerEntry(asset) {
 }
 
 export function activeLayer(asset) {
+  if(asset?.animation?.enabled)return framePaintLayer(asset);
   const layers = asset?.layers || [];
   const selected = selectedLayerEntry(asset);
   if (selected?.type !== 'group' && selected) return selected;
@@ -197,20 +200,20 @@ function layerTreeIndex(layers) {
   return index;
 }
 
-export function compositeLayers(asset, liveCanvas = null, rootUid = null, region = null) {
+export function compositeLayers(asset, liveCanvas = null, rootUid = null, region = null, includedUids = null, liveLayerUid = null, rasters = layerRasterCache) {
   if (!asset?.layers?.length) return liveCanvas;
-  const selected = activeLayer(asset);
+  const selected = liveLayerUid?asset.layers.find(layer=>layer.uid===liveLayerUid):activeLayer(asset);
   // The editable texture canvas is reused when the active layer changes.
   // Caching that DOM canvas by reference makes the previous layer vanish as
   // soon as showEditableLayer clears it for the next layer.
-  if (liveCanvas && selected && !region) layerRasterCache.set(selected.uid, {
+  if (liveCanvas && selected && !region) rasters.set(selected.uid, {
     canvas: imageCanvas(liveCanvas), savedSource: selected.source
   });
   const canvas = document.createElement('canvas');
   let rasterWidth = 0, rasterHeight = 0;
   if (!region && !liveCanvas) for (const layer of asset.layers) {
     if (layer.type === 'group') continue;
-    const raster = layerRasterCache.get(layer.uid)?.canvas;
+    const raster = rasters.get(layer.uid)?.canvas;
     if (raster) { rasterWidth = Math.max(rasterWidth, raster.width); rasterHeight = Math.max(rasterHeight, raster.height); }
   }
   canvas.width = region?.width || Math.max(1, liveCanvas?.width || rasterWidth || asset.uvWidth || 16);
@@ -258,7 +261,7 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
       renderChildren(uid, children.getContext('2d'), new Set([uid]), true, sourceTrail);
       blend(output.getContext('2d'), source, children, sourceTrail);
     } else {
-      blend(output.getContext('2d'), source, layerRasterCache.get(uid)?.canvas, sourceTrail, region);
+      blend(output.getContext('2d'), source, rasters.get(uid)?.canvas, sourceTrail, region);
     }
     return output;
   }
@@ -320,9 +323,10 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
   }
   function renderChildren(parentUid, context, ancestors = new Set(), ignoreVisibility = false, trail = new Set()) {
     for (const layer of childrenByParent.get(parentUid) || []) {
+      if (includedUids && !ignoreVisibility && !includedUids.has(layer.uid)) continue;
       if (layer.type === 'group') {
         if (ancestors.has(layer.uid)) continue;
-        if (!ignoreVisibility && layer.visible === false) continue;
+        if (!includedUids && !ignoreVisibility && layer.visible === false) continue;
         if (canPassThroughGroup(layer.uid)) {
           renderChildren(layer.uid, context, new Set([...ancestors, layer.uid]), ignoreVisibility, trail);
           continue;
@@ -330,7 +334,7 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
         const nested = blankCanvas();
         renderChildren(layer.uid, nested.getContext('2d'), new Set([...ancestors, layer.uid]), ignoreVisibility, trail);
         blend(context, layer, nested, trail);
-      } else if (ignoreVisibility || layer.visible !== false) blend(context, layer, layerRasterCache.get(layer.uid)?.canvas, trail, region);
+      } else if (includedUids || ignoreVisibility || layer.visible !== false) blend(context, layer, rasters.get(layer.uid)?.canvas, trail, region);
     }
   }
   renderChildren(rootUid, context);
@@ -347,9 +351,31 @@ export function layerEntryRaster(asset, uid) {
     : layerRasterCache.get(entry.uid)?.canvas || null;
 }
 
-export function flipbookFrame(asset, source, frame = 0) {
-  // Animation is a texture-kind placeholder until its playback contract is defined.
-  return source;
+const frameRasterCache = new WeakMap();
+export function flipbookFrame(asset, source, region = null) {
+  const {frame,next,mix}=textureFrameSample(asset);
+  if (!asset?.animation?.enabled || !frame || !source) return source;
+  let cache=frameRasterCache.get(asset);
+  if(!cache||cache.source!==source||cache.savedSource!==asset.source||cache.frames!==asset.animation.frames||cache.layers!==asset.layers){
+    cache={source,savedSource:asset.source,frames:asset.animation.frames,layers:asset.layers,rasters:new Map()};frameRasterCache.set(asset,cache);
+  }
+  if(region)for(const uid of cache.rasters.keys())if(uid!==frame.uid&&uid!==next?.uid)cache.rasters.delete(uid);
+  const rasterFor=entry=>{
+    let canvas=cache.rasters.get(entry.uid);if(canvas&&!region)return canvas;
+    const patch=canvas&&region?region:null,raster=compositeLayers(asset,null,null,patch,frameLayerUids(asset,entry));
+    if(!canvas){canvas=document.createElement('canvas');canvas.width=source.width;canvas.height=source.height;}
+    const ctx=canvas.getContext('2d');if(patch)ctx.clearRect(patch.x,patch.y,patch.width,patch.height);else ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(raster)ctx.drawImage(raster,patch?.x||0,patch?.y||0);cache.rasters.set(entry.uid,canvas);
+    if(cache.rasters.size>4)for(const uid of cache.rasters.keys())if(uid!==frame.uid&&uid!==next?.uid){cache.rasters.delete(uid);break;}
+    return canvas;
+  };
+  const first=rasterFor(frame);if(!mix||!next||next===frame)return first;
+  const second=rasterFor(next);
+  const output=cache.mixed||=document.createElement('canvas');
+  if(output.width!==source.width||output.height!==source.height){output.width=source.width;output.height=source.height;}
+  const context=output.getContext('2d');context.clearRect(0,0,output.width,output.height);
+  context.globalAlpha=1-mix;context.drawImage(first,0,0);context.globalCompositeOperation='lighter';context.globalAlpha=mix;context.drawImage(second,0,0);
+  context.globalAlpha=1;context.globalCompositeOperation='source-over';return output;
 }
 
 
@@ -362,38 +388,37 @@ export function faceTileSize(cube, faceName) {
 export function tiledFaceReference(cube, faceName, asset, region = null) {
   const face = cube.faces?.[faceName];
   if (asset?.mode !== 'tiled') return null;
-  const tile = face.tiling || {};
-  const size = region ? [region.width, region.height] : faceTileSize(cube, faceName);
+  const tile = faceTilingRegion(face, region);
   const mod = (v, n) => Math.round((((v % n) + n) % n) * 1e8) / 1e8;
-  return `__tile__${JSON.stringify([face.texture, size, mod((Number(tile.offsetX) || 0) + (region?.x || 0), Number(tile.width) || 16), mod((Number(tile.offsetY) || 0) + (region?.y || 0), Number(tile.height) || 16), Number(tile.width) || 16, Number(tile.height) || 16])}`;
+  return `__tile__${JSON.stringify([face.texture, tile.width, tile.height,
+    mod(tile.offsetX, asset.width || asset.uvWidth || 16), mod(tile.offsetY, asset.height || asset.uvHeight || 16)])}`;
 }
 
-export function tiledFaceRegions(cube, faceName, sourceWidth, sourceHeight) {
-  const tile = cube.faces?.[faceName]?.tiling || {};
+export function tiledFaceRegions(cube, faceName) {
+  const tile = faceTilingSettings(cube.faces?.[faceName]);
   const [width, height] = faceTileSize(cube, faceName);
-  const stepX = Math.max(.0001, Number(tile.width) || 16) * Math.max(1, Math.floor(1024 / sourceWidth));
-  const stepY = Math.max(.0001, Number(tile.height) || 16) * Math.max(1, Math.floor(1024 / sourceHeight));
   const regions = [];
-  for (let y = 0; y < height; y += stepY) for (let x = 0; x < width; x += stepX) {
-    regions.push({ x, y, width: Math.min(stepX, width - x), height: Math.min(stepY, height - y), faceWidth: width, faceHeight: height });
+  if (!width || !height) return regions;
+  for (let y = 0; y < tile.height; y += 1024) for (let x = 0; x < tile.width; x += 1024) {
+    regions.push({ x: x / tile.width * width, y: y / tile.height * height,
+      width: Math.min(1024, tile.width - x) / tile.width * width,
+      height: Math.min(1024, tile.height - y) / tile.height * height,
+      faceWidth: width, faceHeight: height });
   }
   return regions;
 }
 
 export function tiledFaceRaster(cube, faceName, source, region = null, outputSize = null, sourcePixels = null) {
-  const tile = cube.faces[faceName].tiling || {};
-  const size = region ? [region.width, region.height] : faceTileSize(cube, faceName);
-  const repeat = [size[0] / Math.max(.0001, Number(tile.width) || 16), size[1] / Math.max(.0001, Number(tile.height) || 16)];
+  const tile = faceTilingRegion(cube.faces?.[faceName], region);
   const canvas = document.createElement('canvas');
-  canvas.width = outputSize?.[0] || Math.max(1, Math.min(1024, Math.ceil(repeat[0] * source.width)));
-  canvas.height = outputSize?.[1] || Math.max(1, Math.min(1024, Math.ceil(repeat[1] * source.height)));
+  canvas.width = outputSize?.[0] || Math.max(1, Math.min(1024, Math.ceil(tile.width)));
+  canvas.height = outputSize?.[1] || Math.max(1, Math.min(1024, Math.ceil(tile.height)));
   const input = sourcePixels || source.getContext('2d').getImageData(0, 0, source.width, source.height);
   const context = canvas.getContext('2d'), output = context.createImageData(canvas.width, canvas.height);
-  const offset = [(Number(tile.offsetX) || 0) + (region?.x || 0), (Number(tile.offsetY) || 0) + (region?.y || 0)];
-  const fraction = value => ((value % 1) + 1) % 1;
+  const wrap = (value, period) => ((Math.floor(value) % period) + period) % period;
   for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
-    const u = Math.floor(fraction((x + .5) / canvas.width * repeat[0] + offset[0] / Math.max(.0001, Number(tile.width) || 16)) * source.width);
-    const v = Math.floor(fraction((y + .5) / canvas.height * repeat[1] + offset[1] / Math.max(.0001, Number(tile.height) || 16)) * source.height);
+    const u = wrap(tile.offsetX + (x + .5) / canvas.width * tile.width, source.width);
+    const v = wrap(tile.offsetY + (y + .5) / canvas.height * tile.height, source.height);
     const src = (v * source.width + u) * 4, dst = (y * canvas.width + x) * 4;
     for (let channel = 0; channel < 4; channel++) output.data[dst + channel] = input.data[src + channel];
   }

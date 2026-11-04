@@ -1,6 +1,99 @@
 // Fallback patterns for runtime-composed UI messages. Static messages use stable IDs in messages.js.
 export function translateEnglishUiText(text, language, translateUiText) {
   const upcoming = {
+    '正在烘焙导出贴图': 'Baking export textures',
+    '烘焙贴图超出可用尺寸，请减少帧数或平铺范围': 'The baked texture exceeds the supported size. Reduce the frame count or tiled span.',
+    '打開項目首頁': 'Open project home',
+    '刪除項目': 'Delete project',
+    '保存並關閉': 'Save and close',
+    '不保留': 'Discard',
+    '從未保存': 'Never saved',
+    '已保存的工作項目': 'Saved working project',
+    '從未保存的工作項目': 'Never-saved working project',
+    '正在讀取歷史記錄': 'Loading history',
+    '歷史記錄讀取失敗': 'Could not load history',
+    '歷史記錄': 'History',
+    '標記節點': 'Mark node',
+    '編輯節點標記': 'Edit node mark',
+    '標記歷史節點': 'Mark history node',
+    '標記形狀': 'Mark shape',
+    '正菱形': 'Diamond',
+    '六邊形': 'Hexagon',
+    '五角星': 'Five-pointed star',
+    '移除標記': 'Remove mark',
+    '無效的歷史節點標記': 'Invalid history node mark',
+    '項目歷史分支圖': 'Project history tree',
+    '目前狀態': 'Current state',
+    '歷史記錄僅在桌面版可用': 'History is available in the desktop application',
+    '切換到此歷史狀態': 'Restore this history state',
+    '切換歷史狀態': 'Restore history state',
+    '刪除單個節點': 'Delete this node only',
+    '刪除節點及後續整個分支': 'Delete this node and its entire branch',
+    '至少需要保留一個歷史狀態': 'At least one history state must remain',
+    '只刪除此歷史節點？後續記錄會保留。': 'Delete only this history node? Later records will be kept.',
+    '刪除此節點及其全部後續分支？': 'Delete this node and all its descendant branches?',
+    '刪除歷史節點': 'Delete history node',
+    '刪除歷史分支': 'Delete history branch',
+    '刪除單個歷史節點': 'Delete a single history node',
+    '刪除節點': 'Delete node',
+    '刪除分支': 'Delete branch',
+    '這項操作無法撤銷。如果目前狀態被刪除，會先還原到仍保留的父節點或鄰近歷史狀態。': 'This cannot be undone. If the current state is deleted, a retained parent or nearby history state will be restored first.',
+    '已保存的項目不能自動刪除': 'Saved projects cannot be deleted automatically',
+    '項目': 'Project',
+    '正在讀取工作項目': 'Reading working project',
+    '正在還原模型與貼圖': 'Restoring model and textures',
+    '項目已載入': 'Project loaded',
+    '將刪除這個項目的本機文件夾及全部歷史記錄，無法撤銷。已導出的模型文件不受影響。': 'This permanently deletes the local project folder and its entire history. Exported model files are not affected.',
+    '這個新建項目從未保存。保存後會一直保留在項目文件夾中。': 'This new project has never been saved. Saving keeps its working folder permanently.',
+    '以下僅列出從未保存的新建項目。勾選即可保存並保留；取消勾選會刪除該項目的本機工作記錄。保存過的項目會自動保存並永久保留，不會在此列出。': 'Only new, never-saved projects are listed. Checked projects will be saved and retained; unchecked projects lose their local working records. Previously saved projects are saved automatically, retained permanently, and omitted from this list.',
+    '默認': 'Default',
+    '開始記錄 8 秒，請持續操作主視圖': 'Recording for 8 seconds; keep interacting with the viewport',
+    '性能記錄已複製到剪貼板': 'Performance report copied to the clipboard',
+    '無法複製性能記錄，請查看開發者工具': 'Could not copy the performance report; check Developer Tools',
+    '項目封面讀取失敗': 'Could not load the project cover',
+    '項目首頁載入失敗': 'Could not load the project home page',
+    '貼圖模式': 'Texture mode',
+    '複製': 'Copy',
+    '貼上': 'Paste',
+    '剪切': 'Cut',
+    '原地複製': 'Duplicate',
+    '幀': 'Frames',
+    '＋ 幀': '+ Frame',
+    '尚無幀元素': 'No frame elements',
+    '新增幀元素': 'Add frame element',
+    '刪除幀元素': 'Delete frame element',
+    '剪切幀元素': 'Cut frame element',
+    '貼上幀元素': 'Paste frame element',
+    '原地複製幀元素': 'Duplicate frame element',
+    '調整幀元素順序': 'Reorder frame elements',
+    '切換貼圖手翻書屬性': 'Toggle texture flipbook attribute',
+    '連接幀與圖層': 'Connect frame and layer',
+    '斷開幀與圖層': 'Disconnect frame and layer',
+    '幀與圖層連線': 'Frame and layer connections',
+    '幀漸變': 'Frame interpolation',
+    '幀進度': 'Frame position',
+    '顯示或隱藏幀進度條': 'Show or hide the frame timeline',
+    '當前幀沒有可編輯圖層': 'This frame has no editable layer',
+    '更改幀內圖層顯隱': 'Change frame-local layer visibility',
+    '選擇幀內繪畫圖層': 'Select frame paint layer',
+    '更改手翻書播放設置': 'Change flipbook playback settings',
+    '播放': 'Play',
+    '暫停': 'Pause',
+    '動畫尺寸與時間必須是正整數': 'Animation dimensions and timing must be positive integers',
+    '動畫單幀尺寸無法整齊切分貼圖': 'Animation frame dimensions do not divide the texture evenly',
+    '貼圖動畫包含過多圖像': 'The texture animation contains too many images',
+    '貼圖動畫包含過多幀': 'The texture animation contains too many frames',
+    '動畫幀索引超出貼圖範圍': 'An animation frame index is outside the texture',
+    'X 偏移（px）': 'X offset (px)',
+    'Y 偏移（px）': 'Y offset (px)',
+    '整個面的平鋪寬度（px）': 'Full face width (px)',
+    '整個面的平鋪高度（px）': 'Full face height (px)',
+    'UV X 起點（px）': 'UV X origin (px)',
+    'UV Y 起點（px）': 'UV Y origin (px)',
+    'UV 寬度（px）': 'UV width (px)',
+    'UV 高度（px）': 'UV height (px)',
+    '手翻書': 'Flipbook',
+    '平鋪': 'Tiled',
     '動畫編輯': 'Animation Editing',
     '動畫編輯（開發中）': 'Animation Editing (in development)',
     '動畫編輯 · 即將推出': 'Animation Editing · Coming Soon',
@@ -66,6 +159,8 @@ export function translateEnglishUiText(text, language, translateUiText) {
     '依新 UV 重排各圖層像素，保留組與混合設定': 'Rearrange each layer for the new UVs while preserving groups and blend settings'
   };
   if (upcoming[text]) return upcoming[text];
+  if(text.startsWith('動畫配置讀取失敗：'))return `Could not load animation metadata: ${translateUiText(text.slice('動畫配置讀取失敗：'.length),language)}`;
+  if(text.startsWith('已導入動畫貼圖 '))return `Imported animated texture ${text.slice('已導入動畫貼圖 '.length)}`;
   let match = text.match(/^背景：(純黑|目前背景|棋盤格)$/);
   if (match) return `Background: ${translateUiText(match[1], language)}`;
   match = text.match(/^不支援拖入 (.+)$/);
@@ -155,6 +250,14 @@ export function translateEnglishUiText(text, language, translateUiText) {
   if (match) return `${translateUiText(match[1], language)} ${match[2]}`;
   match = text.match(/^正在(建立|準備|截取|離屏渲染)(.+)$/);
   if (match) return `${{ 建立: 'Creating', 準備: 'Preparing', 截取: 'Capturing', 離屏渲染: 'Rendering offscreen' }[match[1]]}${match[2]}`;
+  match = text.match(/^是否保留「(.+)」？$/);
+  if (match) return `Keep “${match[1]}”?`;
+  match = text.match(/^確定刪除「(.+)」？$/);
+  if (match) return `Delete “${match[1]}”?`;
+  match = text.match(/^正在讀取歷史記錄 (\d+)%$/);
+  if (match) return `Loading history ${match[1]}%`;
+  match = text.match(/^歷史清理未完成：(.+)$/);
+  if (match) return `History cleanup incomplete: ${match[1]}`;
   match = text.match(/^「(.+)」尚未保存，仍要關閉嗎？$/);
   if (match) return `“${match[1]}” has not been saved. Close it anyway?`;
   match = text.match(/^找到 (\d+) 個未保存的工作項目。要全部恢復到分頁嗎？$/);

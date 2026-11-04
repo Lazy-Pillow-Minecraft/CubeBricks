@@ -31,14 +31,32 @@
 
 ## 入口边界
 
+贴图导出由 `texture/export-bake.js` 连接已有几何烘焙结果；`export-plan.js` 负责引用解析、周期范围复用、最小公倍数和图集／箱型布局，`export-raster.js` 负责独立快照合成与像素烘焙，`export-progress.js` 管理延迟显示的进度窗。格式注册表用 `singleTexture` 声明合并规则。导出不依赖当前帧选择、全局图层光栅缓存或可编辑画布，不向工程写入烘焙结果。
+
+贴图导出由 `texture/export-bake.js` 连接已有几何烘焙结果；`export-plan.js` 负责引用解析、周期范围复用、最小公倍数和图集／箱型布局，`export-raster.js` 负责独立快照合成与像素烘焙，`export-progress.js` 管理延迟显示的进度窗。格式注册表用 `singleTexture` 声明合并规则。导出不依赖当前帧选择、全局图层光栅缓存或可编辑画布，不向工程写入烘焙结果。
+
 `app.js` 保留少量转发函数，以处理各控制器间的初始化顺序与回调循环；具体操作实现不应回流入口。移动功能时应保持操作 ID、日志与导入／导出测试覆盖。操作 ID 测试会递归扫描整个 `src/`，新模块不会因离开入口而漏出记录审核。
 
 ## 贴图模板与图层边界
 
 `src/texture/template-controller.js` 负责收集 Cube 面、打包新 UV、绘制模板与更新面指派；它不应直接实现图层合成规则。勾选保留图层时，来源图层及组的结构会复制到新贴图，图片层的像素逐层重排，遮罩 UID 改指向新层；最终合成仍使用 `src/common/core/texture-features.js` 的图层管线。关闭时使用原本的合成单张模板流程。图层资产的加载、启用与预览刷新则由 `src/texture/asset-controller.js` 负责。
 
+`src/texture/frame-elements.js` 管理独立帧；`animation.frames` 内的 `layerUids`、`visibility` 和 `paintLayerUid` 分别保存关联、帧内显隐和绘画目标。`frame-links.js` 解析根组、后代与祖先范围；列表、连线和播放分别由三个独立控制器管理。进度与播放状态属于运行时，FPS 与渐变设置属于贴图。显示合成缓存最多四帧并复用脏区域更新，帧渐变混合预合成图像；原像素和蒙版来源不改写。`src/paint/eyedropper.js` 共用不含光照的取色管线，三维按深度跳过全透明命中。
+
 ## 日志线程与视图更新
 
 `electron/main.cjs` 管理窗口、项目所有权和逐项目操作队列；`journal-service.cjs` 将日志调用转交 `journal-worker.cjs`，实际快照、文件读写、撤销和归档沿用 `project-journal.cjs`。工作线程完成或失败时同步返回状态与错误；确认顺序、原子写入和恢复校验不因后台执行而放宽。
+
+`project-retention.cjs` 通过项目目录内的 `workspace_state` 原子保存持久化标记，独立于编辑历史；该文件不进入导出归档。自动丢弃入口在主进程再次检查标记，未知或损坏的标记按保留处理。首页与模型页签有不同类型，首页不建立日志，也不捕获模型工作阶段。
+
+`project_settings` 保存项目历史上限，并随两种归档模式导出。项目选项将模型信息变更与历史设置分开提交，后者使用独立设置接口和已有的项目写入队列，不新增事务或清空重做。历史比较忽略旧快照内的上限字段；恢复模型时保留当前设置。
+
+`electron/history-marks.cjs` 验证并原子保存节点标记；标记接口复用项目写入队列。前端的 `history-mark-shapes.js` 共用图形路径，`history-mark-editor.js` 管理标记表单并调用已有选色器。历史窗口用逆视图比例保持标记及标签的屏幕尺寸，标签按用户文本渲染，`R` 快捷键只作用于最上层历史窗口，聚焦动画结束后停止调度。
+
+`journal-import.cjs` 对大型归档分阶段还原：先写当前事务、元素快照、贴图和必要计数，再在后台写其余不可变历史；撤销可直接读取待写记录。导入原档和恢复标记暂存于项目目录，意外中断后可续写，完成后清理。关闭和再次导出会等待必要写入完成，历史未就绪时延后裁剪，避免与后台导入冲突。
+
+`archive-index.cjs` 按 CBM2 索引读取和校验当前所需的压缩块、文件和图片，保留有界的解压块缓存，避免显示模型前解压全部历史。新归档将当前快照集中排列在前，历史记录随后；文件内容和校验规则保持不变。
+
+`journal-history.cjs` 读取完整历史森林，负责按全局序号裁剪及单节点／整分支删除；`journal-history-storage.cjs` 处理跨根路径与按内容去重的根贴图基准。先准备恢复数据，再提交删除索引；加载时也会依据索引规范化尚未完成物理清理的父指针。`src/project/history-layout.js` 以迭代算法按末端数分配圆周空间，并均分每段直线上的节点间距；`history-dialog.js` 只在历史变化时重绘，普通点的屏幕直径为线宽的 2 倍，命中查询使用最终位置的空间索引，断开的根用虚线连接虚拟中心。
 
 手柄通过 `src/utils/dom/svg-markup.js` 保留 SVG 节点并更新坐标与路径，拓扑改变时才重建。`src/utils/performance-monitor.js` 提供短时采样，`electron/main-performance.cjs` 记录主线程延迟及进行中的操作。`scripts/profile-viewport-input.cjs` 可使用临时项目执行自动基准；详细测量见[性能排查记录](docs/CODE_AUDIT_2026-11-01.md)。

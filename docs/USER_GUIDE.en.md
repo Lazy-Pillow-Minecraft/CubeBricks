@@ -5,9 +5,24 @@
 ## 1. Create, save, and switch projects
 
 1. Choose a project format from the model-type list on the start page or from **New** in the top bar. The format supplies initial snapping and UV capabilities. Java Block/Item version restrictions can be changed in Project Information.
-2. Use the top tabs to switch between open projects or drag them to reorder. Right-click a tab to edit project information; middle-click it or use its hover-only close icon to close it.
+2. Use the top tabs to switch projects or drag them to reorder. Right-click a project tab for information; middle-click or use its hover-only close icon to close it. The plus directly after the list adds a home tab without closing projects. Creating or opening from that home replaces its tab in place.
 3. `Ctrl+S` or **Save** in the top bar retains the project's working folder without generating a `.cbmodel` or opening a file dialog. `Ctrl+Shift+S` and **Export** create a file; the chosen or typed extension selects `.cbmodel` or `.bbmodel`.
-4. On desktop exit, the retention prompt lists only projects created during this launch that have not yet been saved this way. Unchecking one deletes its expanded working directory. Retained working folders and previously existing projects are omitted from the prompt.
+4. Saved status is stored in the project directory and survives restarts. Previously saved projects save automatically when closing a tab or the application, without a prompt or automatic folder deletion. Only new, never-saved projects ask whether to keep or discard them; canceling keeps the project open.
+5. Right-click a home project entry and choose **Delete project**. Confirmation is required before removing its working folder and history. Exported files remain intact, and any tab for the deleted project closes.
+
+Opening an existing project shows a progress dialog only after half a second. Large history archives restore the current model and textures first, then read remaining history in the background. A thin progress bar at the bottom tracks this work while editing and undo remain available.
+
+**History**, directly after **Export**, opens a radial branch window. Terminal nodes receive equal circular sectors. The current node is highlighted, tips have a secondary highlight, and ordinary nodes use dots matching the line color, with a diameter twice the line width. Nodes are evenly spaced along each straight segment between forks or leading to a tip. Hover for operation and timestamp details. Use the wheel to zoom; drag empty space or middle-drag to pan.
+
+Left-click a history node to select it. `R` smoothly focuses that point; `Shift+R` restores the initial radial view, without changing the main camera or model state. UV Preview and History share the same fixed, low-contrast checkerboard background.
+
+Choose **Mark node** from a node's context menu to select a square, diamond, circle, hexagon, five-pointed star, or triangle, then set its color and name. The color button opens the existing three-mode picker. Names appear directly above their nodes in bright text on translucent dark backgrounds. Mark and label sizes stay constant on screen while zooming. When a marked node becomes current, its shape grows to 1.5 times its normal size with a fixed 3 px white outline; the label moves upward to keep clear of the enlarged shape. Right-click again to edit or remove a mark. Marks are saved independently, creating no history nodes and surviving state checkout; deleting or capping a node also clears its mark.
+
+Right-click a node to restore its state, delete only that node, or delete it and its entire descendant branch. Deletion requires confirmation and must leave at least one state. If the current state is removed, a retained parent or nearby state is restored first. Single-node deletion preserves successors. Branches whose parents were removed connect to a shared virtual center with dashed lines and remain navigable.
+
+The history cap removes the oldest project-wide sequence numbers individually, preserving newer records across all branches. The virtual center indicates that earlier connections were cleared; it has no restorable model state.
+
+Set a project-specific history limit in Project Information, or leave it empty to use the application default. The limit is saved independently: changing it creates no history node, and undo, redo, or history checkout does not change it. Reducing the limit still performs the required cleanup of old records.
 
 Java Block/Item projects force back-face culling and per-face UVs. Their three version classes allow, respectively, 22.5° steps on one axis, arbitrary angles on one axis, or unrestricted rotation axes. The viewport guide marks the −16 to 32 `from/to` coordinate range; the ground reference grid shifts +8 on X/Z while the red and blue axes still start at the origin and extend farther. Animation mode is unavailable for this format, and Display Settings is currently only a placeholder. The Bedrock Block guide moves with the model to indicate its 30 px size constraint; a drag or numeric change that worsens an out-of-range model is rejected. The guides share the main ground-grid line color and depth behavior.
 
@@ -60,7 +75,39 @@ Use the controls above the scene hierarchy to create cubes, groups, locators, an
 4. **New Texture → Texture Template** repacks UVs from the current cube faces. Options include selected elements only, zero-area face cleanup, box UVs, canvas-size alignment, padding, and **Do Not Share UVs**. The latter is checked by default each time the dialog opens. Unchecking it allows faces with the same source and old UVs to reuse a new slot, even across different cubes.
 5. **Preserve Layer Structure** is on by default. Each source texture's layers are remapped separately into the new UV layout, retaining groups, visibility, blend modes, and mask links. Multiple source textures become separate groups; faces with no texture go into a template base layer. Turn it off to output one flattened image. Box UVs default to off except where required by the model format.
 
-The **Tiled** and **Flipbook** entries in the texture-mode dropdown are marked **Coming Soon** and cannot currently be selected. Ordinary textures remain available.
+The four fields below the texture view show X/Y origin and width W/height H. For ordinary UVs, moving the origin translates the whole rectangle, and resizing preserves its mirror orientation. Mixed values in a multi-selection show `-`.
+
+Change texture mode at the top of the Layers panel. Mode and creation controls stay visible while scrolling. In **Tiled** mode, the fields specify X/Y starting offsets and the entire face's pixel width/height. The source image repeats intact: a 16px-wide image repeats twice across a face whose W is 32px. These parameters are separate from ordinary UVs. Switch back to **Default** to edit the original UV coordinates.
+
+With UV Preview's auto-focus option enabled, clicking a face switches to its assigned texture and focuses its UVs automatically.
+
+Lines, rectangles, and ellipses on tiled faces use continuous face positions before their pixels wrap onto the source texture. Screen-space painting fills the actual projected footprint, keeping stroke width consistent with ordinary textures.
+
+**Flipbook** is a separate checkbox available for both Default and Tiled textures. Open the layer editor using the gear beside the layer-creation controls; frame elements appear in its rightmost list. Use **+ Frame** to add one, drag a row to reorder, or right-click to copy, paste, cut, duplicate, or delete. With the frame list focused, `Ctrl+C/V/X/D` and `Delete` perform the same actions. Edits support undo and redo. Frames have no grouping or visibility controls.
+
+The frame list appears only with Flipbook enabled. The window expands to the right with the list and a gap about half the layer-list width, preserving existing columns; smaller screens can scroll horizontally. Drag between dots for many-to-many links; the top-right port represents the entire layer list, and overflowing layer ports snap to its right border. Right-click a curve to disconnect it. Highlights follow the last selected frame or layer. Each frame composites only connected content; thick left edges mark effective members. Connected-group children have frame-local visibility controls in the editor. Painting is restricted to editable image layers in the current frame, which remembers its last paint layer and initially chooses the first editable one. The timeline supports scrubbing and clickable frame ticks; header controls set FPS and interpolation. Textures play independently and only their play/pause buttons change playback state. Other actions and focus changes do not pause them. The timeline appears automatically with Flipbook frames, without a visibility switch. PNG import reads a sibling `filename.png.mcmeta`, creating flat image layers and linked frames while preserving order, timing, and interpolation. Disabling Flipbook restores global visibility and retains frame settings. Original pixels, dimensions, and UVs remain intact.
+
+The eyedropper skips fully transparent pixels and continues to deeper faces in 3D. Hold `Ctrl` to sample the final composite, including current-frame interpolation, blending, and masks, without lighting or shadows. This also works with the temporary `Alt` eyedropper.
+
+### Exporting tiled and flipbook textures
+
+Choosing `.bbmodel` bakes textures after the existing Shape/modifier geometry pass, leaving the current project, layers, and playback position unchanged. Animation frames become a vertical PNG strip in frame-list order. Longer exports display progress.
+
+- **Single-texture formats**, including Bedrock Entity and Java Modded Entity, merge all textures into one atlas. The output count is the least common multiple of all animation frame counts, each sequence cycles independently, and static images remain unchanged in every frame. FPS is the mean of the animated textures' rates and interpolation is disabled. The same rule applies when there is only one animated texture.
+- **Multi-texture formats**, including Java Block/Item, keep static textures separate and bake each animation independently, preserving its rate, frame durations, and interpolation setting.
+- **Tiled faces** bake their offsets and full-face extents. Faces using the same source share a periodic plane; whole-period offsets and compatible overlapping regions reuse UV pixels instead of receiving separate images. The renderer's 1024px cache cap does not truncate exports. Box-only formats bake into fixed box nets and reuse identical nets.
+
+`.cbmodel` retains editable textures, layers, frame links, and tiling parameters. Keep an engineering project file for subsequent editing.
+
+### Exporting tiled and flipbook textures
+
+Choosing `.bbmodel` bakes textures after the existing Shape/modifier geometry pass, leaving the current project, layers, and playback position unchanged. Animation frames become a vertical PNG strip in frame-list order. Longer exports display progress.
+
+- **Single-texture formats**, including Bedrock Entity and Java Modded Entity, merge all textures into one atlas. The output count is the least common multiple of all animation frame counts, each sequence cycles independently, and static images remain unchanged in every frame. FPS is the mean of the animated textures' rates and interpolation is disabled. The same rule applies when there is only one animated texture.
+- **Multi-texture formats**, including Java Block/Item, keep static textures separate and bake each animation independently, preserving its rate, frame durations, and interpolation setting.
+- **Tiled faces** bake their offsets and full-face extents. Faces using the same source share a periodic plane; whole-period offsets and compatible overlapping regions reuse UV pixels instead of receiving separate images. The renderer's 1024px cache cap does not truncate exports. Box-only formats bake into fixed box nets and reuse identical nets.
+
+`.cbmodel` retains editable textures, layers, frame links, and tiling parameters. Keep an engineering project file for subsequent editing.
 
 ## 5. Painting
 

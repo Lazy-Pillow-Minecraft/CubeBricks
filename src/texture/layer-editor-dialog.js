@@ -1,11 +1,12 @@
 import { LAYER_BLEND_MODES } from '../common/core/layer-blend.js';
-import { activeLayer, compositeLayers, layerRasterCache, loadRaster, prepareLayers, selectedLayerEntry } from '../common/core/texture-features.js';
+import { activeLayer, compositeLayers, flipbookFrame, layerRasterCache, loadRaster, prepareLayers, selectedLayerEntry } from '../common/core/texture-features.js';
 import { tonePaletteSnapshot } from './tone-palette.js';
 
-export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, samplePaletteGradient, onPropertyInput, onPropertyCommit, onClose, toast }) {
+export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, samplePaletteGradient, getCompositeSource, onPropertyInput, onPropertyCommit, onClose, onRender, toast }) {
   const dialog = $('#layerEditorDialog');
   const layerList = $('#textureFeatureControls').closest('.texture-layer-panel-scroll');
-  const originalParent = layerList.parentNode;
+  const dockSlot = document.createComment('layer-list-dock-slot');
+  layerList.before(dockSlot);
   const host = $('#layerEditorListHost');
   const range = $('#layerOpacityRange');
   const value = $('#layerOpacityValue');
@@ -104,6 +105,7 @@ export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, sa
 
   function render() {
     if (!dialog.open) return;
+    onRender?.();
     const asset = activeTextureAsset();
     const layer = selectedLayerEntry(asset) || activeLayer(asset);
     $('#layerEditorLayerName').textContent = layer?.name || '未選擇圖層';
@@ -125,11 +127,16 @@ export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, sa
     }
     maskSource.value = layer?.maskLayerUid || '';
     updateToneControls(layer);
-    const composite = asset?.layers?.length ? compositeLayers(asset) : fallbackRaster;
+    refreshPreview();
     const current = layer?.type === 'group' ? compositeLayers(asset, null, layer.uid)
       : layerRasterCache.get(layer?.uid)?.canvas || null;
-    paintPreview(compositePreview, composite, composite?.width || 16, composite?.height || 16);
     paintPreview(currentPreview, current, current?.width || 16, current?.height || 16);
+  }
+
+  function refreshPreview(){
+    if(!dialog.open)return;const asset=activeTextureAsset();
+    const composite=flipbookFrame(asset,getCompositeSource?.(asset)||(asset?.layers?.length?compositeLayers(asset):fallbackRaster));
+    paintPreview(compositePreview,composite,composite?.width||16,composite?.height||16);
   }
 
   function scheduleRender() {
@@ -202,7 +209,7 @@ export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, sa
     if (frame !== null) cancelAnimationFrame(frame);
     frame = null;
     onClose();
-    originalParent.append(layerList);
+    dockSlot.after(layerList);
     pendingAsset = null;
     fallbackRaster = null;
   });
@@ -224,5 +231,5 @@ export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, sa
     }).catch(error => toast(error.message));
   }
 
-  return { open, render: scheduleRender, get isOpen() { return dialog.open; } };
+  return { open, render: scheduleRender, refreshPreview, get isOpen() { return dialog.open; } };
 }

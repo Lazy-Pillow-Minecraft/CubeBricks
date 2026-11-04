@@ -1,10 +1,12 @@
 import { getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
+import { faceTilingValues } from '../common/core/face-tiling.js';
+import { uvRectangleFields } from '../common/core/uv-rectangle.js';
 
 const CUBE_FACE_NAMES = ['north', 'east', 'south', 'west', 'up', 'down'];
 
 export function createUvEditorController({
   state, $, $$, getSelectionExpansion, activeTextureAsset,
-  textureAtlasReferences, effectiveFaceTextureReference, isFaceTiled,
+  textureAtlasReferences, effectiveFaceTextureReference, isFaceTiled, selectedTilingFaces,
   round, renderTextureTileControls, syncTexturePreviewPriority,
   clamp, snapValue, snapshot, markDirty,
   invalidateSelectionRenderGeometry, scheduleSceneRender
@@ -100,6 +102,25 @@ function selectedTextureUvEntries(entries = textureUvEntries()) {
   return selected;
 }
 
+// Tiled faces remain selectable through the direction buttons, but do not
+// expose their dormant ordinary UV rectangles as draggable outlines.
+function textureFaceEntries() {
+  if (activeTextureAsset()?.mode !== 'tiled') return textureUvEntries();
+  const asset = activeTextureAsset();
+  const references = new Set(textureAtlasReferences(asset, state.textureAssets.indexOf(asset))
+    .flatMap(reference => [String(reference), String(reference).startsWith('#') ? String(reference).slice(1) : `#${reference}`]));
+  const entries = [];
+  for (const uid of getSelectionExpansion().elementUids) {
+    const cube = state.project.getNode(uid);
+    if (cube?.type !== 'cube') continue;
+    for (const faceName of CUBE_FACE_NAMES) {
+      if (isFaceTiled(cube.faces?.[faceName]) && references.has(String(effectiveFaceTextureReference(cube.faces?.[faceName]))))
+        entries.push({ key: uvFaceKey(uid, faceName), faceName });
+    }
+  }
+  return entries;
+}
+
 function normalizedUvBounds(entries) {
   if (!entries.length) return null;
   const u = entries.flatMap(entry => [entry.uv[0], entry.uv[2]]);
@@ -117,16 +138,28 @@ function textureUvPath(entries, layout) {
   }).join('');
 }
 
-function updateTextureUvFields(selectedEntries) {
+function updateTextureUvFields(selectedEntries = selectedTextureUvEntries()) {
+  const tiled = activeTextureAsset()?.mode === 'tiled';
+  const tileTargets = tiled ? selectedTilingFaces() : [];
+  const values = tiled ? tileTargets.map(({ cube, faceName }) => faceTilingValues(cube.faces?.[faceName]))
+    : selectedEntries.map(entry => uvRectangleFields(entry.uv));
+  const labels = ['X', 'Y', 'W', 'H'];
+  const titles = tiled ? ['X 偏移（px）', 'Y 偏移（px）', '整個面的平鋪寬度（px）', '整個面的平鋪高度（px）']
+    : ['UV X 起點（px）', 'UV Y 起點（px）', 'UV 寬度（px）', 'UV 高度（px）'];
   const boxUv = selectedEntries.some(entry => entry.cube.uvMode === 'box');
   $$('[data-uv-coordinate]').forEach(input => {
     const coordinate = Number(input.dataset.uvCoordinate);
-    const first = selectedEntries[0]?.uv[coordinate];
-    const shared = selectedEntries.length && selectedEntries.every(entry => Math.abs(entry.uv[coordinate] - first) < 1e-8);
-    if (document.activeElement !== input) input.value = shared ? String(round(first)) : '';
-    input.disabled = !selectedEntries.length || boxUv;
-    input.title = boxUv ? '箱型 UV 的各面位置固定；可在預覽中整體移動' : '';
-    input.dataset.mixed = selectedEntries.length && !shared ? 'true' : 'false';
+    const first = values[0]?.[coordinate];
+    const shared = values.length && values.every(value => Math.abs(value[coordinate] - first) < 1e-8);
+    if (document.activeElement !== input) input.value = shared ? String(tiled ? Number(first.toFixed(6)) : round(first)) : '';
+    input.disabled = !values.length || (!tiled && boxUv);
+    input.title = !tiled && boxUv ? '箱型 UV 的各面位置固定；可在預覽中整體移動' : titles[coordinate];
+    input.setAttribute('aria-label', titles[coordinate]);
+    input.closest('label').querySelector('span').textContent = labels[coordinate];
+    if (!tiled) input.min = '0';
+    else if (coordinate >= 2) input.min = '.0001';
+    else input.removeAttribute('min');
+    input.dataset.mixed = values.length && !shared ? 'true' : 'false';
   });
 }
 
@@ -193,11 +226,15 @@ function renderTextureUvOverlay(selectionOnly = false) {
     marquee.removeAttribute('hidden');
   } else marquee?.setAttribute('hidden', '');
   updateTextureUvFields(selectedEntries);
+  const faceEntries = activeTextureAsset()?.mode === 'tiled' ? textureFaceEntries() : entries;
   const selectedFaceCounts = new Map(CUBE_FACE_NAMES.map(faceName => [faceName, 0]));
-  selectedEntries.forEach(entry => selectedFaceCounts.set(entry.faceName, (selectedFaceCounts.get(entry.faceName) || 0) + 1));
+  faceEntries.filter(entry => state.selectedUvFaces.has(entry.key))
+    .forEach(entry => selectedFaceCounts.set(entry.faceName, (selectedFaceCounts.get(entry.faceName) || 0) + 1));
+  const totals = new Map(CUBE_FACE_NAMES.map(faceName => [faceName, 0]));
+  faceEntries.forEach(entry => totals.set(entry.faceName, (totals.get(entry.faceName) || 0) + 1));
   $$('[data-texture-face]').forEach(button => {
     const faceName = button.dataset.textureFace;
-    const total = textureUvEntryCache?.faceCounts.get(faceName) || 0;
+    const total = totals.get(faceName) || 0;
     button.classList.toggle('active', total > 0 && selectedFaceCounts.get(faceName) === total);
   });
 }
@@ -427,8 +464,8 @@ return {
   get textureViewLayout() { return textureViewLayout; }, set textureViewLayout(value) { textureViewLayout = value; },
   get textureFocusFrame() { return textureFocusFrame; }, set textureFocusFrame(value) { textureFocusFrame = value; },
   get textureUvEntryCache() { return textureUvEntryCache; }, set textureUvEntryCache(value) { textureUvEntryCache = value; },
-  updateTexturePreviewFrame, uvFaceKey, parseUvFaceKey, textureUvEntries,
-  selectedTextureUvEntries, normalizedUvBounds, renderTextureUvOverlay,
+  updateTexturePreviewFrame, uvFaceKey, parseUvFaceKey, textureUvEntries, textureFaceEntries,
+  selectedTextureUvEntries, normalizedUvBounds, renderTextureUvOverlay, updateTextureUvFields,
   updateTextureStageTransform, cancelTextureFocus, resetTextureView,
   focusSelectedTextureUvs, setDockHotspotFocus, clientToTextureUv,
   textureUvHit, textureUvHandleAt, snapTexturePan, materializeUvFaces,

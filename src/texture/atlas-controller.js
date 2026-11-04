@@ -1,6 +1,9 @@
-import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerEntryRaster, layerRasterCache, tiledFaceRaster, tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
+import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerRasterCache, prepareLayers, tiledFaceRaster, tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
 import { isCubeFaceCulled } from '../common/core/geometry-utils.js';
 import { performanceMonitor } from '../utils/performance-monitor.js';
+import { boundPaintLayer } from '../paint/canvas-layer-binding.js';
+import { snapshotEditableTexture } from './source-snapshot.js';
+import { createLayerThumbnailUpdates } from './layer-thumbnail-controller.js';
 
 export function createTextureAtlasController({
   state, $, textureCanvas, textureCtx, sceneRenderer, uvPreviewRenderer,
@@ -26,18 +29,7 @@ let textureAtlasRevision = 0;
 let textureAtlasRebuildFrame = null;
 const failedImageRetries = new WeakMap();
 const decodedCanvasCache = new WeakMap();
-const layerThumbnailCache = new Map();
-
-function layerThumbnail(uid) {
-  if (!uid) return null;
-  const cached = layerThumbnailCache.get(uid);
-  if (cached?.isConnected && cached.closest('[data-layer-row]')?.dataset.layerRow === uid) return cached;
-  const row = document.querySelector(`#textureFeatureControls [data-layer-row="${CSS.escape(String(uid))}"]`);
-  const thumbnail = row?.querySelector('.texture-layer-thumb') || null;
-  if (thumbnail) layerThumbnailCache.set(uid, thumbnail);
-  else layerThumbnailCache.delete(uid);
-  return thumbnail;
-}
+const layerThumbnails=createLayerThumbnailUpdates({activeTextureAsset});
 
 function resetAtlas({ preserveGpu = false } = {}) {
   textureAtlasRevision++;
@@ -146,7 +138,8 @@ async function rebuildTextureAtlasNow() {
       if (typeof image.getContext !== 'function') decodedCanvasCache.set(image, original);
     }
     animationRasterCache.set(asset._uid, { canvas: original, source: asset.source });
-    const frame = flipbookFrame(asset, original, asset.animation?.currentFrame || 0);
+    if(asset.animation?.enabled&&asset.layers?.length)await prepareLayers(asset);
+    const frame = flipbookFrame(asset, original);
     return { asset, index, image: frame, width: frame.width, height: frame.height,
       uvWidth: Number(asset.uvWidth) || Number(state.project.textureSize?.[0]) || frame.width,
       uvHeight: Number(asset.uvHeight) || Number(state.project.textureSize?.[1]) || frame.height };
@@ -188,8 +181,9 @@ async function rebuildTextureAtlasNow() {
         sourcePixels = source.getContext('2d').getImageData(0, 0, source.width, source.height);
         tileSourcePixels.set(source, sourcePixels);
       }
-      for (const region of tiledFaceRegions(cube, faceName, source.width, source.height)) {
-        const reference = tiledFaceReference(cube, faceName, asset, region);
+      const tileAsset = { ...asset, width: source.width, height: source.height };
+      for (const region of tiledFaceRegions(cube, faceName)) {
+        const reference = tiledFaceReference(cube, faceName, tileAsset, region);
         if (tileKeys.has(reference)) continue;
         tileKeys.add(reference);
         const image = tiledFaceRaster(cube, faceName, source, region, null, sourcePixels);
@@ -251,26 +245,14 @@ async function rebuildTextureAtlasNow() {
   return true;
 }
 
-function syncRendererTextureAsset(asset, source, composited = false, dirty = null) {
+function syncRendererTextureAsset(asset, source, composited = false, dirty = null, changedLayerUid = null) {
   const profile = performanceMonitor.enabled;
   const start = profile ? performance.now() : 0;
   if (asset?.layers?.length) {
-    const drawLayerThumbnail = (uid, raster) => {
-      const thumbnail = layerThumbnail(uid);
-      if (!thumbnail || !raster) return;
-      const context = thumbnail.getContext('2d');
-      const scale = Math.min(thumbnail.width / raster.width, thumbnail.height / raster.height);
-      const width = raster.width * scale, height = raster.height * scale;
-      context.clearRect(0, 0, thumbnail.width, thumbnail.height);
-      context.imageSmoothingEnabled = false;
-      context.drawImage(raster, (thumbnail.width - width) / 2, (thumbnail.height - height) / 2, width, height);
-    };
-    if (!composited && !dirty && asset._uid === state.activeTextureUid && source) {
-      drawLayerThumbnail(activeLayer(asset)?.uid, source);
-    }
+    layerThumbnails.queue(asset,changedLayerUid||(!composited?(boundPaintLayer(asset,source)||activeLayer(asset))?.uid:null));
     if (!composited) {
       const cached = livePaintTextureSources.get(asset._uid);
-      const selected = activeLayer(asset);
+      const selected = boundPaintLayer(asset,source)||activeLayer(asset);
       const layerCanvas = selected && layerRasterCache.get(selected.uid)?.canvas;
       const region = dirty && cached?.savedSource === asset.source
         && cached.source?.width === source.width && cached.source?.height === source.height
@@ -291,33 +273,24 @@ function syncRendererTextureAsset(asset, source, composited = false, dirty = nul
         source = cached.source;
         dirty = region;
       } else {
-        source = compositeLayers(asset, source);
+        source = compositeLayers(asset, source,null,null,null,selected?.uid);
         dirty = null;
       }
     }
-    if (asset._uid === state.activeTextureUid && !dirty) {
-      const groups = new Map(asset.layers.filter(layer => layer.type === 'group').map(layer => [layer.uid, layer]));
-      let parentUid = activeLayer(asset)?.parentUid;
-      const seen = new Set();
-      while (groups.has(parentUid) && !seen.has(parentUid)) {
-        seen.add(parentUid);
-        drawLayerThumbnail(parentUid, layerEntryRaster(asset, parentUid));
-        parentUid = groups.get(parentUid).parentUid;
-      }
-    }
-    updateLayerCompositePreview(asset, source, dirty);
   }
   const compositeEnd = profile ? performance.now() : 0;
+  source=snapshotEditableTexture(asset,source,textureCanvas,dirty);
   if (asset && source) animationRasterCache.set(asset._uid, {
     canvas: typeof source.getContext === 'function' ? source : imageCanvas(source), source: asset.source
   });
   if (asset?._uid && source) livePaintTextureSources.set(asset._uid, { source, savedSource: asset.source });
+  source=flipbookFrame(asset,source,dirty);
+  updateLayerCompositePreview(asset,source,dirty);
   const atlasEntry = asset && textureAtlasLayoutByUid.get(asset._uid);
-  if (asset?.animation?.enabled && source) source = flipbookFrame(asset, imageCanvas(source), asset.animation.currentFrame || 0);
   let atlasPatch = null;
   if (atlasEntry && source?.width === atlasEntry.width && source?.height === atlasEntry.height) {
     textureAtlasRevision++;
-    if (dirty && !asset?.animation?.enabled) atlasPatch = textureAtlasRegionPatch(source, atlasEntry, dirty);
+    if (dirty) atlasPatch = textureAtlasRegionPatch(source, atlasEntry, dirty);
     if (!atlasPatch) {
       drawTextureAtlasEntry(source, atlasEntry);
       atlasPatch = { source: textureAtlasPatch(atlasEntry), x: atlasEntry.x - 1, y: atlasEntry.y - 1 };

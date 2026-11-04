@@ -1,7 +1,9 @@
-import { CubeBricksProject, exportBlockbench, importBlockbench } from '../model.js';
-import { constrainProject } from '../common/core/format-constraints.js';
+import { CubeBricksProject, importBlockbench } from '../model.js';
+import { createBakedBlockbenchExport } from '../texture/export-bake.js';
+import { beginTextureExportProgress } from '../texture/export-progress.js';
 import { ConfigKey, configRegistry } from '../common/config/app-config.js';
 import { showAppConfirm, showAppChoice } from '../screen/prompt-dialog.js';
+import { beginProjectOpenProgress } from './open-progress.js';
 
 export function createProjectFileController({
   state, fileInput, projectTabsController, journalController,
@@ -11,42 +13,44 @@ export function createProjectFileController({
 }) {
 const blobTextureSourceCache = new Map();
 async function openProject(filePath = null) {
-  const progressDialog = document.getElementById('projectOpenProgressDialog');
-  const progressBar = document.getElementById('projectOpenProgressBar');
-  const progressStatus = document.getElementById('projectOpenProgressStatus');
-  const progressPercent = document.getElementById('projectOpenProgressPercent');
-  let progressTimer = null;
-  let unsubscribeProgress = null;
-  let progressStarted = false;
+  const home = projectTabById(projectTabsController.activeId);
+  const replaceTabId = home?.kind === 'home' ? home.id : null;
+  const progress = beginProjectOpenProgress({ waitForProgress: !filePath });
   try {
     await getShapePacksReady();
     if (window.cubeBricksDesktop) {
-      unsubscribeProgress = window.cubeBricksDesktop.onProjectOpenProgress?.(({ value, label }) => {
-        if (!progressStarted) {
-          progressStarted = true;
-          progressTimer = setTimeout(() => {
-            if (progressDialog && !progressDialog.open) progressDialog.showModal();
-          }, 250);
-        }
-        const fraction = Math.max(0, Math.min(1, Number(value) || 0));
-        if (progressBar) progressBar.value = fraction;
-        if (progressStatus) progressStatus.textContent = label || '正在載入項目…';
-        if (progressPercent) progressPercent.textContent = `${Math.round(fraction * 100)}%`;
-      });
-      if (progressDialog) progressDialog.oncancel = event => event.preventDefault();
       const result = await window.cubeBricksDesktop.openProject(filePath);
       if (!result) return;
       const existing = projectTabsController.tabs.find(tab => tab.journalId && tab.journalId === result.journalId);
-      if (existing) { activateProjectTab(existing.id); return; }
+      if (existing) {
+        if (replaceTabId && projectTabsController.tabs.includes(home)) projectTabsController.removeProjectTab(home);
+        activateProjectTab(existing.id); return;
+      }
       loadProjectContent(result.content, result.filePath, result.textureAssets || [], result.journalId || null,
-        result.dirty === undefined ? {} : { dirty: result.dirty });
+        { dirty: result.dirty, persistent: result.persistent, replaceTabId });
     } else fileInput.click();
   } catch (error) { toast(`打開失敗：${error.message}`); }
   finally {
-    if (progressTimer) clearTimeout(progressTimer);
-    unsubscribeProgress?.();
-    if (progressDialog?.open) progressDialog.close();
+    progress.finish();
   }
+}
+
+async function openWorkspaceProject(journalId) {
+  const home = projectTabById(projectTabsController.activeId);
+  const replaceTabId = home?.kind === 'home' ? home.id : null;
+  const existing = projectTabsController.tabs.find(tab => tab.journalId === journalId);
+  if (existing) {
+    if (replaceTabId) projectTabsController.removeProjectTab(home);
+    activateProjectTab(existing.id);
+    return existing;
+  }
+  const progress = beginProjectOpenProgress();
+  try {
+    await getShapePacksReady();
+    const result = await window.cubeBricksDesktop.recoverProjectJournal({ journalId });
+    return loadProjectContent(result.content, result.filePath || '', [], result.journalId,
+      { dirty: result.dirty ?? !result.filePath, persistent: result.persistent, replaceTabId });
+  } finally { progress.finish(); }
 }
 
 async function serializableTextureAssets(assets = state.textureAssets) {
@@ -65,6 +69,13 @@ async function serializableTextureAssets(assets = state.textureAssets) {
     const source = await sourcePromise;
     return { ...texture, source };
   }));
+}
+
+async function serializeBbmodel(textureAssets) {
+  const progress = beginTextureExportProgress();
+  try {
+    return JSON.stringify(await createBakedBlockbenchExport(state.project, textureAssets, { progress: progress.progress }), null, 2);
+  } finally { progress.finish(); }
 }
 
 function serializeCbmodel(textureAssets = [], project = state.project, textureGroups = state.textureGroups,
@@ -106,20 +117,21 @@ function loadProjectContent(content, filePath = '', resolvedTextures = [], journ
     mode: texture.mode || 'default',
     layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null
   }));
-  addProjectTab(project, {
+  const tab = addProjectTab(project, {
     filePath: savedPath,
     displayName: filePath ? filePath.split(/[\\/]/).pop() : null,
     textureAssets: resolvedTextures.length ? resolvedTextures : embeddedTextures,
     textureGroups: data.textureGroups || [],
     dirty: options.dirty ?? !savedPath,
     journalId,
-    imported: true
+    imported: true, persistent: options.persistent, replaceTabId: options.replaceTabId
   });
   if (options.dirty !== undefined) {
     journalController.suppressRecording = true;
     try { markDirty(options.dirty, { constrain: false }); } finally { journalController.suppressRecording = false; }
   } else markDirty(!savedPath, { constrain: false });
   toast(`已打開 ${project.name}`);
+  return tab;
 }
 
 async function offerProjectRecovery() {
@@ -130,18 +142,13 @@ async function offerProjectRecovery() {
     for (const tab of retained) {
       try {
         const result = await window.cubeBricksDesktop.recoverProjectJournal(tab);
-        loadProjectContent(result.content, tab.filePath || '', [], result.journalId, { dirty: tab.dirty === true });
+        loadProjectContent(result.content, tab.filePath || '', [], result.journalId, { dirty: tab.dirty === true, persistent: result.persistent });
         restored.add(tab.journalId);
       } catch (error) { toast(`分頁恢復失敗：${error.message}`); }
     }
     if (restored.size && projectTabsController.tabs.length > 1) {
       const initial = projectTabsController.tabs[0];
-      if (!initial.session.project.elements.length && !initial.session.project.groups.length
-        && !initial.session.dirty && !initial.session.filePath) {
-        projectTabsController.tabs.shift();
-        void discardProjectTabJournal(initial).catch(error => toast(`空白工作目錄清理失敗：${error.message}`));
-        renderProjectTabs();
-      }
+      if (initial.kind === 'home') projectTabsController.removeProjectTab(initial);
       const preferred = retained.find(tab => tab.active && restored.has(tab.journalId));
       if (preferred) {
         const projectTab = projectTabsController.tabs.find(tab => tab.journalId === preferred.journalId);
@@ -158,7 +165,7 @@ async function offerProjectRecovery() {
       detail: '恢復後會以分頁打開；現有工作項目不會被覆蓋。', buttons: ['恢復', '略過'] })) return;
     for (const project of pending) {
       const result = await window.cubeBricksDesktop.recoverProjectJournal(project);
-      loadProjectContent(result.content, project.filePath || '', [], result.journalId, { dirty: true });
+      loadProjectContent(result.content, project.filePath || '', [], result.journalId, { dirty: true, persistent: result.persistent });
     }
     if (pending.length > 1) toast(`已恢復 ${pending.length} 個工作項目`);
   } catch (error) { toast(`工作項目恢復失敗：${error.message}`); }
@@ -167,7 +174,7 @@ async function offerProjectRecovery() {
 async function saveProject() {
   try {
     const activeTab = projectTabById(projectTabsController.activeId);
-    if (!activeTab) return;
+    if (!activeTab || activeTab.kind === 'home') return;
     if (!window.cubeBricksDesktop?.commitProjectJournal) {
       toast('瀏覽器預覽無法保留工作目錄，請使用導出');
       return;
@@ -176,14 +183,20 @@ async function saveProject() {
     await flushProjectJournal(activeTab);
     await activeTab?.journalWrites;
     if (activeTab.journalPending) throw new Error('工作記錄尚未寫入，請稍後重試');
+    const savedRevision = activeTab.journalEditRevision || 0;
+    await window.cubeBricksDesktop.retainProjectJournal({ journalId: activeTab.journalId });
     activeTab.persistedWorkingCopy = true;
     activeTab.createdThisLaunch = false;
-    markDirty(false);
-    toast('工作項目已保留在項目資料夾');
+    if ((activeTab.journalEditRevision || 0) === savedRevision) {
+      activeTab.session.dirty = false;
+      if (projectTabsController.activeId === activeTab.id) markDirty(false);
+      else renderProjectTabs();
+    }
   } catch (error) { toast(`保存失敗：${error.message}`); }
 }
 
 async function exportProject() {
+  if (state.projectHomeActive) return;
   try {
     const activeTab = projectTabById(projectTabsController.activeId);
     if (window.cubeBricksDesktop?.exportProject) {
@@ -207,11 +220,7 @@ async function exportProject() {
       const textureAssets = await serializableTextureAssets();
       const content = result.extension === '.cbmodel'
         ? { cbmodelContent: serializeCbmodel(textureAssets) }
-        : (() => {
-          const exportModel = new CubeBricksProject(JSON.parse(state.project.serialize()));
-          constrainProject(exportModel);
-          return { bbmodelContent: JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2) };
-        })();
+        : { bbmodelContent: await serializeBbmodel(textureAssets) };
       result = await window.cubeBricksDesktop.exportProject({ ...payload, ...content,
         filePath: result.filePath, ...(includeHistory === null ? {} : { includeHistory }) });
       if (!result) return;
@@ -228,20 +237,14 @@ async function exportProject() {
       });
       const extension = handle.name.toLowerCase().endsWith('.cbmodel') ? '.cbmodel' : '.bbmodel';
       const textureAssets = await serializableTextureAssets();
-      const content = extension === '.cbmodel' ? serializeCbmodel(textureAssets) : (() => {
-        const exportModel = new CubeBricksProject(JSON.parse(state.project.serialize()));
-        constrainProject(exportModel);
-        return JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2);
-      })();
+      const content = extension === '.cbmodel' ? serializeCbmodel(textureAssets) : await serializeBbmodel(textureAssets);
       const writable = await handle.createWritable();
       await writable.write(content);
       await writable.close();
       toast(`已導出 ${extension}`);
     } else {
       const textureAssets = await serializableTextureAssets();
-      const exportModel = new CubeBricksProject(JSON.parse(state.project.serialize()));
-      constrainProject(exportModel);
-      const bbmodelContent = JSON.stringify(exportBlockbench(exportModel, textureAssets), null, 2);
+      const bbmodelContent = await serializeBbmodel(textureAssets);
       download(bbmodelContent, `${state.project.name}.bbmodel`, 'application/json');
       toast('已導出 .bbmodel（目前瀏覽器不支援格式選擇）');
     }
@@ -262,7 +265,7 @@ return {
   serializeCbmodel,
   loadProjectContent,
   offerProjectRecovery,
-  saveProject,
+  saveProject, openWorkspaceProject,
   exportProject,
 };
 }

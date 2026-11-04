@@ -119,8 +119,24 @@ const coreOperations = {
   'core.texture.paste': '貼上貼圖',
   'core.texture.duplicate': '原地複製貼圖',
   'core.texture.reorder': '調整貼圖順序',
+  'core.texture.animation': '切換貼圖手翻書屬性',
+  'core.texture.frame.create': '新增幀元素',
+  'core.texture.frame.delete': '刪除幀元素',
+  'core.texture.frame.cut': '剪切幀元素',
+  'core.texture.frame.paste': '貼上幀元素',
+  'core.texture.frame.duplicate': '原地複製幀元素',
+  'core.texture.frame.reorder': '調整幀元素順序',
+  'core.texture.frame.link': '連接幀與圖層',
+  'core.texture.frame.unlink': '斷開幀與圖層',
+  'core.texture.frame.visibility': '更改幀內圖層顯隱',
+  'core.texture.frame.paint_layer': '選擇幀內繪畫圖層',
+  'core.texture.animation.settings': '更改手翻書播放設置',
   'core.history.undo': '撤銷',
-  'core.history.redo': '重做'
+  'core.history.redo': '重做',
+  'core.history.checkout': '切換歷史狀態',
+    'core.history.mark': '標記歷史節點',
+    'core.history.delete': '刪除單個歷史節點',
+  'core.history.prune': '刪除歷史分支'
 };
 for (const [id, label] of Object.entries(coreOperations)) registerOperation(id, label);
 

@@ -4,8 +4,19 @@ import { createListDragAutoScroll } from '../screen/list-drag-scroll.js';
 import { verticalDropTarget } from '../screen/vertical-drop.js';
 import { createLayerEditorDialog } from './layer-editor-dialog.js';
 import { tonePaletteSnapshot } from './tone-palette.js';
+import { faceTilingValues, setFaceTilingCoordinate } from '../common/core/face-tiling.js';
+import { migrateTextureAnimationMode, createTextureFrameElement, textureFrameElements } from './frame-elements.js';
+import { createTextureFrameList } from './frame-list-controller.js';
+import { createFrameConnections } from './frame-connections-controller.js';
+import { activeTextureFrame, frameLayerUids, framePaintLayer, frameVisibilityControls, rememberFramePaintLayer, setFrameLayerVisibility } from '../common/core/frame-links.js';
+import { createFramePlayback } from './frame-playback-controller.js';
+import { readCompanionAnimation, splitTextureAnimation } from './animation-import.js';
+import { paintCanvasIsBound } from '../paint/canvas-layer-binding.js';
+import { isolateTextureLayerIds, reidentifyTextureLayers } from '../common/core/texture-layer-identity.js';
 
 const CUBE_FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
+const TEXTURE_MODE_LABEL = '貼圖模式';
+const TEXTURE_MODES = [['default', '默認'], ['tiled', '平鋪']];
 let textureClipboard = null;
 const decodedTextureImages = new WeakMap();
 
@@ -18,10 +29,10 @@ export function createTextureAssetController({
   rebuildTextureAtlas, drawTextureAtlasEntry, textureAtlasPatch,
   uvPreviewIsActive, pushTexturePaintHistory, renderAll,
   invalidateAllRenderGeometry, registerGeneratedTexture, renderScene,
-  updateTexturePreviewFrame, syncRendererTexture, selectedElementUids,
+  updateTexturePreviewFrame, syncRendererTexture, syncRendererTextureAsset, getAllTextureAssets, texturePlaybackKey, selectedElementUids,
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
-  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp
+  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu
 }) {
 let textureLoadRevision = 0;
 let pendingTextureImage = null;
@@ -32,7 +43,15 @@ let layerDrag = null;
 let layerDragBound = false;
 let layerEditSession = null;
 let paletteRefreshTimer = null;
+const frameConnections=createFrameConnections({$,activeTextureAsset,noteJournalOperation,markDirty,
+  onChange:refreshFrameDisplay,onSelectFrame:uid=>frameList.select(uid)});
+const frameList=createTextureFrameList({$,activeTextureAsset,noteJournalOperation,markDirty,showContextMenu,
+  onSelect:frameConnections.selectFrame,onChange:refreshFrameDisplay});
+const framePlayback=createFramePlayback({$,state,activeTextureAsset,getAllTextureAssets,texturePlaybackKey,onChange:refreshFrameDisplay});
+window.addEventListener('cubebricks:paint-canvas-released',event=>{if(event.detail===textureCanvas&&activeTextureAsset()?.animation?.enabled)showEditableLayer(activeTextureAsset());});
 const layerEditor = createLayerEditorDialog({ $, activeTextureAsset, toast, paletteRows, samplePaletteGradient,
+  getCompositeSource(asset){if(layerEditSession?.asset===asset)return null;const cached=animationRasterCache.get(asset?._uid);return cached?.source===asset?.source?cached.canvas:null;},
+  onRender(){frameList.render();frameConnections.render();updateFrameLayerIndicators();},
   onPropertyInput(layer, property, next) {
     const asset = activeTextureAsset();
     if (!asset || layer[property] === next) return;
@@ -45,7 +64,7 @@ const layerEditor = createLayerEditorDialog({ $, activeTextureAsset, toast, pale
     layerEditor.render();
   },
   onPropertyCommit: finishLayerEdit,
-  onClose: finishLayerEdit
+  onClose(){finishLayerEdit();updateFrameLayerIndicators();}
 });
 
 function finishLayerEdit() {
@@ -122,7 +141,7 @@ function addTextureGroup() {
 function updateLayerCompositePreview(asset, canvas, dirty = null) {
   if (asset && asset._uid !== state.activeTextureUid) return;
   const preview = $('#textureLayerComposite');
-  const showComposite = Boolean(asset?.layers?.length && canvas?.width && canvas?.height);
+  const showComposite = Boolean((asset?.layers?.length || asset?.animation?.enabled && activeTextureFrame(asset)) && canvas?.width && canvas?.height);
   preview.hidden = !showComposite;
   textureCanvas.style.opacity = showComposite ? '0' : '';
   if (!asset) textureCanvas.style.visibility = '';
@@ -142,45 +161,44 @@ function updateLayerCompositePreview(asset, canvas, dirty = null) {
 }
 
 function selectedTilingFaces() {
+  const asset = activeTextureAsset();
+  if (asset?.mode !== 'tiled') return [];
   const targets = [];
   for (const key of state.selectedUvFaces) {
     const parsed = parseUvFaceKey(key);
     const cube = parsed && state.project.getNode(parsed.uid);
-    if (cube?.type === 'cube') targets.push({ cube, faceName: parsed.faceName });
+    if (cube?.type === 'cube' && textureAssetForReference(cube.faces?.[parsed.faceName]?.texture) === asset)
+      targets.push({ cube, faceName: parsed.faceName });
   }
   if (!targets.length) {
     const data = selectedUvFaceData(false);
-    if (data?.cube && state.uvPreviewSelectedFace?.faceName) targets.push({ cube: data.cube, faceName: state.uvPreviewSelectedFace.faceName });
+    if (data?.cube && state.uvPreviewSelectedFace?.faceName && textureAssetForReference(data.face?.texture) === asset)
+      targets.push({ cube: data.cube, faceName: state.uvPreviewSelectedFace.faceName });
   }
   return targets;
 }
 
 function renderTextureTileControls() {
-  const root = $('#textureTileControls');
-  if (!root) return;
-  const targets = selectedTilingFaces();
-  if (!targets.length) { delete root.dataset.renderKey; root.innerHTML = '<span>在主視圖或 UV 預覽選中面</span>'; return; }
-  const first = targets[0].cube.faces?.[targets[0].faceName]?.tiling || {};
-  const key = JSON.stringify([targets.map(target => [target.cube.uid, target.faceName, isFaceTiled(target.cube.faces?.[target.faceName])]), first]);
-  if (root.dataset.renderKey === key) return;
-  root.dataset.renderKey = key;
-  root.innerHTML = `<span>平鋪參數（${targets.length} 面；僅平鋪貼圖使用，換回普通貼圖仍保留）</span>
-    <div class="texture-feature-grid">${[['width', '單片寬度', 16], ['height', '單片高度', 16], ['offsetX', 'X 偏移', 0], ['offsetY', 'Y 偏移', 0]].map(([property, label, fallback]) => `<label>${label}<input type="number" step="any" data-tile-field="${property}" value="${first[property] ?? fallback}"></label>`).join('')}</div>`;
-  $$('[data-tile-field]', root).forEach(input => input.addEventListener('change', () => {
-    const property = input.dataset.tileField;
-    let value = input.type === 'checkbox' ? input.checked : Number(input.value);
-    if (input.type !== 'checkbox' && !Number.isFinite(value)) return;
-    if (property === 'width' || property === 'height') value = Math.max(.0001, value);
-    snapshot('core.uv.tiling');
-    for (const { cube, faceName } of targets) {
-      const face = ensureCubeFaceRecord(cube, faceName);
-      face.tiling ||= { width: 16, height: 16, offsetX: 0, offsetY: 0 };
-      face.tiling[property] = value;
-      persistGeneratedPaintCube(cube);
-    }
-    uvPreviewController.uvPreviewProjectCache = null; uvEditorController.textureUvEntryCache = null;
-    rebuildTextureAtlas(); markDirty(); renderAll('selection');
-  }));
+  uvEditorController.updateTextureUvFields();
+}
+
+function setTilingCoordinate(coordinate, value) {
+  if (activeTextureAsset()?.mode !== 'tiled') return false;
+  if (!Number.isInteger(coordinate) || coordinate < 0 || coordinate > 3 || !Number.isFinite(value)) return true;
+  const next = coordinate >= 2 ? Math.max(.0001, value) : value;
+  const targets = selectedTilingFaces().filter(({ cube, faceName }) =>
+    faceTilingValues(cube.faces?.[faceName])[coordinate] !== next);
+  if (!targets.length) return true;
+  snapshot('core.uv.tiling');
+  for (const { cube, faceName } of targets) {
+    setFaceTilingCoordinate(ensureCubeFaceRecord(cube, faceName), coordinate, next);
+    persistGeneratedPaintCube(cube);
+  }
+  uvPreviewController.uvPreviewProjectCache = null;
+  uvEditorController.textureUvEntryCache = null;
+  uvPreviewController.uvPreviewRenderDirty = true;
+  rebuildTextureAtlas(); markDirty(); renderTextureTileControls();
+  return true;
 }
 
 function refreshDerivedTileEntries(asset, source) {
@@ -210,8 +228,59 @@ function refreshDerivedTileEntries(asset, source) {
 }
 
 function scheduleTextureAnimation() {
-  // Animation is an asset-mode placeholder; no frame loop is started.
+  // Frame selection changes membership; timed playback is not started here.
 }
+
+function refreshFrameDisplay({asset=activeTextureAsset(),playback=false,frameChanged=true}={}) {
+  if(asset&&asset!==activeTextureAsset()){
+    const cache=animationRasterCache.get(asset._uid),source=cache?.source===asset.source?cache.canvas:compositeLayers(asset);
+    if(source)syncRendererTextureAsset(asset,source,true);return;
+  }
+  if(asset?.animation?.enabled&&frameChanged){asset.activeLayerUid=framePaintLayer(asset)?.uid||null;
+    if(asset.activeLayerUid)rememberFramePaintLayer(asset,asset.activeLayerUid);showEditableLayer(asset);}
+  const existing=asset&&animationRasterCache.get(asset._uid);
+  if(playback&&existing?.source===asset.source){syncRendererTexture(existing.canvas,true);}
+  else if(asset?.layers?.length){const composite=compositeLayers(asset);if(composite)showLayerComposite(asset,composite);}
+  else if(asset){
+    const cached=animationRasterCache.get(asset._uid);
+    syncRendererTexture(cached?.source===asset.source?cached.canvas:textureCanvas,true);
+  }
+  if(!playback)renderTextureFeatureControls();
+  else if(frameChanged)updateFrameLayerIndicators();
+  if(!playback||frameChanged){layerEditor.render();frameConnections.render();}
+  else layerEditor.refreshPreview();
+  framePlayback.render();
+}
+
+function updateFrameLayerIndicators(){
+  const asset=activeTextureAsset(),root=$('#textureFeatureControls');if(!asset)return;
+  const enabled=asset.animation?.enabled,frame=activeTextureFrame(asset),members=enabled?frameLayerUids(asset):new Set();
+  const local=enabled&&layerEditor.isOpen?frameVisibilityControls(asset):new Set();
+  const paintUid=enabled?framePaintLayer(asset)?.uid:asset.activeLayerUid;
+  for(const row of root.querySelectorAll('[data-layer-row]')){
+    const layer=asset.layers.find(entry=>entry.uid===row.dataset.layerRow);if(!layer)continue;
+    row.classList.toggle('frame-member',members.has(layer.uid));
+    const selected=layer.type==='group'?asset.activeLayerUid===layer.uid:paintUid===layer.uid;
+    row.classList.toggle('active',selected);
+    const slot=row.querySelector('[data-layer-visibility-slot]');
+    const visible=enabled?frame?.visibility?.[layer.uid]!==false:layer.visible!==false;
+    const show=!enabled||local.has(layer.uid);
+    const key=show?`${enabled}:${visible}`:'hidden';if(slot.dataset.state===key)continue;slot.dataset.state=key;
+    slot.innerHTML=show?`<button type="button" class="texture-layer-visibility ${enabled?'frame-local ':''}${visible?'':'is-off'}" data-layer-visible="${escapeAttribute(layer.uid)}" title="${visible?'隱藏圖層':'顯示圖層'}" aria-label="${visible?'隱藏圖層':'顯示圖層'}"><svg class="outliner-state-icon" aria-hidden="true"><use href="#${visible?'icon-show':'icon-unshow'}"></use></svg></button>`:'';
+  }
+}
+$('#textureFeatureControls').addEventListener('click',event=>{
+  const button=event.target.closest('[data-layer-visible]'),asset=activeTextureAsset();if(!button||!asset)return;
+  const layer=asset.layers.find(entry=>entry.uid===button.dataset.layerVisible);if(!layer)return;
+  if(asset.animation?.enabled){
+    noteJournalOperation('core.texture.frame.visibility');
+    if(setFrameLayerVisibility(asset,layer.uid,activeTextureFrame(asset)?.visibility?.[layer.uid]===false)){markDirty();refreshFrameDisplay();}
+  }else{
+    pushTexturePaintHistory(asset,textureCanvas,null,'core.texture.layer');const visible=layer.visible===false;layer.visible=visible;
+    if(layer.type==='group'){const children=layerDescendantUids(asset.layers,layer.uid);for(const child of asset.layers)if(children.has(child.uid))child.visible=visible;}
+    refreshLayeredTexture(asset).catch(error=>toast(error.message));
+  }
+});
 
 async function refreshLayeredTexture(asset) {
   const revision = (layerRefreshRevision.get(asset) || 0) + 1;
@@ -243,13 +312,13 @@ function showLayerComposite(asset, canvas) {
   showEditableLayer(asset, canvas);
   textureCanvas.style.visibility = '';
   updateTexturePreviewFrame(asset.uvWidth || canvas.width, asset.uvHeight || canvas.height);
-  updateLayerCompositePreview(asset, canvas);
   syncRendererTexture(canvas, true);
   window.dispatchEvent(new Event('cubebricks:texture-change'));
   renderScene();
 }
 
 function showEditableLayer(asset, fallback = null) {
+  if(paintCanvasIsBound(textureCanvas))return;
   const editable = layerRasterCache.get(activeLayer(asset)?.uid)?.canvas;
   if (!editable && !fallback) return;
   textureCanvas.width = editable?.width || fallback.width;
@@ -407,7 +476,7 @@ function bindLayerDrag(root) {
       const ghostThumb = ghost.querySelector('.texture-layer-thumb');
       if (originalThumb && ghostThumb) ghostThumb.getContext('2d').drawImage(originalThumb, 0, 0);
       ghost.style.width = `${row.getBoundingClientRect().width}px`;
-      document.body.append(ghost);
+      (root.closest('dialog[open]') || document.body).append(ghost);
       drag.ghost = ghost;
       autoScroll.start();
     }
@@ -443,11 +512,12 @@ function bindLayerDrag(root) {
 function renderTextureFeatureControls() {
   const root = $('#textureFeatureControls'), asset = activeTextureAsset();
   bindLayerDrag(root);
-  if (!asset) { root.innerHTML = '<span>請先選擇貼圖</span>'; return; }
+  if (!asset) { root.style.removeProperty('--layer-tree-min-width'); root.innerHTML = '<span>請先選擇貼圖</span>'; framePlayback.render();layerEditor.render(); return; }
+  migrateTextureAnimationMode(asset);
   const selected = selectedLayerEntry(asset);
   const layerLineX = depth => 11 + depth * 16;
   const groupStarts = new Map(), groupRails = [];
-  let treeY = 0;
+  let treeY = 0,treeMinWidth=220;
   const rows = layerTreeItems(asset.layers || []).map(({ layer, depth, groupEnd }) => {
     if (groupEnd) {
       const start = groupStarts.get(groupEnd);
@@ -456,6 +526,7 @@ function renderTextureFeatureControls() {
       return `<div class="texture-layer-group-end" data-layer-group-end="${escapeAttribute(groupEnd)}"></div>`;
     }
     const group = layer.type === 'group';
+    treeMinWidth=Math.max(treeMinWidth,220+depth*16);
     if (group) groupStarts.set(layer.uid, { top: treeY });
     treeY += 42;
     const uid = escapeAttribute(layer.uid);
@@ -466,13 +537,17 @@ function renderTextureFeatureControls() {
         : '<span class="texture-layer-disclosure-spacer"></span><canvas class="texture-layer-thumb" width="27" height="27" aria-hidden="true"></canvas>'}
       <span class="texture-layer-name" title="${escapeAttribute(layer.name)}">${escapeHtml(layer.name)}</span>
       ${group ? `<button type="button" class="texture-layer-ungroup" data-layer-ungroup="${uid}" title="解散圖層組" aria-label="解散圖層組">×</button>` : ''}
-      <button type="button" class="texture-layer-visibility ${layer.visible === false ? 'is-off' : ''}" data-layer-visible="${uid}" aria-label="${visibilityLabel}" title="${visibilityLabel}"><svg class="outliner-state-icon" aria-hidden="true"><use href="#${layer.visible === false ? 'icon-unshow' : 'icon-show'}"></use></svg></button></div>`;
+      <span class="texture-layer-visibility-slot" data-layer-visibility-slot></span></div>`;
   }).join('');
   const rails = groupRails.map(({ uid, depth, top, bottom }) => `<span class="texture-layer-group-rail"
     data-layer-group-line="${escapeAttribute(uid)}" style="left:${layerLineX(depth)}px;top:${top}px;height:${Math.max(0, bottom - top)}px"><span class="texture-layer-group-rail-branch"></span></span>`).join('');
-  root.innerHTML = `<label>貼圖模式 <select data-texture-mode><option value="default" ${!asset.mode || asset.mode === 'default' ? 'selected' : ''}>默認</option><option value="tiled" disabled ${asset.mode === 'tiled' ? 'selected' : ''}>平鋪（即將推出）</option><option value="animation" disabled ${asset.mode === 'animation' ? 'selected' : ''}>手翻書（即將推出）</option></select></label>
-    ${asset.mode === 'animation' ? '<span>動畫邏輯待完善，目前顯示原始貼圖。</span>' : ''}
-    <div class="texture-layer-control-strip"><button type="button" data-add-layer>＋ 圖層</button><button type="button" data-add-layer-group>＋ 組</button><button type="button" data-open-layer-editor title="編輯圖層" aria-label="編輯圖層"><svg class="object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button></div><div class="texture-layer-tree">${rows}${rails}<span class="texture-layer-drop-guide" hidden></span></div>`;
+  root.style.setProperty('--layer-tree-min-width',`${treeMinWidth}px`);
+  root.innerHTML = `<div class="texture-layer-panel-header">
+    <label class="texture-layer-mode-row">${TEXTURE_MODE_LABEL} <select data-texture-mode>${TEXTURE_MODES.map(([mode,label]) => `<option value="${mode}" ${(asset.mode || 'default') === mode ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+    <label class="texture-animation-toggle"><input type="checkbox" data-texture-animation ${asset.animation?.enabled?'checked':''}>手翻書</label>
+    ${asset.animation?.enabled?`<div class="texture-animation-options"><label>FPS <input type="number" data-frame-fps min="0.1" max="240" step="0.1" value="${Number(asset.animation.fps)||20}"></label><label><input type="checkbox" data-frame-interpolate ${asset.animation.interpolate?'checked':''}>幀漸變</label></div>`:''}
+    <div class="texture-layer-control-strip"><button type="button" data-add-layer>＋ 圖層</button><button type="button" data-add-layer-group>＋ 組</button><button type="button" data-open-layer-editor title="編輯圖層" aria-label="編輯圖層"><svg class="object-icon" aria-hidden="true"><use href="#icon-setting"></use></svg></button></div>
+    </div><div class="texture-layer-tree">${rows}${rails}<span class="texture-layer-drop-guide" hidden></span></div>`;
   $$('[data-layer-row]', root).forEach(row => {
     const raster = layerEntryRaster(asset, row.dataset.layerRow);
     const canvas = row.querySelector('.texture-layer-thumb');
@@ -484,16 +559,27 @@ function renderTextureFeatureControls() {
     context.drawImage(raster, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
   });
   $('[data-texture-mode]', root).addEventListener('change', event => {
-    if (event.target.value !== 'default') {
-      event.target.value = asset.mode || 'default';
-      return;
-    }
-    if (!asset.mode || asset.mode === 'default') return;
+    if (!['default', 'tiled'].includes(event.target.value)
+      || (asset.mode || 'default') === event.target.value) return;
     noteJournalOperation('core.texture.mode');
     asset.mode = event.target.value;
     uvEditorController.textureUvEntryCache = null;
-    invalidateUvPreviewTextureState();
+    uvPreviewController.uvPreviewProjectCache = null;
+    uvPreviewController.uvPreviewTextureDirty = true;
+    uvPreviewController.uvPreviewRenderDirty = true;
+    uvPreviewRenderer.invalidateGeometry();
     rebuildTextureAtlas(); renderTextureFeatureControls(); renderTextureTileControls(); markDirty();
+  });
+  $('[data-texture-animation]',root).addEventListener('change',event=>{
+    noteJournalOperation('core.texture.animation');
+    asset.animation={...asset.animation,enabled:event.target.checked};
+    markDirty();refreshFrameDisplay();frameList.render();frameConnections.render();
+  });
+  $('[data-frame-fps]',root)?.addEventListener('change',event=>{
+    noteJournalOperation('core.texture.animation.settings');asset.animation={...asset.animation,fps:Math.max(.1,Math.min(240,Number(event.target.value)||20))};markDirty();framePlayback.render();
+  });
+  $('[data-frame-interpolate]',root)?.addEventListener('change',event=>{
+    noteJournalOperation('core.texture.animation.settings');asset.animation={...asset.animation,interpolate:event.target.checked};markDirty();refreshFrameDisplay();
   });
   $('[data-add-layer]', root).addEventListener('click', () => addTextureLayer().catch(error => toast(error.message)));
   $('[data-add-layer-group]', root).addEventListener('click', () => addTextureLayerGroup().catch(error => toast(error.message)));
@@ -514,9 +600,11 @@ function renderTextureFeatureControls() {
   }).catch(error => toast(error.message))));
   const selectLayer = uid => {
     root.focus({ preventScroll: true });
+    frameConnections.selectLayer(uid);
     if (asset.activeLayerUid === uid) return;
     finishLayerEdit();
     asset.activeLayerUid = uid;
+    if(asset.animation?.enabled&&rememberFramePaintLayer(asset,uid)){noteJournalOperation('core.texture.frame.paint_layer');markDirty();}
     showEditableLayer(asset);
     renderTextureFeatureControls();
     layerEditor.render();
@@ -533,16 +621,6 @@ function renderTextureFeatureControls() {
     pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
     action(); await refreshLayeredTexture(asset); renderTextureFeatureControls(); layerEditor.render();
   };
-  $$('[data-layer-visible]', root).forEach(button => button.addEventListener('click', () => mutate(() => {
-    const layer = asset.layers.find(entry => entry.uid === button.dataset.layerVisible);
-    if (!layer) return;
-    const visible = layer.visible === false;
-    layer.visible = visible;
-    if (layer.type === 'group') {
-      const descendants = layerDescendantUids(asset.layers, layer.uid);
-      for (const child of asset.layers) if (descendants.has(child.uid)) child.visible = visible;
-    }
-  }).catch(error => toast(error.message))));
   $$('[data-layer-opacity]', root).forEach(input => input.addEventListener('change', () => mutate(() => { asset.layers.find(layer => layer.uid === input.dataset.layerOpacity).opacity = clamp(Number(input.value), 0, 100); })));
   $$('[data-layer-up], [data-layer-down]', root).forEach(button => button.addEventListener('click', () => mutate(() => {
     const index = Number(button.dataset.layerUp ?? button.dataset.layerDown), next = index + (button.dataset.layerUp !== undefined ? 1 : -1);
@@ -553,7 +631,7 @@ function renderTextureFeatureControls() {
     discardMissingLayerMasks(asset);
     asset.activeLayerUid = activeLayer(asset)?.uid;
   })));
-
+  updateFrameLayerIndicators();framePlayback.render();layerEditor.render();
 }
 
 
@@ -744,6 +822,13 @@ function pasteTexture({ inPlace = false } = {}) {
     && !state.textureAssets.some(asset => asset._uid === original._uid);
   const id = restoreCut ? original._uid : textureUid();
   const asset = structuredClone(original);
+  if(!restoreCut)reidentifyTextureLayers(asset);
+  if(!restoreCut&&textureFrameElements(asset).length){
+    const previous=asset.animation.selectedFrameUid;
+    const mapped=new Map();
+    asset.animation.frames=textureFrameElements(asset).map(frame=>{const next=createTextureFrameElement([],frame);mapped.set(frame.uid,next.uid);return next;});
+    if(previous)asset.animation.selectedFrameUid=mapped.get(previous)||null;
+  }
   asset._uid = id;
   if (!restoreCut) { asset.uuid = id; asset.id = id; }
   asset.useAsDefault = false;
@@ -817,15 +902,23 @@ function importTexture(file) {
   const revision = ++textureLoadRevision;
   const url = URL.createObjectURL(file);
   const image = new Image();
-  image.onload = () => {
+  const metadata=readCompanionAnimation(file).catch(error=>{toast(`動畫配置讀取失敗：${error.message}`);return null;});
+  image.onload = async () => {
+    const configuration=await metadata;
     if (revision !== textureLoadRevision) return;
+    let animation=null;
+    try{animation=splitTextureAnimation(image,configuration);}catch(error){toast(`動畫配置讀取失敗：${error.message}`);}
     noteJournalOperation('core.texture.import');
     const asset = { _uid: textureUid(), name: file.name, source: url, uvWidth: image.naturalWidth, uvHeight: image.naturalHeight,
-      kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null };
-    decodedTextureImages.set(asset, { source: url, promise: Promise.resolve(image) });
+      kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null,...animation };
+    if(!animation)decodedTextureImages.set(asset, { source: url, promise: Promise.resolve(image) });
     state.textureAssets.push(asset);
     state.activeTextureUid = asset._uid;
     const assignedFaces = assignImportedTextureToBlankFaces(asset);
+    if(animation){
+      URL.revokeObjectURL(url);activateProjectTexture(state.textureAssets.length-1);renderTextureList();rebuildTextureAtlas();markDirty();
+      toast(`已導入動畫貼圖 ${file.name}`);return;
+    }
     updateLayerCompositePreview(asset, null);
     textureCanvas.width = image.naturalWidth;
     textureCanvas.height = image.naturalHeight;
@@ -897,8 +990,8 @@ function loadTextureSource(source, name) {
 
 function installProjectTextures(assets) {
   state.textureGroups = [];
-  state.textureAssets = assets.map(asset => ({ ...asset, _uid: textureUid(asset), groupId: asset.groupId || null,
-    layers: normalizeTextureLayers(asset) }));
+  state.textureAssets = isolateTextureLayerIds(assets.map(asset => ({ ...asset, _uid: textureUid(asset), groupId: asset.groupId || null,
+    layers: normalizeTextureLayers(asset),animation:asset.animation?structuredClone(asset.animation):null })));
   state.activeTextureUid = null;
   if (!assets.length) {
     renderTextureList();
@@ -952,6 +1045,7 @@ return {
   get pendingTextureImage() { return pendingTextureImage; },
   set pendingTextureImage(value) { pendingTextureImage = value; },
   textureUid, renderTextureList, addTextureGroup, updateLayerCompositePreview, renderTextureTileControls, refreshDerivedTileEntries, scheduleTextureAnimation, textureAssetForReference, isFaceTiled, remapNumericFaceTextureReferences, loadTextureAssetImage, createSimpleTexture, updateTextureCreateDialog, openTextureCreateDialog, importTexture, loadTextureSource, installProjectTextures, activateProjectTexture, invalidateUvPreviewTextureState,
+  selectedTilingFaces, setTilingCoordinate,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeActiveLayer, removeTextureLayer, mergeTextureLayerDown,
   syncToneMappedPalettes
 };

@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('cubeBricksDesktop', {
   openProject: (filePath = null) => ipcRenderer.invoke('project:open', filePath ? { filePath } : {}),
   getPathForFile: file => webUtils.getPathForFile(file),
+  readTextureAnimationMetadata: payload => ipcRenderer.invoke('texture:animation-metadata',payload),
   onExternalProjectOpen: listener => {
     const handler = (_event, filePath) => listener(filePath);
     ipcRenderer.on('project:external-open', handler);
@@ -15,6 +16,11 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
     const handler = (_event, progress) => listener(progress);
     ipcRenderer.on('project:open-progress', handler);
     return () => ipcRenderer.removeListener('project:open-progress', handler);
+  },
+  onProjectHistoryProgress: listener => {
+    const handler = (_event, progress) => listener(progress);
+    ipcRenderer.on('project:history-progress', handler);
+    return () => ipcRenderer.removeListener('project:history-progress', handler);
   },
   onPromptRequest: listener => {
     const handler = (_event, request) => listener(request);
@@ -31,10 +37,16 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
   copyCaptureImage: (dataUrl) => ipcRenderer.invoke('image:copy-capture', dataUrl),
   initProjectJournal: (payload) => ipcRenderer.invoke('project:journal-init', payload),
   discardProjectJournal: (payload) => ipcRenderer.invoke('project:journal-discard', payload),
+  retainProjectJournal: payload => ipcRenderer.invoke('project:journal-save', payload),
+  deleteWorkspaceProject: payload => ipcRenderer.invoke('project:delete-workspace', payload),
   commitProjectJournal: (payload) => ipcRenderer.invoke('project:journal-commit', payload),
   compactProjectJournal: (payload) => ipcRenderer.invoke('project:journal-compact', payload),
+  updateProjectJournalSettings: payload => ipcRenderer.invoke('project:journal-settings',payload),
   checkoutProjectJournal: (payload) => ipcRenderer.invoke('project:journal-checkout', payload),
   projectJournalState: (payload) => ipcRenderer.invoke('project:journal-state', payload),
+  projectHistoryGraph: payload => ipcRenderer.invoke('project:history-graph',payload),
+  pruneProjectHistoryBranch: payload => ipcRenderer.invoke('project:history-prune',payload),
+  setProjectHistoryMark: payload => ipcRenderer.invoke('project:history-mark',payload),
   listRecoverableProjects: () => ipcRenderer.invoke('project:journal-list-recoverable'),
   listWorkspaceProjects: (options) => ipcRenderer.invoke('project:list-workspace', options),
   recoverProjectJournal: (payload) => ipcRenderer.invoke('project:journal-recover', payload),

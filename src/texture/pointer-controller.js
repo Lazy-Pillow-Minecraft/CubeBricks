@@ -1,4 +1,5 @@
 import { PAINT_TOOLS } from '../editor/tool-registry.js';
+import { editUvRectangleField } from '../common/core/uv-rectangle.js';
 
 export function createTexturePointerController({
   state, $, dockManager, uvEditorController, getTexturePaintDrag,
@@ -9,7 +10,7 @@ export function createTexturePointerController({
   moveTexturePaintPointer, endTexturePaintPointer, applyTextureUvDrag,
   clamp, snapValue, snapTexturePan, updateTextureStageTransform,
   snapshot, materializeUvFaces, markDirty, invalidateSelectionRenderGeometry,
-  scheduleSceneRender, renderAll, toast
+  scheduleSceneRender, renderAll, toast, setTilingCoordinate
 }) {
 function startTexturePointer(event) {
   if (![0, 1].includes(event.button)) return;
@@ -234,14 +235,17 @@ function wheelTextureView(event) {
 }
 
 function setUvCoordinate(coordinate, value) {
+  if (setTilingCoordinate(coordinate, value)) return;
   const entries = selectedTextureUvEntries();
   if (!entries.length || !Number.isFinite(value)) return;
   if (entries.some(entry => entry.cube.uvMode === 'box')) return toast('箱型 UV 的六面相對位置固定，不能單獨修改面座標');
-  snapshot('core.uv.coordinate');
   const maximum = coordinate % 2 === 0 ? uvEditorController.texturePreviewSize[0] : uvEditorController.texturePreviewSize[1];
-  const nextValue = clamp(value, 0, maximum);
+  const edits = entries.map(entry => ({ entry, uv: editUvRectangleField(entry.uv, coordinate, value, maximum) }))
+    .filter(({ entry, uv }) => uv.some((number, index) => number !== entry.uv[index]));
+  if (!edits.length) return;
+  snapshot('core.uv.coordinate');
   materializeUvFaces(entries);
-  entries.forEach(entry => { entry.cube.faces[entry.faceName].uv[coordinate] = nextValue; });
+  edits.forEach(({ entry, uv }) => { entry.cube.faces[entry.faceName].uv = uv; });
   markDirty();
   renderAll('selection');
   updateTextureStageTransform();

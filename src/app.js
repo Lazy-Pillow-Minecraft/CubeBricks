@@ -40,11 +40,13 @@ import { createPaintStrokeController } from './paint/stroke-controller.js';
 import { createScenePaintController } from './paint/scene-controller.js';
 import { createTexturePointerController } from './texture/pointer-controller.js';
 import { createProjectFileController } from './project/file-controller.js';
+import { createProjectHistoryDialog } from './project/history-dialog.js';
 import { createSettingsController } from './screen/settings-controller.js';
 import { createContextMenuController } from './screen/context-menus.js';
 import { createTextureAtlasController } from './texture/atlas-controller.js';
 import { createModelFormatPicker } from './project/format-picker.js';
 import { createProjectCoverController } from './project/cover-controller.js';
+import { bindProjectHistoryProgress } from './project/history-progress.js';
 import { createOutlinerViewController } from './screen/outliner-view.js';
 import { createOutlinerDragController } from './screen/outliner-drag.js';
 import { createElementCommands } from './editor/element-commands.js';
@@ -433,7 +435,7 @@ function updateTransformGizmo(...args) { return gizmoController.updateTransformG
 
 const uvEditorController = createUvEditorController({
   state, $, $$, getSelectionExpansion, activeTextureAsset,
-  textureAtlasReferences, effectiveFaceTextureReference, isFaceTiled,
+  textureAtlasReferences, effectiveFaceTextureReference, isFaceTiled, selectedTilingFaces,
   round, renderTextureTileControls, syncTexturePreviewPriority,
   clamp, snapValue, snapshot, markDirty,
   invalidateSelectionRenderGeometry, scheduleSceneRender
@@ -442,6 +444,7 @@ function updateTexturePreviewFrame(...args) { return uvEditorController.updateTe
 function uvFaceKey(...args) { return uvEditorController.uvFaceKey(...args); }
 function parseUvFaceKey(...args) { return uvEditorController.parseUvFaceKey(...args); }
 function textureUvEntries(...args) { return uvEditorController.textureUvEntries(...args); }
+function textureFaceEntries(...args) { return uvEditorController.textureFaceEntries(...args); }
 function selectedTextureUvEntries(...args) { return uvEditorController.selectedTextureUvEntries(...args); }
 function normalizedUvBounds(...args) { return uvEditorController.normalizedUvBounds(...args); }
 function renderTextureUvOverlay(...args) { return uvEditorController.renderTextureUvOverlay(...args); }
@@ -581,7 +584,7 @@ const texturePointerController = createTexturePointerController({
   moveTexturePaintPointer, endTexturePaintPointer, applyTextureUvDrag,
   clamp, snapValue, snapTexturePan, updateTextureStageTransform,
   snapshot, materializeUvFaces, markDirty, invalidateSelectionRenderGeometry,
-  scheduleSceneRender, renderAll, toast
+  scheduleSceneRender, renderAll, toast, setTilingCoordinate
 });
 function startTexturePointer(...args) { return texturePointerController.startTexturePointer(...args); }
 function moveTexturePointer(...args) { return texturePointerController.moveTexturePointer(...args); }
@@ -624,10 +627,15 @@ const textureAssetController = createTextureAssetController({
   rebuildTextureAtlas, drawTextureAtlasEntry, textureAtlasPatch,
   uvPreviewIsActive, pushTexturePaintHistory, renderAll,
   invalidateAllRenderGeometry, registerGeneratedTexture, renderScene,
-  updateTexturePreviewFrame, syncRendererTexture, selectedElementUids,
+  updateTexturePreviewFrame, syncRendererTexture, syncRendererTextureAsset,
+  getAllTextureAssets:()=>[...state.textureAssets,...projectTabsController.tabs.flatMap(tab=>tab.session?.textureAssets||[])],selectedElementUids,
+  texturePlaybackKey:asset=>{
+    const tabId=state.textureAssets.includes(asset)?projectTabsController.activeId:projectTabsController.tabs.find(tab=>tab.session?.textureAssets?.includes(asset))?.id;
+    return tabId?`${tabId}:${asset._uid}`:asset;
+  },
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
-  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp
+  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu
 });
 function textureUid(...args) { return textureAssetController.textureUid(...args); }
 function renderTextureList(...args) { return textureAssetController.renderTextureList(...args); }
@@ -638,6 +646,8 @@ function refreshDerivedTileEntries(...args) { return textureAssetController.refr
 function scheduleTextureAnimation(...args) { return textureAssetController.scheduleTextureAnimation(...args); }
 function textureAssetForReference(...args) { return textureAssetController.textureAssetForReference(...args); }
 function isFaceTiled(...args) { return textureAssetController.isFaceTiled(...args); }
+function selectedTilingFaces(...args) { return textureAssetController.selectedTilingFaces(...args); }
+function setTilingCoordinate(...args) { return textureAssetController.setTilingCoordinate(...args); }
 function remapNumericFaceTextureReferences(...args) { return textureAssetController.remapNumericFaceTextureReferences(...args); }
 function loadTextureAssetImage(...args) { return textureAssetController.loadTextureAssetImage(...args); }
 function createSimpleTexture(...args) { return textureAssetController.createSimpleTexture(...args); }
@@ -694,7 +704,9 @@ function exportProject(...args) { return projectFileController.exportProject(...
 
 const modelFormatPicker = createModelFormatPicker({
   $, newProjectDialog, escapeHtml, escapeAttribute, formatNumber,
-  addProjectTab, markDirty, toast, configRegistry, loadProjectContent
+  addProjectTab, markDirty, toast, configRegistry,
+  openWorkspaceProject: (...args) => projectFileController.openWorkspaceProject(...args),
+  deleteWorkspaceProject: (...args) => projectTabsController.deleteWorkspaceProject(...args), showContextMenu
 });
 function modelFormatIconMarkup(...args) { return modelFormatPicker.modelFormatIconMarkup(...args); }
 function renderModelFormatPicker(...args) { return modelFormatPicker.renderModelFormatPicker(...args); }
@@ -747,6 +759,8 @@ function showContextMenu(...args) { return contextMenuController.showContextMenu
 function setActiveTextureItem(...args) { return contextMenuController.setActiveTextureItem(...args); }
 function showElementContextMenu(...args) { return contextMenuController.showElementContextMenu(...args); }
 function bindContextMenus(...args) { return contextMenuController.bindContextMenus(...args); }
+
+createProjectHistoryDialog({$,state,projectTabsController,journalController,showContextMenu,closeContextMenu,openColorPickerPopup,toast});
 
 const curvePlacementController = createCurvePlacementController({
   state, sceneCanvas, sceneRenderer, intersectRayPlane, snapValue,
@@ -802,7 +816,7 @@ const eventBinder = createEventBinder({
   setRenderModeMenu, setThemeVar, setTool, setUvCoordinate, snapshot,
   startCameraDrag, startTexturePointer, startTransformDrag, stopTimeline,
   stopUvPreviewAnimation, syncTexturePreviewPriority, textureUid,
-  textureUvEntries, toast, topLevelSelectedUids, undo,
+  textureUvEntries, textureFaceEntries, textureAssetForReference, activateProjectTexture, toast, topLevelSelectedUids, undo,
   updateFaceSelectionOverlay, updateGizmoDepthHover,
   updateMultiTransformModeButtons, updateRenderModeControl,
   updateRotationModeButtons, updateScaleHandleModeButtons,
@@ -953,6 +967,7 @@ if (window.cubeBricksDesktop?.platform === 'win32' && window.cubeBricksDesktop.w
 }
 sceneRenderer.setSelectionOutline(getComputedStyle(document.documentElement).getPropertyValue('--selection-outline').trim());
 initializeProjectTabs();
+bindProjectHistoryProgress();
 if (window.cubeBricksDesktop?.onCloseRequested) {
   window.cubeBricksDesktop.onCloseRequested(requestProjectClose);
   $('#closeProjectsForm').addEventListener('submit', event => { event.preventDefault(); void confirmProjectClose(); });

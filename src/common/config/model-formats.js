@@ -17,6 +17,7 @@ const cubeCapabilities = Object.freeze({
   locators: false,
   animation: false,
   texturePainting: true,
+  singleTexture: false,
   boxUv: true,
   faceUv: true
 });
@@ -75,7 +76,7 @@ modelFormatRegistry.registerMany([
     aliases: ['bedrock_entity'],
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 64], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true }
+    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true, singleTexture: true }
   },
   {
     id: ModelFormatId.BEDROCK_BLOCK,
@@ -98,7 +99,7 @@ modelFormatRegistry.registerMany([
     aliases: ['java_entity'],
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 32], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true, faceUv: false }
+    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true, faceUv: false, singleTexture: true }
   },
   {
     id: ModelFormatId.MINECRAFT_SKIN,
@@ -112,7 +113,7 @@ modelFormatRegistry.registerMany([
     placeholderReason: '皮膚模型目前暫停新建',
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 64], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities }
+    capabilities: { ...cubeCapabilities, singleTexture: true }
   },
   {
     id: ModelFormatId.GECKOLIB,
@@ -126,7 +127,7 @@ modelFormatRegistry.registerMany([
     placeholderReason: 'GeckoLib 模型目前暫停新建',
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 64], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true }
+    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true, singleTexture: true }
   }
 ]);
 

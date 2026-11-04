@@ -2106,7 +2106,7 @@ export class WebGLSceneRenderer {
     return closest;
   }
 
-  pickCoincident(project, screenX, screenY, geometryOnly = true, allDepths = false) {
+  pickCoincident(project, screenX, screenY, geometryOnly = true, allDepths = false, includeGenerated = false) {
     if (!this.lastCameraState || !this.lastCameraInput) return [];
     const ray = screenRay(screenX, screenY, this.lastViewport, this.lastCameraState, this.lastCameraInput);
     const dynamicUids = new Set(this.selectedCache?.ownerPoints?.keys() || []);
@@ -2141,6 +2141,30 @@ export class WebGLSceneRenderer {
         normal,
         point: ray.origin.map((value, axis) => value + ray.direction[axis] * faceDistance)
       });
+    }
+    if(includeGenerated&&!this.lastCameraInput.modifierResultGhost)for(const instance of this.mirrorCache?.instances||[]){
+      for(const sourceUid of this.lastCameraInput?.mode==='paint'&&this.lastCameraInput.paintExplode?instance.sourceUids:[null]){
+        const translation=sourceUid?this.paintExplodeInstanceTranslation(instance,sourceUid):instance.translation;
+        const inverse=(point,direction=false)=>[0,1,2].map(axis=>instance.matrix[0][axis]*(point[0]-(direction?0:translation[0]))
+          +instance.matrix[1][axis]*(point[1]-(direction?0:translation[1]))+instance.matrix[2][axis]*(point[2]-(direction?0:translation[2])));
+        const localRay={origin:inverse(ray.origin),direction:inverse(ray.direction,true)};
+        const candidates=[...queryFaceBvh(this.staticCache?.faceBvh,localRay).filter(face=>!dynamicUids.has(face.uid)),...queryFaceBvh(this.selectedCache?.faceBvh,localRay)];
+        for(const face of candidates){
+          if(sourceUid&&face.uid!==sourceUid||!instance.sourceUidSet.has(face.uid)||this.lastLockedUids.has(face.uid))continue;
+          const indices=instance.cubeIndices?.[face.uid];if(indices&&!indices.includes(face.cubeIndex??0))continue;
+          let distance=Infinity;
+          for(let triangle=0;triangle<2;triangle++){
+            const base=triangle*3,value=rayTriangleDistance(localRay.origin,localRay.direction,face.quad[FACE_TRIANGLE_SLOTS[base]],face.quad[FACE_TRIANGLE_SLOTS[base+1]],face.quad[FACE_TRIANGLE_SLOTS[base+2]]);
+            if(value!==null)distance=Math.min(distance,value);
+          }
+          if(!Number.isFinite(distance))continue;
+          hits.set(`${instance.key}:${face.uid}:${face.cubeUid||face.uid}:${face.faceName}:${face.cubeIndex??''}`,{
+            uid:face.uid,cubeUid:face.cubeUid||face.uid,cubeIndex:face.cubeIndex??null,cube:face.cube||null,distance,faceName:face.faceName,generated:true,instanceKey:instance.key,
+            facePoints:face.quad.map(point=>this.paintExplodeInstancePoint(instance,face.uid,point)),point:ray.origin.map((value,axis)=>value+ray.direction[axis]*distance),
+            modelPoint:localRay.origin.map((value,axis)=>value+localRay.direction[axis]*distance-(this.paintExplodeOffsets.get(face.uid)?.[axis]||0))
+          });
+        }
+      }
     }
     const ordered = [...hits.values()].sort((a, b) => a.distance - b.distance);
     if (!ordered.length) return [];
@@ -2978,7 +3002,7 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
     const textureEntry = textureLayoutEntry(textureLayout, faceData?.texture);
     const quad = quadIndices.map(index => corners[index]);
     if (textured && textureEntry?.mode === 'tiled') {
-      const regions = tiledFaceRegions(cube, faceName, textureEntry.width, textureEntry.height);
+      const regions = tiledFaceRegions(cube, faceName);
       const point = (u, v) => quad[0].map((value, axis) => value + (quad[1][axis] - value) * u + (quad[2][axis] - value) * v);
       for (const region of regions) {
         const tileEntry = textureLayout.byReference.get(tiledFaceReference(cube, faceName, textureEntry, region));

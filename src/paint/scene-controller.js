@@ -1,10 +1,13 @@
 import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
-import { activeLayer, faceTileSize, layerRasterCache, prepareLayers } from '../common/core/texture-features.js';
+import { activeLayer, layerRasterCache, prepareLayers } from '../common/core/texture-features.js';
 import { barycentric2d } from '../screen/color-picker/math.js';
 import { dot3 } from '../utils/math/vector3.js';
 import { PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
 import { paintSelectionAllows } from './selection-controller.js';
 import { rasterScreenPaint, rasterScreenUvFootprint, screenPaintClientPoint, screenPaintGrid, screenPaintPoint } from './screen-space.js';
+import { tiledFacePaintBounds, tiledFacePaintCoordinates, tiledFacePaintPoint } from './tiled-face.js';
+import { eyedropperCanvas, opaqueTextureColor } from './eyedropper.js';
+import { bindPaintCanvas } from './canvas-layer-binding.js';
 
 export function sceneBrushHitKey(hit) {
   return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.cubeIndex ?? ''}`
@@ -78,19 +81,11 @@ function barycentricPoint(point, a, b, c) {
   return first >= -1e-4 && second >= -1e-4 && third >= -1e-4 ? [first, second, third] : null;
 }
 
-function facePaintUvPoint(hit, target, canvas) {
+function facePaintUvPoint(hit, target, canvas, wrapTiled = true) {
   if (!hit?.point || !hit.facePoints?.length || !target || !canvas) return null;
   const face = target.cube.faces?.[target.faceName] || {};
   if (isFaceTiled(face)) {
-    const uAxis = hit.facePoints[1].map((value, axis) => value - hit.facePoints[0][axis]);
-    const vAxis = hit.facePoints[2].map((value, axis) => value - hit.facePoints[0][axis]);
-    const offset = hit.point.map((value, axis) => value - hit.facePoints[0][axis]);
-    const size = faceTileSize(target.cube, target.faceName);
-    const u = dot3(offset, uAxis) / Math.max(1e-8, dot3(uAxis, uAxis)) * size[0];
-    const v = dot3(offset, vAxis) / Math.max(1e-8, dot3(vAxis, vAxis)) * size[1];
-    const fraction = value => ((value % 1) + 1) % 1;
-    return [Math.floor(fraction((u + (Number(face.tiling?.offsetX) || 0)) / Math.max(.0001, Number(face.tiling?.width) || 16)) * canvas.width),
-      Math.floor(fraction((v + (Number(face.tiling?.offsetY) || 0)) / Math.max(.0001, Number(face.tiling?.height) || 16)) * canvas.height)];
+    return tiledFacePaintPoint(hit, target.cube, target.faceName, canvas, wrapTiled);
   }
   const rectangle = target.cube.uvMode !== 'box' && Array.isArray(face.uv) && face.uv.length >= 4
     ? face.uv
@@ -121,7 +116,7 @@ function facePaintUvPoint(hit, target, canvas) {
 function facePaintUvContinuous(hit, target, canvas) {
   if (!hit?.point || hit.facePoints?.length !== 4 || !target || !canvas) return null;
   const face = target.cube.faces?.[target.faceName] || {};
-  if (isFaceTiled(face)) return null;
+  if (isFaceTiled(face)) return tiledFacePaintCoordinates(hit, target.cube, target.faceName);
   const rectangle = target.cube.uvMode !== 'box' && Array.isArray(face.uv) && face.uv.length >= 4
     ? face.uv : getBlockbenchBoxUv(target.cube, target.faceName);
   if (!rectangle) return null;
@@ -536,9 +531,11 @@ function cloneCanvas(source) {
 }
 
 async function paintCanvasForAsset(asset) {
+  if(asset?.animation?.enabled&&!activeLayer(asset))return null;
   if (asset.layers?.length) {
     await prepareLayers(asset);
-    return cloneCanvas(layerRasterCache.get(activeLayer(asset).uid).canvas);
+    const layer=activeLayer(asset),raster=layerRasterCache.get(layer?.uid)?.canvas;
+    if(!raster)return null;const result=cloneCanvas(raster);bindPaintCanvas(asset,result.canvas,layer.uid);return result;
   }
   const image = await loadTextureAssetImage(asset);
   return image ? cloneCanvas(image) : null;
@@ -640,6 +637,7 @@ async function sceneBrushSurfaceForHit(drag, hit) {
   const surface = {
     ...base, baseSurface: base, rootDrag: drag, clip,
     tool: drag.tool,
+    wrapTexture:isFaceTiled(target.cube.faces?.[target.faceName]),
     cube: target.cube, faceName: target.faceName,
     paintFace: { cube: target.cube, faceName: target.faceName, facePoints: hit.facePoints },
     depthEdges: []
@@ -679,17 +677,14 @@ async function applySceneBrushHit(drag, hit) {
     for (const { paintHit, sourceHit } of hits) {
       const surface = await sceneBrushSurfaceForHit(drag, paintHit);
       if (!surface || drag.canceled) continue;
-      const point = facePaintUvPoint(paintHit, surface, surface.canvas);
+      const point = facePaintUvPoint(paintHit, surface, surface.canvas,!surface.wrapTexture);
       if (!point) continue;
       // Keep one UV-space cursor per source/target face branch. Two adjacent
       // source faces can map onto the same target face around the symmetry
       // center, but their points must never be joined into one segment.
       const faceKey = sceneBrushBranchKey(sourceHit, paintHit, surface.asset._uid);
       const previousPoint = drag.lastByFace.get(faceKey);
-      const wrapped = isFaceTiled(surface.cube.faces?.[surface.faceName]) && previousPoint
-        && (Math.abs(previousPoint[0] - point[0]) > surface.canvas.width / 2 || Math.abs(previousPoint[1] - point[1]) > surface.canvas.height / 2);
-      const previous = wrapped ? null : previousPoint;
-      drawPaintSegment(surface, previous || point, point);
+      drawPaintSegment(surface, previousPoint || point, point);
       drag.lastByFace.set(faceKey, point);
       activeKeys.add(faceKey);
     }
@@ -891,19 +886,22 @@ async function paintScreenSpacePixels(drag, from, to, preview, generation, fromE
       if (!base || drag.canceled || preview && generation !== drag.screenGeneration) continue;
       let lastYield = performance.now();
       for (const { hit, sourceHit, target, coverage, index } of group.samples) {
-        const point = facePaintUvPoint(hit, target, base.canvas);
+        const tiled = isFaceTiled(target.cube.faces?.[target.faceName]);
+        const point = facePaintUvPoint(hit, target, base.canvas, !tiled);
         if (!point) continue;
         const surfaceKey = `${group.asset._uid}:${hit.cubeUid || target.cube.uid}:${hit.cubeIndex ?? ''}:${target.faceName}`;
         let surface = drag.screenSurfaces.get(surfaceKey);
         if (!surface || surface.canvas !== base.canvas) {
           surface = { ...base, baseSurface: base, rootDrag: drag, tool: drag.tool,
-            clip: paintUvBounds(target.cube, target.faceName, base.canvas) };
+            clip: paintUvBounds(target.cube, target.faceName, base.canvas),
+            tiledFaceBounds: tiled ? tiledFacePaintBounds(target.cube, target.faceName) : null };
           drag.screenSurfaces.set(surfaceKey, surface);
         }
         let footprint = sourceHit === hit ? drag.screenFootprints.get(hit) : null;
         if (sourceHit === hit && (!footprint || footprint.index !== index || footprint.canvas !== base.canvas)) {
           footprint = { index, canvas: base.canvas,
-            points: screenCellUvFootprint(drag.screenGrid, index, hit, target, base.canvas, point, surface.clip) };
+            points: screenCellUvFootprint(drag.screenGrid, index, hit, target, base.canvas, point,
+              surface.tiledFaceBounds || surface.clip) };
           drag.screenFootprints.set(hit, footprint);
         }
         const points = sourceHit === hit ? footprint.points : [point];
@@ -984,7 +982,6 @@ function screenVisibleFaceKey(grid, x, y, cache, drag = null) {
 }
 
 function screenCellUvFootprint(grid, index, hit, target, canvas, center, bounds = null) {
-  if (isFaceTiled(target.cube.faces?.[target.faceName])) return [center];
   const points = hit.facePoints;
   if (!points || points.length !== 4) return [center];
   const edgeU = points[1].map((value, axis) => value - points[0][axis]);
@@ -1207,7 +1204,7 @@ async function finalizeScenePaintShapeSymmetry(drag) {
   sourceGroup.surfaces.push({
     asset: drag.asset, canvas: drag.canvas, context: drag.context, baseImage: drag.baseImage,
     cube: drag.cube, faceName: drag.faceName, clip: drag.clip, tool: drag.tool,
-    start: drag.start, end: drag.last || drag.start
+    start: drag.start, end: drag.last || drag.start, tiledFaceBounds: drag.tiledFaceBounds
   });
   for (let index = 1; index < starts.length; index++) {
     const startHit = starts[index];
@@ -1227,13 +1224,15 @@ async function finalizeScenePaintShapeSymmetry(drag) {
       assets.set(target.asset._uid, group);
       pushTexturePaintHistory(target.asset, result.canvas);
     }
-    const start = facePaintUvPoint(startHit, target, group.canvas);
-    const end = facePaintUvPoint(endHitForTarget, target, group.canvas);
+    const start = facePaintUvPoint(startHit, target, group.canvas, false);
+    const end = facePaintUvPoint(endHitForTarget, target, group.canvas, false);
     if (!start || !end) continue;
     group.surfaces.push({
       asset: target.asset, canvas: group.canvas, context: group.context, baseImage: group.baseImage,
       cube: target.cube, faceName: target.faceName, clip: paintUvBounds(target.cube, target.faceName, group.canvas),
-      tool: drag.tool, start, end
+      tool: drag.tool, start, end,
+      tiledFaceBounds: isFaceTiled(target.cube.faces?.[target.faceName])
+        ? tiledFacePaintBounds(target.cube, target.faceName) : null
     });
   }
   for (const group of assets.values()) {
@@ -1309,7 +1308,7 @@ function moveScenePaintDrag(event, drag = state.dragging) {
   }
   if (!drag.ready) return true;
   const hit = scenePaintHit(event.clientX, event.clientY, drag);
-  const point = hit && facePaintUvPoint(hit, drag, drag.canvas);
+  const point = hit && facePaintUvPoint(hit, drag, drag.canvas, !drag.tiledFaceBounds);
   if (!point) {
     if (!PAINT_SHAPE_TOOLS.includes(drag.tool)) drag.last = null;
     return true;
@@ -1354,18 +1353,25 @@ function queueSceneBucketAt(drag, clientX, clientY) {
 }
 
 function startScenePaintPointer(event, x, y) {
+  if(state.tool==='eyedropper'){
+    event.preventDefault();const rect=sceneCanvas.getBoundingClientRect(),composite=event.ctrlKey;
+    const hits=sceneRenderer.pickCoincident(state.project,event.clientX-rect.left,event.clientY-rect.top,true,true,!state.modifierResultGhost);
+    (async()=>{
+      const sources=new Map();
+      for(const candidate of hits){
+        const target=facePaintTarget(candidate);if(!target)continue;
+        if(!sources.has(target.asset))sources.set(target.asset,await eyedropperCanvas(target.asset,{composite,loadImage:loadTextureAssetImage}));
+        const canvas=sources.get(target.asset),color=opaqueTextureColor(canvas,canvas&&facePaintUvPoint(candidate,target,canvas));
+        if(color){setPaintColor(color,true);updateToolOptions();return;}
+      }
+      const color=sampleReferenceImage?.(event.clientX,event.clientY);if(color){setPaintColor(color,true);updateToolOptions();}
+    })().catch(error=>toast(error.message));return true;
+  }
   if (event.ctrlKey && (state.tool === 'brush' || state.tool === 'fill' || PAINT_SHAPE_TOOLS.includes(state.tool)))
     return startScreenSpacePaint(event);
   const hit = scenePaintHit(event.clientX, event.clientY);
-  if (state.tool === 'eyedropper' && !hit) {
-    const color = sampleReferenceImage?.(event.clientX, event.clientY);
-    if (color) {
-      event.preventDefault();
-      setPaintColor(color, true);
-      updateToolOptions();
-      return true;
-    }
-  }
+  const hitAsset=hit&&facePaintTarget(hit)?.asset;
+  if(hitAsset?.animation?.enabled&&!activeLayer(hitAsset)){toast('當前幀沒有可編輯圖層');return true;}
   if (state.tool === 'gradient') {
     if (!hit?.faceName) { toast('請指向一個 Cube 面'); return true; }
     const cube = hit.cube?.type === 'cube' ? hit.cube : state.project.getNode(hit.uid);
@@ -1417,16 +1423,6 @@ function startScenePaintPointer(event, x, y) {
     queueSceneBucketAt(drag, event.clientX, event.clientY);
     return true;
   }
-  if (state.tool === 'eyedropper') {
-    paintCanvasForAsset(target.asset).then(result => {
-      const point = result && facePaintUvPoint(hit, target, result.canvas);
-      if (!point) return;
-      const pixel = result.context.getImageData(point[0], point[1], 1, 1).data;
-      setPaintColor(`#${[pixel[0], pixel[1], pixel[2]].map(value => value.toString(16).padStart(2, '0')).join('')}`, true);
-      updateToolOptions();
-    });
-    return true;
-  }
   sceneCanvas.setPointerCapture(event.pointerId);
   const drag = {
     type: 'texture-paint-3d', pointerId: event.pointerId, uid: hit.uid,
@@ -1453,9 +1449,11 @@ function startScenePaintPointer(event, x, y) {
     drag.canvas = result.canvas;
     drag.context = result.context;
     drag.clip = paintUvBounds(target.cube, target.faceName, drag.canvas);
+    if (PAINT_SHAPE_TOOLS.includes(drag.tool) && isFaceTiled(face))
+      drag.tiledFaceBounds = tiledFacePaintBounds(target.cube, target.faceName);
     pushTexturePaintHistory(drag.asset, drag.canvas);
     drag.ready = true;
-    const initial = facePaintUvPoint(drag.initialHit, drag, drag.canvas);
+    const initial = facePaintUvPoint(drag.initialHit, drag, drag.canvas, !drag.tiledFaceBounds);
     if (initial) {
       drag.start = initial;
       if (PAINT_SHAPE_TOOLS.includes(drag.tool)) {

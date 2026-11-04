@@ -5,6 +5,7 @@ const { ProjectJournal } = require('./project-journal.cjs');
 
 let worker = null, sequence = 0;
 const pending = new Map();
+const historyListeners = new Set();
 function ensureWorker() {
   if (worker) return worker;
   const current = new Worker(path.join(__dirname, 'journal-worker.cjs'));
@@ -17,6 +18,12 @@ function ensureWorker() {
     }
   };
   current.on('message', response => {
+    if (response.historyProgress) {
+      for (const listener of historyListeners) {
+        try { listener(response.historyProgress); } catch (error) { console.warn('History progress listener failed',error); }
+      }
+      return;
+    }
     const task = pending.get(response.request);
     if (!task || task.worker !== current) return;
     if (response.progress) {
@@ -62,12 +69,15 @@ class WorkerProjectJournal {
   }
   static inspectArchive(...args) { return ProjectJournal.inspectArchive(...args); }
   static historySignature(...args) { return ProjectJournal.historySignature(...args); }
-  static fromArchive(bytes, directory, entries = null, onProgress = null) {
-    return new WorkerProjectJournal(directory).call('fromArchive', [bytes, entries], onProgress);
+  static fromArchive(bytes, directory, entries = null, onProgress = null, options = {}) {
+    return new WorkerProjectJournal(directory).call('fromArchive', [bytes, entries, options], onProgress);
   }
 }
 for (const method of ['initialize', 'load', 'ensureReady', 'commit', 'content',
-  'checkout', 'navigate', 'compactHistory', 'archive', 'dispose']) {
+  'checkout', 'navigate', 'compactHistory', 'setHistoryLimit', 'archive', 'dispose', 'finishHistoryImport', 'historyGraph', 'setHistoryMark', 'pruneHistoryBranch']) {
   WorkerProjectJournal.prototype[method] = function (...args) { return this.call(method, args); };
 }
-module.exports = { WorkerProjectJournal };
+module.exports = { WorkerProjectJournal, onHistoryProgress(listener) {
+  historyListeners.add(listener);
+  return () => historyListeners.delete(listener);
+} };
