@@ -33,7 +33,7 @@ export function createEventBinder({
   exportProject, focusSelected, focusSceneOrigin, focusSelectedTextureUvs, getUvPreviewProject,
   importPlayerReferenceTexture, importTexture, inspectorBatchNodes,
   invalidateSelectionRenderGeometry, isBezierElement, isEffectivelyLocked,
-  loadProjectContent, markDirty, moveSelectedNodes, newProject,
+  loadProjectContent, loadProjectFile, markDirty, moveSelectedNodes, newProject,
   nodeAutoUvEnabled, nodeUvNormalizedEnabled, noteJournalOperation,
   onPointerDown, onPointerMove, onScenePointerMove, onTexturePointerMove,
   openNewProjectDialog, openPreciseRotationInput, openProject,
@@ -132,12 +132,12 @@ function choosePngDestination(file) {
 async function handleExternalFiles(files) {
   for (const file of files) {
     const extension = droppedFileExtension(file);
-    if (['cbmodel', 'bbmodel', 'json'].includes(extension)) {
+    if (['cbmodel', 'bbmodel', 'json', 'java'].includes(extension)) {
       if (window.cubeBricksDesktop?.getPathForFile) {
         const filePath = window.cubeBricksDesktop.getPathForFile(file);
         if (!filePath) throw new Error(`無法取得 ${file.name} 的本機路徑`);
         await openProject(filePath);
-      } else if (extension !== 'cbmodel') loadProjectContent(await file.text(), file.name);
+      } else if (extension !== 'cbmodel') await loadProjectFile(file);
       else toast('.cbmodel 需要在桌面版打開');
       continue;
     }
@@ -1046,7 +1046,7 @@ function bindEvents() {
   });
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files[0]; if (!file) return;
-    try { loadProjectContent(await file.text(), file.name); } catch (error) { toast(`文件無法讀取：${error.message}`); }
+    try { await loadProjectFile(file); } catch (error) { toast(`文件無法讀取：${error.message}`); }
     fileInput.value = '';
   });
   textureInput.addEventListener('change', () => {

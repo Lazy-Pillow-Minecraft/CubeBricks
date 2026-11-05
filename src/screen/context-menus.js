@@ -19,7 +19,7 @@ export function createContextMenuController({
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
-  copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown
+  copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown, saveTexture
 }) {
 let contextMenuSource = null;
 const contextMenuHome = $('#contextMenu').parentNode;
@@ -390,6 +390,9 @@ function bindContextMenus() {
     if (item) {
       const asset = state.textureAssets.find(entry => entry._uid === item.dataset.textureUid);
       return showContextMenu(event, { title: asset?.name || '貼圖', source: item, items: [
+        { icon: '▣', label: '保存贴图', action: () => saveTexture(asset) },
+        { icon: '▣', label: '贴图另存为', action: () => saveTexture(asset, { saveAs: true }) },
+        { separator: true },
         { icon: '◉', label: '設為目前貼圖', action: () => setActiveTextureItem(item) },
         { icon: '▣', label: '複製貼圖', action: () => copyTexture(asset) },
         { icon: '✂', label: '剪切貼圖', action: () => cutTexture(asset) },

@@ -36,6 +36,7 @@ import { createGizmoController } from './screen/gizmo-controller.js';
 import { createUvPreviewController } from './screen/uv-preview-controller.js';
 import { createUvEditorController } from './texture/uv-editor-controller.js';
 import { createTextureAssetController } from './texture/asset-controller.js';
+import { createTextureFileController } from './texture/file-controller.js';
 import { createPaintStrokeController } from './paint/stroke-controller.js';
 import { createScenePaintController } from './paint/scene-controller.js';
 import { createTexturePointerController } from './texture/pointer-controller.js';
@@ -74,6 +75,7 @@ import { createWorkspaceCoordinator } from './editor/workspace-coordinator.js';
 import { createDockSystem } from './screen/dock-bootstrap.js';
 import { showAppChoice } from './screen/prompt-dialog.js';
 
+let textureFileController = null;
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const LOCATOR_ICON_SHAPES = '<path d="M98.74,144.52c-38.86,0-72.06-19.5-85.3-46.99-1.11,4.43-1.7,9-1.7,13.69,0,38.28,38.95,69.32,87,69.32s87-31.03,87-69.32c0-4.69-.59-9.26-1.7-13.69-13.24,27.49-46.44,46.99-85.3,46.99Z"/><rect x="81.01" y="56.54" width="35.47" height="96.98"/><rect x="59.53" y="77.83" width="78.43" height="25.75" rx="7.93" ry="7.93"/><path d="M98.74,0c-18.89,0-34.21,15.31-34.21,34.21s15.31,34.21,34.21,34.21,34.21-15.31,34.21-34.21S117.63,0,98.74,0ZM98.74,49.2c-8.28,0-14.99-6.71-14.99-14.99s6.71-14.99,14.99-14.99,14.99,6.71,14.99,14.99-6.71,14.99-14.99,14.99Z"/><path d="M26.73,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66H5.18c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M179.83,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66h-34.03c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M97.08,188.46l-18.84-16.15c-1.8-1.55-.71-4.5,1.67-4.5h37.68c2.38,0,3.47,2.96,1.67,4.5l-18.84,16.15c-.96.82-2.37.82-3.33,0Z"/>';
@@ -227,7 +229,7 @@ function snapshot(...args) { return journalController.snapshot(...args); }
 function restore(...args) { return journalController.restore(...args); }
 function undo(...args) { return journalController.undo(...args); }
 function redo(...args) { return journalController.redo(...args); }
-function markDirty(...args) { return journalController.markDirty(...args); }
+function markDirty(...args) { textureFileController?.refresh(); return journalController.markDirty(...args); }
 function startProjectJournal(...args) { return journalController.startProjectJournal(...args); }
 function scheduleProjectJournal(...args) { return journalController.scheduleProjectJournal(...args); }
 function noteJournalOperation(...args) { return journalController.noteJournalOperation(...args); }
@@ -618,6 +620,7 @@ function activeSnapSubdivisions(...args) { return snapController.activeSnapSubdi
 function updateSnapButton(...args) { return snapController.updateSnapButton(...args); }
 function cycleSnap(...args) { return snapController.cycleSnap(...args); }
 
+textureFileController = createTextureFileController({ state, toast, noteJournalOperation, markDirty });
 const textureAssetController = createTextureAssetController({
   state, $, $$, textureCanvas, textureCtx, sceneRenderer, uvPreviewRenderer,
   uvPreviewController, uvEditorController, livePaintTextureSources,
@@ -635,7 +638,8 @@ const textureAssetController = createTextureAssetController({
   },
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
-  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu
+  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu,
+  textureSaveIndicators: textureFileController
 });
 function textureUid(...args) { return textureAssetController.textureUid(...args); }
 function renderTextureList(...args) { return textureAssetController.renderTextureList(...args); }
@@ -692,12 +696,13 @@ const projectFileController = createProjectFileController({
   state, fileInput, projectTabsController, journalController,
   getShapePacksReady: () => shapePacksReady, activateProjectTab, addProjectTab, markDirty,
   discardProjectTabJournal, renderProjectTabs, projectTabById,
-  flushProjectJournal, toast
+  flushProjectJournal, toast, textureFileController
 });
 function openProject(...args) { return projectFileController.openProject(...args); }
 function serializableTextureAssets(...args) { return projectFileController.serializableTextureAssets(...args); }
 function serializeCbmodel(...args) { return projectFileController.serializeCbmodel(...args); }
 function loadProjectContent(...args) { return projectFileController.loadProjectContent(...args); }
+function loadProjectFile(...args) { return projectFileController.loadProjectFile(...args); }
 function offerProjectRecovery(...args) { return projectFileController.offerProjectRecovery(...args); }
 function saveProject(...args) { return projectFileController.saveProject(...args); }
 function exportProject(...args) { return projectFileController.exportProject(...args); }
@@ -752,7 +757,8 @@ const contextMenuController = createContextMenuController({
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
-  copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown
+  copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown,
+  saveTexture: textureFileController.saveTexture
 });
 function closeContextMenu(...args) { return contextMenuController.closeContextMenu(...args); }
 function showContextMenu(...args) { return contextMenuController.showContextMenu(...args); }
@@ -799,7 +805,7 @@ const eventBinder = createEventBinder({
   exportProject, focusSelected, focusSceneOrigin, focusSelectedTextureUvs, getUvPreviewProject,
   importPlayerReferenceTexture, importTexture, inspectorBatchNodes,
   invalidateSelectionRenderGeometry, isBezierElement, isEffectivelyLocked,
-  loadProjectContent, markDirty, moveSelectedNodes, newProject,
+  loadProjectContent, loadProjectFile, markDirty, moveSelectedNodes, newProject,
   nodeAutoUvEnabled, nodeUvNormalizedEnabled, noteJournalOperation,
   onPointerDown, onPointerMove, onScenePointerMove, onTexturePointerMove,
   openNewProjectDialog, openPreciseRotationInput, openProject,

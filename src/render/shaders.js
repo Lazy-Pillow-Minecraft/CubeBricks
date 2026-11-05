@@ -1,3 +1,18 @@
+import { UV_PREVIEW_CULLED_UV } from '../common/core/geometry-utils.js';
+
+const culledPreviewFragment = (depth = '') => `
+    if (vUv.x < ${(UV_PREVIEW_CULLED_UV + 1).toFixed(1)}) {
+      if (uRenderMode != 2) discard;
+      vec2 pixel = gl_FragCoord.xy / max(1.0, uSelectionStripeViewport.z);
+      float diagonal = mod((pixel.x + pixel.y) * 0.70710678, 8.0);
+      float ink = 1.0 - smoothstep(1.0, 1.8, abs(diagonal - 4.0));
+      if (ink < 0.001) discard;
+      gl_FragColor = vec4(vec3(1.0), ink * 0.45);
+      ${depth}
+      return;
+    }
+`;
+
 export const POST_VERTEX_SHADER = `
   attribute vec2 aPosition;
   varying vec2 vScreenUv;
@@ -124,6 +139,7 @@ export const FRAGMENT_SHADER = `
   uniform vec4 uColorOverride;
   varying float vSelected;
   void main() {
+    ${culledPreviewFragment()}
     vec4 color = vColor;
     bool hasTexture = vUv.x > -999999.0;
     bool gridOnly = false;
@@ -217,6 +233,7 @@ export const LOG_DEPTH_FRAGMENT_SHADER = `
   uniform int uUseLogDepth;
   uniform float uLogDepthFactor;
   void main() {
+    ${culledPreviewFragment('gl_FragDepthEXT = uUseLogDepth == 1 ? log2(max(1.0e-6, vFragDepth)) * uLogDepthFactor : gl_FragCoord.z;')}
     vec4 color = vColor;
     bool hasTexture = vUv.x > -999999.0;
     bool gridOnly = false;

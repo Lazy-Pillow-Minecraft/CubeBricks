@@ -1230,6 +1230,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "CubeBricks 导出选项",
     "en": "CubeBricks export options"
   },
+  "ui.cubebricks-java": {
+    "zhHant": "只能导回 CubeBricks 导出且未经修改的 Java 文件",
+    "zhHans": "只能导回 CubeBricks 导出且未经修改的 Java 文件",
+    "en": "Only unchanged Java files exported by CubeBricks can be reimported"
+  },
   "ui.cubebricks-settings": {
     "zhHant": "CubeBricks 設定",
     "zhHans": "CubeBricks 设置",
@@ -2110,6 +2115,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "橡皮擦（E）",
     "en": "Eraser (E)"
   },
+  "ui.error-message": {
+    "zhHant": "贴图保存失败：${error.message}",
+    "zhHans": "贴图保存失败：${error.message}",
+    "en": "Could not save texture: ${error.message}"
+  },
   "ui.euler": {
     "zhHant": "歐拉角",
     "zhHans": "欧拉角",
@@ -2160,11 +2170,6 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "导出失败：${error.message}",
     "en": "Export failed: ${error.message}"
   },
-  "ui.exported-bbmodel-format-selection-is-unavailable-in-this-browser": {
-    "zhHant": "已導出 .bbmodel（目前瀏覽器不支援格式選擇）",
-    "zhHans": "已导出 .bbmodel（当前浏览器不支援格式选择）",
-    "en": "Exported .bbmodel; format selection is unavailable in this browser"
-  },
   "ui.exported-bbmodel-procedural-objects-were-converted-to-cube-groups": {
     "zhHant": "已導出 .bbmodel（程序化物件已轉為 Cube 組）",
     "zhHans": "已导出 .bbmodel（程序化对象已转为 Cube 组）",
@@ -2176,14 +2181,24 @@ export const UI_MESSAGES = Object.freeze({
     "en": "Exported .cbmodel"
   },
   "ui.exported-extension": {
-    "zhHant": "已導出 ${extension}",
-    "zhHans": "已导出 ${extension}",
-    "en": "Exported ${extension}"
+    "zhHant": "已導出 .${extension}",
+    "zhHans": "已导出 .${extension}",
+    "en": "Exported .${extension}"
+  },
+  "ui.exported-fileextension": {
+    "zhHant": "已導出 ${fileExtension}",
+    "zhHans": "已导出 ${fileExtension}",
+    "en": "Exported ${fileExtension}"
   },
   "ui.extend-the-stroke-into-adjacent-face-textures-when-it-reaches-a-cube-edge": {
     "zhHant": "筆跡碰到 Cube 邊緣時，向相鄰面的貼圖延伸指定像素",
     "zhHans": "笔迹碰到 Cube 边缘时，向相邻面的贴图延伸指定像素",
     "en": "Extend the stroke into adjacent face textures when it reaches a cube edge"
+  },
+  "ui.extension": {
+    "zhHant": "已导出 .${extension}",
+    "zhHans": "已导出 .${extension}",
+    "en": "已导出 .${extension}"
   },
   "ui.eyedropper": {
     "zhHant": "取色器",
@@ -2570,6 +2585,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "几何",
     "en": "Geometry"
   },
+  "ui.geometry-bones": {
+    "zhHant": "基岩模型没有有效的 geometry/bones",
+    "zhHans": "基岩模型没有有效的 geometry/bones",
+    "en": "The Bedrock model has no valid geometry/bones"
+  },
   "ui.geometry-only": {
     "zhHant": "僅幾何",
     "zhHans": "仅几何",
@@ -2915,6 +2935,36 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "三维${item.variant === 'envelope' ? '包络' : ''}贝塞尔",
     "en": "三維${item.variant === 'envelope' ? '包絡' : ''}貝塞爾"
   },
+  "ui.java": {
+    "zhHant": "当前 Java 版本不能导出该旋转角度，请调整版本或组旋转",
+    "zhHans": "当前 Java 版本不能导出该旋转角度，请调整版本或组旋转",
+    "en": "This Java version cannot export that rotation angle. Change the version or group rotation."
+  },
+  "ui.java-1-21-11": {
+    "zhHant": "当前 Java 版本不能导出多轴旋转，请选择 1.21.11+ 或调整组旋转",
+    "zhHans": "当前 Java 版本不能导出多轴旋转，请选择 1.21.11+ 或调整组旋转",
+    "en": "This Java version cannot export multi-axis rotation. Select 1.21.11+ or change the group rotation."
+  },
+  "ui.java-2": {
+    "zhHant": "Java 文件已被修改，无法安全导回模型",
+    "zhHans": "Java 文件已被修改，无法安全导回模型",
+    "en": "The Java file has been modified and cannot be safely reimported"
+  },
+  "ui.java-3": {
+    "zhHant": "Java 文件名必须是合法的类名，请使用字母、数字或下划线",
+    "zhHans": "Java 文件名必须是合法的类名，请使用字母、数字或下划线",
+    "en": "Use a valid Java class name for the filename, with letters, digits, or underscores"
+  },
+  "ui.java-4": {
+    "zhHant": "Java 文件的还原信息无效",
+    "zhHans": "Java 文件的还原信息无效",
+    "en": "The Java restoration metadata is invalid"
+  },
+  "ui.java-5": {
+    "zhHant": "Java 模型旋转轴无效",
+    "zhHans": "Java 模型旋转轴无效",
+    "en": "The Java model rotation axis is invalid"
+  },
   "ui.java-block-item": {
     "zhHant": "Java 版方塊/物品",
     "zhHans": "Java 版方块/物品",
@@ -2924,6 +2974,36 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "Java 方塊／物品版本",
     "zhHans": "Java 方块／物品版本",
     "en": "Java block/item version"
+  },
+  "ui.java-cube": {
+    "zhHant": "Java 模组实体的 Cube 不能旋转，请使用组旋转",
+    "zhHans": "Java 模组实体的 Cube 不能旋转，请使用组旋转",
+    "en": "Cubes in Java modded entities cannot rotate. Rotate their group instead."
+  },
+  "ui.java-from-to": {
+    "zhHant": "Java 模型元素缺少有效的 from/to",
+    "zhHans": "Java 模型元素缺少有效的 from/to",
+    "en": "A Java model element has no valid from/to coordinates"
+  },
+  "ui.java-uv": {
+    "zhHant": "Java 模组实体导出需要箱型 UV",
+    "zhHans": "Java 模组实体导出需要箱型 UV",
+    "en": "Java modded entity export requires box UVs"
+  },
+  "ui.json": {
+    "zhHant": "几何 JSON 本身不区分实体与方块",
+    "zhHans": "几何 JSON 本身不区分实体与方块",
+    "en": "Geometry JSON alone does not distinguish entities from blocks"
+  },
+  "ui.json-2": {
+    "zhHant": "无法识别该 JSON 的原生模型格式",
+    "zhHans": "无法识别该 JSON 的原生模型格式",
+    "en": "The native model format of this JSON could not be identified"
+  },
+  "ui.json-3": {
+    "zhHant": "该模型格式不支持原生 JSON",
+    "zhHans": "该模型格式不支持原生 JSON",
+    "en": "This model format does not support native JSON"
   },
   "ui.keep-operation-history": {
     "zhHant": "保留操作歷史",
@@ -3210,6 +3290,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "基础色卡位置 %",
     "en": "Base palette position %"
   },
+  "ui.message-2": {
+    "zhHant": "文件包含多个几何模型，请选择要导入的一个",
+    "zhHans": "文件包含多个几何模型，请选择要导入的一个",
+    "en": "This file contains multiple geometries. Choose one to import."
+  },
   "ui.message-20": {
     "zhHant": "視窗控制",
     "zhHans": "视窗控制",
@@ -3395,10 +3480,70 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "历史记录读取失败",
     "en": "Could not load history"
   },
+  "ui.message-54": {
+    "zhHant": "先保存贴图，再导出原生模型文件",
+    "zhHans": "先保存贴图，再导出原生模型文件",
+    "en": "Save textures first, then export the native model file"
+  },
+  "ui.message-55": {
+    "zhHant": "导出模组实体模型层，原样文件可导回",
+    "zhHans": "导出模组实体模型层，原样文件可导回",
+    "en": "Export a modded entity model layer; unchanged files can be reimported"
+  },
+  "ui.message-56": {
+    "zhHant": "保存贴图",
+    "zhHans": "保存贴图",
+    "en": "Save texture"
+  },
+  "ui.message-57": {
+    "zhHant": "保存贴图路径",
+    "zhHans": "保存贴图路径",
+    "en": "Save texture location"
+  },
+  "ui.message-58": {
+    "zhHant": "贴图已保存",
+    "zhHans": "贴图已保存",
+    "en": "Texture saved"
+  },
+  "ui.message-59": {
+    "zhHant": "贴图另存为",
+    "zhHans": "贴图另存为",
+    "en": "Save texture as"
+  },
   "ui.message-6": {
     "zhHant": "皮膚模型目前暫停新建",
     "zhHans": "皮肤模型当前暂停新建",
     "en": "Creating skin models is temporarily unavailable"
+  },
+  "ui.message-60": {
+    "zhHant": "选择几何模型",
+    "zhHans": "选择几何模型",
+    "en": "Choose geometry"
+  },
+  "ui.message-61": {
+    "zhHant": "选择基岩模型类型",
+    "zhHans": "选择基岩模型类型",
+    "en": "Choose Bedrock model type"
+  },
+  "ui.message-62": {
+    "zhHant": "基岩版方块",
+    "zhHans": "基岩版方块",
+    "en": "Bedrock Block"
+  },
+  "ui.message-63": {
+    "zhHant": "基岩版实体",
+    "zhHans": "基岩版实体",
+    "en": "Bedrock Entity"
+  },
+  "ui.message-64": {
+    "zhHant": "基岩骨骼存在循环引用",
+    "zhHans": "基岩骨骼存在循环引用",
+    "en": "The Bedrock bone hierarchy contains a cycle"
+  },
+  "ui.message-65": {
+    "zhHant": "基岩模型包含重名骨骼",
+    "zhHans": "基岩模型包含重名骨骼",
+    "en": "The Bedrock model contains duplicate bone names"
   },
   "ui.message-7": {
     "zhHant": "色卡已導出",
@@ -5604,6 +5749,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "當前幀沒有可編輯圖層",
     "zhHans": "当前幀没有可编辑图层",
     "en": "This frame has no editable layer"
+  },
+  "ui.this-is-a-texture-index-open-its-corresponding-model-file-instead": {
+    "zhHant": "这是贴图索引，请打开对应的模型文件",
+    "zhHans": "这是贴图索引，请打开对应的模型文件",
+    "en": "This is a texture index. Open its corresponding model file instead."
   },
   "ui.this-java-version-only-permits-one-axis-rotation-drag-the-x-y-or-z-ring": {
     "zhHant": "目前 Java 版本只允許單軸旋轉，請拖動 X、Y 或 Z 軸圓環",

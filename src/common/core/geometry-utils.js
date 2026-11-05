@@ -1,4 +1,5 @@
 const DEG = Math.PI / 180;
+export const UV_PREVIEW_CULLED_UV = -2000000;
 
 export function isCubeFaceCulled(face) {
   return face === null || face?.enabled === false || face?.texture === null;
@@ -20,6 +21,17 @@ export function rotatePoint(point, pivot, rotation) {
   c = Math.cos(ry); s = Math.sin(ry); [x, z] = [x * c + z * s, -x * s + z * c];
   c = Math.cos(rz); s = Math.sin(rz); [x, y] = [x * c - y * s, x * s + y * c];
   return [x + pivot[0], y + pivot[1], z + pivot[2]];
+}
+
+// Java's optional rotation rescale expands the two axes perpendicular to the
+// rotation axis before rotating. Keeping this visual transform separate leaves
+// the native from/to values and their format limits unchanged.
+export function rescaleRotationPoint(point, pivot, rotation, enabled) {
+  if (!enabled) return point;
+  const axis = rotation.reduce((best, value, index) => Math.abs(value) > Math.abs(rotation[best]) ? index : best, 0);
+  const cosine = Math.abs(Math.cos(rotation[axis] * DEG));
+  if (cosine < 1e-7) return point;
+  return point.map((value, index) => index === axis ? value : pivot[index] + (value - pivot[index]) / cosine);
 }
 
 export function applyGroupTransforms(point, groupChain = []) {

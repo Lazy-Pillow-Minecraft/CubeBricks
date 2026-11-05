@@ -1,6 +1,7 @@
 import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
 import { normalize3 } from '../utils/math/vector3.js';
 import { UV_FACE_LABELS, CULLED_FACE_TEXTURE_KEY } from '../texture/face-constants.js';
+import { createUvPreviewElement } from '../texture/culled-face-preview.js';
 
 const CUBE_FACE_NAMES = ['north', 'east', 'south', 'west', 'up', 'down'];
 
@@ -50,25 +51,9 @@ function getUvPreviewProject() {
 
   // Visibility and locking are editor concerns. This isolated preview always
   // shows the selected geometry while inheriting its real transform and UVs.
-  const previewTexture = faceTextureReference(activeTextureAsset()) || '__cubebricks_uv_preview__';
-  const elements = sourceElements.map(element => {
-    const preview = Object.assign(Object.create(element), { visible: true, locked: false, modifiers: [] });
-    if (element.type !== 'cube') return preview;
-    const sourceFaces = element.faces || {};
-    preview.faces = Object.fromEntries(CUBE_FACE_NAMES.map(faceName => {
-      const sourceFace = sourceFaces[faceName];
-      if (!isCubeFaceCulled(sourceFace)) return [faceName, sourceFace ? { ...sourceFace } : sourceFace];
-      const storedTexture = effectiveFaceTextureReference(sourceFace);
-      return [faceName, {
-        ...(sourceFace && typeof sourceFace === 'object' ? sourceFace : {}),
-        enabled: true,
-        texture: storedTexture ?? previewTexture,
-        uv: Array.isArray(sourceFace?.uv) ? [...sourceFace.uv] : [...getBlockbenchBoxUv(element, faceName)],
-        rotation: Number(sourceFace?.rotation) || 0
-      }];
-    }));
-    return preview;
-  });
+  const previews = sourceElements.map(createUvPreviewElement);
+  const elements = previews.map(preview => preview.element);
+  const hasCulledFaces = previews.some(preview => preview.hasCulledFaces);
   const groups = state.project.groups.map(group => Object.assign(Object.create(group), { locked: false, modifiers: [] }));
   const previewNodes = new Map([...elements, ...groups].map(node => [node.uid, node]));
   const previewGroups = new Map(groups.map(group => [group.uid, group]));
@@ -90,7 +75,8 @@ function getUvPreviewProject() {
     hierarchyRevision: state.project.hierarchyRevision,
     elements,
     project,
-    fit: null
+    fit: null,
+    hasCulledFaces
   };
   uvPreviewRenderer.invalidateGeometry();
   return uvPreviewProjectCache;
@@ -252,7 +238,7 @@ function buildUvPreviewFaceLabel() {
   const selection = state.uvPreviewSelectedFace;
   const data = selectedUvFaceData(false);
   const points = selection?.points || [];
-  if (!data || points.length !== 4) return null;
+  if (!data || points.length !== 4 || isCubeFaceCulled(data.cube.faces?.[selection.faceName])) return null;
   const [u1, v1, u2, v2] = data.uv;
   const rotation = ((Math.round(Number(data.face.rotation) || 0) % 360) + 360) % 360;
   const info = `↻${rotation}°${u2 < u1 ? ' ↔' : ''}${v2 < v1 ? ' ↕' : ''}`;
@@ -338,12 +324,14 @@ function updateUvFaceUi() {
   const rotation = ((Math.round(Number(data.face.rotation) || 0) % 360) + 360) % 360;
   const mirrorX = u2 < u1, mirrorY = v2 < v1;
   const culled = isCubeFaceCulled(data.cube.faces?.[selection.faceName]);
+  if (culled) controls.forEach(button => { if (button.dataset.uvFaceAction !== 'cull') button.disabled = true; });
   label.textContent = `${data.cube.name} · ${UV_FACE_LABELS[selection.faceName] || selection.faceName}${culled ? ' · 已剔除' : ''}`;
   size.textContent = `${formatNumber(Math.abs(u2 - u1))} × ${formatNumber(Math.abs(v2 - v1))} px`;
   $('[data-uv-face-action="mirror-x"]').classList.toggle('active', mirrorX);
   $('[data-uv-face-action="mirror-y"]').classList.toggle('active', mirrorY);
   $('[data-uv-face-action="cull"]').classList.toggle('active', culled);
   $('[data-uv-face-action="cull"]').title = culled ? '恢復面' : '剔除面';
+  if (culled) { overlay.innerHTML = ''; return; }
   const points = selection.points || [];
   const projected = points.map(point => uvPreviewRenderer.projectPoint(point));
   if (projected.length !== 4 || projected.some(point => point.behind || point.depth < -1 || point.depth > 1)) {
@@ -443,7 +431,7 @@ function renderUvPreview() {
     uvPreviewTextureDirty = false;
   }
   cache.project.textureSize = state.project.textureSize;
-  cache.project.renderType = state.project.renderType;
+  cache.project.renderType = cache.hasCulledFaces ? 'translucent' : state.project.renderType;
   cache.project.cullFaces = state.project.cullFaces || state.project.formatId === 'java_block_item';
   const fit = uvPreviewFit(cache);
   const textureWidth = Math.max(1, Number(state.project.textureSize?.[0]) || 1);
@@ -466,6 +454,7 @@ function renderUvPreview() {
     geometryOnly: true,
     snap: state.settingsSnap,
     faceDistinct: state.uvPreviewFaceColors,
+    culledFacePreview: cache.hasCulledFaces,
     faceLabel: buildUvPreviewFaceLabel(),
     lockedDefaultAlpha: 100,
     lockedHoverFade: false,

@@ -1,6 +1,43 @@
 // Fallback patterns for runtime-composed UI messages. Static messages use stable IDs in messages.js.
 export function translateEnglishUiText(text, language, translateUiText) {
   const upcoming = {
+    '箱型 UV 的小数精度过高，无法无损烘焙': 'The box UV fractional precision is too high for lossless baking',
+    '这是贴图索引，请打开对应的模型文件': 'This is a texture index. Open its corresponding model file instead.',
+    '导出模型': 'Export model',
+    '保留可编辑工程、贴图和可选历史': 'Keep the editable project, textures, and optional history',
+    '烘焙程序化对象和贴图，内嵌图片': 'Bake procedural objects and textures; embed images',
+    '只能导回 CubeBricks 导出且未经修改的 Java 文件': 'Only unchanged Java files exported by CubeBricks can be reimported',
+    '基岩模型没有有效的 geometry/bones': 'The Bedrock model has no valid geometry/bones',
+    '当前 Java 版本不能导出该旋转角度，请调整版本或组旋转': 'This Java version cannot export that rotation angle. Change the version or group rotation.',
+    '当前 Java 版本不能导出多轴旋转，请选择 1.21.11+ 或调整组旋转': 'This Java version cannot export multi-axis rotation. Select 1.21.11+ or change the group rotation.',
+    'Java 文件已被修改，无法安全导回模型': 'The Java file has been modified and cannot be safely reimported',
+    'Java 文件名必须是合法的类名，请使用字母、数字或下划线': 'Use a valid Java class name for the filename, with letters, digits, or underscores',
+    'Java 文件的还原信息无效': 'The Java restoration metadata is invalid',
+    'Java 模型旋转轴无效': 'The Java model rotation axis is invalid',
+    'Java 模组实体的 Cube 不能旋转，请使用组旋转': 'Cubes in Java modded entities cannot rotate. Rotate their group instead.',
+    'Java 模型元素缺少有效的 from/to': 'A Java model element has no valid from/to coordinates',
+    'Java 模组实体导出需要箱型 UV': 'Java modded entity export requires box UVs',
+    '几何 JSON 本身不区分实体与方块': 'Geometry JSON alone does not distinguish entities from blocks',
+    '无法识别该 JSON 的原生模型格式': 'The native model format of this JSON could not be identified',
+    '该模型格式不支持原生 JSON': 'This model format does not support native JSON',
+    '文件包含多个几何模型，请选择要导入的一个': 'This file contains multiple geometries. Choose one to import.',
+    '先保存贴图，再导出原生模型文件': 'Save textures first, then export the native model file',
+    '导出模组实体模型层，原样文件可导回': 'Export a modded entity model layer; unchanged files can be reimported',
+    '保存贴图': 'Save texture',
+    '保存贴图路径': 'Save texture location',
+    '贴图已保存': 'Texture saved',
+    '贴图另存为': 'Save texture as',
+    '选择几何模型': 'Choose geometry',
+    '选择基岩模型类型': 'Choose Bedrock model type',
+    '基岩版方块': 'Bedrock Block',
+    '基岩版实体': 'Bedrock Entity',
+    '基岩骨骼存在循环引用': 'The Bedrock bone hierarchy contains a cycle',
+    '基岩模型包含重名骨骼': 'The Bedrock model contains duplicate bone names',
+    '原生模型文件过大': 'The native model file is too large',
+    '模型贴图索引过大': 'The model texture index is too large',
+    '贴图不是有效的 PNG': 'The texture is not a valid PNG',
+    '贴图 PNG 数据无效': 'The PNG texture data is invalid',
+    '贴图动画配置无效': 'The texture animation metadata is invalid',
     '正在烘焙导出贴图': 'Baking export textures',
     '烘焙贴图超出可用尺寸，请减少帧数或平铺范围': 'The baked texture exceeds the supported size. Reduce the frame count or tiled span.',
     '打開項目首頁': 'Open project home',
@@ -316,5 +353,9 @@ export function translateEnglishUiText(text, language, translateUiText) {
   if (match) return `Edit ${translateUiText(match[1], language)}: ${translateUiText(match[2], language)}`;
   match = text.match(/^修改(.+)$/);
   if (match) return `Edit ${translateUiText(match[1], language)}`;
+  match = text.match(/^贴图保存失败：(.+)$/);
+  if (match) return `Could not save texture: ${translateUiText(match[1], language)}`;
+  match = text.match(/^已导出 \.(json|java)$/);
+  if (match) return `Exported .${match[1]}`;
   return text;
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { combinedAnimation, texturePlane, packExportPlanes, collectExportFaces, checkBakeSize } from '../src/texture/export-plan.js';
+import { combinedAnimation, texturePlane, packExportPlanes, collectExportFaces, checkBakeSize, boxExportPlan } from '../src/texture/export-plan.js';
 import { modelFormatRegistry } from '../src/common/config/model-formats.js';
 
 const animated = (count, fps) => ({ animation: { enabled: true, frames: Array.from({ length: count }, () => ({})), fps } });
@@ -26,4 +26,9 @@ assert.equal(collectExportFaces(bb, [{ uuid: 'first' }, { uuid: 'second', id: '0
 assert.equal(modelFormatRegistry.resolve('bedrock').capabilities.singleTexture, true);
 assert.equal(modelFormatRegistry.resolve('java_block').capabilities.singleTexture, false);
 assert.equal(modelFormatRegistry.resolve('bedrock_block').capabilities.singleTexture, false);
+const boxElement = { from: [0, 0, 0], to: [2, 2, 2] };
+assert.equal(boxExportPlan({}, [{ element: boxElement, name: 'north', index: 0, pixelUv: [.5, .5, 2.5, 2.5], rotation: 0 }]).density, 2,
+  'half-pixel UV phases are preserved in a doubled-resolution fixed box net');
+assert.equal(boxExportPlan({}, [{ element: boxElement, name: 'north', index: 0, pixelUv: [1, 1, 10, 8], rotation: 0 }]).density, 63,
+  'independent 9/2 and 7/2 tiling rates retain all pixel boundaries in their common box-net density');
 console.log('Export frame periods, tiled overlap, face references and format capabilities passed.');

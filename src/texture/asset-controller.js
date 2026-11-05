@@ -32,7 +32,7 @@ export function createTextureAssetController({
   updateTexturePreviewFrame, syncRendererTexture, syncRendererTextureAsset, getAllTextureAssets, texturePlaybackKey, selectedElementUids,
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
-  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu
+  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu, textureSaveIndicators
 }) {
 let textureLoadRevision = 0;
 let pendingTextureImage = null;
@@ -109,6 +109,7 @@ function textureItemMarkup(asset, index) {
       data-texture-uid="${escapeAttribute(asset._uid)}" data-texture-index="${index}">
     <span class="texture-thumb" style="background-image:url(&quot;${escapeAttribute(asset.source || '')}&quot;);background-size:cover;image-rendering:pixelated"></span>
     <span><strong>${escapeHtml(asset.name || `texture_${index + 1}.png`)}</strong><small>${asset.uvWidth || '?'} × ${asset.uvHeight || '?'} · ${asset.kind || 'IMAGE'}</small></span>
+    <span class="texture-save-action" role="button" tabindex="0" data-save-texture="${escapeAttribute(asset._uid)}" title="保存贴图" aria-label="保存贴图" ${textureSaveIndicators?.isDirty(asset) === false ? 'hidden' : ''}></span>
   </button>`;
 }
 
@@ -124,6 +125,7 @@ function renderTextureList() {
   }).join('');
   list.innerHTML = ungrouped.map(asset => textureItemMarkup(asset, state.textureAssets.indexOf(asset))).join('') + groups;
   renderTextureFeatureControls();
+  textureSaveIndicators?.refresh({ paint: true });
 }
 
 function addTextureGroup() {
@@ -831,6 +833,7 @@ function pasteTexture({ inPlace = false } = {}) {
   }
   asset._uid = id;
   if (!restoreCut) { asset.uuid = id; asset.id = id; }
+  if (!restoreCut) delete asset.externalFile;
   asset.useAsDefault = false;
   if (!restoreCut) {
     const dot = asset.name?.lastIndexOf('.') ?? -1;
@@ -910,7 +913,9 @@ function importTexture(file) {
     try{animation=splitTextureAnimation(image,configuration);}catch(error){toast(`動畫配置讀取失敗：${error.message}`);}
     noteJournalOperation('core.texture.import');
     const asset = { _uid: textureUid(), name: file.name, source: url, uvWidth: image.naturalWidth, uvHeight: image.naturalHeight,
-      kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null,...animation };
+      kind: file.type.split('/')[1]?.toUpperCase() || 'IMAGE', groupId: null,...animation,
+      externalFile: { imported: true, path: window.cubeBricksDesktop?.getPathForFile?.(file) || null } };
+    textureSaveIndicators?.registerImported(asset);
     if(!animation)decodedTextureImages.set(asset, { source: url, promise: Promise.resolve(image) });
     state.textureAssets.push(asset);
     state.activeTextureUid = asset._uid;

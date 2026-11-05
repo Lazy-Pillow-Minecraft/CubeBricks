@@ -8,9 +8,15 @@
 | --- | --- |
 | `.cbmodel` | A complete CubeBricks project archive. It stores model data and textures and can optionally include operation history. Export can instead retain only the current complete state. |
 | `.bbmodel` | Blockbench interchange. Export expands shapes and modifiers into compatible cubes and groups; native procedural shape parameters are not preserved as shapes in this format. |
+| `.json` | Native Java Block/Item models and Bedrock geometry only. Coordinates, bones, rotations, and UVs follow their format; external textures are saved first. |
+| `.java` | A Mojang-mapped modded entity model layer with integrity metadata; only unchanged files produced by CubeBricks can be reimported. |
+| `.png` / `.png.mcmeta` | Independently saved composite images; animation uses a vertical frame strip and companion metadata. |
+| `.cbtextures.json` | A native model's companion relative texture-path/material index. It is not a model format and must not be opened as a model on its own. |
 | `.cbcmap` | Portable JSON for one palette's colors, gradient spacing, and color-space curve. It does not contain the palette's local name or ID. |
 
 ## Modeling-format boundaries
+
+Native JSON follows [Minecraft Java 1.21.11 rotation fields](https://www.minecraft.net/en-us/article/minecraft-java-edition-1-21-11) and the [Bedrock geometry documentation](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/visualreference/geometry.v1.19.30). Java's unsupported group hierarchy is composed into element poses; rotations the selected version cannot represent fail explicitly. Modded Entity has no JSON option. Its Java output is a model layer, without game registration or animation code.
 
 In `.bbmodel`, tiling becomes ordinary UVs and flipbooks become embedded vertical PNG strips with Blockbench animation fields. Single-texture formats merge images using the least common multiple of frame counts and the mean FPS, with interpolation off; multi-texture formats remain separate. Java `.mcmeta` timing uses integral game ticks, so compatible durations are rounded to at least one tick while the exact FPS is also recorded. See the [Blockbench texture implementation](https://github.com/JannisX11/blockbench/blob/master/js/texturing/textures.js). Baking leaves the source project intact and reuses overlapping tiled regions. Results exceeding 16384px on either axis or 64M pixels fail explicitly rather than silently shortening sequences or reducing resolution.
 

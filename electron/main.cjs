@@ -6,6 +6,8 @@ const fs = require('fs/promises');
 const syncFs = require('fs');
 const crypto = require('crypto');
 const { atomicWrite } = require('./project-journal.cjs');
+const { readTextureAssets, registerTextureFiles } = require('./texture-files.cjs');
+const { readNativeModel, writeTextureReferences } = require('./native-model-io.cjs');
 const { WorkerProjectJournal: ProjectJournal, onHistoryProgress } = require('./journal-service.cjs');
 const { isArchiveV2, unpackArchiveWithProgress } = require('./archive-codec.cjs');
 const { openIndexedArchive } = require('./archive-index.cjs');
@@ -53,7 +55,7 @@ handleIpc('app:prompt-response', (event, response) => {
 });
 function externalProjectPath(argumentsList) {
   return argumentsList.map(value => String(value).replace(/^"|"$/g, ''))
-    .find(value => /\.(?:cbmodel|bbmodel|json)$/i.test(value) && path.isAbsolute(value)) || null;
+    .find(value => /\.(?:cbmodel|bbmodel|json|java)$/i.test(value) && path.isAbsolute(value)) || null;
 }
 function queueExternalProject(filePath) {
   if (!filePath) return;
@@ -470,14 +472,14 @@ handleIpc('app:confirm-close', async (event, payload) => {
 
 handleIpc('project:open', async (event, options = {}) => {
   const suppliedPath = typeof options?.filePath === 'string' ? options.filePath : null;
-  if (suppliedPath && (!path.isAbsolute(suppliedPath) || !/\.(?:cbmodel|bbmodel|json)$/i.test(suppliedPath)))
+  if (suppliedPath && (!path.isAbsolute(suppliedPath) || !/\.(?:cbmodel|bbmodel|json|java)$/i.test(suppliedPath)))
     throw new Error('不支援的項目文件路徑');
   const picked = suppliedPath ? { canceled: false, filePaths: [suppliedPath] } : await dialog.showOpenDialog({
     title: '打開模型',
     properties: ['openFile'],
     filters: [
       { name: 'CubeBricks / Blockbench', extensions: ['cbmodel', 'bbmodel'] },
-      { name: 'JSON', extensions: ['json'] }
+      { name: 'JSON / Java', extensions: ['json', 'java'] }
     ]
   });
   if (picked.canceled || !picked.filePaths[0]) return null;
@@ -565,7 +567,22 @@ handleIpc('project:open', async (event, options = {}) => {
     }
     return { filePath, content, journalId, textureAssets: await readTextureAssets(content, filePath) };
   }
-  const content = bytes.toString('utf8');
+  const rawContent = bytes.toString('utf8');
+  let content = rawContent;
+  if (/\.(json|java)$/i.test(filePath)) {
+    const parsed = await readNativeModel(rawContent, filePath, {
+      async chooseGeometry(names) {
+        const result = await requestUiChoice(event.sender, { title: '选择几何模型', message: '文件包含多个几何模型，请选择要导入的一个', buttons: [...names, '取消'], cancelIndex: names.length });
+        return result.index === names.length ? null : result.index;
+      },
+      async chooseBedrockFormat() {
+        const result = await requestUiChoice(event.sender, { title: '选择基岩模型类型', message: '几何 JSON 本身不区分实体与方块', buttons: ['基岩版实体', '基岩版方块', '取消'], cancelIndex: 2 });
+        return ['bedrock_entity', 'bedrock_block'][result.index] || null;
+      }
+    });
+    if (!parsed) return null;
+    content = JSON.stringify(parsed);
+  }
   report(.6, '正在載入模型與貼圖');
   const textureAssets = await readTextureAssets(content, filePath);
   report(1, '項目已載入');
@@ -819,47 +836,7 @@ handleIpc('project:set-workspace-root', async (_event, directory) => {
 });
 
 handleIpc('texture:animation-metadata',(_event,payload)=>require('./texture-animation-metadata.cjs').readTextureAnimationMetadata(payload));
-
-async function readTextureAssets(content, modelPath) {
-  let model;
-  try { model = JSON.parse(content); } catch { return []; }
-  const assets = [];
-  for (const texture of model.textures || []) {
-    let source = null;
-    let loadedPath = null;
-    const candidates = [];
-    if (texture.relative_path) candidates.push(path.resolve(path.dirname(modelPath), texture.relative_path));
-    if (texture.path) candidates.push(path.isAbsolute(texture.path) ? texture.path : path.resolve(path.dirname(modelPath), texture.path));
-    for (const candidate of candidates) {
-      try {
-        const bytes = await fs.readFile(candidate);
-        const extension = path.extname(candidate).toLowerCase();
-        const mime = extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg'
-          : extension === '.webp' ? 'image/webp'
-            : extension === '.gif' ? 'image/gif' : 'image/png';
-        source = `data:${mime};base64,${bytes.toString('base64')}`;
-        loadedPath = candidate;
-        break;
-      } catch { /* Try the next Blockbench-compatible path. */ }
-    }
-    if (!source && typeof texture.source === 'string' && texture.source.startsWith('data:image/')) source = texture.source;
-    if (source) assets.push({
-      uuid: texture.uuid,
-      id: texture.id,
-      name: texture.name || path.basename(loadedPath || 'texture.png'),
-      source,
-      uvWidth: texture.uv_width,
-      uvHeight: texture.uv_height,
-      useAsDefault: texture.use_as_default === true,
-      groupId: texture.group_id || null,
-      kind: texture.kind || 'IMAGE',
-      templateUvIndependent: texture.template_uv_independent ?? null,
-      mode: texture.mode || 'default',
-      layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null
-    });
-  }
-  return assets;
-}
+registerTextureFiles(handleIpc, dialog, atomicWrite);
 
 handleIpc('project:save', async (_event, payload) => {
   let filePath = payload.filePath;
@@ -885,19 +862,20 @@ handleIpc('project:save', async (_event, payload) => {
 });
 
 handleIpc('project:export', async (_event, payload) => {
+  const preferred = ['cbmodel', 'bbmodel', 'json', 'java'].includes(payload.extension) ? payload.extension : 'bbmodel';
   const picked = payload.filePath ? { canceled: false, filePath: payload.filePath } : await dialog.showSaveDialog({
     title: '導出模型',
-    defaultPath: `${payload.name || 'untitled'}.bbmodel`,
-    filters: [
-      { name: 'Blockbench Model', extensions: ['bbmodel'] },
-      { name: 'CubeBricks Model', extensions: ['cbmodel'] }
+    defaultPath: `${payload.name || 'untitled'}.${preferred}`,
+    filters: ['json', 'java'].includes(preferred) ? [{ name: preferred.toUpperCase(), extensions: [preferred] }] : [
+      ...(preferred === 'cbmodel' ? [{ name: 'CubeBricks Model', extensions: ['cbmodel'] }, { name: 'Blockbench Model', extensions: ['bbmodel'] }]
+        : [{ name: 'Blockbench Model', extensions: ['bbmodel'] }, { name: 'CubeBricks Model', extensions: ['cbmodel'] }])
     ]
   });
   if (picked.canceled || !picked.filePath) return null;
   let filePath = picked.filePath;
   let extension = path.extname(filePath).toLowerCase();
-  if (extension !== '.cbmodel' && extension !== '.bbmodel') {
-    extension = '.bbmodel';
+  if (['json', 'java'].includes(preferred) ? extension !== `.${preferred}` : !['.cbmodel', '.bbmodel'].includes(extension)) {
+    extension = `.${preferred}`;
     filePath += extension;
   }
   if (extension === '.cbmodel') {
@@ -911,6 +889,13 @@ handleIpc('project:export', async (_event, payload) => {
       } else await journal.commit(payload.cbmodelContent, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
       await journal.archive(filePath, { includeHistory: payload.includeHistory, markSaved: false });
     });
+  } else if (extension === '.json' || extension === '.java') {
+    if (typeof payload.modelContent !== 'string') return { filePath, extension, requiresContent: true };
+    if (Buffer.byteLength(payload.modelContent) > 64 * 1024 * 1024) throw Error('原生模型文件过大');
+    if (extension === '.json') JSON.parse(payload.modelContent);
+    if (Array.isArray(payload.textureLocations))
+      await writeTextureReferences(filePath, payload.formatId, payload.textureLocations, atomicWrite);
+    await atomicWrite(filePath, payload.modelContent);
   } else {
     if (typeof payload.bbmodelContent !== 'string') return { filePath, extension, requiresContent: true };
     await atomicWrite(filePath, payload.bbmodelContent);

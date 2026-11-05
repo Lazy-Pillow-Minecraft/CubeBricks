@@ -31,6 +31,8 @@
 
 ## Entry-point boundary
 
+`model/formats/` separates Java JSON, Bedrock geometry, and integrity-checked Java model layers. Format definitions declare native export through `nativeExport`. `project/export-dialog.js` selects output and `native-export-controller.js` orchestrates textures before model files. Desktop paths and image writes live in `electron/native-model-io.cjs` and `texture-files.cjs`. `texture/save-state.js` refreshes only for changed content; a dedicated worker serializes pixel checks, avoiding false positives from PNG re-encoding and image work during camera drags.
+
 `texture/export-bake.js` processes the existing geometry bake result. `export-plan.js` resolves references, shares periodic tiled regions, computes frame-count LCMs, and packs atlases or box nets; `export-raster.js` composites private snapshots and bakes pixels; `export-progress.js` owns the delayed progress dialog. Format definitions declare merging through `singleTexture`. Export does not depend on frame selection, the global layer raster cache, or editable canvases, and never writes baked results into the source project.
 
 `app.js` retains a few forwarding functions to handle initialization order and callback cycles. Implementations should not flow back into the entry point. When moving code, preserve operation IDs and import/export and journal test coverage. The operation-ID audit scans all of `src/`, so moving a feature out of the entry point does not hide it from the audit.

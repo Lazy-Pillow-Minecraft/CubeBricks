@@ -9,8 +9,9 @@ import { constrainCube, formatRules, projectSizeBounds, bedrockLimitBox, javaBlo
 import { buildPaintExplodeOffsets, applyPaintExplodeOffsets } from './paint-explode.js';
 import { SELECTION_STRIPE_SIZE, SELECTION_STRIPE_PIXELS, selectionStripePhase } from '../utils/selection-stripes.js';
 import { performanceMonitor } from '../utils/performance-monitor.js';
-import { applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv,
-  getEffectiveInflate, hasAssignedFaceTexture, isCubeFaceCulled, rotatePoint } from '../common/core/geometry-utils.js';
+import { projectCullsBackfaces, faceAcceptsInteraction, faceAcceptsCameraInteraction } from './face-culling.js';
+import { applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv, rescaleRotationPoint,
+  getEffectiveInflate, hasAssignedFaceTexture, isCubeFaceCulled, rotatePoint, UV_PREVIEW_CULLED_UV } from '../common/core/geometry-utils.js';
 export { applyGroupTransforms, createBlockbenchFaceUvSlots, getBlockbenchBoxUv,
   getEffectiveInflate, hasAssignedFaceTexture, isCubeFaceCulled } from '../common/core/geometry-utils.js';
 
@@ -35,7 +36,7 @@ export function cubeLifetimeScale(kind, elapsed, duration = CUBE_LIFETIME_ANIMAT
   return t < .7 ? 1.05 * t / .7 : 1.05 - .05 * (t - .7) / .3;
 }
 const IDENTITY_MATRIX = Object.freeze([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-const cullsBackfaces = project => project.cullFaces || formatRules(project).forceCullFaces;
+const cullsBackfaces = projectCullsBackfaces;
 
 // Minecraft-like pass order: opaque geometry writes depth first, then overlays.
 // Cutout/translucent passes are reserved here so textures can join the same pipeline.
@@ -1259,7 +1260,7 @@ export class WebGLSceneRenderer {
       drawPass({ depthWrite: minecraftRenderType.depthWrite, cull: cullsBackfaces(project),
         renderMode: 2, alphaMode: minecraftRenderType.alphaMode,
         blend: minecraftRenderType.blend || this.paintPixelGrid });
-      drawPass({ depthWrite: false, cull: false, renderMode: 3,
+      drawPass({ depthWrite: false, cull: cullsBackfaces(project), renderMode: 3,
         alphaMode: minecraftRenderType.alphaMode, blend: true, opacity: .34 });
       this.drawCubeTransitions(project, camera, viewProjection, gl.TRIANGLES);
       return;
@@ -1343,7 +1344,7 @@ export class WebGLSceneRenderer {
         });
         drawFacePass({
           depthWrite: false,
-          cull: false,
+          cull: cullsBackfaces(project),
           // Mode 3 uses the face colour while retaining the texture alpha,
           // so cutout/transparent pixels never become coloured plates.
           renderMode: 3,
@@ -1993,6 +1994,7 @@ export class WebGLSceneRenderer {
     ];
     for (const face of faces) {
       if (selected.has(face.uid) || this.lastLockedUids.has(face.uid)) continue;
+      if (!faceAcceptsCameraInteraction(face, project, this.lastCameraState)) continue;
       const projected = face.quad
         .map(point => projectScreenPoint(point, this.lastViewProjection, this.lastViewport.width, this.lastViewport.height))
         .filter(point => !point.behind && point.depth >= -1 && point.depth <= 1);
@@ -2038,6 +2040,7 @@ export class WebGLSceneRenderer {
     ];
     for (const face of faces) {
       if (candidateUids && !candidateUids.has(face.uid)) continue;
+      if (!faceAcceptsInteraction(face, project, ray.direction)) continue;
       const locked = this.lastLockedUids.has(face.uid);
       if ((!includeLocked && locked) || (lockedOnly && !locked) || (geometryOnly && ['locator', 'node'].includes(project.getNode(face.uid)?.type))) continue;
       const indices = FACE_TRIANGLE_SLOTS;
@@ -2077,6 +2080,7 @@ export class WebGLSceneRenderer {
         const candidates = [...queryFaceBvh(this.staticCache?.faceBvh, localRay, closestDistance),
           ...queryFaceBvh(this.selectedCache?.faceBvh, localRay, closestDistance)];
         for (const face of candidates) {
+          if (!faceAcceptsInteraction(face, project, localRay.direction)) continue;
           if ((sourceUid && face.uid !== sourceUid) || !instance.sourceUidSet.has(face.uid) || this.lastLockedUids.has(face.uid)
             || candidateUids && !candidateUids.has(face.uid)) continue;
           const indices = instance.cubeIndices?.[face.uid];
@@ -2116,6 +2120,7 @@ export class WebGLSceneRenderer {
     ];
     const hits = new Map();
     for (const face of faces) {
+      if (!faceAcceptsInteraction(face, project, ray.direction)) continue;
       if (this.lastLockedUids.has(face.uid)
         || (geometryOnly && ['locator', 'node'].includes(project.getNode(face.uid)?.type))) continue;
       let faceDistance = Infinity;
@@ -2150,6 +2155,7 @@ export class WebGLSceneRenderer {
         const localRay={origin:inverse(ray.origin),direction:inverse(ray.direction,true)};
         const candidates=[...queryFaceBvh(this.staticCache?.faceBvh,localRay).filter(face=>!dynamicUids.has(face.uid)),...queryFaceBvh(this.selectedCache?.faceBvh,localRay)];
         for(const face of candidates){
+          if(!faceAcceptsInteraction(face,project,localRay.direction))continue;
           if(sourceUid&&face.uid!==sourceUid||!instance.sourceUidSet.has(face.uid)||this.lastLockedUids.has(face.uid))continue;
           const indices=instance.cubeIndices?.[face.uid];if(indices&&!indices.includes(face.cubeIndex??0))continue;
           let distance=Infinity;
@@ -2612,6 +2618,7 @@ export class WebGLSceneRenderer {
     }
     if (paintGridActive) gl.uniform2f(this.paintGridSizeLocation, this.texturePixelSize[0], this.texturePixelSize[1]);
     const paintSelectionActive = this.paintSelectionActive && (!texture || texture === this.texture);
+    if (this.lastCameraInput?.culledFacePreview) gl.uniform4fv(this.selectionStripeViewportLocation, this.selectionStripeViewport || [0, 0, 1, 1]);
     if (this.lastUniformSelectionActive !== paintSelectionActive) {
       gl.uniform1i(this.selectionActiveLocation, paintSelectionActive ? 1 : 0);
       this.lastUniformSelectionActive = paintSelectionActive;
@@ -2989,13 +2996,14 @@ function cubeGeometry(entry, color, selected, selectionOutline = [1, 1, 1], face
     // A face without a texture remains renderable using the same display
     // colour as solid mode. Only an explicitly culled face is omitted.
     if (isCubeFaceCulled(faceData)) continue;
-    const textured = hasAssignedFaceTexture(faceData);
+    const culledPreview = faceData?._uvPreviewCulled === true;
+    const textured = !culledPreview && hasAssignedFaceTexture(faceData);
     const indices = FACE_TRIANGLE_SLOTS.map(slot => quadIndices[slot]);
     const a = corners[indices[0]], b = corners[indices[1]], c = corners[indices[2]];
     const normal = normalize(cross(subtract(b, a), subtract(c, a)));
     const sourceColor = getCubeFaceDisplayColor(color, faceName, faceDistinct);
     const faceColor = sourceColor.map(channel => Math.min(1, channel * edgeBoost));
-    const faceUv = textured
+    const faceUv = culledPreview ? Array.from({ length: 6 }, () => [UV_PREVIEW_CULLED_UV, UV_PREVIEW_CULLED_UV]) : textured
       ? getFaceUv(cube, faceName, textureSize, textureLayout)
       : Array.from({ length: 6 }, () => [UNTEXTURED_UV_SENTINEL, UNTEXTURED_UV_SENTINEL]);
     const faceVertices = [];
@@ -3038,6 +3046,7 @@ function cubeWorldCorners(entry) {
   const start = cube.position.map((value, axis) => value + offset[axis]);
   const cubePivot = cube.pivot.map((value, axis) => value + offset[axis]);
   return createSignedCubeCorners(start, cube.size, inflate)
+    .map(point => rescaleRotationPoint(point, cubePivot, cube.rotation || [0, 0, 0], cube.rescale))
     .map(point => rotatePoint(point, cubePivot, cube.rotation || [0, 0, 0]))
     .map(point => rotatePoint(point, ownerOrigin, ownerRotation || [0, 0, 0]))
     .map(point => applyGroupTransforms(point, groupChain));

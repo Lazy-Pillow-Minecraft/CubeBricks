@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' data:" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' data:" />
   <title>CubeBricks</title>
   <link rel="icon" type="image/png" href="./assets/shortcut-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
@@ -698,7 +698,7 @@
   <div id="projectHistoryProgress" class="project-history-progress" role="status" hidden><span>正在讀取歷史記錄</span><progress max="1" value="0"></progress></div>
   <div class="context-menu" id="contextMenu" role="menu" hidden></div>
   <div class="toast" id="toast" role="status"></div>
-  <input type="file" id="fileInput" accept=".cbmodel,.bbmodel,.json" hidden />
+  <input type="file" id="fileInput" accept=".cbmodel,.bbmodel,.json,.java" hidden />
   <input type="file" id="textureInput" accept="image/png" hidden />
   <input type="file" id="referenceImageInput" accept="image/*" multiple hidden />
   <input type="file" id="playerReferenceTextureInput" accept="image/png" hidden />

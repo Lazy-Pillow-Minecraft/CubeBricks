@@ -8,9 +8,15 @@
 | --- | --- |
 | `.cbmodel` | CubeBricks 的完整工程封存。保存模型、贴图与可选的操作历史；导出时可选择只保留当前完整状态。 |
 | `.bbmodel` | 与 Blockbench 交换模型。Shape 和修改器在导出时展开为兼容的 Cube／组；原本的程序化参数不会以原生 Shape 形式留在 `.bbmodel`。 |
+| `.json` | 仅支持模型原生格式：Java 方块／物品模型和基岩 geometry。按格式处理骨骼、坐标、旋转和 UV，导出前先保存外部贴图。 |
+| `.java` | 模组实体的 Mojang 映射模型层；内置完整性校验，仅允许原样导回本软件生成的文件。 |
+| `.png` / `.png.mcmeta` | 可独立保存的完整合成贴图，动画使用纵向帧条与配套配置。 |
+| `.cbtextures.json` | 原生模型的贴图路径／材质配套索引，使用相对路径；不是通用模型格式，不要单独作为模型打开。 |
 | `.cbcmap` | 单张色卡的便携式 JSON，包含颜色、渐变分段和色彩空间曲线，不包含本地名称或 ID。 |
 
 ## 建模格式边界
+
+原生 JSON 的坐标和字段遵循 [Minecraft Java 1.21.11 多轴旋转说明](https://www.minecraft.net/en-us/article/minecraft-java-edition-1-21-11) 及 [基岩几何文档](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/visualreference/geometry.v1.19.30)。Java 不支持的组层级会合成为元素姿态；版本无法表达的旋转会明确报告失败。模组实体没有 JSON 选项，Java 输出为模型层，不包含游戏注册和动画代码。
 
 `.bbmodel` 中的平铺会转换为普通 UV，手翻书保存为内嵌纵向 PNG 帧条及 Blockbench 动画字段。单贴图格式自动合并贴图，使用最小公倍数帧数与平均 FPS、关闭帧渐变；多贴图格式分别保留。Java 的 `.mcmeta` 时间按游戏整数 tick 表示，因此导出兼容时间会四舍五入且至少为 1 tick，精确 FPS 仍写入贴图字段。参数约定参考 [Blockbench 贴图实现](https://github.com/JannisX11/blockbench/blob/master/js/texturing/textures.js)。烘焙不会改写原工程，平铺区域可重叠引用；超过 16384px 单边或 64M 像素的结果会报告失败，不会偷偷截短序列或缩小贴图。
 

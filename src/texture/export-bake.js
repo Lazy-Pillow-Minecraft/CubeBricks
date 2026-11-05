@@ -34,7 +34,7 @@ function assignFace(entry, uv, index) {
   delete face.tiling;
 }
 
-export async function bakeBlockbenchTextures(bbmodel, assets, { progress = async () => {} } = {}) {
+export async function bakeBlockbenchTextures(bbmodel, assets, { progress = async () => {}, forceBoxBake = false } = {}) {
   if (!assets.length) return bbmodel;
   const format = modelFormatRegistry.resolve(bbmodel.meta.model_format);
   const single = format?.capabilities.singleTexture === true;
@@ -50,7 +50,7 @@ export async function bakeBlockbenchTextures(bbmodel, assets, { progress = async
   }, captures[index].first, faces.filter(face => face.index === index)));
   for (const face of faces) face.tiled = planes[face.index].tiled;
   const needsMerge = single && assets.length > 1;
-  const needsBoxBake = single && format.capabilities.faceUv === false && (needsMerge || planes.some(plane => plane.tiled));
+  const needsBoxBake = single && format.capabilities.faceUv === false && (forceBoxBake || needsMerge || planes.some(plane => plane.tiled));
 
   if (needsMerge || needsBoxBake) {
     const animation = combinedAnimation(assets);

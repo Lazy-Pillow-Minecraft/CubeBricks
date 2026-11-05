@@ -43,6 +43,7 @@ function facePaintTarget(hit) {
   const cube = hit.cube?.type === 'cube' ? hit.cube : hitNode;
   if (cube?.type !== 'cube') return null;
   const existingFace = cube.faces?.[hit.faceName];
+  if (isCubeFaceCulled(existingFace)) return null;
   const asset = textureAssetForReference(existingFace?.texture);
   if (!asset) return null;
   return { cube, faceName: hit.faceName, asset, owner: cube.subdivisionOwnerUid ? state.project.getNode(cube.subdivisionOwnerUid) : null };

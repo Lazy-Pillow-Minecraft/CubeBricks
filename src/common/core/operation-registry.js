@@ -100,6 +100,7 @@ const coreOperations = {
   'core.uv.tiling': '修改平鋪貼圖參數',
   'core.texture.assign': '分配貼圖',
   'core.texture.create': '建立貼圖',
+  'core.texture.save': '保存贴图路径',
   'core.texture.generate': '生成貼圖模板',
   'core.texture.layer': '編輯貼圖圖層',
   'core.texture.group': '編輯貼圖組',

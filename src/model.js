@@ -281,6 +281,7 @@ export class Cube {
     this.position = data.position || data.from || [-4, 0, -4];
     this.size = data.size || (data.to && data.from ? data.to.map((value, axis) => value - data.from[axis]) : [8, 8, 8]);
     this.inflate = data.inflate ?? 0;
+    this.rescale = data.rescale === true;
     this.pivot = data.pivot || data.origin || [0, 4, 0];
     this.rotation = data.rotation || [0, 0, 0];
     this.appliedTransform = loadAppliedTransform(data.appliedTransform);
@@ -1283,6 +1284,7 @@ export function importBlockbench(data) {
       position: item.from,
       size: item.to?.map((value, axis) => value - item.from[axis]),
       inflate: item.inflate,
+      rescale: item.rescale,
       pivot: item.origin,
       rotation: item.rotation,
       uvMode: item.box_uv === false ? 'face' : 'box',
@@ -1390,7 +1392,7 @@ function blockbenchCube(cube, offset = [0, 0, 0]) {
     // losslessly as explicit per-face UV while retaining CubeBricks' mode.
     box_uv: cube.uvMode !== 'face' && !hasExplicitFaceUv,
     uv_normalized: cube.uvNormalized !== false,
-    rescale: false,
+    rescale: cube.rescale === true,
     locked: cube.locked === true,
     from,
     to: from.map((value, axis) => value + cube.size[axis]),
@@ -1534,9 +1536,9 @@ function mirrorCubeFacesAcrossLocalX(faces, flipExplicitUv) {
 
 function modifierOwnerTransform(owner) {
   return {
-    pivot: owner.type === 'group' || owner.type === 'cube' || (Array.isArray(owner.pivot) && typeof owner.toCubes === 'function')
-      ? owner.pivot
-      : owner.origin || owner.position || [0, 0, 0],
+    // Stack evaluation may use a plain owner snapshot without prototype
+    // methods. Its explicit pivot still defines the same frame as preview.
+    pivot: owner.pivot || owner.origin || owner.position || [0, 0, 0],
     rotation: owner.rotation || [0, 0, 0]
   };
 }
@@ -1642,8 +1644,9 @@ function sourceWorldVertices(source) {
   const { cube, offset, ownerRotation, ownerOrigin, chain } = source;
   const inflate = (Number(cube.inflate) || 0) + (source.groupInflate
     ?? chain.reduce((sum, group) => sum + (Number(group.inflate) || 0), 0));
-  const from = cube.position.map((value, axis) => value + offset[axis] - inflate);
-  const to = cube.position.map((value, axis) => value + offset[axis] + cube.size[axis] + inflate);
+  const direction = cube.size.map(value => value < 0 ? -1 : 1);
+  const from = cube.position.map((value, axis) => value + offset[axis] - direction[axis] * inflate);
+  const to = cube.position.map((value, axis) => value + offset[axis] + cube.size[axis] + direction[axis] * inflate);
   const pivot = cube.pivot.map((value, axis) => value + offset[axis]);
   const cubeMatrix = rotationMatrix(cube.rotation || [0, 0, 0]);
   const ownerMatrix = rotationMatrix(ownerRotation);
@@ -1670,7 +1673,10 @@ function cubeVertexKey(source, affine = null) {
     const z = matrix ? matrix[2][0] * point[0] + matrix[2][1] * point[1] + matrix[2][2] * point[2] + translation[2] : point[2];
     keys[index] = `${Math.round(x * 100000) / 100000},${Math.round(y * 100000) / 100000},${Math.round(z * 100000) / 100000}`;
   }
-  return keys.sort().join('|');
+  // Coincident vertices do not make positive and negative Cubes equivalent.
+  // Compare each local size sign; modifier reflections already compensate
+  // their winding and must not change the source Cube's sign signature.
+  return `${source.cube.size.map(value => Math.sign(value)).join(',')}:${keys.sort().join('|')}`;
 }
 
 function originalCubeKeys(project, sourcesByUid = null, excludedUids = null) {
@@ -1823,8 +1829,13 @@ function bakedCubeFromWorld(source, affine, parentChain) {
     matrixMultiply(matrixMultiply(affine.matrix, worldOrientation), handednessFix));
   const fromOffset = matrixVector(handednessFix, baseFrom.map((value, axis) => value - basePivot[axis]));
   const toOffset = matrixVector(handednessFix, baseTo.map((value, axis) => value - basePivot[axis]));
-  const from = localPivot.map((value, axis) => value + Math.min(fromOffset[axis], toOffset[axis]));
-  const to = localPivot.map((value, axis) => value + Math.max(fromOffset[axis], toOffset[axis]));
+  // Reflection compensation changes the local X basis, not the Cube's signed
+  // dimensions. Order endpoints using the original per-axis signs so baking
+  // preserves negative geometry instead of normalizing it into a positive box.
+  const from = localPivot.map((value, axis) => value + (cube.size[axis] < 0
+    ? Math.max(fromOffset[axis], toOffset[axis]) : Math.min(fromOffset[axis], toOffset[axis])));
+  const to = localPivot.map((value, axis) => value + (cube.size[axis] < 0
+    ? Math.min(fromOffset[axis], toOffset[axis]) : Math.max(fromOffset[axis], toOffset[axis])));
   const faces = mirrored ? mirrorCubeFacesAcrossLocalX(cube.faces, cube.uvMode === 'face') : cloneData(cube.faces);
   return new Cube({
     ...cloneData(cube), uid: undefined,

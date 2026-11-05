@@ -97,7 +97,7 @@ function restoredProjectSession(session, data, restoreTextures = false, changedU
       uvHeight: asset.uv_height, useAsDefault: asset.use_as_default === true,
       templateUvIndependent: asset.template_uv_independent ?? null,
       groupId: asset.group_id || null, activeLayerUid: asset.active_layer_uid || null,
-      layers: normalizeTextureLayers(asset)
+      layers: normalizeTextureLayers(asset), externalFile: asset.external_file || null
     }));
     restored.textureGroups = structuredClone(data.textureGroups || []);
     if (!restored.textureAssets.some(asset => asset._uid === restored.activeTextureUid)) {

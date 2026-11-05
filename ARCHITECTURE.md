@@ -31,6 +31,8 @@
 
 ## 入口边界
 
+`model/formats/` 将 Java JSON、基岩 geometry 和带完整性校验的 Java 模型层分开实现，模型格式注册表通过 `nativeExport` 声明原生导出能力。`project/export-dialog.js` 选择格式，`native-export-controller.js` 编排先贴图、后模型的流程；桌面路径解析和图片写入放在 `electron/native-model-io.cjs`、`texture-files.cjs`。`texture/save-state.js` 只在内容变化时更新状态，像素校验由专用 Worker 串行执行，避免 PNG 重编码误报和拖动视图时重新处理图像。
+
 贴图导出由 `texture/export-bake.js` 连接已有几何烘焙结果；`export-plan.js` 负责引用解析、周期范围复用、最小公倍数和图集／箱型布局，`export-raster.js` 负责独立快照合成与像素烘焙，`export-progress.js` 管理延迟显示的进度窗。格式注册表用 `singleTexture` 声明合并规则。导出不依赖当前帧选择、全局图层光栅缓存或可编辑画布，不向工程写入烘焙结果。
 
 贴图导出由 `texture/export-bake.js` 连接已有几何烘焙结果；`export-plan.js` 负责引用解析、周期范围复用、最小公倍数和图集／箱型布局，`export-raster.js` 负责独立快照合成与像素烘焙，`export-progress.js` 管理延迟显示的进度窗。格式注册表用 `singleTexture` 声明合并规则。导出不依赖当前帧选择、全局图层光栅缓存或可编辑画布，不向工程写入烘焙结果。

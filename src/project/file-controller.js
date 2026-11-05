@@ -4,14 +4,26 @@ import { beginTextureExportProgress } from '../texture/export-progress.js';
 import { ConfigKey, configRegistry } from '../common/config/app-config.js';
 import { showAppConfirm, showAppChoice } from '../screen/prompt-dialog.js';
 import { beginProjectOpenProgress } from './open-progress.js';
+import { chooseProjectExport } from './export-dialog.js';
+import { createNativeExportController } from './native-export-controller.js';
+import { decodeNativeJson } from '../model/formats/native-json.js';
+import { importModdedJava } from '../model/formats/modded-java.js';
+import { loadRaster } from '../common/core/texture-features.js';
+import { splitTextureAnimation } from '../texture/animation-import.js';
 
 export function createProjectFileController({
   state, fileInput, projectTabsController, journalController,
   getShapePacksReady, activateProjectTab, addProjectTab, markDirty,
   discardProjectTabJournal, renderProjectTabs, projectTabById,
-  flushProjectJournal, toast
+  flushProjectJournal, toast, textureFileController
 }) {
 const blobTextureSourceCache = new Map();
+const exportNative = createNativeExportController({ serializableTextureAssets, textureFileController, download,
+  async onSaved(project, committed) {
+    if (state.project !== project) return;
+    if (!committed) journalController.noteJournalOperation('core.texture.save');
+    else markDirty();
+  } });
 async function openProject(filePath = null) {
   const home = projectTabById(projectTabsController.activeId);
   const replaceTabId = home?.kind === 'home' ? home.id : null;
@@ -26,7 +38,14 @@ async function openProject(filePath = null) {
         if (replaceTabId && projectTabsController.tabs.includes(home)) projectTabsController.removeProjectTab(home);
         activateProjectTab(existing.id); return;
       }
-      loadProjectContent(result.content, result.filePath, result.textureAssets || [], result.journalId || null,
+      const textureAssets = result.textureAssets || [];
+      for (const asset of textureAssets) if (asset.animationMetadata && !asset.animation) {
+        const image = await loadRaster(asset.source);
+        const animation = splitTextureAnimation(image, asset.animationMetadata);
+        if (animation) Object.assign(asset, animation);
+        delete asset.animationMetadata;
+      }
+      loadProjectContent(result.content, result.filePath, textureAssets, result.journalId || null,
         { dirty: result.dirty, persistent: result.persistent, replaceTabId });
     } else fileInput.click();
   } catch (error) { toast(`打開失敗：${error.message}`); }
@@ -71,10 +90,10 @@ async function serializableTextureAssets(assets = state.textureAssets) {
   }));
 }
 
-async function serializeBbmodel(textureAssets) {
+async function serializeBbmodel(textureAssets, project = state.project) {
   const progress = beginTextureExportProgress();
   try {
-    return JSON.stringify(await createBakedBlockbenchExport(state.project, textureAssets, { progress: progress.progress }), null, 2);
+    return JSON.stringify(await createBakedBlockbenchExport(project, textureAssets, { progress: progress.progress }), null, 2);
   } finally { progress.finish(); }
 }
 
@@ -97,17 +116,19 @@ function serializeCbmodel(textureAssets = [], project = state.project, textureGr
     use_as_default: texture.useAsDefault === true,
     group_id: texture.groupId || null,
     kind: texture.kind || 'IMAGE',
-    template_uv_independent: texture.templateUvIndependent ?? null
+    template_uv_independent: texture.templateUvIndependent ?? null,
+    external_file: texture.externalFile || null, namespace: texture.namespace || ''
   }));
   return JSON.stringify(data, null, 2);
 }
 
 function loadProjectContent(content, filePath = '', resolvedTextures = [], journalId = null, options = {}) {
-  const data = JSON.parse(content);
+  const data = decodeNativeJson(JSON.parse(content.replace(/^\uFEFF/, '')), filePath);
   // A journal already contains native snapshots, regardless of the original
   // imported filename recorded in saved_state.
   const project = !journalId && (filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format)
     ? importBlockbench(data) : new CubeBricksProject(data);
+  if (data._cubebricksFormatData) project.formatData = { ...project.formatData, ...data._cubebricksFormatData };
   const savedPath = filePath.toLowerCase().endsWith('.cbmodel') ? filePath : null;
   const embeddedTextures = (data.textures || []).filter(texture => typeof texture.source === 'string' && texture.source.startsWith('data:image/')).map(texture => ({
     uuid: texture.uuid, id: texture.id, name: texture.name || 'embedded_texture.png', source: texture.source,
@@ -115,7 +136,8 @@ function loadProjectContent(content, filePath = '', resolvedTextures = [], journ
     groupId: texture.group_id || null, kind: texture.kind || 'IMAGE',
     templateUvIndependent: texture.template_uv_independent ?? null,
     mode: texture.mode || 'default',
-    layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null
+    layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null,
+    namespace: texture.namespace, externalFile: texture.external_file || (data.meta?.model_format ? { imported: true, path: null } : null)
   }));
   const tab = addProjectTab(project, {
     filePath: savedPath,
@@ -198,11 +220,18 @@ async function saveProject() {
 async function exportProject() {
   if (state.projectHomeActive) return;
   try {
+    const project = state.project, sourceAssets = state.textureAssets;
+    const extension = await chooseProjectExport(project.formatId);
+    if (!extension) return;
+    if (extension === 'json' || extension === 'java') {
+      if (await exportNative(extension, project, sourceAssets)) toast(`已导出 .${extension}`);
+      return;
+    }
     const activeTab = projectTabById(projectTabsController.activeId);
     if (window.cubeBricksDesktop?.exportProject) {
       const payload = {
-        name: state.project.name, journalId: activeTab?.journalId,
-        historyLimit: state.project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT)
+        name: project.name, journalId: activeTab?.journalId, extension,
+        historyLimit: project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT)
       };
       let result = await window.cubeBricksDesktop.exportProject(payload);
       if (!result) return;
@@ -217,10 +246,10 @@ async function exportProject() {
       }
       await flushProjectJournal(activeTab);
       await activeTab?.journalWrites;
-      const textureAssets = await serializableTextureAssets();
+      const textureAssets = await serializableTextureAssets(sourceAssets);
       const content = result.extension === '.cbmodel'
-        ? { cbmodelContent: serializeCbmodel(textureAssets) }
-        : { bbmodelContent: await serializeBbmodel(textureAssets) };
+        ? { cbmodelContent: serializeCbmodel(textureAssets, project) }
+        : { bbmodelContent: await serializeBbmodel(textureAssets, project) };
       result = await window.cubeBricksDesktop.exportProject({ ...payload, ...content,
         filePath: result.filePath, ...(includeHistory === null ? {} : { includeHistory }) });
       if (!result) return;
@@ -229,24 +258,24 @@ async function exportProject() {
         : '已導出 .bbmodel（程序化物件已轉為 Cube 組）');
     } else if (window.showSaveFilePicker) {
       const handle = await window.showSaveFilePicker({
-        suggestedName: `${state.project.name}.bbmodel`,
+        suggestedName: `${project.name}.${extension}`,
         types: [
           { description: 'Blockbench Model', accept: { 'application/json': ['.bbmodel'] } },
           { description: 'CubeBricks Model', accept: { 'application/json': ['.cbmodel'] } }
-        ]
+        ].sort((a, b) => Number(Object.values(b.accept)[0].includes(`.${extension}`)) - Number(Object.values(a.accept)[0].includes(`.${extension}`)))
       });
-      const extension = handle.name.toLowerCase().endsWith('.cbmodel') ? '.cbmodel' : '.bbmodel';
-      const textureAssets = await serializableTextureAssets();
-      const content = extension === '.cbmodel' ? serializeCbmodel(textureAssets) : await serializeBbmodel(textureAssets);
+      const fileExtension = handle.name.toLowerCase().endsWith('.cbmodel') ? '.cbmodel' : '.bbmodel';
+      const textureAssets = await serializableTextureAssets(sourceAssets);
+      const content = fileExtension === '.cbmodel' ? serializeCbmodel(textureAssets, project) : await serializeBbmodel(textureAssets, project);
       const writable = await handle.createWritable();
       await writable.write(content);
       await writable.close();
-      toast(`已導出 ${extension}`);
+      toast(`已導出 ${fileExtension}`);
     } else {
-      const textureAssets = await serializableTextureAssets();
-      const bbmodelContent = await serializeBbmodel(textureAssets);
-      download(bbmodelContent, `${state.project.name}.bbmodel`, 'application/json');
-      toast('已導出 .bbmodel（目前瀏覽器不支援格式選擇）');
+      const textureAssets = await serializableTextureAssets(sourceAssets);
+      const content = extension === 'cbmodel' ? serializeCbmodel(textureAssets, project) : await serializeBbmodel(textureAssets, project);
+      download(content, `${project.name}.${extension}`, 'application/json');
+      toast(`已導出 .${extension}`);
     }
   } catch (error) {
     toast(`導出失敗：${error.message}`);
@@ -264,6 +293,23 @@ return {
   serializableTextureAssets,
   serializeCbmodel,
   loadProjectContent,
+  async loadProjectFile(file) {
+    const content = await file.text();
+    if (/\.java$/i.test(file.name)) return loadProjectContent(JSON.stringify(await importModdedJava(content)), file.name);
+    let data = JSON.parse(content.replace(/^\uFEFF/, ''));
+    if (data['minecraft:geometry']?.length > 1) {
+      const choices = data['minecraft:geometry'].map((geometry, index) => geometry.description?.identifier || String(index + 1));
+      const selected = await showAppChoice({ title: '选择几何模型', message: '文件包含多个几何模型，请选择要导入的一个', buttons: [...choices, '取消'], cancelIndex: choices.length });
+      if (selected.index === choices.length) return null;
+      data = { ...data, 'minecraft:geometry': [data['minecraft:geometry'][selected.index]] };
+    }
+    if (data['minecraft:geometry'] || Object.keys(data).some(key => key.startsWith('geometry.') && data[key]?.bones)) {
+      const selected = await showAppChoice({ title: '选择基岩模型类型', message: '几何 JSON 本身不区分实体与方块', buttons: ['基岩版实体', '基岩版方块', '取消'], cancelIndex: 2 });
+      if (selected.index === 2) return null;
+      data = decodeNativeJson(data, file.name, [], ['bedrock_entity', 'bedrock_block'][selected.index]);
+    }
+    return loadProjectContent(JSON.stringify(data), file.name);
+  },
   offerProjectRecovery,
   saveProject, openWorkspaceProject,
   exportProject,

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
   openProject: (filePath = null) => ipcRenderer.invoke('project:open', filePath ? { filePath } : {}),
   getPathForFile: file => webUtils.getPathForFile(file),
   readTextureAnimationMetadata: payload => ipcRenderer.invoke('texture:animation-metadata',payload),
+  saveTexture: payload => ipcRenderer.invoke('texture:save', payload),
   onExternalProjectOpen: listener => {
     const handler = (_event, filePath) => listener(filePath);
     ipcRenderer.on('project:external-open', handler);

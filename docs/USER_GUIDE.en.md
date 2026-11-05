@@ -6,7 +6,7 @@
 
 1. Choose a project format from the model-type list on the start page or from **New** in the top bar. The format supplies initial snapping and UV capabilities. Java Block/Item version restrictions can be changed in Project Information.
 2. Use the top tabs to switch projects or drag them to reorder. Right-click a project tab for information; middle-click or use its hover-only close icon to close it. The plus directly after the list adds a home tab without closing projects. Creating or opening from that home replaces its tab in place.
-3. `Ctrl+S` or **Save** in the top bar retains the project's working folder without generating a `.cbmodel` or opening a file dialog. `Ctrl+Shift+S` and **Export** create a file; the chosen or typed extension selects `.cbmodel` or `.bbmodel`.
+3. `Ctrl+S` or **Save** retains the project's working folder without creating a separate file. `Ctrl+Shift+S` or **Export** opens a format window offering `.cbmodel`, `.bbmodel`, and the current format's native JSON or Java output. Unsupported options are omitted.
 4. Saved status is stored in the project directory and survives restarts. Previously saved projects save automatically when closing a tab or the application, without a prompt or automatic folder deletion. Only new, never-saved projects ask whether to keep or discard them; canceling keeps the project open.
 5. Right-click a home project entry and choose **Delete project**. Confirmation is required before removing its working folder and history. Exported files remain intact, and any tab for the deleted project closes.
 
@@ -90,6 +90,12 @@ The frame list appears only with Flipbook enabled. The window expands to the rig
 The eyedropper skips fully transparent pixels and continues to deeper faces in 3D. Hold `Ctrl` to sample the final composite, including current-frame interpolation, blending, and masks, without lighting or shadows. This also works with the temporary `Alt` eyedropper.
 
 ### Exporting tiled and flipbook textures
+
+Java Block/Item imports and exports native model `.json`; Bedrock Entity, Bedrock Block, and GeckoLib geometry use native geometry JSON. Multi-geometry files offer a choice, and Bedrock files without type metadata ask whether to import as an entity or block. Modded Entity exports a Java model layer using the Minecraft 1.17+ Mojang-mapped `createBodyLayer()` API. Only unchanged Java files exported by CubeBricks can be reimported; editing code or restoration metadata invalidates reimport.
+
+Native JSON/Java export saves each baked PNG and any `.png.mcmeta` first, then asks for the model filename. Canceling any step stops model export. Java JSON uses resource locations; saving under `assets/<namespace>/textures/` infers the namespace automatically. A sibling `<model filename>.cbtextures.json` records actual relative image paths and material links for reimport; Bedrock geometry itself has no image-path field. Keep images and this index together when moving interchange files, and arrange resource-pack directories and materials when integrating into a game.
+
+Texture context menus offer **Save Texture** and **Save Texture As**. New, copied, or edited unsaved textures show a clickable save icon on the right. Untouched imports and saved textures hide it. Saving writes the full composite; flipbooks write the complete strip and metadata. Editable layers remain part of the `.cbmodel` project.
 
 Choosing `.bbmodel` bakes textures after the existing Shape/modifier geometry pass, leaving the current project, layers, and playback position unchanged. Animation frames become a vertical PNG strip in frame-list order. Longer exports display progress.
 

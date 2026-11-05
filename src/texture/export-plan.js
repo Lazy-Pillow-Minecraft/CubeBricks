@@ -94,6 +94,27 @@ export function boxExportPlan(bbmodel, faces, planes = []) {
   }
   const entries = [], signatures = new Map();
   let density = 1;
+  const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return a; };
+  const fraction = value => {
+    for (let denominator = 1; denominator <= 256; denominator++) {
+      const numerator = Math.round(Math.abs(value) * denominator);
+      if (Math.abs(Math.abs(value) * denominator - numerator) < 1e-6) {
+        const divisor = gcd(numerator, denominator) || 1;
+        return [numerator / divisor, denominator / divisor];
+      }
+    }
+    throw new Error('箱型 UV 的小数精度过高，无法无损烘焙');
+  };
+  const includeDensity = (start, end, span) => {
+    if (!span) return;
+    const axis = Math.abs(end[0] - start[0]) > 1e-8 ? 0 : 1;
+    const [numerator, denominator] = fraction(Math.abs(end[axis] - start[axis]) / span);
+    if (!numerator) return;
+    const [, phaseDenominator] = fraction(start[axis]);
+    const required = numerator * phaseDenominator / gcd(denominator, phaseDenominator);
+    density = density / gcd(density, required) * required;
+    checkBakeSize(1, density);
+  };
   for (const [element, members] of byElement) {
     const cube = exportedCubeView(element);
     cube.uv = [0, 0]; cube.mirrorUv = false;
@@ -106,8 +127,8 @@ export function boxExportPlan(bbmodel, faces, planes = []) {
       for (const face of members) {
         const target = getBlockbenchBoxUv(cube, face.name), source = createBlockbenchFaceUvSlots(face.pixelUv, face.rotation);
         const w = Math.abs(target[2] - target[0]), h = Math.abs(target[3] - target[1]);
-        if (w) density = Math.max(density, Math.hypot(source[1][0] - source[0][0], source[1][1] - source[0][1]) / w);
-        if (h) density = Math.max(density, Math.hypot(source[2][0] - source[0][0], source[2][1] - source[0][1]) / h);
+        includeDensity(source[0], source[1], w);
+        includeDensity(source[0], source[2], h);
       }
     }
     net.elements.push(element);
