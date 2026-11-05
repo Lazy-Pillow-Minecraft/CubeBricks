@@ -26,6 +26,8 @@ Set a project-specific history limit in Project Information, or leave it empty t
 
 Java Block/Item projects force back-face culling and per-face UVs. Their three version classes allow, respectively, 22.5° steps on one axis, arbitrary angles on one axis, or unrestricted rotation axes. The viewport guide marks the −16 to 32 `from/to` coordinate range; the ground reference grid shifts +8 on X/Z while the red and blue axes still start at the origin and extend farther. Animation mode is unavailable for this format, and Display Settings is currently only a placeholder. The Bedrock Block guide moves with the model to indicate its 30 px size constraint; a drag or numeric change that worsens an out-of-range model is rejected. The guides share the main ground-grid line color and depth behavior.
 
+For Java Cubes with a single-axis limit, whole 90° turns are folded into position, dimensions, and per-face UVs before constraining the remaining angle. Face culling, UV mirrors, and negative dimensions are preserved. Exported bbmodels store the selected version class in the root `java_block_version` property and restore it on import; this is separate from the bbmodel file version in `meta.format_version`.
+
 ## 2. Camera and selection
 
 | Input | Result |

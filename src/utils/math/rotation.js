@@ -43,6 +43,10 @@ export function quaternionFromAxisAngle(axis, degrees) {
 export function eulerFromQuaternion(q) {
   const [x, y, z, w] = q;
   const sinY = 2 * (w * y - z * x);
+  // At a Y quarter turn, separate X/Z atan2 terms both approach 0/0.
+  // Keep their combined rotation instead of amplifying floating-point noise.
+  if (Math.abs(sinY) > 1 - 1e-12) return [0, Math.sign(sinY) * 90,
+    Math.atan2(2 * (w * z - x * y), 1 - 2 * (x * x + z * z)) * 180 / Math.PI];
   const rx = Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y));
   const ry = Math.asin(Math.max(-1, Math.min(1, sinY)));
   const rz = Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));

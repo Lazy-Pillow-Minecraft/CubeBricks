@@ -1,6 +1,6 @@
 import { Shape, addModifier, addOperator, bakeModifier, setPivotPreservingGeometry, setNodeName, setNodeUnnamed, translateNode } from '../model.js';
 import { actualTransformValue, applyTransform, displayedTransformVector, restoreTransform, supportsAppliedTransform } from '../common/core/applied-transform.js';
-import { formatRules, constrainNode, captureFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
+import { formatRules, constrainNode, captureFormatGeometry, restoreFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { modifierRegistry } from '../common/config/modifiers.js';
 import { operatorRegistry } from '../common/config/operators.js';
 import { shapeRegistry } from '../shapes/builtins.js';
@@ -567,6 +567,7 @@ function bindInspector(root = null) {
   });
   $$('[data-vector]', inspector).forEach(input => {
     let snapshotTaken = false;
+    let javaRotationGeometry = null;
     const apply = () => {
       const value = Number(input.value);
       if (!Number.isFinite(value)) return;
@@ -580,6 +581,10 @@ function bindInspector(root = null) {
       const field = input.dataset.vector;
       const axis = Number(input.dataset.axis);
       const before = formatRules(state.project).bedrockBlock || formatRules(state.project).javaBlock ? captureFormatGeometry(items) : null;
+      if (field === 'rotation' && formatRules(state.project).singleAxisRotation) {
+        javaRotationGeometry ||= captureFormatGeometry(items.filter(node => node.type === 'cube'));
+        restoreFormatGeometry(javaRotationGeometry);
+      }
       if (field.startsWith('curve-node:') && isBezierElement(item)) {
         const [, indexText, property] = field.split(':');
         const node = item.nodes[Number(indexText)];
@@ -651,7 +656,10 @@ function bindInspector(root = null) {
     };
     input.addEventListener('input', apply);
     input.addEventListener('change', apply);
-    input.addEventListener('blur', () => { snapshotTaken = false; });
+    input.addEventListener('blur', () => {
+      snapshotTaken = false;
+      if (javaRotationGeometry) { javaRotationGeometry = null; syncInspectorValues(); }
+    });
   });
   $$('[data-parameter]', inspector).forEach(input => {
     let snapshotTaken = false;

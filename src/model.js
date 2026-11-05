@@ -2,6 +2,7 @@ import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './comm
 import { modifierRegistry } from './common/config/modifiers.js';
 import { operatorRegistry } from './common/config/operators.js';
 import { constrainCube, formatRules } from './common/core/format-constraints.js';
+import { normalizeJavaBlockVersion, blockbenchJavaVersion } from './common/core/java-block-version.js';
 import { shapeRegistry } from './shapes/builtins.js';
 import { DODECAHEDRON_UNIT_FACES, TRUNCATED_ICOSAHEDRON_UNIT_FACES, regularPolyhedronCubes } from './utils/shape/polyhedron-geometry.js';
 import { bezierCubes } from './utils/shape/bezier-geometry.js';
@@ -1349,6 +1350,9 @@ export function importBlockbench(data) {
     name: data.name || 'imported_model',
     formatId: resolveModelFormatId(data.meta?.model_format || 'free'),
     modelType: data.meta?.model_format || 'free',
+    formatData: { ...structuredClone(data._cubebricksFormatData || {}),
+      ...(data.meta?.model_format === 'java_block' ? { javaBlockVersion: normalizeJavaBlockVersion(
+        data.java_block_version || data._cubebricksFormatData?.javaBlockVersion) } : {}) },
     textureSize: data.resolution ? [data.resolution.width, data.resolution.height] : [64, 64],
     renderType: data.render_type,
     elements,
@@ -2419,6 +2423,7 @@ export function exportBlockbench(project, textureAssets = []) {
       box_uv: project.uvMode === 'box'
     },
     name: project.name,
+    ...(formatRules(project).javaBlock ? { java_block_version: blockbenchJavaVersion(project.formatData?.javaBlockVersion) } : {}),
     model_identifier: '',
     visible_box: [1, 1, 0],
     variable_placeholders: '',

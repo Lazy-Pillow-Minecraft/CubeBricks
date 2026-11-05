@@ -1,16 +1,12 @@
-export const JavaBlockVersion = Object.freeze({
-  LEGACY: '1.9-1.21.5',
-  SINGLE_AXIS: '1.21.6-1.21.10',
-  UNRESTRICTED: '1.21.11+'
-});
-const JAVA_BLOCK_VERSIONS = new Set(Object.values(JavaBlockVersion));
+import { JavaBlockVersion, normalizeJavaBlockVersion } from './java-block-version.js';
+import { foldJavaCubeRotation } from '../../utils/math/cube-quarter-turn.js';
+export { JavaBlockVersion } from './java-block-version.js';
 
 export function formatRules(project) {
   const javaBlock = project?.formatId === 'java_block_item';
   const bedrockBlock = project?.formatId === 'bedrock_block';
   const moddedEntity = project?.formatId === 'modded_entity';
-  const version = JAVA_BLOCK_VERSIONS.has(project?.formatData?.javaBlockVersion)
-    ? project.formatData.javaBlockVersion : JavaBlockVersion.LEGACY;
+  const version = normalizeJavaBlockVersion(project?.formatData?.javaBlockVersion);
   return {
     javaBlock, bedrockBlock, moddedEntity, version,
     forceCullFaces: javaBlock,
@@ -44,7 +40,7 @@ export function constrainCube(cube, rules) {
     cube.size = cube.size.map(value => Math.round(value));
     cube.rotation = [0, 0, 0];
   } else if (rules.javaBlock) {
-    cube.rotation = constrainRotation(cube.rotation, rules, { cube: true });
+    if (rules.singleAxisRotation) foldJavaCubeRotation(cube, rules);
     // Java validates the unrotated from/to values, not the rotated corners.
     // Moving a diagonal cube because its visual AABB crosses this box would
     // reject otherwise valid Minecraft models.
@@ -206,7 +202,8 @@ export function javaBlockSizeIsValid(project, epsilon = 1e-6) {
   return javaBlockSizeViolation(project) <= epsilon;
 }
 
-const GEOMETRY_FIELDS = ['position', 'size', 'pivot', 'origin', 'rotation', 'inflate', 'parameters', 'nodes', 'modifiers'];
+const GEOMETRY_FIELDS = ['position', 'size', 'pivot', 'origin', 'rotation', 'inflate', 'parameters', 'nodes', 'modifiers', 'operators',
+  'faces', 'uvMode', 'uv', 'autoUv', 'mirrorUv', 'rescale', 'appliedTransform'];
 
 export function captureFormatGeometry(nodes) {
   return [...new Set(nodes.filter(Boolean))].map(node => [node,
@@ -215,7 +212,7 @@ export function captureFormatGeometry(nodes) {
 }
 
 export function restoreFormatGeometry(captured) {
-  for (const [node, values] of captured) for (const [key, value] of Object.entries(values)) node[key] = value;
+  for (const [node, values] of captured) for (const [key, value] of Object.entries(values)) node[key] = structuredClone(value);
 }
 
 export function keepFormatEditWithinLimit(project, captured) {

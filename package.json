@@ -17,7 +17,7 @@
     "test:layer-tone-map": "node scripts/test-layer-tone-map.mjs && node scripts/test-layer-mask.mjs && node scripts/test-layer-region.mjs",
     "test:modules": "node scripts/test-editor-modules.mjs && node scripts/test-template-duplicate-uv.mjs && node scripts/test-frame-elements.mjs && node scripts/test-texture-animation-import.mjs && node scripts/test-texture-layer-identity.mjs && node scripts/test-export-plan.mjs",
     "test:config": "node scripts/test-config-registry.mjs",
-    "test:model": "node scripts/test-model-groups.mjs && node scripts/test-modifier-dedup.mjs && node scripts/test-modifier-negative-bake.mjs && node scripts/test-format-limits.mjs && node scripts/test-native-models.mjs",
+    "test:model": "node scripts/test-model-groups.mjs && node scripts/test-modifier-dedup.mjs && node scripts/test-modifier-negative-bake.mjs && node scripts/test-format-limits.mjs && node scripts/test-java-rotation.mjs && node scripts/test-native-models.mjs",
     "test:texture-files": "node --test scripts/test-texture-files.cjs && node scripts/test-texture-save-state.mjs",
     "test:shape-packs": "node scripts/test-shape-packs.mjs",
     "test:resource-packs": "node scripts/test-resource-packs.mjs",

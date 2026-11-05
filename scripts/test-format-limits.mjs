@@ -18,7 +18,7 @@ java.elements.push(diagonal);
 assert.equal(javaBlockSizeIsValid(java), true);
 const legacyTurn = new Cube({ rotation: [0, 90, 0] });
 constrainCube(legacyTurn, javaRules);
-assert.deepEqual(legacyTurn.rotation, [0, 45, 0]);
+assert.deepEqual(legacyTurn.rotation, [0, 0, 0], 'whole quarter turns are baked instead of being clamped to 45 degrees');
 
 const bedrock = new CubeBricksProject({ formatId: 'bedrock_block', elements: [
   { type: 'cube', position: [-8, 0, -8], size: [16, 16, 16], pivot: [0, 8, 0] }

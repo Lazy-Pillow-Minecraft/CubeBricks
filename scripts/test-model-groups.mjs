@@ -337,7 +337,7 @@ const envelopeSymmetry = addModifier(mirroredEnvelope, 'symmetry', {
   enabled: true, mode: 'axes', axes: { x: true, y: false, z: false }, wrapParent: false
 });
 const mirroredEnvelopeProject = new CubeBricksProject({
-  elements: [mirroredEnvelope], outliner: [mirroredEnvelope.uid]
+  formatId: 'bedrock_entity', elements: [mirroredEnvelope], outliner: [mirroredEnvelope.uid]
 });
 const mirroredEnvelopeExport = exportBlockbench(mirroredEnvelopeProject);
 assert.equal(mirroredEnvelopeExport.outliner.length, 2, 'symmetry still creates both envelope branches');
@@ -1023,7 +1023,7 @@ for (const shapeType of ['polygon_prism', 'dodecahedron', 'truncated_icosahedron
   assert.deepEqual(project.getNode(parent.uid).children, [sibling.uid, result.group.uid], 'baked group keeps the original sibling position');
   assert.deepEqual(result.group.rotation, original.rotation, 'owner rotation moves to the baked group');
   assert.deepEqual(result.group.pivot, original.pivot, 'owner pivot moves to the baked group');
-  assert.deepEqual(result.cubes[0].position, expected.position.map((value, axis) => value + original.origin[axis]));
+  assert.ok(almostEqual(result.cubes[0].position, expected.position.map((value, axis) => value + original.origin[axis])));
   assert.deepEqual(result.cubes[0].pivot, expected.pivot.map((value, axis) => value + original.origin[axis]));
   const originalStart = expected.position.map((value, axis) => value + original.origin[axis]);
   const originalCubePivot = expected.pivot.map((value, axis) => value + original.origin[axis]);

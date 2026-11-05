@@ -1,5 +1,5 @@
 import { Cube, Group, setPivotPreservingGeometry } from '../model.js';
-import { constrainNode, formatRules, captureFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
+import { constrainNode, formatRules, captureFormatGeometry, restoreFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { paintSymmetryRelationCache } from '../paint/symmetry-relations.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { inverseRotateVector, quaternionFromAxisAngle, quaternionFromEuler, quaternionMultiply, eulerFromQuaternion,
@@ -147,6 +147,8 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
     startAngle: kind.startsWith('rotate') && handle ? Math.atan2(event.clientY - (handle.centerY + rect.top), event.clientX - (handle.centerX + rect.left)) : 0,
     lastAngle: kind.startsWith('rotate') && handle ? Math.atan2(event.clientY - (handle.centerY + rect.top), event.clientX - (handle.centerX + rect.left)) : 0,
     accumulatedAngle: 0,
+    javaRotationGeometry: state.tool === 'rotate' && formatRules(state.project).singleAxisRotation
+      && !modifierAnchorContext && !curveNodeContext ? captureFormatGeometry(targets.map(target => target.node).filter(node => node.type === 'cube')) : null,
     rect, storedAxis, chain, selectionContext, targets, multiTransformMode: state.multiTransformMode,
     batchPreview: selectionContext.multiple && state.multiTransformMode === 'unified'
       && ['move', 'rotate'].includes(state.tool),
@@ -268,7 +270,7 @@ function applyExactRotation(drag, degrees) {
   const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || drag.item;
   if (formatRules(state.project).singleAxisRotation && drag.kind === 'rotate'
     && Number.isInteger(drag.axisIndex) && !drag.curveNodeContext && !drag.modifierAnchorContext) {
-    target.rotation = [0, 0, 0];
+    target.rotation = [...drag.rotation];
     target.rotation[drag.axisIndex] = drag.rotation[drag.axisIndex] + degrees;
     return;
   }
@@ -469,6 +471,7 @@ function applyPendingTransform(drag) {
   drag.pendingTransform = null;
   const before = (formatRules(state.project).bedrockBlock || formatRules(state.project).javaBlock)
     ? captureFormatGeometry([drag.item, ...(drag.targets || []).map(target => target.node)]) : null;
+  if (drag.javaRotationGeometry?.length) restoreFormatGeometry(drag.javaRotationGeometry);
   applyTransformDrag(drag, pending.dx, pending.dy, pending.event);
   const rules = formatRules(state.project);
   if (rules.javaBlock || rules.moddedEntity) {
@@ -696,7 +699,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       }
       drag.accumulatedAngle += delta;
       const rules = formatRules(state.project);
-      if (rules.singleAxisRotation && rules.rotationLimit && Number.isInteger(drag.axisIndex)
+      if (drag.item.type !== 'cube' && rules.singleAxisRotation && rules.rotationLimit && Number.isInteger(drag.axisIndex)
         && !drag.curveNodeContext && !drag.modifierAnchorContext) {
         const base = drag.rotation[drag.axisIndex] || 0;
         const scale = 180 / Math.PI * (drag.rotationPlaneAxis ? 1 : drag.rotationScreenSign) * rotationDragSensitivity;
@@ -1082,8 +1085,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       const snappedDelta = snapAngle(angle, angleStep);
       if (drag.rotationMode === 'euler' && drag.kind === 'rotate') {
         const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || item;
-        target.rotation = formatRules(state.project).singleAxisRotation && !drag.curveNodeContext
-          && !drag.modifierAnchorContext ? [0, 0, 0] : [...drag.rotation];
+        target.rotation = [...drag.rotation];
         target.rotation[drag.axisIndex] = drag.rotation[drag.axisIndex] + snappedDelta;
       } else {
         const turn = quaternionFromAxisAngle(drag.rotationAxis, snappedDelta);

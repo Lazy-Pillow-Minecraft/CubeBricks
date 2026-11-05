@@ -47,8 +47,9 @@ export function flattenedCube(cube, parents) {
   }
   const offset = pivot.map((n, i) => n - vector(cube.origin)[i]), inflate = Number(cube.inflate) || 0;
   const rescaleBaked = cube.rescale === true && parents.some(group => vector(group.rotation).some(n => Math.abs(n) > 1e-7));
-  const from = rescaleRotationPoint(cube.from.map(n => n - inflate), vector(cube.origin), vector(cube.rotation), rescaleBaked);
-  const to = rescaleRotationPoint(cube.to.map(n => n + inflate), vector(cube.origin), vector(cube.rotation), rescaleBaked);
+  const signs = cube.to.map((value, axis) => value < cube.from[axis] ? -1 : 1);
+  const from = rescaleRotationPoint(cube.from.map((n, axis) => n - signs[axis] * inflate), vector(cube.origin), vector(cube.rotation), rescaleBaked);
+  const to = rescaleRotationPoint(cube.to.map((n, axis) => n + signs[axis] * inflate), vector(cube.origin), vector(cube.rotation), rescaleBaked);
   return { from: cleanVector(from.map((n, i) => n + offset[i])),
     to: cleanVector(to.map((n, i) => n + offset[i])), pivot: cleanVector(pivot), rotation: cleanVector(eulerFromQuaternion(q)), rescaleBaked };
 }
