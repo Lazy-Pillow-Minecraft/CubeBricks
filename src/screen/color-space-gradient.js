@@ -22,7 +22,7 @@ export function hsvToRgbColor(hue, saturation, value) {
   const h = ((hue % 1) + 1) % 1 * 6, s = clamp(saturation), v = clamp(value);
   const chroma = v * s, secondary = chroma * (1 - Math.abs(h % 2 - 1)), offset = v - chroma;
   return [[chroma, secondary, 0], [secondary, chroma, 0], [0, chroma, secondary],
-    [0, secondary, chroma], [secondary, 0, chroma], [chroma, 0, secondary]][Math.min(5, Math.floor(h))]
+  [0, secondary, chroma], [secondary, 0, chroma], [chroma, 0, secondary]][Math.min(5, Math.floor(h))]
     .map(component => Math.round((component + offset) * 255));
 }
 
@@ -294,8 +294,10 @@ export class ColorSpaceCurveViewport {
     const scale = preview ? 49 : Math.min(width, height) * .33 * this.zoom;
     const depth = dot(relative, forward);
     const factor = this.perspective ? 2.8 / Math.max(.5, 2.8 - depth) : 1;
-    return { x: (preview ? this.canvas.clientWidth - 78 : width / 2) + dot(relative, right) * scale * factor,
-      y: (preview ? 79 : height / 2) - dot(relative, up) * scale * factor, depth };
+    return {
+      x: (preview ? this.canvas.clientWidth - 78 : width / 2) + dot(relative, right) * scale * factor,
+      y: (preview ? 79 : height / 2) - dot(relative, up) * scale * factor, depth
+    };
   }
   pointerOnCylinderPlane(event, height) {
     const rect = this.canvas.getBoundingClientRect();
@@ -328,17 +330,23 @@ export class ColorSpaceCurveViewport {
       if (index) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y);
     });
     if (closed) ctx.closePath();
-    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.stroke();
   }
   axisLine(a, b, startColor, endColor, width = 2) {
     const first = this.project(a), last = this.project(b);
     const gradient = this.context.createLinearGradient(first.x, first.y, last.x, last.y);
-    gradient.addColorStop(0, startColor); gradient.addColorStop(1, endColor);
+    gradient.addColorStop(0, startColor);
+    gradient.addColorStop(1, endColor);
     this.line([a, b], gradient, width);
   }
   drawSpace(preview = false) {
     const ctx = this.context, mode = this.curve.mode;
-    if (preview) { this.drawMergedSpacePreview(mode); return; }
+    if (preview) {
+      this.drawMergedSpacePreview(mode);
+      return;
+    }
     if (mode === 'hsv_cylinder') {
       const rings = [0, 1].map(y => Array.from({ length: 65 }, (_, index) => {
         const angle = index / 64 * Math.PI * 2;
@@ -350,10 +358,12 @@ export class ColorSpaceCurveViewport {
           const inner = ring / 10, outer = (ring + 1) / 10;
           const points = [[inner, a], [outer, a], [outer, b], [inner, b]]
             .map(([radius, angle]) => this.project([Math.cos(angle) * radius, 0, Math.sin(angle) * radius]));
-          ctx.beginPath(); points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+          ctx.beginPath();
+          points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
           ctx.closePath();
           ctx.fillStyle = colorAtPosition([Math.cos(a) * (inner + outer) / 2, 1, Math.sin(a) * (inner + outer) / 2], mode);
-          ctx.globalAlpha = .38; ctx.fill();
+          ctx.globalAlpha = .38;
+          ctx.fill();
         }
         ctx.globalAlpha = 1;
       }
@@ -427,8 +437,10 @@ export class ColorSpaceCurveViewport {
   createSpacePreviewRenderer() {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 112;
-    const gl = canvas.getContext('webgl', { alpha: true, antialias: true, depth: true,
-      preserveDrawingBuffer: true, premultipliedAlpha: false });
+    const gl = canvas.getContext('webgl', {
+      alpha: true, antialias: true, depth: true,
+      preserveDrawingBuffer: true, premultipliedAlpha: false
+    });
     if (!gl) return null;
     const compile = (type, source) => {
       const shader = gl.createShader(type);
@@ -470,7 +482,7 @@ export class ColorSpaceCurveViewport {
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     const meshes = new Map();
     for (const [mode, mesh] of [['rgb_cube', getCubePreviewMesh('rgb_cube')],
-      ['hsv_cube', getCubePreviewMesh('hsv_cube')], ['hsv_cylinder', getCylinderPreviewMesh()]]) {
+    ['hsv_cube', getCubePreviewMesh('hsv_cube')], ['hsv_cylinder', getCylinderPreviewMesh()]]) {
       const vertexBuffer = gl.createBuffer(), indexBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
@@ -488,11 +500,13 @@ export class ColorSpaceCurveViewport {
     gl.clearColor(0, 0, 0, 0);
     gl.clearDepth(1);
     gl.enable(gl.DEPTH_TEST);
-    return { canvas, gl, program, meshes, position, color, stride,
+    return {
+      canvas, gl, program, meshes, position, color, stride,
       right: gl.getUniformLocation(program, 'uRight'), up: gl.getUniformLocation(program, 'uUp'),
       forward: gl.getUniformLocation(program, 'uForward'), origin: gl.getUniformLocation(program, 'uOrigin'),
       perspective: gl.getUniformLocation(program, 'uPerspective'), alpha: gl.getUniformLocation(program, 'uAlpha'),
-      key: null };
+      key: null
+    };
   }
   drawCurve() {
     const ctx = this.context, curve = this.curve, geometry = curveGeometry(curve);
@@ -506,9 +520,13 @@ export class ColorSpaceCurveViewport {
     }
     geometry.positions.forEach((position, index) => {
       const projected = this.project(position), selected = index === this.selected;
-      ctx.beginPath(); ctx.arc(projected.x, projected.y, selected ? 10 : 8, 0, Math.PI * 2);
-      ctx.fillStyle = colorAtPosition(position, curve.mode); ctx.fill();
-      ctx.lineWidth = selected ? 3 : 2; ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#b9f55a'; ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(projected.x, projected.y, selected ? 10 : 8, 0, Math.PI * 2);
+      ctx.fillStyle = colorAtPosition(position, curve.mode);
+      ctx.fill();
+      ctx.lineWidth = selected ? 3 : 2;
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#b9f55a';
+      ctx.stroke();
       this.hitTargets.push({ type: 'node', index, x: projected.x, y: projected.y, radius: 14 });
     });
     const node = curve.nodes[this.selected];
@@ -522,8 +540,17 @@ export class ColorSpaceCurveViewport {
       ctx.save();
       ctx.shadowColor = active ? '#fff' : hovered ? 'rgba(255,255,255,.8)' : 'transparent';
       ctx.shadowBlur = active ? 12 : hovered ? 7 : 0;
-      ctx.beginPath(); ctx.moveTo(p.x, p.y - size); ctx.lineTo(p.x + size, p.y); ctx.lineTo(p.x, p.y + size); ctx.lineTo(p.x - size, p.y);
-      ctx.closePath(); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - size);
+      ctx.lineTo(p.x + size, p.y);
+      ctx.lineTo(p.x, p.y + size);
+      ctx.lineTo(p.x - size, p.y);
+      ctx.closePath();
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 1;
+      ctx.stroke();
       ctx.restore();
       if (!node.autoTangent) this.hitTargets.push({ type: `handle-${kind}`, index: this.selected, x: p.x, y: p.y, radius: 11 });
     }
@@ -540,7 +567,8 @@ export class ColorSpaceCurveViewport {
         const angle = index / 128 * Math.PI * 2;
         return [Math.cos(angle) * radius, position[1], Math.sin(angle) * radius];
       });
-      ctx.save(); ctx.globalAlpha = .55;
+      ctx.save();
+      ctx.globalAlpha = .55;
       this.line(circle, colors.z, 1.5);
       ctx.restore();
       return;
@@ -555,9 +583,14 @@ export class ColorSpaceCurveViewport {
     if (screenLength < 1e-3) return;
     const direction = [(sample.x - start.x) / screenLength, (sample.y - start.y) / screenLength];
     const reach = Math.hypot(this.canvas.clientWidth, this.canvas.clientHeight);
-    ctx.save(); ctx.globalAlpha = .55; ctx.strokeStyle = colors[drag.axis]; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(start.x - direction[0] * reach, start.y - direction[1] * reach);
-    ctx.lineTo(start.x + direction[0] * reach, start.y + direction[1] * reach); ctx.stroke();
+    ctx.save();
+    ctx.globalAlpha = .55;
+    ctx.strokeStyle = colors[drag.axis];
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(start.x - direction[0] * reach, start.y - direction[1] * reach);
+    ctx.lineTo(start.x + direction[0] * reach, start.y + direction[1] * reach);
+    ctx.stroke();
     ctx.restore();
   }
   hueHandleSpan(position, targetPixels = 65) {
@@ -601,12 +634,24 @@ export class ColorSpaceCurveViewport {
       const p = { x: start.x + direction[0] * 54, y: start.y + direction[1] * 54 };
       const active = this.drag?.type === 'axis' && this.drag.axis === axis;
       const hovered = this.hover?.type === 'axis' && this.hover.axis === axis;
-      ctx.save(); ctx.shadowColor = colors[axis]; ctx.shadowBlur = active ? 14 : hovered ? 8 : 0;
-      ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(p.x, p.y); ctx.strokeStyle = colors[axis]; ctx.lineWidth = active ? 5 : hovered ? 4 : 3; ctx.stroke();
+      ctx.save();
+      ctx.shadowColor = colors[axis];
+      ctx.shadowBlur = active ? 14 : hovered ? 8 : 0;
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.strokeStyle = colors[axis];
+      ctx.lineWidth = active ? 5 : hovered ? 4 : 3;
+      ctx.stroke();
       const angle = Math.atan2(p.y - start.y, p.x - start.x);
       const arrow = active ? 14 : hovered ? 12 : 10;
-      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - Math.cos(angle - .55) * arrow, p.y - Math.sin(angle - .55) * arrow);
-      ctx.lineTo(p.x - Math.cos(angle + .55) * arrow, p.y - Math.sin(angle + .55) * arrow); ctx.closePath(); ctx.fillStyle = colors[axis]; ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - Math.cos(angle - .55) * arrow, p.y - Math.sin(angle - .55) * arrow);
+      ctx.lineTo(p.x - Math.cos(angle + .55) * arrow, p.y - Math.sin(angle + .55) * arrow);
+      ctx.closePath();
+      ctx.fillStyle = colors[axis];
+      ctx.fill();
       ctx.restore();
       this.hitTargets.push({ type: 'axis', axis, index: this.selected, x: p.x, y: p.y, radius: 16, vector });
     }
@@ -620,16 +665,21 @@ export class ColorSpaceCurveViewport {
           return [Math.cos(angle) * radius, position[1], Math.sin(angle) * radius];
         });
         const active = this.drag?.type === 'hue', hovered = this.hover?.type === 'hue';
-        ctx.save(); ctx.shadowColor = colors.z; ctx.shadowBlur = active ? 14 : hovered ? 8 : 0;
+        ctx.save();
+        ctx.shadowColor = colors.z;
+        ctx.shadowBlur = active ? 14 : hovered ? 8 : 0;
         this.line(points, colors.z, active ? 5 : hovered ? 4 : 3);
         for (const [endIndex, end] of [[0, points[0]], [1, points.at(-1)]]) {
           const p = this.project(end), neighbor = this.project(endIndex ? points.at(-2) : points[1]);
           const angle = Math.atan2(p.y - neighbor.y, p.x - neighbor.x);
-          ctx.beginPath(); ctx.moveTo(p.x, p.y);
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
           const arrow = active ? 14 : hovered ? 12 : 10;
           ctx.lineTo(p.x - Math.cos(angle - .55) * arrow, p.y - Math.sin(angle - .55) * arrow);
           ctx.lineTo(p.x - Math.cos(angle + .55) * arrow, p.y - Math.sin(angle + .55) * arrow);
-          ctx.closePath(); ctx.fillStyle = colors.z; ctx.fill();
+          ctx.closePath();
+          ctx.fillStyle = colors.z;
+          ctx.fill();
           this.hitTargets.push({ type: 'hue', index: this.selected, x: p.x, y: p.y, radius: 15 });
         }
         ctx.restore();
@@ -639,7 +689,10 @@ export class ColorSpaceCurveViewport {
   draw() {
     const canvas = this.canvas, dpr = devicePixelRatio || 1;
     const width = Math.max(1, Math.round(canvas.clientWidth * dpr)), height = Math.max(1, Math.round(canvas.clientHeight * dpr));
-    if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
     const ctx = this.context;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
@@ -647,8 +700,12 @@ export class ColorSpaceCurveViewport {
     ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     this.drawSpace();
     this.drawCurve();
-    ctx.save(); ctx.beginPath(); ctx.roundRect(canvas.clientWidth - 144, 13, 132, 132, 8);
-    ctx.fillStyle = 'rgba(0,0,0,.48)'; ctx.fill(); ctx.clip();
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(canvas.clientWidth - 144, 13, 132, 132, 8);
+    ctx.fillStyle = 'rgba(0,0,0,.48)';
+    ctx.fill();
+    ctx.clip();
     this.drawSpace(true);
     ctx.restore();
   }
@@ -659,17 +716,22 @@ export class ColorSpaceCurveViewport {
   }
   pointerDown(event) {
     if (event.button !== 0 && event.button !== 1) return;
-    event.preventDefault(); this.canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    this.canvas.setPointerCapture(event.pointerId);
     const target = event.button === 0 ? this.targetAt(event) : null;
     if (target?.index !== undefined && target.index !== this.selected) {
-      this.selected = target.index; this.onSelect(this.selected); this.draw();
+      this.selected = target.index;
+      this.onSelect(this.selected);
+      this.draw();
     }
     const node = this.curve.nodes[this.selected];
-    this.drag = { type: target?.type || 'orbit', axis: target?.axis, handle: target?.type?.slice(7),
+    this.drag = {
+      type: target?.type || 'orbit', axis: target?.axis, handle: target?.type?.slice(7),
       x: event.clientX, y: event.clientY, nodeIndex: this.selected,
       position: node ? [...node.position] : null,
       handleValue: node && target?.type?.startsWith('handle-') ? [...node[target.type === 'handle-in' ? 'handleIn' : 'handleOut']] : null,
-      yaw: this.yaw, pitch: this.pitch, moved: false };
+      yaw: this.yaw, pitch: this.pitch, moved: false
+    };
     if (this.drag.type === 'hue' && node) {
       const fallback = !this.pointerOnCylinderPlane(event, node.position[1]);
       this.drag.hueScreenFallback = fallback;
@@ -697,7 +759,8 @@ export class ColorSpaceCurveViewport {
     if (drag.type === 'orbit') {
       this.yaw = drag.yaw + dx * .008;
       this.pitch = clamp(drag.pitch + dy * .008, -1.4, 1.4);
-      this.draw(); return;
+      this.draw();
+      return;
     }
     const node = this.curve.nodes[drag.nodeIndex];
     if (!node) return;

@@ -38,7 +38,9 @@ parentPort.on('message', async ({ request, journalId, directory, method, args })
     parentPort.postMessage({ request, result, metadata: metadata(journal) });
   } catch (error) {
     if (['initialize', 'load', 'fromArchive'].includes(method)) journals.delete(journalId);
-    parentPort.postMessage({ request, metadata: metadata(journals.get(journalId)),
-      error: { message: error.message, code: error.code, stack: error.stack } });
+    parentPort.postMessage({
+      request, metadata: metadata(journals.get(journalId)),
+      error: { message: error.message, code: error.code, stack: error.stack }
+    });
   }
 });

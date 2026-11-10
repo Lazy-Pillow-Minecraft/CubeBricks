@@ -18,10 +18,13 @@ export function bindProjectHistoryProgress() {
     status.hidden = pending.size === 0 && failures.size === 0;
     bar.hidden = pending.size === 0;
     status.title = [...failures.values()].join('\n');
-    if (!pending.size) { if (failures.size) label.textContent = '歷史記錄讀取失敗'; return; }
-    const total = [...pending.values()].reduce((sum,item)=>sum+(item.total||1),0);
-    const completed = [...pending.values()].reduce((sum,item)=>sum+(item.completed||0),0);
+    if (!pending.size) {
+      if (failures.size) label.textContent = '歷史記錄讀取失敗';
+      return;
+    }
+    const total = [...pending.values()].reduce((sum, item) => sum + (item.total || 1), 0);
+    const completed = [...pending.values()].reduce((sum, item) => sum + (item.completed || 0), 0);
     bar.value = completed / total;
-    label.textContent = `正在讀取歷史記錄 ${Math.floor(bar.value*100)}%`;
+    label.textContent = `正在讀取歷史記錄 ${Math.floor(bar.value * 100)}%`;
   });
 }

@@ -18,10 +18,15 @@ async function readProjectRetention(directory) {
 }
 
 async function initializeProjectRetention(directory, persistent, sequence) {
-  try { await fs.access(path.join(directory, 'workspace_state')); return readProjectRetention(directory); }
+  try {
+    await fs.access(path.join(directory, 'workspace_state'));
+    return readProjectRetention(directory);
+  }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  const state = { version: 1, persistent: persistent === true,
-    savedSequence: persistent ? sequence : null, savedAt: persistent ? new Date().toISOString() : null };
+  const state = {
+    version: 1, persistent: persistent === true,
+    savedSequence: persistent ? sequence : null, savedAt: persistent ? new Date().toISOString() : null
+  };
   await atomicWrite(path.join(directory, 'workspace_state'), JSON.stringify(state));
   return state;
 }

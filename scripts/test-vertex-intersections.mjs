@@ -29,7 +29,7 @@ assert.deepEqual(findVertexSnapIntersections([source], [], [[[0, -.2, -.2], [0, 
   'an existing source vertex is not relabelled as a new intersection');
 
 const nodes = new Map([['group', { uid: 'group', type: 'group', visible: true }],
-  ['source', { uid: 'source', type: 'cube', visible: true }], ['target', { uid: 'target', type: 'cube', visible: true }]]);
+['source', { uid: 'source', type: 'cube', visible: true }], ['target', { uid: 'target', type: 'cube', visible: true }]]);
 const project = {
   getNode: uid => nodes.get(uid),
   getGroupChain: () => [],

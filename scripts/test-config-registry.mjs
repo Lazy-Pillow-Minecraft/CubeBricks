@@ -83,10 +83,12 @@ assert.equal(translateUiKey('ui.object-properties', 'en'), 'Object properties');
 assert.equal(translateUiKey('ui.object-properties', 'zh-Hans'), '对象属性');
 assert.equal(translateUiText('ui.object-properties', 'en'), 'Object properties');
 assert.ok(Object.keys(UI_MESSAGES).every(key => /^ui\.[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key)), 'translation keys are stable semantic IDs');
-replaceLanguagePacks([{ code: 'fr', label: 'Français', translations: {
-  'ui.object-properties': 'Propriétés de l’objet',
-  'ui.preparing-facecount': 'Préparation de {0} faces…'
-} }]);
+replaceLanguagePacks([{
+  code: 'fr', label: 'Français', translations: {
+    'ui.object-properties': 'Propriétés de l’objet',
+    'ui.preparing-facecount': 'Préparation de {0} faces…'
+  }
+}]);
 assert.equal(translateUiText('物件屬性', 'fr'), 'Propriétés de l’objet');
 assert.equal(translateUiText('正在準備 12 個面…', 'fr'), 'Préparation de 12 faces…');
 replaceLanguagePacks([{ code: 'fr', label: 'Français', translations: { '物件屬性': 'Anciennes propriétés' } }]);

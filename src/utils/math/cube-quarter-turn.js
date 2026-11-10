@@ -3,7 +3,14 @@ import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, rescaleRotationPoint }
 
 const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 const CORNERS = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]];
-const FACES = { south: [7, 6, 4, 5], north: [2, 3, 1, 0], east: [6, 2, 5, 1], west: [3, 7, 0, 4], up: [3, 2, 7, 6], down: [4, 5, 0, 1] };
+const FACES = {
+  south: [7, 6, 4, 5],
+  north: [2, 3, 1, 0],
+  east: [6, 2, 5, 1],
+  west: [3, 7, 0, 4],
+  up: [3, 2, 7, 6],
+  down: [4, 5, 0, 1]
+};
 const NORMALS = { south: [0, 0, 1], north: [0, 0, -1], east: [1, 0, 0], west: [-1, 0, 0], up: [0, 1, 0], down: [0, -1, 0] };
 const multiply = (a, b) => a.map(row => [0, 1, 2].map(column => row.reduce((sum, value, axis) => sum + value * b[axis][column], 0)));
 const transpose = matrix => matrix[0].map((_, axis) => matrix.map(row => row[axis]));
@@ -15,7 +22,10 @@ const rotations = [IDENTITY], visited = new Set([IDENTITY.flat().join(',')]);
 for (let index = 0; index < rotations.length; index++) for (const axis of [0, 1, 2]) {
   const turn = rotationMatrix([0, 0, 0].map((_, slot) => slot === axis ? 90 : 0)).map(row => row.map(Math.round));
   const matrix = multiply(turn, rotations[index]), key = matrix.flat().join(',');
-  if (!visited.has(key)) { visited.add(key); rotations.push(matrix); }
+  if (!visited.has(key)) {
+    visited.add(key);
+    rotations.push(matrix);
+  }
 }
 
 function decompose(rotation, step, weights = [1, 1, 1]) {
@@ -31,7 +41,8 @@ function decompose(rotation, step, weights = [1, 1, 1]) {
       let angle = Math.atan2(sine, cosine) * 180 / Math.PI;
       if (step) angle = Math.round(angle / step) * step;
       if (Math.abs(angle) > 45 + 1e-7) continue;
-      const residual = [0, 0, 0]; residual[axis] = clean(angle);
+      const residual = [0, 0, 0];
+      residual[axis] = clean(angle);
       const actual = multiply(rotationMatrix(residual), quarter);
       const score = actual.reduce((sum, row, i) => sum + row.reduce((total, value, j) => total + value * target[i][j], 0), 0);
       const fitScore = actual.reduce((sum, row, i) => sum + row.reduce((total, value, j) => total + weights[j] * value * target[i][j], 0), 0);
@@ -48,7 +59,10 @@ function remapFaces(cube, cornerMap, quarter) {
     const mapped = slots.map(slot => cornerMap[slot]);
     const [targetName, targetSlots] = Object.entries(FACES).find(([, indices]) => mapped.every(slot => indices.includes(slot)));
     const source = cube.faces?.[name];
-    if (source === null) { result[targetName] = null; continue; }
+    if (source === null) {
+      result[targetName] = null;
+      continue;
+    }
     const rect = cube.uvMode === 'box' ? getBlockbenchBoxUv(cube, name) : source?.uv || getBlockbenchBoxUv(cube, name);
     const uv = createBlockbenchFaceUvSlots(rect, source?.rotation || 0);
     const desired = targetSlots.map(slot => uv[mapped.indexOf(slot)]);
@@ -117,7 +131,12 @@ export function foldJavaCubeRotation(cube, { rotationStep = null, strict = false
   if (cube.appliedTransform?.position) cube.appliedTransform.position = cube.appliedTransform.position
     .map((value, axis) => value + cube.position[axis] - previousPosition[axis]);
   cube.size = start.map((value, axis) => clean(signs[axes[axis]] * Math.abs(end[axis] - value)));
-  cube.faces = faces; cube.uvMode = 'face'; cube.rotation = result.rotation;
-  if (cube.rescale) { cube.rescale = false; cube.inflate = 0; }
+  cube.faces = faces;
+  cube.uvMode = 'face';
+  cube.rotation = result.rotation;
+  if (cube.rescale) {
+    cube.rescale = false;
+    cube.inflate = 0;
+  }
   return true;
 }

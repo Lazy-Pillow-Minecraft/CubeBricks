@@ -3,20 +3,24 @@ const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const profile = fs.mkdtempSync(path.join(os.tmpdir(),'cubebricks-texture-modes-'));
-app.setPath('userData',profile); app.setPath('sessionData',profile);
-const errors=[];
-app.on('web-contents-created',(_event,contents)=>contents.on('console-message',details=>{
-  if(details.level==='error') errors.push(details.message);
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-texture-modes-'));
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+const errors = [];
+app.on('web-contents-created', (_event, contents) => contents.on('console-message', details => {
+  if (details.level === 'error') errors.push(details.message);
 }));
-app.on('browser-window-created',(_event,win)=>{win.hide();win.webContents.setBackgroundThrottling(false);});
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.webContents.setBackgroundThrottling(false);
+});
 require('../electron/main.cjs');
-app.whenReady().then(async()=>{
+app.whenReady().then(async () => {
   let report;
   try {
-    const contents=BrowserWindow.getAllWindows()[0].webContents;
-    if(contents.isLoading()) await new Promise(resolve=>contents.once('did-finish-load',resolve));
-    report=await contents.executeJavaScript(`(async()=>{
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    if (contents.isLoading()) await new Promise(resolve => contents.once('did-finish-load', resolve));
+    report = await contents.executeJavaScript(`(async()=>{
       const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       const check=(value,message)=>{if(!value) throw Error(message);};
       const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -121,9 +125,11 @@ app.whenReady().then(async()=>{
       check(state.selectedUvFaces.size===1,'Texture switching retains the clicked UV face');
       return {ok:true,checks:['mode round trip','independent parameters','origin and dimensions','batch edit','direction selection','box UV','undo and redo','flipbook placeholder','flush fixed header','whole face raster','WebGL','preview texture auto-switch'],paint};
     })()`);
-    if(errors.length) throw Error(errors.join('\n'));
-  } catch(error) {report={ok:false,error:error.stack,errors};}
-  const output=path.resolve(process.argv.find(arg=>arg.startsWith('--output='))?.slice(9)||'build/performance/texture-modes.json');
-  fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,JSON.stringify(report,null,2));
-  console.log(JSON.stringify(report));app.exit(report.ok?0:1);
+    if (errors.length) throw Error(errors.join('\n'));
+  } catch (error) { report = { ok: false, error: error.stack, errors }; }
+  const output = path.resolve(process.argv.find(arg => arg.startsWith('--output='))?.slice(9) || 'build/performance/texture-modes.json');
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

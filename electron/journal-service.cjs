@@ -14,13 +14,14 @@ function ensureWorker() {
     if (worker === current) worker = null;
     for (const [request, task] of pending) {
       if (task.worker !== current) continue;
-      pending.delete(request); task.reject(error);
+      pending.delete(request);
+      task.reject(error);
     }
   };
   current.on('message', response => {
     if (response.historyProgress) {
       for (const listener of historyListeners) {
-        try { listener(response.historyProgress); } catch (error) { console.warn('History progress listener failed',error); }
+        try { listener(response.historyProgress); } catch (error) { console.warn('History progress listener failed', error); }
       }
       return;
     }
@@ -77,7 +78,9 @@ for (const method of ['initialize', 'load', 'ensureReady', 'commit', 'content',
   'checkout', 'navigate', 'compactHistory', 'setHistoryLimit', 'archive', 'dispose', 'finishHistoryImport', 'historyGraph', 'setHistoryMark', 'pruneHistoryBranch']) {
   WorkerProjectJournal.prototype[method] = function (...args) { return this.call(method, args); };
 }
-module.exports = { WorkerProjectJournal, onHistoryProgress(listener) {
-  historyListeners.add(listener);
-  return () => historyListeners.delete(listener);
-} };
+module.exports = {
+  WorkerProjectJournal, onHistoryProgress(listener) {
+    historyListeners.add(listener);
+    return () => historyListeners.delete(listener);
+  }
+};

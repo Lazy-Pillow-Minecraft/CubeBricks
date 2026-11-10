@@ -4,7 +4,10 @@ const crypto = require('crypto');
 
 function processAlive(pid) {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try { process.kill(pid, 0); return true; }
+  try {
+    process.kill(pid, 0);
+    return true;
+  }
   catch (error) { return error.code !== 'ESRCH'; }
 }
 
@@ -29,7 +32,10 @@ class JournalOwnership {
       let owner = null;
       try { owner = JSON.parse(text); } catch { /* A writer may still be filling its claim. */ }
       return { owner, text, stat };
-    } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+    } catch (error) {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    }
   }
 
   async isLocked(directory) {
@@ -60,18 +66,31 @@ class JournalOwnership {
         let reaper;
         const reaperPath = `${filename}.reclaim`;
         try { reaper = await fs.open(reaperPath, 'wx'); }
-        catch (error) { if (error.code === 'EEXIST') throw busyError(); throw error; }
+        catch (error) {
+          if (error.code === 'EEXIST') throw busyError();
+          throw error;
+        }
         try {
           const current = await this.readOwner(directory);
           if (current?.text === record.text && current.stat.ino === record.stat.ino) {
             await fs.unlink(filename).catch(error => { if (error.code !== 'ENOENT') throw error; });
           }
-        } finally { await reaper.close(); await fs.unlink(reaperPath); }
+        } finally {
+          await reaper.close();
+          await fs.unlink(reaperPath);
+        }
         continue;
       }
       const owner = { pid: process.pid, token: crypto.randomUUID(), createdAt: new Date().toISOString() };
-      try { await handle.writeFile(JSON.stringify(owner)); await handle.sync(); }
-      catch (error) { await handle.close(); await fs.unlink(filename).catch(() => {}); throw error; }
+      try {
+        await handle.writeFile(JSON.stringify(owner));
+        await handle.sync();
+      }
+      catch (error) {
+        await handle.close();
+        await fs.unlink(filename).catch(() => {});
+        throw error;
+      }
       await handle.close();
       this.owned.set(directory, owner.token);
       return;

@@ -21,7 +21,10 @@ internal static class CubeBricksStart
         try
         {
             var command = new StringBuilder(Quote(root));
-            foreach (string argument in arguments) command.Append(' ').Append(Quote(argument));
+            foreach (string argument in arguments)
+            {
+                command.Append(' ').Append(Quote(argument));
+            }
             Process.Start(new ProcessStartInfo
             {
                 FileName = electron,
@@ -41,11 +44,16 @@ internal static class CubeBricksStart
 
     private static string Quote(string value)
     {
+        // Windows interprets runs of backslashes differently before a quote.
         var result = new StringBuilder("\"");
         int slashes = 0;
         foreach (char character in value)
         {
-            if (character == '\\') { slashes++; continue; }
+            if (character == '\\')
+            {
+                slashes++;
+                continue;
+            }
             if (character == '"')
             {
                 result.Append('\\', slashes * 2 + 1).Append('"');

@@ -4,9 +4,11 @@ import { faceAcceptsCameraInteraction } from '../src/render/face-culling.js';
 import { createUvPreviewElement } from '../src/texture/culled-face-preview.js';
 import { Cube } from '../src/model.js';
 
-const face = (uid, z, front = true) => ({ uid, faceName: 'north', cube: { faces: { north: {} } },
+const face = (uid, z, front = true) => ({
+  uid, faceName: 'north', cube: { faces: { north: {} } },
   quad: (front ? [[-1, 1], [1, 1], [-1, -1], [1, -1]]
-    : [[1, 1], [-1, 1], [1, -1], [-1, -1]]).map(([x, y]) => [x, y, z]) });
+    : [[1, 1], [-1, 1], [1, -1], [-1, -1]]).map(([x, y]) => [x, y, z])
+});
 const near = face('near-back', .5, false), far = face('far-front', 0);
 const probe = (projection, selected = false) => {
   const renderer = Object.create(WebGLSceneRenderer.prototype);
@@ -16,8 +18,10 @@ const probe = (projection, selected = false) => {
     lastViewProjection: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
     lastHelperPoints: new Map(), lastOwnerPoints: new Map(), lastLockedUids: new Set(), lastNodeByUid: new Map(),
     staticCache: { faces: selected ? [far] : [near, far], faceBvh: buildFaceBvh(selected ? [far] : [near, far]) },
-    selectedCache: { ownerPoints: new Map(selected ? [[near.uid, []]] : []), faces: selected ? [near] : [],
-      faceBvh: buildFaceBvh(selected ? [near] : []) },
+    selectedCache: {
+      ownerPoints: new Map(selected ? [[near.uid, []]] : []), faces: selected ? [near] : [],
+      faceBvh: buildFaceBvh(selected ? [near] : [])
+    },
     mirrorCache: { instances: [] }, paintExplodeOffsets: new Map()
   });
   return renderer;
@@ -25,7 +29,8 @@ const probe = (projection, selected = false) => {
 const project = { formatId: 'generic_model', cullFaces: false, getNode: () => ({ type: 'cube' }) };
 for (const projection of ['orthographic', 'perspective']) for (const selected of [false, true]) {
   const renderer = probe(projection, selected);
-  project.cullFaces = false; project.formatId = 'generic_model';
+  project.cullFaces = false;
+  project.formatId = 'generic_model';
   assert.equal(renderer.pickDetailed(project, 100, 100, true).uid, near.uid);
   project.cullFaces = true;
   assert.equal(renderer.pickDetailed(project, 100, 100, true).uid, far.uid,
@@ -33,7 +38,8 @@ for (const projection of ['orthographic', 'perspective']) for (const selected of
   assert.deepEqual(renderer.pickCoincident(project, 100, 100, true, true).map(hit => hit.uid), [far.uid],
     'paint and transparent-pixel sampling share the same culling policy');
   assert.deepEqual(renderer.selectInScreenRect(project, { x1: 0, y1: 0, x2: 200, y2: 200 }, true), [far.uid]);
-  project.cullFaces = false; project.formatId = 'java_block_item';
+  project.cullFaces = false;
+  project.formatId = 'java_block_item';
   assert.equal(renderer.pickDetailed(project, 100, 100, true).uid, far.uid, 'Java always enforces backface culling');
   project.formatId = 'generic_model';
   for (const culled of [null, { enabled: false }, { texture: null }]) {
@@ -43,8 +49,10 @@ for (const projection of ['orthographic', 'perspective']) for (const selected of
   }
   near.cube.faces.north = {};
   project.cullFaces = true;
-  renderer.mirrorCache.instances.push({ key: 'reflection', sourceUids: [near.uid], sourceUidSet: new Set([near.uid]),
-    matrix: [[1, 0, 0], [0, 1, 0], [0, 0, -1]], translation: [0, 0, 1], reflected: true });
+  renderer.mirrorCache.instances.push({
+    key: 'reflection', sourceUids: [near.uid], sourceUidSet: new Set([near.uid]),
+    matrix: [[1, 0, 0], [0, 1, 0], [0, 0, -1]], translation: [0, 0, 1], reflected: true
+  });
   const generated = renderer.pickDetailed(project, 100, 100, true, { includeGenerated: true });
   assert.equal(generated.generated, true, 'reflections use their corrected rendered winding');
   assert.equal(generated.uid, near.uid);
@@ -52,8 +60,12 @@ for (const projection of ['orthographic', 'perspective']) for (const selected of
 }
 assert.equal(faceAcceptsCameraInteraction(near, project, { projection: 'perspective', eye: [0, 0, -10] }), true);
 
-const cube = new Cube({ faces: { north: { texture: null, uv: [4, 8, 0, 0], rotation: 90 },
-  south: { texture: 'texture-a', uv: [0, 0, 4, 4] }, east: null, west: { enabled: false } } });
+const cube = new Cube({
+  faces: {
+    north: { texture: null, uv: [4, 8, 0, 0], rotation: 90 },
+    south: { texture: 'texture-a', uv: [0, 0, 4, 4] }, east: null, west: { enabled: false }
+  }
+});
 const original = structuredClone(cube.faces);
 for (const source of [cube, { type: 'bezier3d', toCubes: () => [cube] }]) {
   const preview = createUvPreviewElement(source);

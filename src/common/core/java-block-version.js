@@ -11,6 +11,8 @@ export function normalizeJavaBlockVersion(value) {
 // Blockbench stores this project property at the document root; meta's
 // format_version describes the bbmodel container, not the Minecraft version.
 export function blockbenchJavaVersion(value) {
-  return { [JavaBlockVersion.LEGACY]: '1.9.0', [JavaBlockVersion.SINGLE_AXIS]: '1.21.6',
-    [JavaBlockVersion.UNRESTRICTED]: '1.21.11' }[normalizeJavaBlockVersion(value)];
+  return {
+    [JavaBlockVersion.LEGACY]: '1.9.0', [JavaBlockVersion.SINGLE_AXIS]: '1.21.6',
+    [JavaBlockVersion.UNRESTRICTED]: '1.21.11'
+  }[normalizeJavaBlockVersion(value)];
 }

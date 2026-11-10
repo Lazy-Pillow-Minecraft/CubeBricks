@@ -37,15 +37,20 @@ function decodePng(source) {
     if (!width && type !== 'IHDR') throw new Error('PNG 缺少圖像標頭');
     if (type === 'IHDR') {
       if (width || data.length !== 13) throw new Error('PNG 圖像標頭損壞');
-      width = data.readUInt32BE(0); height = data.readUInt32BE(4);
-      bitDepth = data[8]; colorType = data[9];
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8];
+      colorType = data[9];
       if (data[10] !== 0 || data[11] !== 0 || data[12] !== 0) return null;
     } else if (type === 'IDAT') imageData.push(data);
     else if (type === 'PLTE') palette = data;
     else if (type === 'tRNS') transparency = data;
     else if (type !== 'IEND' && (type.charCodeAt(0) & 32) === 0) return null;
     cursor += 12 + length;
-    if (type === 'IEND') { ended = data.length === 0; break; }
+    if (type === 'IEND') {
+      ended = data.length === 0;
+      break;
+    }
   }
   if (!ended || !imageData.length) throw new Error('PNG 數據不完整');
   if (!width || !height || width * height > 67108864 || bitDepth !== 8) return null;
@@ -92,7 +97,10 @@ function decodePng(source) {
         rgba.fill(row[sourceOffset], targetOffset, targetOffset + 3);
         rgba[targetOffset + 3] = transparency && row[sourceOffset] === transparency.readUInt16BE(0) ? 0 : 255;
       }
-      else if (colorType === 4) { rgba.fill(row[sourceOffset], targetOffset, targetOffset + 3); rgba[targetOffset + 3] = row[sourceOffset + 1]; }
+      else if (colorType === 4) {
+        rgba.fill(row[sourceOffset], targetOffset, targetOffset + 3);
+        rgba[targetOffset + 3] = row[sourceOffset + 1];
+      }
       else {
         const color = row[sourceOffset] * 3;
         if (!palette || color + 2 >= palette.length) throw new Error('PNG 調色盤損壞');
@@ -106,8 +114,10 @@ function decodePng(source) {
 }
 function encodePng({ width, height, rgba }) {
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4);
-  header[8] = 8; header[9] = 6;
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
   const scanlines = Buffer.alloc((width * 4 + 1) * height);
   for (let y = 0; y < height; y++) rgba.copy(scanlines, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
   return `data:image/png;base64,${Buffer.concat([PNG_SIGNATURE, chunk('IHDR', header), chunk('IDAT', zlib.deflateSync(scanlines)), chunk('IEND', Buffer.alloc(0))]).toString('base64')}`;
@@ -125,15 +135,21 @@ let decodedBytes = 0;
 const decodedLimit = 32 * 1024 * 1024;
 function tryDecodePng(source) {
   const cached = decoded.get(source);
-  if (cached) { decoded.delete(source); decoded.set(source, cached); return cached.image; }
+  if (cached) {
+    decoded.delete(source);
+    decoded.set(source, cached);
+    return cached.image;
+  }
   try {
     const image = decodePng(source);
     const bytes = (image?.rgba.length || 0) + (source?.length || 0);
     if (image && bytes <= decodedLimit) {
-      decoded.set(source, { image, bytes }); decodedBytes += bytes;
+      decoded.set(source, { image, bytes });
+      decodedBytes += bytes;
       while (decoded.size > 64 || decodedBytes > decodedLimit) {
         const [old, entry] = decoded.entries().next().value;
-        decoded.delete(old); decodedBytes -= entry.bytes;
+        decoded.delete(old);
+        decodedBytes -= entry.bytes;
       }
     }
     return image;
@@ -186,14 +202,19 @@ function createTextureDelta(before, after) {
     for (let row = y; row < y + height; row++) {
       if (!changedRows[row]) continue;
       const start = row * stride + x * 4, end = start + width * 4;
-      if (oldImage.rgba.compare(newImage.rgba, start, end, start, end) !== 0) { different = true; break; }
+      if (oldImage.rgba.compare(newImage.rgba, start, end, start, end) !== 0) {
+        different = true;
+        break;
+      }
     }
     if (!different) continue;
     const original = tileBytes(oldImage, x, y, width, height);
     const result = tileBytes(newImage, x, y, width, height);
-    tiles.push({ x, y, width, height,
+    tiles.push({
+      x, y, width, height,
       before: zlib.deflateSync(original).toString('base64'),
-      after: zlib.deflateSync(result).toString('base64') });
+      after: zlib.deflateSync(result).toString('base64')
+    });
   }
   return tiles.length ? { kind: 'tiles', width: oldImage.width, height: oldImage.height, tiles } : { kind: 'unchanged' };
 }

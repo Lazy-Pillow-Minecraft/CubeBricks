@@ -53,7 +53,10 @@ function updateFaceBounds(quad, min, max) {
     if (point[axis] < min[axis]) min[axis] = point[axis];
     if (point[axis] > max[axis]) max[axis] = point[axis];
   }
-  for (let axis = 0; axis < 3; axis++) { min[axis] -= 1e-6; max[axis] += 1e-6; }
+  for (let axis = 0; axis < 3; axis++) {
+    min[axis] -= 1e-6;
+    max[axis] += 1e-6;
+  }
 }
 
 export function refitFaceBvh(root, changedUids) {

@@ -10,8 +10,10 @@ function textureLocation(filePath, namespace = 'minecraft') {
   const java = /(?:^|\/)assets\/([^/]+)\/textures\/(.+)\.png$/i.exec(normalized);
   const bedrock = /(?:^|\/)(textures\/.+)\.png$/i.exec(normalized);
   const valid = value => String(value).toLowerCase().replace(/[^a-z0-9_./-]/g, '_');
-  return { filePath, namespace: java ? java[1] : namespace,
-    resource: java ? `${java[1]}:${java[2]}` : bedrock ? bedrock[1] : `${valid(namespace || 'minecraft')}:${valid(path.basename(filePath, path.extname(filePath)))}` };
+  return {
+    filePath, namespace: java ? java[1] : namespace,
+    resource: java ? `${java[1]}:${java[2]}` : bedrock ? bedrock[1] : `${valid(namespace || 'minecraft')}:${valid(path.basename(filePath, path.extname(filePath)))}`
+  };
 }
 
 function resourceCandidates(resource, modelPath) {
@@ -47,20 +49,28 @@ async function readNativeModel(content, modelPath, { chooseGeometry, chooseBedro
     data = { ...data, 'minecraft:geometry': [data['minecraft:geometry'][index]] };
   }
   if ((data['minecraft:geometry'] || Object.keys(data).some(key => key.startsWith('geometry.') && data[key]?.bones)) && !reference?.formatId && chooseBedrockFormat) {
-    const formatId = await chooseBedrockFormat(); if (!formatId) return null;
+    const formatId = await chooseBedrockFormat();
+    if (!formatId) return null;
     reference = { ...reference, formatId };
   }
   const bb = (await codecs()).decodeNativeJson(data, path.basename(modelPath), textures, reference?.formatId);
   if (/\.java$/i.test(modelPath) && reference?.textures?.length) {
     bb.textures.forEach((texture, index) => {
-      const saved = reference.textures[index]; if (saved?.relative_path) { texture.relative_path = saved.relative_path; texture.path = ''; }
+      const saved = reference.textures[index];
+      if (saved?.relative_path) {
+        texture.relative_path = saved.relative_path;
+        texture.path = '';
+      }
     });
   }
   if (data['minecraft:geometry'] && (!bb.textures?.length || bb.textures.length === 1 && !bb.textures[0].resource && !bb.textures[0].path && !bb.textures[0].relative_path)) {
     const candidate = path.join(path.dirname(modelPath), path.basename(modelPath).replace(/(?:\.geo)?\.json$/i, '.png'));
     try {
       await fs.access(candidate);
-      if (bb.textures.length) { bb.textures[0].path = candidate; bb.textures[0].name = path.basename(candidate); }
+      if (bb.textures.length) {
+        bb.textures[0].path = candidate;
+        bb.textures[0].name = path.basename(candidate);
+      }
       else bb.textures = [{ uuid: crypto.randomUUID(), id: '0', path: candidate, name: path.basename(candidate) }];
     } catch { /* An external geometry may require manual material assignment. */ }
   }
@@ -68,9 +78,11 @@ async function readNativeModel(content, modelPath, { chooseGeometry, chooseBedro
 }
 
 async function writeTextureReferences(modelPath, formatId, textures, atomicWrite) {
-  const references = textures.map((texture, index) => ({ id: String(index), name: path.basename(texture.filePath),
+  const references = textures.map((texture, index) => ({
+    id: String(index), name: path.basename(texture.filePath),
     relative_path: path.relative(path.dirname(modelPath), texture.filePath).replaceAll('\\', '/'),
-    resource: texture.resource, material: `texture_${index}`, uv_width: texture.uvWidth, uv_height: texture.uvHeight }));
+    resource: texture.resource, material: `texture_${index}`, uv_width: texture.uvWidth, uv_height: texture.uvHeight
+  }));
   await atomicWrite(`${modelPath}.cbtextures.json`, JSON.stringify({ format: 'cubebricks-texture-references', version: 1, formatId, textures: references }, null, 2));
 }
 

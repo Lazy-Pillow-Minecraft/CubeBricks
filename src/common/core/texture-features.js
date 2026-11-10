@@ -41,18 +41,21 @@ export function normalizeTextureLayers(asset) {
     const properties = { ...layer };
     delete properties.data_url;
     const blendMode = layer.blendMode || layer.blend_mode || 'normal';
-    return { ...properties, uid: layer.uid || layer.uuid || `${textureId}_layer_${index}`,
+    return {
+      ...properties, uid: layer.uid || layer.uuid || `${textureId}_layer_${index}`,
       parentUid: layer.parentUid || null,
       source, visible: layer.visible !== false, opacity: Number.isFinite(Number(layer.opacity))
         ? Number(layer.opacity) : 100,
-      blendMode: LAYER_BLEND_MODES.some(([key]) => key === blendMode) ? blendMode : 'normal' };
+      blendMode: LAYER_BLEND_MODES.some(([key]) => key === blendMode) ? blendMode : 'normal'
+    };
   }).filter(Boolean);
   return layers.length ? layers : null;
 }
 
 export function imageCanvas(source, width = source.width || source.naturalWidth, height = source.height || source.naturalHeight) {
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, width); canvas.height = Math.max(1, height);
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
   canvas.getContext('2d').drawImage(source, 0, 0);
   return canvas;
 }
@@ -82,7 +85,7 @@ export function selectedLayerEntry(asset) {
 }
 
 export function activeLayer(asset) {
-  if(asset?.animation?.enabled)return framePaintLayer(asset);
+  if (asset?.animation?.enabled) return framePaintLayer(asset);
   const layers = asset?.layers || [];
   const selected = selectedLayerEntry(asset);
   if (selected?.type !== 'group' && selected) return selected;
@@ -160,8 +163,10 @@ export function insertLayerNearSelection(layers, entry, selectedUid) {
 
 export function createLayerGroup(layers, selectedUid, uid, name) {
   const selected = layers.find(layer => layer.uid === selectedUid);
-  const group = { uid, type: 'group', name, parentUid: selected?.type === 'group' ? selected.uid : selected?.parentUid || null,
-    visible: true, collapsed: false, opacity: 100, blendMode: 'normal' };
+  const group = {
+    uid, type: 'group', name, parentUid: selected?.type === 'group' ? selected.uid : selected?.parentUid || null,
+    visible: true, collapsed: false, opacity: 100, blendMode: 'normal'
+  };
   if (!selected) return [...layers, group];
   const next = layers.map(layer => layer.uid === selectedUid && layer.type !== 'group'
     ? { ...layer, parentUid: uid } : layer);
@@ -208,15 +213,17 @@ function layerTreeIndex(layers) {
     if (!childrenByParent.has(parentUid)) childrenByParent.set(parentUid, []);
     childrenByParent.get(parentUid).push(layer);
   }
-  const index = { groups, entries, childrenByParent,
-    structure: layers.map(layer => [layer, layer.uid, layer.parentUid, layer.type]) };
+  const index = {
+    groups, entries, childrenByParent,
+    structure: layers.map(layer => [layer, layer.uid, layer.parentUid, layer.type])
+  };
   layerTreeIndexCache.set(layers, index);
   return index;
 }
 
 export function compositeLayers(asset, liveCanvas = null, rootUid = null, region = null, includedUids = null, liveLayerUid = null, rasters = layerRasterCache) {
   if (!asset?.layers?.length) return liveCanvas;
-  const selected = liveLayerUid?asset.layers.find(layer=>layer.uid===liveLayerUid):activeLayer(asset);
+  const selected = liveLayerUid ? asset.layers.find(layer => layer.uid === liveLayerUid) : activeLayer(asset);
   // The editable texture canvas is reused when the active layer changes.
   // Caching that DOM canvas by reference makes the previous layer vanish as
   // soon as showEditableLayer clears it for the next layer.
@@ -228,7 +235,10 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
   if (!region && !liveCanvas) for (const layer of asset.layers) {
     if (layer.type === 'group') continue;
     const raster = rasters.get(layer.uid)?.canvas;
-    if (raster) { rasterWidth = Math.max(rasterWidth, raster.width); rasterHeight = Math.max(rasterHeight, raster.height); }
+    if (raster) {
+      rasterWidth = Math.max(rasterWidth, raster.width);
+      rasterHeight = Math.max(rasterHeight, raster.height);
+    }
   }
   canvas.width = region?.width || Math.max(1, liveCanvas?.width || rasterWidth || asset.uvWidth || 16);
   canvas.height = region?.height || Math.max(1, liveCanvas?.height || rasterHeight || asset.uvHeight || 16);
@@ -255,7 +265,8 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
   }
   const blankCanvas = () => {
     const result = document.createElement('canvas');
-    result.width = canvas.width; result.height = canvas.height;
+    result.width = canvas.width;
+    result.height = canvas.height;
     return result;
   };
   const localRaster = raster => {
@@ -287,7 +298,10 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
       else destination.drawImage(raster, 0, 0);
     };
     if (layer.maskLayerUid) {
-      if (sourceRegion) { raster = localRaster(raster); sourceRegion = null; }
+      if (sourceRegion) {
+        raster = localRaster(raster);
+        sourceRegion = null;
+      }
       const mask = maskRaster(layer.maskLayerUid, new Set([...trail, layer.uid]));
       if (mask) {
         const clipped = blankCanvas();
@@ -301,9 +315,13 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
       }
     }
     if (layer.blendMode === 'tone_map') {
-      if (sourceRegion) { raster = localRaster(raster); sourceRegion = null; }
+      if (sourceRegion) {
+        raster = localRaster(raster);
+        sourceRegion = null;
+      }
       const mapped = document.createElement('canvas');
-      mapped.width = canvas.width; mapped.height = canvas.height;
+      mapped.width = canvas.width;
+      mapped.height = canvas.height;
       const mappedContext = mapped.getContext('2d');
       mappedContext.drawImage(raster, 0, 0);
       const pixels = mappedContext.getImageData(0, 0, mapped.width, mapped.height);
@@ -329,7 +347,10 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
     if (sourceRegion && rasters.get(layer.uid)?.canvas === raster) {
       upper = layerRasterRegions.read(raster, sourceRegion);
     } else {
-      if (sourceRegion) { raster = localRaster(raster); sourceRegion = null; }
+      if (sourceRegion) {
+        raster = localRaster(raster);
+        sourceRegion = null;
+      }
       const source = blankCanvas();
       const sourceContext = source.getContext('2d');
       drawRaster(sourceContext);
@@ -371,31 +392,52 @@ export function layerEntryRaster(asset, uid) {
 
 const frameRasterCache = new WeakMap();
 export function flipbookFrame(asset, source, region = null, rasters = layerRasterCache) {
-  const {frame,next,mix}=textureFrameSample(asset);
+  const { frame, next, mix } = textureFrameSample(asset);
   if (!asset?.animation?.enabled || !frame || !source) return source;
   const useCache = rasters === layerRasterCache;
-  let cache=useCache ? frameRasterCache.get(asset) : null;
-  if(!cache||cache.source!==source||cache.savedSource!==asset.source||cache.frames!==asset.animation.frames||cache.layers!==asset.layers){
-    cache={source,savedSource:asset.source,frames:asset.animation.frames,layers:asset.layers,rasters:new Map()};
-    if (useCache) frameRasterCache.set(asset,cache);
+  let cache = useCache ? frameRasterCache.get(asset) : null;
+  if (!cache || cache.source !== source || cache.savedSource !== asset.source || cache.frames !== asset.animation.frames || cache.layers !== asset.layers) {
+    cache = { source, savedSource: asset.source, frames: asset.animation.frames, layers: asset.layers, rasters: new Map() };
+    if (useCache) frameRasterCache.set(asset, cache);
   }
-  if(region)for(const uid of cache.rasters.keys())if(uid!==frame.uid&&uid!==next?.uid)cache.rasters.delete(uid);
-  const rasterFor=entry=>{
-    let canvas=cache.rasters.get(entry.uid);if(canvas&&!region)return canvas;
-    const patch=canvas&&region?region:null,raster=compositeLayers(asset,null,null,patch,frameLayerUids(asset,entry),null,rasters);
-    if(!canvas){canvas=document.createElement('canvas');canvas.width=source.width;canvas.height=source.height;}
-    const ctx=canvas.getContext('2d');if(patch)ctx.clearRect(patch.x,patch.y,patch.width,patch.height);else ctx.clearRect(0,0,canvas.width,canvas.height);
-    if(raster)ctx.drawImage(raster,patch?.x||0,patch?.y||0);cache.rasters.set(entry.uid,canvas);
-    if(cache.rasters.size>4)for(const uid of cache.rasters.keys())if(uid!==frame.uid&&uid!==next?.uid){cache.rasters.delete(uid);break;}
+  if (region) for (const uid of cache.rasters.keys()) if (uid !== frame.uid && uid !== next?.uid) cache.rasters.delete(uid);
+  const rasterFor = entry => {
+    let canvas = cache.rasters.get(entry.uid);
+    if (canvas && !region) return canvas;
+    const patch = canvas && region ? region : null, raster = compositeLayers(asset, null, null, patch, frameLayerUids(asset, entry), null, rasters);
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.width = source.width;
+      canvas.height = source.height;
+    }
+    const ctx = canvas.getContext('2d');
+    if (patch) ctx.clearRect(patch.x, patch.y, patch.width, patch.height); else ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (raster) ctx.drawImage(raster, patch?.x || 0, patch?.y || 0);
+    cache.rasters.set(entry.uid, canvas);
+    if (cache.rasters.size > 4) for (const uid of cache.rasters.keys()) if (uid !== frame.uid && uid !== next?.uid) {
+      cache.rasters.delete(uid);
+      break;
+    }
     return canvas;
   };
-  const first=rasterFor(frame);if(!mix||!next||next===frame)return first;
-  const second=rasterFor(next);
-  const output=cache.mixed||=document.createElement('canvas');
-  if(output.width!==source.width||output.height!==source.height){output.width=source.width;output.height=source.height;}
-  const context=output.getContext('2d');context.clearRect(0,0,output.width,output.height);
-  context.globalAlpha=1-mix;context.drawImage(first,0,0);context.globalCompositeOperation='lighter';context.globalAlpha=mix;context.drawImage(second,0,0);
-  context.globalAlpha=1;context.globalCompositeOperation='source-over';return output;
+  const first = rasterFor(frame);
+  if (!mix || !next || next === frame) return first;
+  const second = rasterFor(next);
+  const output = cache.mixed ||= document.createElement('canvas');
+  if (output.width !== source.width || output.height !== source.height) {
+    output.width = source.width;
+    output.height = source.height;
+  }
+  const context = output.getContext('2d');
+  context.clearRect(0, 0, output.width, output.height);
+  context.globalAlpha = 1 - mix;
+  context.drawImage(first, 0, 0);
+  context.globalCompositeOperation = 'lighter';
+  context.globalAlpha = mix;
+  context.drawImage(second, 0, 0);
+  context.globalAlpha = 1;
+  context.globalCompositeOperation = 'source-over';
+  return output;
 }
 
 
@@ -411,7 +453,7 @@ export function tiledFaceReference(cube, faceName, asset, region = null) {
   const tile = faceTilingRegion(face, region);
   const mod = (v, n) => Math.round((((v % n) + n) % n) * 1e8) / 1e8;
   return `__tile__${JSON.stringify([face.texture, tile.width, tile.height,
-    mod(tile.offsetX, asset.width || asset.uvWidth || 16), mod(tile.offsetY, asset.height || asset.uvHeight || 16)])}`;
+  mod(tile.offsetX, asset.width || asset.uvWidth || 16), mod(tile.offsetY, asset.height || asset.uvHeight || 16)])}`;
 }
 
 export function tiledFaceRegions(cube, faceName) {
@@ -420,10 +462,12 @@ export function tiledFaceRegions(cube, faceName) {
   const regions = [];
   if (!width || !height) return regions;
   for (let y = 0; y < tile.height; y += 1024) for (let x = 0; x < tile.width; x += 1024) {
-    regions.push({ x: x / tile.width * width, y: y / tile.height * height,
+    regions.push({
+      x: x / tile.width * width, y: y / tile.height * height,
       width: Math.min(1024, tile.width - x) / tile.width * width,
       height: Math.min(1024, tile.height - y) / tile.height * height,
-      faceWidth: width, faceHeight: height });
+      faceWidth: width, faceHeight: height
+    });
   }
   return regions;
 }

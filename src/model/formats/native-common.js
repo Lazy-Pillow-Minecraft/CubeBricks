@@ -28,10 +28,15 @@ export function exportedHierarchy(bb, visit) {
     for (const item of items || []) {
       if (typeof item === 'string') {
         const element = elements.get(item);
-        if (element && !seen.has(item)) { seen.add(item); if (element.export !== false) visit(element, parents); }
+        if (element && !seen.has(item)) {
+          seen.add(item);
+          if (element.export !== false) visit(element, parents);
+        }
       } else if (item?.export !== false) {
         if (seen.has(item.uuid)) continue;
-        seen.add(item.uuid); visit(item, parents); walk(item.children, [...parents, item]);
+        seen.add(item.uuid);
+        visit(item, parents);
+        walk(item.children, [...parents, item]);
       }
     }
   };
@@ -50,21 +55,27 @@ export function flattenedCube(cube, parents) {
   const signs = cube.to.map((value, axis) => value < cube.from[axis] ? -1 : 1);
   const from = rescaleRotationPoint(cube.from.map((n, axis) => n - signs[axis] * inflate), vector(cube.origin), vector(cube.rotation), rescaleBaked);
   const to = rescaleRotationPoint(cube.to.map((n, axis) => n + signs[axis] * inflate), vector(cube.origin), vector(cube.rotation), rescaleBaked);
-  return { from: cleanVector(from.map((n, i) => n + offset[i])),
-    to: cleanVector(to.map((n, i) => n + offset[i])), pivot: cleanVector(pivot), rotation: cleanVector(eulerFromQuaternion(q)), rescaleBaked };
+  return {
+    from: cleanVector(from.map((n, i) => n + offset[i])),
+    to: cleanVector(to.map((n, i) => n + offset[i])), pivot: cleanVector(pivot), rotation: cleanVector(eulerFromQuaternion(q)), rescaleBaked
+  };
 }
 
 export function importedTexture(id, resource, references = [], resolution = [16, 16]) {
   const saved = references.find(entry => String(entry.id) === String(id) || entry.resource === resource);
-  return { uuid: newId(), id: String(id), name: saved?.name || (resource ? String(resource).split('/').at(-1) : 'texture') + '.png',
+  return {
+    uuid: newId(), id: String(id), name: saved?.name || (resource ? String(resource).split('/').at(-1) : 'texture') + '.png',
     namespace: String(resource).includes(':') ? String(resource).split(':')[0] : '',
     path: saved?.path || '', relative_path: saved?.relative_path || '', resource,
-    uv_width: saved?.uv_width || resolution[0], uv_height: saved?.uv_height || resolution[1], use_as_default: id === '0' };
+    uv_width: saved?.uv_width || resolution[0], uv_height: saved?.uv_height || resolution[1], use_as_default: id === '0'
+  };
 }
 
 export function bbDocument(name, format, resolution) {
-  return { meta: { format_version: '4.10', model_format: format }, name: fileStem(name),
-    resolution: { width: resolution[0], height: resolution[1] }, elements: [], outliner: [], textures: [] };
+  return {
+    meta: { format_version: '4.10', model_format: format }, name: fileStem(name),
+    resolution: { width: resolution[0], height: resolution[1] }, elements: [], outliner: [], textures: []
+  };
 }
 
 export function faceVisible(face) { return !isCubeFaceCulled(face); }

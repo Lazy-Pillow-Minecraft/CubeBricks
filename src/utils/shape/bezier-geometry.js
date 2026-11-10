@@ -10,9 +10,11 @@ export function bezierCubes(curve, { Cube, vectorLength, directionFrameEuler }) 
     const localThickness = curve.variant === 'envelope'
       ? Math.max(0, (Number(points[index].radius) + Number(points[index + 1].radius)))
       : thickness;
-    segments.push({ start, end, length, thickness: localThickness,
+    segments.push({
+      start, end, length, thickness: localThickness,
       roll: (points[index].roll + points[index + 1].roll) / 2,
-      direction: delta.map(value => value / length) });
+      direction: delta.map(value => value / length)
+    });
   }
   const jointExtension = (left, right) => {
     if (!left || !right) return 0;

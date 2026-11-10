@@ -22,7 +22,9 @@ export function sortFacesByDepth(faces, eye, forward, scratch = null) {
   entries.length = faces.length;
   for (let index = 0; index < faces.length; index++) {
     const entry = entries[index] ||= {};
-    entry.face = faces[index]; entry.index = index; entry.depth = faceCameraDepth(faces[index], eye, forward);
+    entry.face = faces[index];
+    entry.index = index;
+    entry.depth = faceCameraDepth(faces[index], eye, forward);
   }
   entries.sort((left, right) => right.depth - left.depth || left.index - right.index);
   return entries.map(entry => entry.face);

@@ -18,11 +18,15 @@ function animationFields(texture, frames, fps, interpolate, durations = []) {
 
 function writeTexture(texture, canvas, uvWidth, uvHeight) {
   texture.source = canvas.toDataURL('image/png');
-  texture.width = canvas.width; texture.height = canvas.height;
-  texture.uv_width = uvWidth; texture.uv_height = uvHeight;
+  texture.width = canvas.width;
+  texture.height = canvas.height;
+  texture.uv_width = uvWidth;
+  texture.uv_height = uvHeight;
   // A baked image must not retain a path to its unbaked source on disk.
-  texture.path = ''; delete texture.relative_path;
-  texture.mode = 'bitmap'; texture.saved = false;
+  texture.path = '';
+  delete texture.relative_path;
+  texture.mode = 'bitmap';
+  texture.saved = false;
 }
 
 function assignFace(entry, uv, index) {
@@ -44,7 +48,8 @@ export async function bakeBlockbenchTextures(bbmodel, assets, { progress = async
     await progress(.2 * (index + 1) / assets.length);
   }
   const faces = collectExportFaces(bbmodel, assets);
-  const planes = assets.map((asset, index) => texturePlane({ ...asset,
+  const planes = assets.map((asset, index) => texturePlane({
+    ...asset,
     uvWidth: asset.uvWidth || bbmodel.textures[index]?.uv_width || bbmodel.resolution?.width,
     uvHeight: asset.uvHeight || bbmodel.textures[index]?.uv_height || bbmodel.resolution?.height
   }, captures[index].first, faces.filter(face => face.index === index)));
@@ -77,9 +82,14 @@ export async function bakeBlockbenchTextures(bbmodel, assets, { progress = async
       for (const net of packed.entries) {
         const { x, y } = packed.placements.get(net);
         for (const element of net.elements) {
-          element.box_uv = true; element.uv_offset = [x, y]; element.mirror_uv = false;
+          element.box_uv = true;
+          element.uv_offset = [x, y];
+          element.mirror_uv = false;
           for (const face of Object.values(element.faces || {})) if (face && face.texture !== null && face.enabled !== false && face.texture !== undefined) {
-            face.texture = 0; delete face.uv; delete face.tiling; face.rotation = 0;
+            face.texture = 0;
+            delete face.uv;
+            delete face.tiling;
+            face.rotation = 0;
           }
         }
       }
@@ -113,7 +123,10 @@ export async function bakeBlockbenchTextures(bbmodel, assets, { progress = async
         pixelCoordinates ? plane.height : plane.asset.uvHeight || captures[index].first.height);
       for (const entry of plane.faces) {
         if (pixelCoordinates) assignFace(entry, [...entry.pixelUv], index);
-        else { entry.face.texture = index; delete entry.face.tiling; }
+        else {
+          entry.face.texture = index;
+          delete entry.face.tiling;
+        }
       }
       if (animated) animationFields(texture, count, Number(asset.animation.fps) || 20,
         single ? false : asset.animation.interpolate, single ? [] : asset.animation.frames.map(frame => frame.duration));
@@ -121,7 +134,8 @@ export async function bakeBlockbenchTextures(bbmodel, assets, { progress = async
     if (single) bbmodel.resolution = { width: bbmodel.textures[0].uv_width, height: bbmodel.textures[0].uv_height };
   }
   for (const entry of faces) if (entry.wasBox && !entry.element.box_uv && !entry.face.uv) {
-    entry.face.uv = [...entry.uv]; entry.face.rotation = 0;
+    entry.face.uv = [...entry.uv];
+    entry.face.rotation = 0;
   }
   await progress(1);
   return bbmodel;

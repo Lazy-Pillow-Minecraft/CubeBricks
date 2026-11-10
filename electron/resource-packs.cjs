@@ -31,8 +31,10 @@ function languageFromObject(source, fallbackName) {
   if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/i.test(code)) throw new Error('語言代碼不合法');
   if (!translations || typeof translations !== 'object' || Array.isArray(translations)) throw new Error('缺少 translations 對照表');
   if (Object.entries(translations).some(([key, value]) => key.length > 500 || typeof value !== 'string' || value.length > 2000)) throw new Error('翻譯內容不合法');
-  return { code, label: label.slice(0, 80), translations, name: fallbackName,
-    hotReload: source.hotReload !== false };
+  return {
+    code, label: label.slice(0, 80), translations, name: fallbackName,
+    hotReload: source.hotReload !== false
+  };
 }
 
 async function loadLanguage(file, name) {
@@ -76,8 +78,10 @@ async function loadFont(file, name, { includeSources = true } = {}) {
       : { file: entryName };
   });
   if (!fonts.length) throw new Error('包內沒有可用字體');
-  return { name: String(metadata.name || name.replace(/\.(zip|ttf|otf|woff2?)$/i, '')).slice(0, 80),
-    version: String(metadata.version || '1.0.0'), hotReload: metadata.hotReload !== false, fonts };
+  return {
+    name: String(metadata.name || name.replace(/\.(zip|ttf|otf|woff2?)$/i, '')).slice(0, 80),
+    version: String(metadata.version || '1.0.0'), hotReload: metadata.hotReload !== false, fonts
+  };
 }
 
 async function preferences(root) {
@@ -108,10 +112,12 @@ async function listResourcePacks(root) {
       try {
         const data = kind === 'shape' ? await loadShapePack(file, entry)
           : kind === 'language' ? await loadLanguage(file, filename) : await loadFont(file, filename, { includeSources: false });
-        packs.push({ kind, id: `${kind}:${filename}`, filename, name: data.name,
+        packs.push({
+          kind, id: `${kind}:${filename}`, filename, name: data.name,
           version: data.version || '1.0.0', hotReload: data.hotReload !== false,
           ...(kind === 'language' ? { code: data.code, label: data.label, translations: data.translations } : {}),
-          ...(kind === 'font' ? { fonts: data.fonts } : {}) });
+          ...(kind === 'font' ? { fonts: data.fonts } : {})
+        });
       } catch (error) { errors.push(`${filename}: ${error.message}`); }
     }
   }
@@ -173,5 +179,7 @@ async function savePackOrder(root, order) {
   await fs.rename(temp, file);
 }
 
-module.exports = { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder,
-  loadLanguage, loadFont, readFontPack };
+module.exports = {
+  listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder,
+  loadLanguage, loadFont, readFontPack
+};

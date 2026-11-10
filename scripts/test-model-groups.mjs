@@ -30,7 +30,8 @@ assert.deepEqual(bedrockProject.snap, { subdivisions: 16 });
 const bedrockRoundTrip = new CubeBricksProject(JSON.parse(bedrockProject.serialize()));
 assert.equal(bedrockRoundTrip.formatId, ModelFormatId.BEDROCK_ENTITY, 'project format survives a cbmodel round trip');
 assert.deepEqual(bedrockRoundTrip.snap, { subdivisions: 16 }, 'project standard snap survives a cbmodel round trip');
-const journalBase = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [new Cube({ uid: 'journal_cube_a', size: [2, 2, 2] }), new Cube({ uid: 'journal_cube_b' })],
+const journalBase = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [new Cube({ uid: 'journal_cube_a', size: [2, 2, 2] }), new Cube({ uid: 'journal_cube_b' })],
   groups: [new Group({ uid: 'journal_group', children: ['journal_cube_a', 'journal_cube_b'] })],
   outliner: ['journal_group']
 });
@@ -53,13 +54,36 @@ const journalRenamed = JSON.parse(journalRestored.serialize());
 journalRenamed.elements[0].name = 'Renamed';
 assert.equal(canReuseJournalOutliner(journalRestored, new CubeBricksProject(journalRenamed), ['journal_cube_a'], []), false,
   'name changes still rebuild the outliner');
-const referenceProject = new CubeBricksProject({ referenceImages: {
-  general: { name: 'layout.png', source: 'data:image/png;base64,AA==', naturalWidth: 320, naturalHeight: 180, offset: [14, -9], scale: .75 },
-  x: [
-    { name: 'side.png', source: 'data:image/png;base64,BB==', naturalWidth: 128, naturalHeight: 256, offset: [2, 3], scale: .0625 },
-    { name: 'detail.png', source: 'data:image/png;base64,CC==', naturalWidth: 64, naturalHeight: 64, offset: [-4, 8], scale: .125 }
-  ]
-} });
+const referenceProject = new CubeBricksProject({
+  referenceImages: {
+    general: {
+      name: 'layout.png',
+      source: 'data:image/png;base64,AA==',
+      naturalWidth: 320,
+      naturalHeight: 180,
+      offset: [14, -9],
+      scale: .75
+    },
+    x: [
+      {
+        name: 'side.png',
+        source: 'data:image/png;base64,BB==',
+        naturalWidth: 128,
+        naturalHeight: 256,
+        offset: [2, 3],
+        scale: .0625
+      },
+      {
+        name: 'detail.png',
+        source: 'data:image/png;base64,CC==',
+        naturalWidth: 64,
+        naturalHeight: 64,
+        offset: [-4, 8],
+        scale: .125
+      }
+    ]
+  }
+});
 const referenceRoundTrip = new CubeBricksProject(JSON.parse(referenceProject.serialize()));
 assert.deepEqual(referenceRoundTrip.referenceImages.general[0].offset, [14, -9],
   'legacy single general-view references migrate into a list and survive a cbmodel round trip');
@@ -88,18 +112,32 @@ const boundsPrism = new Shape({ parameters: { radius: 4.3, height: 8, sides: 6, 
 assert.equal(boundsPrism.toCubes().length, 3, 'overall-edge snapping retains opposite-edge merging for solid even prisms');
 assert.ok(Math.abs(boundsPrism.toCubes()[0].size[2] - 2 * 4.3 * Math.cos(Math.PI / 6)) < 1e-9,
   'shape generation preserves exact stored dimensions instead of forcibly normalizing them');
-const hollowPrism = new Shape({ parameters: { radius: 5, height: 8, sides: 8, cubeSize: 1,
-  innerRadiusEnabled: true, innerRadius: 2, snapMode: 'cube' } });
+const hollowPrism = new Shape({
+  parameters: {
+    radius: 5, height: 8, sides: 8, cubeSize: 1,
+    innerRadiusEnabled: true, innerRadius: 2, snapMode: 'cube'
+  }
+});
 assert.equal(hollowPrism.toCubes().length, 8, 'enabling an inner radius creates separate hollow wall cubes');
 assert.ok(hollowPrism.toCubes().every(cube => Math.hypot(cube.pivot[0], cube.pivot[2]) > 0),
   'hollow wall cubes stop before reaching the centre');
-const inwardDepthPrism = new Shape({ parameters: { radius: 5, height: 8, sides: 8, cubeSize: 1,
-  innerRadiusEnabled: true, innerRadiusMode: 'depth', innerRadius: 2, snapMode: 'bounds' } });
+const inwardDepthPrism = new Shape({
+  parameters: {
+    radius: 5, height: 8, sides: 8, cubeSize: 1,
+    innerRadiusEnabled: true, innerRadiusMode: 'depth', innerRadius: 2, snapMode: 'bounds'
+  }
+});
 const inwardDepthCubes = inwardDepthPrism.toCubes();
 assert.ok(inwardDepthCubes.every(cube => Math.abs(cube.size[2] - 2) < 1e-7),
   'inner-radius depth mode interprets the value as each cube inward extension distance');
 
-const dodecahedron = new Shape({ type: 'dodecahedron', name: 'dodecahedron', origin: [2, 3, 4], pivot: [1, 5, 2], parameters: { radius: 6, snapMode: 'edge' } });
+const dodecahedron = new Shape({
+  type: 'dodecahedron',
+  name: 'dodecahedron',
+  origin: [2, 3, 4],
+  pivot: [1, 5, 2],
+  parameters: { radius: 6, snapMode: 'edge' }
+});
 assert.equal(dodecahedron.shapeType, 'dodecahedron', 'regular dodecahedra keep their own registered Shape type');
 assert.equal(dodecahedron.toCubes().length, 60, 'a dodecahedron fits five cube plates across each of twelve faces');
 assert.ok(dodecahedron.toCubes().every(cube => cube.size.every(Number.isFinite) && cube.rotation.every(Number.isFinite)),
@@ -116,7 +154,11 @@ assert.equal(footballCubes.length, 120,
 const footballEdges = footballCubes.map(cube => cube.size[0]);
 assert.ok(Math.max(...footballEdges) - Math.min(...footballEdges) < 1e-7,
   'every generated football edge has the same fitted length');
-const shapeRoundTrip = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [dodecahedron, football], outliner: [dodecahedron.uid, football.uid] });
+const shapeRoundTrip = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY,
+  elements: [dodecahedron, football],
+  outliner: [dodecahedron.uid, football.uid]
+});
 const restoredShapes = new CubeBricksProject(JSON.parse(shapeRoundTrip.serialize()));
 assert.deepEqual(restoredShapes.getNode(dodecahedron.uid).pivot, [1, 5, 2], 'Shape pivots survive a cbmodel round trip');
 assert.equal(restoredShapes.getNode(football.uid).shapeType, 'truncated_icosahedron', 'football Shape type survives a cbmodel round trip');
@@ -142,10 +184,12 @@ const subdivisionRoundTrip = JSON.parse(subdivisionProject.serialize());
 assert.equal(subdivisionRoundTrip.elements.length, 1, 'temporary subdivision cubes never leak into cbmodel serialization');
 assert.ok(subdivisionRoundTrip.elements[0].subdivisionEdits['0'], 'Shape subdivision edits are stored on the procedural element');
 
-const planarCurve = new BezierElement({ nodes: [
-  { position: [-4, 9, 0], handleOut: [2, 7, 0] },
-  { position: [4, -3, 0], handleIn: [-2, -5, 0] }
-] }, 2);
+const planarCurve = new BezierElement({
+  nodes: [
+    { position: [-4, 9, 0], handleOut: [2, 7, 0] },
+    { position: [4, -3, 0], handleIn: [-2, -5, 0] }
+  ]
+}, 2);
 const defaultPlanarCurve = new BezierElement({}, 2);
 assert.deepEqual(defaultPlanarCurve.nodes.map(node => node.position), [[0, 0, 0], [0, 0, 8]],
   'a new 2D curve starts as an eight-pixel vertical stroke in its local plane');
@@ -156,10 +200,12 @@ assert.deepEqual(new BezierElement({}, 3).nodes.map(node => node.position), [[0,
 assert.ok(planarCurve.nodes.every(node => node.position[1] === 0 && node.handleIn[1] === 0 && node.handleOut[1] === 0),
   '2D bezier nodes and handles remain coplanar');
 assert.ok(planarCurve.toCubes().length > 0, '2D bezier fits cube columns along the sampled curve');
-const rotatedPlanarCurve = new BezierElement({ nodes: [
-  { position: [0, 0, 0], rotation: [25, 90, -35], handleOut: [3, 0, 0] },
-  { position: [6, 0, 0], handlesEnabled: false }
-] }, 2);
+const rotatedPlanarCurve = new BezierElement({
+  nodes: [
+    { position: [0, 0, 0], rotation: [25, 90, -35], handleOut: [3, 0, 0] },
+    { position: [6, 0, 0], handlesEnabled: false }
+  ]
+}, 2);
 assert.deepEqual(rotatedPlanarCurve.nodes[0].rotation, [0, 90, 0], '2D node rotation stays on the curve plane normal');
 assert.ok(rotatedPlanarCurve.sampleCurve().some(sample => Math.abs(sample.point[2]) > .01),
   'node rotation turns its local bezier handle and changes the fitted curve');
@@ -175,8 +221,10 @@ const envelopeCurve = new BezierElement({
   parameters: { radius: .5, segmentLength: 2, headAtStart: true, nestedBake: true }
 }, 3);
 const envelopeSamples = envelopeCurve.sampleCurve();
-const samePathStandard = new BezierElement({ nodes: envelopeCurve.nodes.map(node => structuredClone(node)),
-  parameters: { segmentLength: 2 } }, 3);
+const samePathStandard = new BezierElement({
+  nodes: envelopeCurve.nodes.map(node => structuredClone(node)),
+  parameters: { segmentLength: 2 }
+}, 3);
 assert.equal(envelopeCurve.toCubes().length, samePathStandard.toCubes().length,
   'changing node radii does not add cube subdivisions along the curve');
 assert.ok(Math.abs(envelopeSamples.find(sample => Math.abs(sample.point[0] - 4) < 1e-7).radius - .5) < 1e-7,
@@ -187,10 +235,11 @@ assert.ok(envelopeSamples.some(sample => sample.point[0] > 0 && sample.point[0] 
 assert.ok(envelopeSamples.some(sample => sample.point[0] > 4 && sample.point[0] < 8
   && sample.radius > .5 && sample.radius < 3),
   'cubes between default and custom-radius nodes receive intermediate radii');
-const oneSidedEnvelope = new BezierElement({ variant: 'envelope',
+const oneSidedEnvelope = new BezierElement({
+  variant: 'envelope',
   nodes: [{ position: [0, 0, 0], handlesEnabled: false, radius: 2 },
-    { position: [4, 0, 0], handlesEnabled: false },
-    { position: [8, 0, 0], handlesEnabled: false }],
+  { position: [4, 0, 0], handlesEnabled: false },
+  { position: [8, 0, 0], handlesEnabled: false }],
   parameters: { radius: .75, segmentLength: 2 }
 }, 2);
 assert.equal(oneSidedEnvelope.sampleCurve().at(-1).radius, .75,
@@ -202,7 +251,8 @@ assert.ok(Math.abs(oneSidedCubes.at(-1).size[0] - 1.5) < 1e-7,
   'adjacent unset nodes retain the overall radius across their whole span');
 assert.ok(envelopeCurve.toCubes()[0].size[0] < envelopeCurve.toCubes().at(-1).size[0],
   'fitted cube columns follow per-node radii');
-const envelopeRoundTrip = new CubeBricksProject(JSON.parse(new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [envelopeCurve], outliner: [envelopeCurve.uid]
+const envelopeRoundTrip = new CubeBricksProject(JSON.parse(new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [envelopeCurve], outliner: [envelopeCurve.uid]
 }).serialize())).getNode(envelopeCurve.uid);
 assert.equal(envelopeRoundTrip.variant, 'envelope', 'curve variant survives project serialization');
 assert.equal(envelopeRoundTrip.nodes[1].radius, null, 'unset node radius survives project serialization');
@@ -214,8 +264,10 @@ assert.equal(envelopeBake.group.children[0], envelopeBake.cubes[0].uid,
   'the head segment occupies the outermost group');
 assert.deepEqual(envelopeBake.nestedGroups[0].children[0], envelopeBake.cubes[1].uid,
   'subsequent segments descend into nested groups');
-const reversedEnvelope = new BezierElement({ ...JSON.parse(JSON.stringify(envelopeCurve)), uid: 'reverse_envelope',
-  parameters: { ...envelopeCurve.parameters, headAtStart: false } }, 3);
+const reversedEnvelope = new BezierElement({
+  ...JSON.parse(JSON.stringify(envelopeCurve)), uid: 'reverse_envelope',
+  parameters: { ...envelopeCurve.parameters, headAtStart: false }
+}, 3);
 const reversedProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [reversedEnvelope], outliner: [reversedEnvelope.uid] });
 const reversedBake = bakeProceduralShape(reversedProject, reversedEnvelope.uid);
 assert.equal(reversedBake.group.children[0], reversedBake.cubes.at(-1).uid,
@@ -238,8 +290,10 @@ const assertBakedEnvelopePivots = (project, baked, headAtStart) => {
 };
 assertBakedEnvelopePivots(envelopeProject, envelopeBake, true);
 assertBakedEnvelopePivots(reversedProject, reversedBake, false);
-const rotatedEnvelope = new BezierElement({ ...JSON.parse(JSON.stringify(envelopeCurve)),
-  uid: 'rotated_envelope', origin: [2, 0, 1], rotation: [0, 35, 0] }, 3);
+const rotatedEnvelope = new BezierElement({
+  ...JSON.parse(JSON.stringify(envelopeCurve)),
+  uid: 'rotated_envelope', origin: [2, 0, 1], rotation: [0, 35, 0]
+}, 3);
 const rotatedEnvelopeProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [rotatedEnvelope], outliner: [rotatedEnvelope.uid] });
 const rotatedEnvelopeBake = bakeProceduralShape(rotatedEnvelopeProject, rotatedEnvelope.uid);
 assertBakedEnvelopePivots(rotatedEnvelopeProject, rotatedEnvelopeBake, true);
@@ -271,12 +325,14 @@ for (const [index, sourceCube] of originalRotatedCubes.entries()) {
     assert.ok(samePoint(original, result), 'reorienting each envelope group preserves every cube vertex');
   }
 }
-const freeCurve = new BezierElement({ variant: 'envelope', origin: [2, 0, 1], rotation: [25, 35, 17],
+const freeCurve = new BezierElement({
+  variant: 'envelope', origin: [2, 0, 1], rotation: [25, 35, 17],
   nodes: [
     { position: [0, 0, 0], autoTangent: false, handleOut: [2, 3, 1], roll: 20 },
     { position: [6, 3, 0], autoTangent: false, handleIn: [-2, -1, 1], handleOut: [1, 1, 3], roll: 50 },
     { position: [8, 5, 4], handlesEnabled: false }
-  ], parameters: { radius: 1, segmentLength: 2, nestedBake: true } }, 3);
+  ], parameters: { radius: 1, segmentLength: 2, nestedBake: true }
+}, 3);
 const freeProject = new CubeBricksProject({ formatId: 'bedrock_entity', elements: [freeCurve], outliner: [freeCurve.uid] });
 const freeSources = freeCurve.toCubes();
 const freeBake = bakeProceduralShape(freeProject, freeCurve.uid);
@@ -295,17 +351,19 @@ for (const [index, cube] of freeBake.cubes.entries()) {
       'nested envelope orientation compensation preserves freely rotated 3D geometry');
   }
 }
-const singleSegmentEnvelope = new BezierElement({ variant: 'envelope', uid: 'single_segment_envelope',
+const singleSegmentEnvelope = new BezierElement({
+  variant: 'envelope', uid: 'single_segment_envelope',
   nodes: [{ position: [0, 0, 0], handlesEnabled: false }, { position: [0, 4, 0], handlesEnabled: false }],
   parameters: { radius: 1, segmentLength: 100, nestedBake: true, headAtStart: true }
 }, 3);
-const singleSegmentProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [singleSegmentEnvelope], outliner: [singleSegmentEnvelope.uid]
+const singleSegmentProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [singleSegmentEnvelope], outliner: [singleSegmentEnvelope.uid]
 });
 const singleSegmentBake = bakeProceduralShape(singleSegmentProject, singleSegmentEnvelope.uid);
 assert.equal(singleSegmentBake.cubes.length, 1, 'the single-segment case produces exactly one fitted cube');
 assertBakedEnvelopePivots(singleSegmentProject, singleSegmentBake, true);
 for (const [curve, headAtStart] of [[envelopeCurve, true], [reversedEnvelope, false],
-  [rotatedEnvelope, true], [singleSegmentEnvelope, true]]) {
+[rotatedEnvelope, true], [singleSegmentEnvelope, true]]) {
   const source = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [curve], outliner: [curve.uid] });
   const exported = exportBlockbench(source);
   const ordered = Array.from({ length: curve.toCubes().length }, (_, index) => `${curve.uid}_cube_${index + 1}`);
@@ -354,20 +412,25 @@ const bakedEnvelopeDepths = mirroredEnvelopeBake.elementUids.map(uid =>
 assert.ok(Math.max(...bakedEnvelopeDepths) > Math.min(...bakedEnvelopeDepths),
   'modifier baking retains nested envelope groups instead of flattening every cube');
 const childEnvelope = new BezierElement({ ...JSON.parse(JSON.stringify(envelopeCurve)), uid: 'child_envelope' }, 3);
-const envelopeMirrorParent = new Group({ uid: 'envelope_mirror_parent', name: 'envelope_parent',
-  children: [childEnvelope.uid] });
+const envelopeMirrorParent = new Group({
+  uid: 'envelope_mirror_parent', name: 'envelope_parent',
+  children: [childEnvelope.uid]
+});
 addModifier(envelopeMirrorParent, 'symmetry', {
   enabled: true, mode: 'axes', axes: { x: true, y: false, z: false }, wrapParent: false
 });
-const childEnvelopeExport = exportBlockbench(new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [childEnvelope], groups: [envelopeMirrorParent], outliner: [envelopeMirrorParent.uid]
+const childEnvelopeExport = exportBlockbench(new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [childEnvelope], groups: [envelopeMirrorParent], outliner: [envelopeMirrorParent.uid]
 }));
 assert.ok(childEnvelopeExport.outliner.every(branch =>
   branch.children[0]?.children?.[1]?.children?.length),
   'a parent-group symmetry modifier also preserves nested envelope descendants');
 assert.ok(spatialCurve.nodes.every(node => node.autoTangent), 'new bezier nodes start with pen-style automatic tangents');
-const autoMiddleCurve = new BezierElement({ nodes: [
-  { position: [0, 0, 0] }, { position: [4, 2, 0] }, { position: [8, 0, 0] }
-] }, 3);
+const autoMiddleCurve = new BezierElement({
+  nodes: [
+    { position: [0, 0, 0] }, { position: [4, 2, 0] }, { position: [8, 0, 0] }
+  ]
+}, 3);
 const autoMiddle = autoMiddleCurve.resolvedNodeState(1);
 assert.ok(autoMiddle.handleIn[0] < 0 && autoMiddle.handleOut[0] > 0,
   'an untouched middle node derives a smooth tangent from its neighbours');
@@ -378,22 +441,27 @@ for (const endpoint of [[0, 8, 0], [0, -8, 0], [.1, 8, 0]]) {
   const tangent = resolved.handleOut.map(value => value / Math.hypot(...resolved.handleOut));
   assert.ok(forward.every((value, axis) => Math.abs(value - tangent[axis]) < 1e-6),
     'vertical and nearly vertical restored node frames point along their tangent');
-  const restored = new CubeBricksProject(JSON.parse(new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [curve], outliner: [curve.uid]
+  const restored = new CubeBricksProject(JSON.parse(new CubeBricksProject({
+    formatId: ModelFormatId.BEDROCK_ENTITY, elements: [curve], outliner: [curve.uid]
   }).serialize())).getNode(curve.uid);
   assert.deepEqual(restored.resolvedNodeState(0).handleOut, resolved.handleOut,
     'undo-style serialization preserves automatic curve handles');
 }
-const rolledCurve = new BezierElement({ nodes: [
-  { position: [0, 0, 0], roll: 0 }, { position: [8, 0, 0], roll: 90 }
-], parameters: { segmentLength: 2 } }, 3);
+const rolledCurve = new BezierElement({
+  nodes: [
+    { position: [0, 0, 0], roll: 0 }, { position: [8, 0, 0], roll: 90 }
+  ], parameters: { segmentLength: 2 }
+}, 3);
 const rolledCubes = rolledCurve.toCubes();
 assert.notDeepEqual(rolledCubes[0].rotation.map(value => Math.round(value * 1000)),
   rolledCubes.at(-1).rotation.map(value => Math.round(value * 1000)),
   '3D node roll interpolates into the fitted cube-column orientation');
-const centredCurve = new BezierElement({ nodes: [
-  { position: [-5, 0, 0], handlesEnabled: false },
-  { position: [5, 0, 0], handlesEnabled: false }
-], parameters: { segmentationMode: 'distance', segmentLength: 3 } }, 3);
+const centredCurve = new BezierElement({
+  nodes: [
+    { position: [-5, 0, 0], handlesEnabled: false },
+    { position: [5, 0, 0], handlesEnabled: false }
+  ], parameters: { segmentationMode: 'distance', segmentLength: 3 }
+}, 3);
 const centredSamples = centredCurve.sampleCurve();
 for (let index = 0; index < centredSamples.length; index++) {
   assert.ok(Math.abs(centredSamples[index].point[0] + centredSamples.at(-1 - index).point[0]) < 1e-7,
@@ -402,11 +470,13 @@ for (let index = 0; index < centredSamples.length; index++) {
 const centredCubes = centredCurve.toCubes();
 assert.ok(centredCubes.some(cube => Math.abs(cube.pivot[0]) < 1e-7),
   'a symmetric curve receives a cube centred on its midpoint');
-const cornerCurve = new BezierElement({ nodes: [
-  { position: [0, 0, 0], handlesEnabled: false },
-  { position: [4, 0, 0], handlesEnabled: false },
-  { position: [4, 0, 4], handlesEnabled: false }
-], parameters: { thickness: 2, segmentationMode: 'distance', segmentLength: 4 } }, 3);
+const cornerCurve = new BezierElement({
+  nodes: [
+    { position: [0, 0, 0], handlesEnabled: false },
+    { position: [4, 0, 0], handlesEnabled: false },
+    { position: [4, 0, 4], handlesEnabled: false }
+  ], parameters: { thickness: 2, segmentationMode: 'distance', segmentLength: 4 }
+}, 3);
 const cornerCubes = cornerCurve.toCubes();
 assert.ok(cornerCubes.some(cube => cube.size[2] > 4),
   'cube columns extend around a bend to close the outside miter gap');
@@ -461,7 +531,12 @@ const mirrorGroup = new Group({
   uid: 'mirror-group', name: 'wing', children: [mirrorCube.uid],
   mirror: { enabled: true, mode: 'axes', axes: { x: true, y: false, z: true }, wrapParent: false }
 });
-const mirrorProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [mirrorCube], groups: [mirrorGroup], outliner: [mirrorGroup.uid] });
+const mirrorProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY,
+  elements: [mirrorCube],
+  groups: [mirrorGroup],
+  outliner: [mirrorGroup.uid]
+});
 const projectMirrorGroup = mirrorProject.getNode(mirrorGroup.uid);
 const symmetryModifier = getModifier(projectMirrorGroup, 'symmetry');
 assert.ok(symmetryModifier, 'legacy group mirror data migrates into a symmetry modifier');
@@ -507,7 +582,8 @@ const uvMirrorGroup = new Group({
   uid: 'uv-mirror-group', name: 'uv_pair', children: [uvMirrorCube.uid],
   mirror: { enabled: true, mode: 'axes', axes: { x: true, y: false, z: false }, wrapParent: false }
 });
-const uvMirrorExport = exportBlockbench(new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [uvMirrorCube], groups: [uvMirrorGroup], outliner: [uvMirrorGroup.uid]
+const uvMirrorExport = exportBlockbench(new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [uvMirrorCube], groups: [uvMirrorGroup], outliner: [uvMirrorGroup.uid]
 }));
 const reflectedUvGroup = uvMirrorExport.outliner.find(group => group.name === 'left_uv_pair');
 const reflectedUvCube = uvMirrorExport.elements.find(element => element.uuid === reflectedUvGroup.children[0]);
@@ -521,13 +597,26 @@ assert.equal(mirrorRoundTrip.elements.filter(element => element.mirrorController
 assert.ok(getModifier(mirrorRoundTrip.getNode(projectMirrorGroup.uid), 'symmetry'),
   'symmetry modifiers survive cbmodel round trips');
 
-const legacyControllerProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [
+const legacyControllerProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [
     { type: 'cube', uid: 'legacy-part', name: 'legacy_part' },
-    { type: 'node', uid: 'legacy-mirror-controller', name: 'mirror_axis', position: [3, 4, 5], rotation: [10, 20, 30], mirrorControllerFor: 'legacy-mirror-group' }
+    {
+      type: 'node',
+      uid: 'legacy-mirror-controller',
+      name: 'mirror_axis',
+      position: [3, 4, 5],
+      rotation: [10, 20, 30],
+      mirrorControllerFor: 'legacy-mirror-group'
+    }
   ],
   groups: [{
     uid: 'legacy-mirror-group', name: 'legacy_group', children: ['legacy-part', 'legacy-mirror-controller'],
-    mirror: { enabled: true, mode: 'axes', axes: { x: true, y: false, z: false }, controllerUid: 'legacy-mirror-controller' }
+    mirror: {
+      enabled: true,
+      mode: 'axes',
+      axes: { x: true, y: false, z: false },
+      controllerUid: 'legacy-mirror-controller'
+    }
   }],
   outliner: ['legacy-mirror-group']
 });
@@ -572,7 +661,8 @@ addModifier(parentStackGroup, 'symmetry', {
   enabled: true, axes: { x: false, y: false, z: true }, wrapParent: false,
   anchor: { position: [0, 0, 0] }
 });
-const nestedStackProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [childStackCube], groups: [parentStackGroup], outliner: [parentStackGroup.uid]
+const nestedStackProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [childStackCube], groups: [parentStackGroup], outliner: [parentStackGroup.uid]
 });
 assert.equal(buildModifierRenderInstances(nestedStackProject).length, 3,
   'group modifiers consume the already evaluated child modifier results in the viewport');
@@ -600,22 +690,30 @@ assert.ok(buildModifierRenderInstances(orderedStackProject).some(instance =>
   && Math.abs(instance.translation[0] - 20) < 1e-9),
   'later modifiers transform the geometry produced by earlier modifiers in stack order');
 
-const mixedStackCube = new Cube({ uid: 'mixed-stack-cube', position: [2, 0, 0],
-  size: [1, 1, 1], pivot: [0, 0, 0] });
-addModifier(mixedStackCube, 'symmetry', { enabled: true,
+const mixedStackCube = new Cube({
+  uid: 'mixed-stack-cube', position: [2, 0, 0],
+  size: [1, 1, 1], pivot: [0, 0, 0]
+});
+addModifier(mixedStackCube, 'symmetry', {
+  enabled: true,
   axes: { x: true, y: false, z: false }, wrapParent: false,
-  anchor: { position: [0, 0, 0] } });
+  anchor: { position: [0, 0, 0] }
+});
 addModifier(mixedStackCube, 'element_copy').nodes = [
   { uid: 'mixed-copy-node', position: [10, 0, 0], rotation: [0, 0, 0] }
 ];
 const mixedStackProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [mixedStackCube], outliner: [mixedStackCube.uid] });
 assert.deepEqual(exportBlockbench(mixedStackProject).elements.map(element => element.from[0]).sort((a, b) => a - b),
   [-3, 2, 7, 12], 'a copy modifier consumes both source and reflected cube in export');
-const mixedPivotCube = new Cube({ uid: 'mixed-pivot-cube', position: [2, 0, 0],
-  size: [1, 1, 1], pivot: [2, 0, 0] });
-addModifier(mixedPivotCube, 'symmetry', { enabled: true,
+const mixedPivotCube = new Cube({
+  uid: 'mixed-pivot-cube', position: [2, 0, 0],
+  size: [1, 1, 1], pivot: [2, 0, 0]
+});
+addModifier(mixedPivotCube, 'symmetry', {
+  enabled: true,
   axes: { x: true, y: false, z: false }, wrapParent: false,
-  anchor: { position: [0, 0, 0] } });
+  anchor: { position: [0, 0, 0] }
+});
 addModifier(mixedPivotCube, 'element_copy').nodes = [
   { uid: 'mixed-pivot-copy-node', position: [10, 0, 0], rotation: [0, 0, 0] }
 ];
@@ -627,14 +725,18 @@ const mixedPivotOwner = mixedPivotBake.getNode(mixedPivotCube.uid);
 bakeModifier(mixedPivotBake, mixedPivotOwner, mixedPivotOwner.modifiers[0].uid);
 assert.deepEqual(exportBlockbench(mixedPivotBake).elements.map(element => element.from[0]).sort((a, b) => a - b),
   [-3, 2, 5, 10], 'manual baking keeps the remaining copy modifier aligned across the entire result');
-const copyThenMirrorCube = new Cube({ uid: 'copy-then-mirror', position: [2, 0, 0],
-  size: [1, 1, 1], pivot: [2, 0, 0] });
+const copyThenMirrorCube = new Cube({
+  uid: 'copy-then-mirror', position: [2, 0, 0],
+  size: [1, 1, 1], pivot: [2, 0, 0]
+});
 addModifier(copyThenMirrorCube, 'element_copy').nodes = [
   { uid: 'copy-then-mirror-node', position: [10, 0, 0], rotation: [0, 0, 0] }
 ];
-addModifier(copyThenMirrorCube, 'symmetry', { enabled: true,
+addModifier(copyThenMirrorCube, 'symmetry', {
+  enabled: true,
   axes: { x: true, y: false, z: false }, wrapParent: false,
-  anchor: { position: [0, 0, 0] } });
+  anchor: { position: [0, 0, 0] }
+});
 const copyThenMirrorProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [copyThenMirrorCube], outliner: [copyThenMirrorCube.uid] });
 assert.deepEqual(exportBlockbench(copyThenMirrorProject).elements.map(element => element.from[0]).sort((a, b) => a - b),
   [-11, -3, 2, 10], 'a later mirror consumes both source and copied cube in export');
@@ -670,8 +772,10 @@ assert.ok(bakeResult.elementUids.every(uid =>
   bakeProject.getNode(uid).modifiers.map(modifier => modifier.uid).join() === preservedSecondModifier.uid),
   'baking one modifier preserves the other modifier on every resulting cube');
 
-const copySource = new Cube({ uid: 'copy-source', name: 'copy_source', position: [0, 0, 0],
-  size: [2, 1, 1], pivot: [0, 0, 0] });
+const copySource = new Cube({
+  uid: 'copy-source', name: 'copy_source', position: [0, 0, 0],
+  size: [2, 1, 1], pivot: [0, 0, 0]
+});
 const copyModifier = addModifier(copySource, 'element_copy');
 copyModifier.nodes = [
   { uid: 'copy-a', position: [5, 0, 0], rotation: [0, 0, 0] },
@@ -703,8 +807,10 @@ const groupCopyOwner = new Group({ uid: 'group-copy-owner', name: 'owner', child
 const groupCopyModifier = addModifier(groupCopyOwner, 'element_copy');
 assert.ok(groupCopyModifier, 'groups can attach the copy modifier');
 groupCopyModifier.nodes = [{ uid: 'group-copy-node', position: [8, 0, 0], rotation: [0, 0, 0] }];
-const groupCopyProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [groupCopyCube],
-  groups: [groupCopyOwner, groupCopyChild], outliner: [groupCopyOwner.uid] });
+const groupCopyProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [groupCopyCube],
+  groups: [groupCopyOwner, groupCopyChild], outliner: [groupCopyOwner.uid]
+});
 assert.equal(buildModifierRenderInstances(groupCopyProject).length, 1,
   'one group copy node previews the complete child geometry');
 const groupCopyExport = exportBlockbench(groupCopyProject);
@@ -722,11 +828,18 @@ const stackedGroupCube = new Cube({ uid: 'stacked-group-cube', position: [0, 0, 
 const stackedGroup = new Group({ uid: 'stacked-group', children: [stackedGroupCube.uid] });
 addModifier(stackedGroup, 'element_copy').nodes = [{ uid: 'group-first', position: [5, 0, 0], rotation: [0, 0, 0] }];
 addModifier(stackedGroup, 'element_copy').nodes = [{ uid: 'group-second', position: [10, 0, 0], rotation: [0, 0, 0] }];
-const stackedGroupProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [stackedGroupCube], groups: [stackedGroup], outliner: [stackedGroup.uid] });
+const stackedGroupProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY,
+  elements: [stackedGroupCube],
+  groups: [stackedGroup],
+  outliner: [stackedGroup.uid]
+});
 assert.deepEqual(exportBlockbench(stackedGroupProject).elements.map(element => element.from[0]).sort((a, b) => a - b),
   [0, 5, 10, 15], 'stacked group copies keep their composed positions during export');
-const appliedCopyCube = new Cube({ uid: 'applied-copy', position: [0, 0, 0], size: [2, 1, 1],
-  pivot: [0, 0, 0], rotation: [0, 90, 0], appliedTransform: { rotation: [0, 90, 0] } });
+const appliedCopyCube = new Cube({
+  uid: 'applied-copy', position: [0, 0, 0], size: [2, 1, 1],
+  pivot: [0, 0, 0], rotation: [0, 90, 0], appliedTransform: { rotation: [0, 90, 0] }
+});
 const appliedCopyModifier = addModifier(appliedCopyCube, 'element_copy');
 const appliedCopyProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [appliedCopyCube], outliner: [appliedCopyCube.uid] });
 const appliedCopyExport = exportBlockbench(appliedCopyProject);
@@ -817,7 +930,8 @@ assert.equal(project.getNode('cube-a').mirrorUv, true);
 assert.deepEqual(project.getGroupChain('cube-a').map(group => group.uid), ['root-group', 'child-group']);
 assert.deepEqual(project.getDescendantElementUids('root-group'), ['cube-a']);
 
-const indexedProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [new Cube({ uid: 'indexed-a' }), new Cube({ uid: 'indexed-b' })],
+const indexedProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [new Cube({ uid: 'indexed-a' }), new Cube({ uid: 'indexed-b' })],
   groups: [new Group({ uid: 'indexed-group', children: ['indexed-a'] })],
   outliner: ['indexed-group', 'indexed-b']
 });
@@ -853,8 +967,26 @@ assert.equal(uvFlagRoundTrip.getNode('uv-flags').uvNormalized, false, 'UV normal
 
 const importedFlags = importBlockbench({
   elements: [
-    { type: 'cube', uuid: 'flags-off', from: [0, 0, 0], to: [1, 1, 1], autouv: 0, export: 0, locked: 1, visibility: 0 },
-    { type: 'cube', uuid: 'flags-on', from: [1, 0, 0], to: [2, 1, 1], autouv: 2, export: 1, locked: 0, visibility: 1 }
+    {
+      type: 'cube',
+      uuid: 'flags-off',
+      from: [0, 0, 0],
+      to: [1, 1, 1],
+      autouv: 0,
+      export: 0,
+      locked: 1,
+      visibility: 0
+    },
+    {
+      type: 'cube',
+      uuid: 'flags-on',
+      from: [1, 0, 0],
+      to: [2, 1, 1],
+      autouv: 2,
+      export: 1,
+      locked: 0,
+      visibility: 1
+    }
   ],
   outliner: [{ uuid: 'flags-group', autouv: 0, export: 0, locked: 1, visibility: 0, children: ['flags-off', 'flags-on'] }]
 });
@@ -905,9 +1037,14 @@ assert.ok(transformed.every((value, axis) => Math.abs(value - [0, 1, -1][axis]) 
 const rotatePoint = (point, pivot, rotation) => {
   let [x, y, z] = point.map((value, axis) => value - pivot[axis]);
   const [rx, ry, rz] = rotation.map(value => value * Math.PI / 180);
-  let c = Math.cos(rx), s = Math.sin(rx); [y, z] = [y * c - z * s, y * s + z * c];
-  c = Math.cos(ry); s = Math.sin(ry); [x, z] = [x * c + z * s, -x * s + z * c];
-  c = Math.cos(rz); s = Math.sin(rz); [x, y] = [x * c - y * s, x * s + y * c];
+  let c = Math.cos(rx), s = Math.sin(rx);
+  [y, z] = [y * c - z * s, y * s + z * c];
+  c = Math.cos(ry);
+  s = Math.sin(ry);
+  [x, z] = [x * c + z * s, -x * s + z * c];
+  c = Math.cos(rz);
+  s = Math.sin(rz);
+  [x, y] = [x * c - y * s, x * s + y * c];
   return [x, y, z].map((value, axis) => value + pivot[axis]);
 };
 const almostEqual = (left, right) => left.every((value, axis) => Math.abs(value - right[axis]) < 1e-9);
@@ -919,7 +1056,13 @@ setPivotPreservingGeometry(pivotProject, pivotCube, [6, -2, 8]);
 const cubeCornerAfter = rotatePoint(pivotCube.position, pivotCube.pivot, pivotCube.rotation);
 assert.ok(almostEqual(cubeCornerBefore, cubeCornerAfter), 'moving a cube pivot must not move its geometry');
 
-const pivotShape = new Shape({ type: 'dodecahedron', origin: [3, -2, 5], pivot: [4, 1, 2], rotation: [17, 31, -9], parameters: { radius: 4 } });
+const pivotShape = new Shape({
+  type: 'dodecahedron',
+  origin: [3, -2, 5],
+  pivot: [4, 1, 2],
+  rotation: [17, 31, -9],
+  parameters: { radius: 4 }
+});
 const pivotShapeProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [pivotShape], outliner: [pivotShape.uid] });
 const shapePointBefore = rotatePoint(pivotShape.toBaseCubes()[0].position.map((value, axis) => value + pivotShape.origin[axis]), pivotShape.pivot, pivotShape.rotation);
 setPivotPreservingGeometry(pivotShapeProject, pivotShape, [-2, 6, 3]);
@@ -928,7 +1071,12 @@ assert.ok(almostEqual(shapePointBefore, shapePointAfter), 'moving a Shape pivot 
 
 const childCube = new Cube({ position: [2, 0, 0], size: [2, 2, 2], pivot: [3, 1, 1] });
 const pivotGroup = new Group({ pivot: [0, 0, 0], rotation: [0, 55, 0], children: [childCube.uid] });
-const groupProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [childCube], groups: [pivotGroup], outliner: [pivotGroup.uid] });
+const groupProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY,
+  elements: [childCube],
+  groups: [pivotGroup],
+  outliner: [pivotGroup.uid]
+});
 const projectChild = groupProject.getNode(childCube.uid), projectGroup = groupProject.getNode(pivotGroup.uid);
 const groupCornerBefore = applyGroupTransforms(projectChild.position, [projectGroup]);
 setPivotPreservingGeometry(groupProject, projectGroup, [4, 1, -3]);
@@ -980,13 +1128,15 @@ assert.equal(chooseKnifeCutAxis([0, 0, 0], [1, 1, 0], 'north', knifeCube), null,
 
 const uvOnlyImport = importBlockbench({
   name: 'uv_only', textures: [{ id: 'skin', uuid: 'texture_skin' }],
-  elements: [{ type: 'cube', uuid: 'uv_cube', from: [0, 0, 0], to: [4, 4, 4],
+  elements: [{
+    type: 'cube', uuid: 'uv_cube', from: [0, 0, 0], to: [4, 4, 4],
     box_uv: false, faces: {
       north: { uv: [0, 0, 4, 4] },
       south: { uv: [0, 0, 4, 4], texture: null },
       east: { uv: [0, 0, 4, 4], texture: '#other' },
       west: { uv: [0, 0, 4, 4], enabled: false }
-    } }], outliner: ['uv_cube']
+    }
+  }], outliner: ['uv_cube']
 });
 assert.equal(uvOnlyImport.elements[0].faces.north.texture, '#skin', 'UV-only imported faces use the first texture');
 assert.equal(uvOnlyImport.elements[0].faces.south.texture, null, 'explicitly culled faces stay culled');
@@ -1001,11 +1151,18 @@ assert.equal(Object.keys(boxUvOnlyImport.elements[0].faces).length, 6, 'box-UV-o
 assert.ok(Object.values(boxUvOnlyImport.elements[0].faces).every(face => face.texture === '#skin'));
 
 for (const shapeType of ['polygon_prism', 'dodecahedron', 'truncated_icosahedron']) {
-  const source = new Shape({ shapeType, name: `${shapeType}_source`, origin: [10, 5, -2], pivot: [2, 3, 4], rotation: [8, 35, -5],
-    subdivisionEdits: { 0: { faces: { north: { uv: [1, 2, 5, 6], texture: '#skin' } } } } });
+  const source = new Shape({
+    shapeType, name: `${shapeType}_source`, origin: [10, 5, -2], pivot: [2, 3, 4], rotation: [8, 35, -5],
+    subdivisionEdits: { 0: { faces: { north: { uv: [1, 2, 5, 6], texture: '#skin' } } } }
+  });
   const sibling = new Cube({ name: 'sibling' });
   const parent = new Group({ name: 'parent', children: [sibling.uid, source.uid], pivot: [3, 0, 0], rotation: [0, 20, 0] });
-  const project = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [source, sibling], groups: [parent], outliner: [parent.uid] });
+  const project = new CubeBricksProject({
+    formatId: ModelFormatId.BEDROCK_ENTITY,
+    elements: [source, sibling],
+    groups: [parent],
+    outliner: [parent.uid]
+  });
   const original = project.getNode(source.uid);
   addModifier(original, 'symmetry', { enabled: false });
   // The evaluated cubes already include their format adapter. Reapplying
@@ -1034,19 +1191,28 @@ for (const shapeType of ['polygon_prism', 'dodecahedron', 'truncated_icosahedron
   assert.equal(project.getNode(source.uid), null, 'the procedural source is replaced');
 }
 
-const nestedBakeCube = new Cube({ uid: 'nested-bake-cube', name: 'part',
-  position: [3, 2, 1], size: [2, 3, 4], pivot: [1, 0, 0], rotation: [0, 0, 15], inflate: .25 });
-const nestedBakeInner = new Group({ uid: 'nested-bake-inner', name: 'finger', pivot: [2, 1, 0],
-  rotation: [25, 0, 0], inflate: .5, children: [nestedBakeCube.uid] });
-const nestedBakeOuter = new Group({ uid: 'nested-bake-outer', name: 'hand', pivot: [1, 0, 2],
-  rotation: [0, 20, 0], inflate: .75, children: [nestedBakeInner.uid] });
-const nestedBakeOwner = new Group({ uid: 'nested-bake-owner', name: 'arm',
-  inflate: 1, children: [nestedBakeOuter.uid] });
+const nestedBakeCube = new Cube({
+  uid: 'nested-bake-cube', name: 'part',
+  position: [3, 2, 1], size: [2, 3, 4], pivot: [1, 0, 0], rotation: [0, 0, 15], inflate: .25
+});
+const nestedBakeInner = new Group({
+  uid: 'nested-bake-inner', name: 'finger', pivot: [2, 1, 0],
+  rotation: [25, 0, 0], inflate: .5, children: [nestedBakeCube.uid]
+});
+const nestedBakeOuter = new Group({
+  uid: 'nested-bake-outer', name: 'hand', pivot: [1, 0, 2],
+  rotation: [0, 20, 0], inflate: .75, children: [nestedBakeInner.uid]
+});
+const nestedBakeOwner = new Group({
+  uid: 'nested-bake-owner', name: 'arm',
+  inflate: 1, children: [nestedBakeOuter.uid]
+});
 const nestedBakeModifier = addModifier(nestedBakeOwner, 'symmetry', {
   enabled: true, mode: 'axes', axes: { x: true, y: false, z: false },
   anchor: { position: [0, 0, 0] }, wrapParent: false
 });
-const nestedBakeProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [nestedBakeCube], groups: [nestedBakeOwner, nestedBakeOuter, nestedBakeInner],
+const nestedBakeProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [nestedBakeCube], groups: [nestedBakeOwner, nestedBakeOuter, nestedBakeInner],
   outliner: [nestedBakeOwner.uid]
 });
 const nestedBakeExport = exportBlockbench(nestedBakeProject);
@@ -1093,7 +1259,7 @@ for (const branch of nestedBakeExport.outliner) {
     ? [-point[0], point[1], point[2]] : point);
   assert.ok(expected.every(point => exportedCorners.some(corner =>
     corner.every((value, axis) => Math.abs(value - point[axis]) < 1e-4))),
-  'direct bbmodel export preserves nested rotated cube geometry on both sides');
+    'direct bbmodel export preserves nested rotated cube geometry on both sides');
 }
 const nestedBakeResult = bakeModifier(nestedBakeProject, nestedBakeOwner, nestedBakeModifier.uid);
 assert.equal(nestedBakeResult.groupUids.length, 7, 'baking retains two copies of both nested group levels');
@@ -1119,7 +1285,7 @@ for (const [branchName, expectedCenter] of [
   const actualCorners = worldCorners(cube, nestedBakeProject.getGroupChain(cube.uid));
   assert.ok(expectedCorners.every(expected => actualCorners.some(actual =>
     actual.every((value, axis) => Math.abs(value - expected[axis]) < 1e-4))),
-  'baking retains all nested cube corners after reflection, not just their centre');
+    'baking retains all nested cube corners after reflection, not just their centre');
 }
 const radialBakeCube = new Cube({ uid: 'radial-bake-cube' });
 const radialBakeChild = new Group({ uid: 'radial-bake-child', name: 'coil', children: [radialBakeCube.uid] });
@@ -1127,7 +1293,8 @@ const radialBakeOwner = new Group({ uid: 'radial-bake-owner', name: 'wheel', chi
 const radialBakeModifier = addModifier(radialBakeOwner, 'symmetry', {
   enabled: true, mode: 'radial', copies: 3
 });
-const radialBakeProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [radialBakeCube], groups: [radialBakeOwner, radialBakeChild], outliner: [radialBakeOwner.uid]
+const radialBakeProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [radialBakeCube], groups: [radialBakeOwner, radialBakeChild], outliner: [radialBakeOwner.uid]
 });
 const radialBakeResult = bakeModifier(radialBakeProject, radialBakeOwner, radialBakeModifier.uid);
 const radialBakedRoot = radialBakeProject.getNode(radialBakeResult.rootUid);
@@ -1135,21 +1302,26 @@ assert.deepEqual(radialBakedRoot.children.map(uid => radialBakeProject.getNode(u
   ['wheel_1', 'wheel_2', 'wheel_3']);
 assert.deepEqual(radialBakedRoot.children.map(uid =>
   radialBakeProject.getNode(radialBakeProject.getNode(uid).children[0]).name),
-['coil_1', 'coil_2', 'coil_3'], 'radial baking applies the numbered suffix to retained child groups');
+  ['coil_1', 'coil_2', 'coil_3'], 'radial baking applies the numbered suffix to retained child groups');
 
 const centeredPart = new Cube({ uid: 'centered-part', name: 'centered', position: [-1, 0, 0], size: [2, 2, 2] });
 const offsetPart = new Cube({ uid: 'offset-part', name: 'offset', position: [2, 0, 0], size: [1, 1, 1] });
 const tipPart = new Cube({ uid: 'tip-part', name: 'tip_cube', position: [4, 0, 0], size: [1, 1, 1] });
-const centeredGroup = new Group({ uid: 'centered-group', name: 'core', rotation: [10, 0, 0],
-  children: [centeredPart.uid, offsetPart.uid] });
+const centeredGroup = new Group({
+  uid: 'centered-group', name: 'core', rotation: [10, 0, 0],
+  children: [centeredPart.uid, offsetPart.uid]
+});
 const tipGroup = new Group({ uid: 'tip-group', name: 'tip', children: [tipPart.uid] });
-const partialOwner = new Group({ uid: 'partial-owner', name: 'balanced', rotation: [20, 0, 0],
-  children: [centeredGroup.uid, tipGroup.uid] });
+const partialOwner = new Group({
+  uid: 'partial-owner', name: 'balanced', rotation: [20, 0, 0],
+  children: [centeredGroup.uid, tipGroup.uid]
+});
 const partialModifier = addModifier(partialOwner, 'symmetry', {
   enabled: true, mode: 'axes', axes: { x: true, y: false, z: false },
   ignoreDuplicateCubes: true, wrapParent: false
 });
-const partialProject = new CubeBricksProject({ formatId: ModelFormatId.BEDROCK_ENTITY, elements: [centeredPart, offsetPart, tipPart], groups: [partialOwner, centeredGroup, tipGroup],
+const partialProject = new CubeBricksProject({
+  formatId: ModelFormatId.BEDROCK_ENTITY, elements: [centeredPart, offsetPart, tipPart], groups: [partialOwner, centeredGroup, tipGroup],
   outliner: [partialOwner.uid]
 });
 const partialExport = exportBlockbench(partialProject);

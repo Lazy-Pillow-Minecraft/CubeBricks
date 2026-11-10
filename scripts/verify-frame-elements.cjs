@@ -1,17 +1,21 @@
-const {app,BrowserWindow}=require('electron');
-const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const profile=fs.mkdtempSync(path.join(os.tmpdir(),'cubebricks-frame-elements-'));
-app.setPath('userData',profile);app.setPath('sessionData',profile);
-const errors=[];
-app.on('web-contents-created',(_event,contents)=>contents.on('console-message',details=>{if(details.level==='error')errors.push(details.message);}));
-app.on('browser-window-created',(_event,win)=>{win.hide();win.webContents.setBackgroundThrottling(false);});
+const { app, BrowserWindow } = require('electron');
+const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-frame-elements-'));
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+const errors = [];
+app.on('web-contents-created', (_event, contents) => contents.on('console-message', details => { if (details.level === 'error') errors.push(details.message); }));
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.webContents.setBackgroundThrottling(false);
+});
 require('../electron/main.cjs');
-app.whenReady().then(async()=>{
+app.whenReady().then(async () => {
   let report;
-  try{
-    const contents=BrowserWindow.getAllWindows()[0].webContents;
-    if(contents.isLoading())await new Promise(resolve=>contents.once('did-finish-load',resolve));
-    report=await contents.executeJavaScript(`(async()=>{
+  try {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    if (contents.isLoading()) await new Promise(resolve => contents.once('did-finish-load', resolve));
+    report = await contents.executeJavaScript(`(async()=>{
       const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       const check=(value,message)=>{if(!value)throw Error(message);};
       const until=async(test,message)=>{for(let i=0;i<180;i++){if(await test())return;await wait(40);}throw Error(message);};
@@ -80,8 +84,13 @@ app.whenReady().then(async()=>{
       check(port&&Math.abs(port.getBoundingClientRect().x+port.getBoundingClientRect().width/2-(viewport.right-2))<2,'overflowing layer port snaps to the list right border');
       return {ok:true,checks:['additional animation property','right-hand frame list','create, delete, copy, paste, cut and duplicate','independent frame UUIDs','no frame pixel implementation','Y-only drag ordering','undo and redo','deep-layer horizontal scrolling','pinned layer controls']};
     })()`);
-    if(errors.length)throw Error(errors.join('\n'));
-    const capture=await contents.capturePage();fs.mkdirSync(path.resolve('build/performance'),{recursive:true});fs.writeFileSync(path.resolve('build/performance/frame-elements.png'),capture.toPNG());
-  }catch(error){report={ok:false,error:error.stack,errors};}
-  fs.mkdirSync(path.resolve('build/performance'),{recursive:true});fs.writeFileSync(path.resolve('build/performance/frame-elements.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));app.exit(report.ok?0:1);
+    if (errors.length) throw Error(errors.join('\n'));
+    const capture = await contents.capturePage();
+    fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+    fs.writeFileSync(path.resolve('build/performance/frame-elements.png'), capture.toPNG());
+  } catch (error) { report = { ok: false, error: error.stack, errors }; }
+  fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+  fs.writeFileSync(path.resolve('build/performance/frame-elements.json'), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

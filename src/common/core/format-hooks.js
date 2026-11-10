@@ -16,7 +16,8 @@ export function bindFormatContext(node, context) { if (node) contexts.set(node, 
 export function boundFormatContext(node) {
   // UV Preview uses prototype-based visual copies of procedural objects.
   for (let source = node; source; source = Object.getPrototypeOf(source)) {
-    const context = contexts.get(source); if (context) return context;
+    const context = contexts.get(source);
+    if (context) return context;
   }
   return null;
 }

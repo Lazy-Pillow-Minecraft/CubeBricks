@@ -18,12 +18,14 @@ async function application(root, options = {}) {
       commandLine: { appendSwitch() {} }, once() {}, on() {},
       whenReady: () => ({ then() {} })
     },
-    BrowserWindow: { getAllWindows: () => [], fromWebContents: () => ({
-      approveProjectClose() { closed = true; },
-      isDestroyed: () => false,
-      isFocused: () => options.focused !== false,
-      getContentBounds: () => options.contentBounds || { x: 100, y: 200 }
-    }) },
+    BrowserWindow: {
+      getAllWindows: () => [], fromWebContents: () => ({
+        approveProjectClose() { closed = true; },
+        isDestroyed: () => false,
+        isFocused: () => options.focused !== false,
+        getContentBounds: () => options.contentBounds || { x: 100, y: 200 }
+      })
+    },
     screen: { getCursorScreenPoint: () => options.cursorPoint || { x: 125, y: 235 } },
     dialog: {
       showOpenDialog: async () => ({ canceled: !options.openFile, filePaths: options.openFile ? [options.openFile] : [] }),
@@ -113,26 +115,37 @@ test('a supplied cbmodel path opens directly and its home cover stays outside th
 });
 
 test('saved retention survives reopen and rejects a stale automatic-discard request', async () => {
-  const root=await fs.mkdtemp(path.join(__dirname,'..','.retention-ipc-test-'));
-  const apps=[];
-  const id='project_12345678-1234-1234-1234-123456789066';
-  const content=x=>JSON.stringify({name:'saved',elements:[{uid:'cube_a',type:'cube',position:[x,0,0]}],groups:[],textures:[],outliner:['cube_a']});
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.retention-ipc-test-'));
+  const apps = [];
+  const id = 'project_12345678-1234-1234-1234-123456789066';
+  const content = x => JSON.stringify({
+    name: 'saved',
+    elements: [{ uid: 'cube_a', type: 'cube', position: [x, 0, 0] }],
+    groups: [],
+    textures: [],
+    outliner: ['cube_a']
+  });
   try {
-    const first=await application(root);apps.push(first);
-    await first.call('project:journal-init',{journalId:id,content:content(0)});
-    await first.call('project:journal-save',{journalId:id});
-    await first.call('project:journal-commit',{journalId:id,content:content(3),operationId:'core.element.move'});
-    assert.equal(await first.call('project:journal-discard',{journalId:id}),false);
-    await first.call('app:confirm-close',{retained:[],discarded:[id]});
-    const second=await application(root);apps.push(second);
-    const restored=await second.call('project:journal-recover',{journalId:id});
-    assert.equal(restored.persistent,true);
-    assert.equal(JSON.parse(restored.content).elements[0].position[0],3);
-    const temporary='project_12345678-1234-1234-1234-123456789067';
-    await second.call('project:journal-init',{journalId:temporary,content:content(0)});
-    assert.equal(await second.call('project:journal-discard',{journalId:temporary}),true,
+    const first = await application(root);
+    apps.push(first);
+    await first.call('project:journal-init', { journalId: id, content: content(0) });
+    await first.call('project:journal-save', { journalId: id });
+    await first.call('project:journal-commit', { journalId: id, content: content(3), operationId: 'core.element.move' });
+    assert.equal(await first.call('project:journal-discard', { journalId: id }), false);
+    await first.call('app:confirm-close', { retained: [], discarded: [id] });
+    const second = await application(root);
+    apps.push(second);
+    const restored = await second.call('project:journal-recover', { journalId: id });
+    assert.equal(restored.persistent, true);
+    assert.equal(JSON.parse(restored.content).elements[0].position[0], 3);
+    const temporary = 'project_12345678-1234-1234-1234-123456789067';
+    await second.call('project:journal-init', { journalId: temporary, content: content(0) });
+    assert.equal(await second.call('project:journal-discard', { journalId: temporary }), true,
       'explicitly discarded never-saved projects can still be removed');
-  }finally{await Promise.all(apps.map(app=>app.release()));await fs.rm(root,{recursive:true,force:true});}
+  } finally {
+    await Promise.all(apps.map(app => app.release()));
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test('cbmodel export offers full history or current-state snapshot without truncating the working journal', async () => {
@@ -140,8 +153,10 @@ test('cbmodel export offers full history or current-state snapshot without trunc
   const apps = [];
   const { ProjectJournal } = require('../electron/project-journal.cjs');
   const id = 'project_12345678-1234-1234-1234-123456789099';
-  const content = x => JSON.stringify({ name: 'export-choice', elements: [{ uid: 'cube_a', type: 'cube', position: [x, 0, 0] }],
-    groups: [], textures: [], outliner: ['cube_a'] });
+  const content = x => JSON.stringify({
+    name: 'export-choice', elements: [{ uid: 'cube_a', type: 'cube', position: [x, 0, 0] }],
+    groups: [], textures: [], outliner: ['cube_a']
+  });
   try {
     const messages = [];
     const snapshotPath = path.join(root, 'snapshot.cbmodel');
@@ -151,23 +166,29 @@ test('cbmodel export offers full history or current-state snapshot without trunc
     apps.push(app);
     await app.call('project:journal-init', { journalId: id, content: content(0) });
     await app.call('project:journal-commit', { journalId: id, content: content(1), operationId: 'core.element.move' });
-    assert.equal((await app.call('project:export', { journalId: id, filePath: snapshotPath,
-      includeHistory: false })).requiresContent, true,
-    'cbmodel export waits for the selected format before requesting model content');
+    assert.equal((await app.call('project:export', {
+      journalId: id, filePath: snapshotPath,
+      includeHistory: false
+    })).requiresContent, true,
+      'cbmodel export waits for the selected format before requesting model content');
     await assert.rejects(fs.stat(snapshotPath), { code: 'ENOENT' });
     const bbPath = path.join(root, 'deferred.bbmodel');
     assert.equal((await app.call('project:export', { journalId: id, filePath: bbPath })).requiresContent, true);
     await assert.rejects(fs.stat(bbPath), { code: 'ENOENT' });
-    await app.call('project:export', { journalId: id, name: 'export-choice', cbmodelContent: content(1),
-      bbmodelContent: '{}', includeHistory: false });
+    await app.call('project:export', {
+      journalId: id, name: 'export-choice', cbmodelContent: content(1),
+      bbmodelContent: '{}', includeHistory: false
+    });
     const snapshot = await ProjectJournal.fromArchive(await fs.readFile(snapshotPath), path.join(root, 'snapshot'));
     assert.equal(snapshot.state.activeHead, 1);
     assert.equal(JSON.parse(await snapshot.content()).elements[0].position[0], 1);
     assert.equal((await app.call('project:journal-state', { journalId: id })).activeHead, 2);
     options.saveFile = fullPath;
     options.keepHistory = true;
-    await app.call('project:export', { journalId: id, name: 'export-choice', cbmodelContent: content(1),
-      bbmodelContent: '{}', includeHistory: true });
+    await app.call('project:export', {
+      journalId: id, name: 'export-choice', cbmodelContent: content(1),
+      bbmodelContent: '{}', includeHistory: true
+    });
     const full = await ProjectJournal.fromArchive(await fs.readFile(fullPath), path.join(root, 'full'));
     assert.equal(full.state.activeHead, 2);
     assert.equal(JSON.parse((await full.navigate('undo')).content).elements[0].position[0], 0);
@@ -182,8 +203,10 @@ test('opening the saved file still reuses a working copy after its saved ancesto
   const root = await fs.mkdtemp(path.join(__dirname, '..', '.journal-capped-open-test-'));
   const apps = [];
   const { ProjectJournal } = require('../electron/project-journal.cjs');
-  const content = x => JSON.stringify({ name: 'capped-open', elements: [{ uid: 'cube_a', type: 'cube', position: [x, 0, 0] }],
-    groups: [], textures: [], outliner: ['cube_a'] });
+  const content = x => JSON.stringify({
+    name: 'capped-open', elements: [{ uid: 'cube_a', type: 'cube', position: [x, 0, 0] }],
+    groups: [], textures: [], outliner: ['cube_a']
+  });
   try {
     const archive = path.join(root, 'model.cbmodel');
     const source = await new ProjectJournal(path.join(root, 'source')).initialize(content(0));
@@ -191,8 +214,10 @@ test('opening the saved file still reuses a working copy after its saved ancesto
     const app = await application(root, { openFile: archive });
     apps.push(app);
     const opened = await app.call('project:open');
-    await app.call('project:journal-commit', { journalId: opened.journalId, content: content(1),
-      operationId: 'core.element.move', historyLimit: 0 });
+    await app.call('project:journal-commit', {
+      journalId: opened.journalId, content: content(1),
+      operationId: 'core.element.move', historyLimit: 0
+    });
     const reopened = await app.call('project:open');
     assert.equal(reopened.journalId, opened.journalId);
     assert.equal(JSON.parse(reopened.content).elements[0].position[0], 1);
@@ -209,8 +234,12 @@ test('IPC cannot recover or delete a journal already open in another application
   try {
     const first = await application(root), second = await application(root);
     apps.push(first, second);
-    await first.call('project:journal-init', { journalId: id, content: JSON.stringify({ name: 'test',
-      elements: [{ uid: 'cube_a', type: 'cube', position: [0, 0, 0] }], groups: [], textures: [], outliner: ['cube_a'] }) });
+    await first.call('project:journal-init', {
+      journalId: id, content: JSON.stringify({
+        name: 'test',
+        elements: [{ uid: 'cube_a', type: 'cube', position: [0, 0, 0] }], groups: [], textures: [], outliner: ['cube_a']
+      })
+    });
     await assert.rejects(second.call('project:journal-recover', { journalId: id }), { code: 'JOURNAL_BUSY' });
     await assert.rejects(second.call('app:confirm-close', { discarded: [id], retained: [] }), /其他視窗/);
     assert.equal((await second.call('project:journal-list-recoverable')).length, 0);
@@ -285,8 +314,10 @@ test('workspace home uses its index until the user explicitly refreshes it', asy
     assert.equal((await app.call('project:list-workspace')).length, 0);
     const folder = path.join(root, 'profile', 'working-projects', 'projects', id);
     const { ProjectJournal } = require('../electron/project-journal.cjs');
-    await new ProjectJournal(folder).initialize(JSON.stringify({ name: 'external',
-      elements: [], groups: [], textures: [], outliner: [] }));
+    await new ProjectJournal(folder).initialize(JSON.stringify({
+      name: 'external',
+      elements: [], groups: [], textures: [], outliner: []
+    }));
     assert.equal((await app.call('project:list-workspace')).length, 0,
       'normal home navigation should not rescan every project folder');
     const refreshed = await app.call('project:list-workspace', { refresh: true });
@@ -316,8 +347,10 @@ test('project UUID survives archive reopening and the same file reuses its worki
     assert.equal((await first.call('project:open')).journalId, opened.journalId);
     const changed = JSON.parse(opened.content);
     changed.elements[0].position[0] = 9;
-    await first.call('project:journal-commit', { journalId: opened.journalId,
-      content: JSON.stringify(changed), operationId: 'core.element.move' });
+    await first.call('project:journal-commit', {
+      journalId: opened.journalId,
+      content: JSON.stringify(changed), operationId: 'core.element.move'
+    });
     const resumed = await first.call('project:open');
     assert.equal(resumed.journalId, opened.journalId);
     assert.equal(resumed.dirty, true);
@@ -340,9 +373,11 @@ test('opening a newer archive preserves the previously saved working folder', as
   try {
     const { ProjectJournal } = require('../electron/project-journal.cjs');
     const archive = path.join(root, 'model.cbmodel');
-    const content = position => JSON.stringify({ name: 'model',
+    const content = position => JSON.stringify({
+      name: 'model',
       elements: [{ uid: 'cube_a', type: 'cube', position: [position, 0, 0] }],
-      groups: [], textures: [], outliner: ['cube_a'] });
+      groups: [], textures: [], outliner: ['cube_a']
+    });
     const source = await new ProjectJournal(path.join(root, 'source')).initialize(content(0));
     await source.archive(archive);
     const first = await application(root, { openFile: archive });
@@ -412,9 +447,11 @@ test('explicit overwrite replaces an idle divergent copy without touching the so
   try {
     const { ProjectJournal } = require('../electron/project-journal.cjs');
     const archive = path.join(root, 'model.cbmodel');
-    const content = (uuid, position) => JSON.stringify({ projectUuid: uuid, name: 'model',
+    const content = (uuid, position) => JSON.stringify({
+      projectUuid: uuid, name: 'model',
       elements: [{ uid: 'cube_a', type: 'cube', position: [position, 0, 0] }],
-      groups: [], textures: [], outliner: ['cube_a'] });
+      groups: [], textures: [], outliner: ['cube_a']
+    });
     const firstSource = await new ProjectJournal(path.join(root, 'first')).initialize(content(null, 0));
     await firstSource.archive(archive);
     const first = await application(root, { openFile: archive });
@@ -443,9 +480,11 @@ test('a shared transaction outside the active branch is still a divergence', asy
   try {
     const { ProjectJournal } = require('../electron/project-journal.cjs');
     const archive = path.join(root, 'model.cbmodel');
-    const content = position => JSON.stringify({ name: 'model',
+    const content = position => JSON.stringify({
+      name: 'model',
       elements: [{ uid: 'cube_a', type: 'cube', position: [position, 0, 0] }],
-      groups: [], textures: [], outliner: ['cube_a'] });
+      groups: [], textures: [], outliner: ['cube_a']
+    });
     const source = await new ProjectJournal(path.join(root, 'source')).initialize(content(0));
     await source.commit(content(1), 'core.element.move');
     await source.commit(content(2), 'core.element.move');
@@ -455,8 +494,10 @@ test('a shared transaction outside the active branch is still a divergence', asy
     apps.push(app);
     const opened = await app.call('project:open');
     await app.call('project:journal-checkout', { journalId: opened.journalId, direction: 'undo' });
-    await app.call('project:journal-commit', { journalId: opened.journalId,
-      content: content(40), operationId: 'core.element.move' });
+    await app.call('project:journal-commit', {
+      journalId: opened.journalId,
+      content: content(40), operationId: 'core.element.move'
+    });
     assert.equal(await app.call('project:open'), null);
     assert.equal(messages.length, 1);
   } finally {

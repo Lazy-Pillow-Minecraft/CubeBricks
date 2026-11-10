@@ -30,17 +30,22 @@ assert.equal(state.transformSpace, 'self', 'new sessions default to local transf
 {
   const project = new CubeBricksProject({ elements: [], groups: [], outliner: [] });
   const creationState = { mode: 'edit', project, selectedUid: null, selectedUids: new Set(), collapsedGroups: new Set() };
-  const commands = createElementCommands({ state: creationState,
+  const commands = createElementCommands({
+    state: creationState,
     selectedNodeUids: () => [...creationState.selectedUids], topLevelSelectedUids: () => [...creationState.selectedUids],
     snapshot() {}, markDirty() {}, renderAll() {}, toast() {}, captureOutlinerRowPositions() { return []; },
-    animateOutlinerReorder() {}, inspectorController: {} });
+    animateOutlinerReorder() {}, inspectorController: {}
+  });
   commands.addCube();
   const groundCube = project.getNode(creationState.selectedUid);
   assert.deepEqual([groundCube.position, groundCube.size, groundCube.pivot],
     [[-1, 0, -1], [2, 2, 2], [0, 0, 0]], 'new cubes sit on the ground with a ground-level pivot');
   const parent = new Group({ pivot: [9, 5, -2], children: [] });
-  project.groups.push(parent); project.outliner.push(parent.uid); project.invalidateHierarchyIndex();
-  creationState.selectedUid = parent.uid; creationState.selectedUids = new Set([parent.uid]);
+  project.groups.push(parent);
+  project.outliner.push(parent.uid);
+  project.invalidateHierarchyIndex();
+  creationState.selectedUid = parent.uid;
+  creationState.selectedUids = new Set([parent.uid]);
   commands.addCube();
   const child = project.getNode(creationState.selectedUid);
   assert.deepEqual([child.position, child.pivot], [[8, 5, -3], [9, 5, -2]],
@@ -85,21 +90,29 @@ assert.equal(activeLayer({ layers: nested, activeLayerUid: 'group' }).uid, 'top'
   'painting from a selected group targets its highest child layer');
 assert.deepEqual(layerDisplayRows(nested.map(layer => layer.uid === 'group' ? { ...layer, collapsed: true } : layer))
   .map(row => row.layer.uid), ['group', 'bottom'], 'collapsed layer groups hide descendants without deleting them');
-assert.deepEqual(normalizeTextureLayers({ uuid: 'texture', layers: [
-  { uid: 'leaf', parentUid: 'folder', source: 'data:image/png;base64,a' },
-  { uid: 'folder', type: 'group', name: 'group_1', collapsed: true }
-] }).map(layer => [layer.uid, layer.parentUid || null, layer.type || 'layer']),
-[['leaf', 'folder', 'layer'], ['folder', null, 'group']], 'project import retains layer hierarchy');
+assert.deepEqual(normalizeTextureLayers({
+  uuid: 'texture', layers: [
+    { uid: 'leaf', parentUid: 'folder', source: 'data:image/png;base64,a' },
+    { uid: 'folder', type: 'group', name: 'group_1', collapsed: true }
+  ]
+}).map(layer => [layer.uid, layer.parentUid || null, layer.type || 'layer']),
+  [['leaf', 'folder', 'layer'], ['folder', null, 'group']], 'project import retains layer hierarchy');
 {
   const originalDocument = globalThis.document;
-  globalThis.document = { createElement: () => ({ width: 1, height: 1,
-    getContext: () => ({ drawImage() {}, save() {}, restore() {}, clearRect() {} }) }) };
+  globalThis.document = {
+    createElement: () => ({
+      width: 1, height: 1,
+      getContext: () => ({ drawImage() {}, save() {}, restore() {}, clearRect() {} })
+    })
+  };
   try {
     const editable = { width: 4, height: 4 };
-    const asset = { layers: [
-      { uid: 'painted', source: 'original', parentUid: 'folder', visible: true },
-      { uid: 'folder', type: 'group', visible: true, opacity: 75, blendMode: 'normal' }
-    ], activeLayerUid: 'painted', uvWidth: 4, uvHeight: 4 };
+    const asset = {
+      layers: [
+        { uid: 'painted', source: 'original', parentUid: 'folder', visible: true },
+        { uid: 'folder', type: 'group', visible: true, opacity: 75, blendMode: 'normal' }
+      ], activeLayerUid: 'painted', uvWidth: 4, uvHeight: 4
+    };
     compositeLayers(asset, editable);
     assert.notEqual(layerRasterCache.get('painted').canvas, editable,
       'a painted layer must not retain the reusable editable canvas by reference');
@@ -158,17 +171,21 @@ const outerGroup = new Group({ uid: 'outliner-outer', children: [innerGroup.uid]
 const outlinerProject = new CubeBricksProject({ elements: [outlinerCube], groups: [innerGroup, outerGroup], outliner: [outerGroup.uid] });
 const virtualWindow = { style: {}, innerHTML: '' };
 const outlinerView = { scrollTop: 0, clientHeight: 300, innerHTML: '' };
-const outlinerState = { project: outlinerProject, selectedUids: new Set(), selectedCurveNodeIndex: null,
-  collapsedGroups: new Set(), mode: 'edit', outlinerDetailed: false };
-const outlinerController = createOutlinerViewController({ state: outlinerState,
+const outlinerState = {
+  project: outlinerProject, selectedUids: new Set(), selectedCurveNodeIndex: null,
+  collapsedGroups: new Set(), mode: 'edit', outlinerDetailed: false
+};
+const outlinerController = createOutlinerViewController({
+  state: outlinerState,
   $: selector => selector === '#outlinerSearch' ? { value: '' } : virtualWindow,
   outliner: outlinerView, LOCATOR_ICON_SHAPES: '', selected: () => null,
   selectedElementUids: () => [], isBezierElement: () => false, isShapeElement: () => false,
-  escapeHtml: String, escapeAttribute: String });
+  escapeHtml: String, escapeAttribute: String
+});
 outlinerController.renderOutliner();
 assert.deepEqual(outlinerState.outlinerRows.map(row => [row.node?.uid || row.groupUid, row.top, row.height]),
   [[outerGroup.uid, 0, 31], [innerGroup.uid, 31, 31], [outlinerCube.uid, 62, 31],
-    [innerGroup.uid, 93, 16], [outerGroup.uid, 109, 16]],
+  [innerGroup.uid, 93, 16], [outerGroup.uid, 109, 16]],
   'nested groups have a half-row drop area after their contents');
 assert.match(outlinerView.innerHTML, /height:218px/, 'the hierarchy reserves three full blank rows after its 125px content');
 assert.match(virtualWindow.innerHTML, /data-group-end="outliner-inner"/, 'nested group footer is rendered as a drop target');
@@ -182,14 +199,18 @@ outlinerController.renderOutlinerWindow();
 assert.doesNotMatch(virtualWindow.innerHTML, /is-selected-group-line/,
   'a selected group keeps normal rails until the pointer hovers over one');
 const localDockRegistry = new DockPanelRegistry();
-localDockRegistry.register({ id: 'sample', index: 2, modes: ['edit'], defaultDock: 'right',
-  defaultPosition: { x: 1, y: 2 }, defaultSize: { width: 200, height: 100 } });
+localDockRegistry.register({
+  id: 'sample', index: 2, modes: ['edit'], defaultDock: 'right',
+  defaultPosition: { x: 1, y: 2 }, defaultSize: { width: 200, height: 100 }
+});
 assert.throws(() => localDockRegistry.register({ id: 'sample', index: 3, modes: ['edit'], defaultDock: 'left' }), /already registered/);
 assert.throws(() => localDockRegistry.register({ id: 'second', index: 2, modes: ['edit'], defaultDock: 'left' }), /unique integer index/);
 const dockHarness = Object.create(DockManager.prototype);
-const makeDockPanel = (id, dock, width, height) => ({ id, index: width, modes: ['edit'], state: {
-  dock, x: width, y: height, width, height, collapsed: false, stackId: null, stackOrder: 0, stackActive: false
-}, element: { after() {} } });
+const makeDockPanel = (id, dock, width, height) => ({
+  id, index: width, modes: ['edit'], state: {
+    dock, x: width, y: height, width, height, collapsed: false, stackId: null, stackOrder: 0, stackActive: false
+  }, element: { after() {} }
+});
 const hostDock = makeDockPanel('host', 'right', 292, 340);
 const incomingDock = makeDockPanel('incoming', 'left', 236, 620);
 const secondIncomingDock = makeDockPanel('secondIncoming', 'floating', 300, 240);
@@ -227,17 +248,21 @@ const memory = new Map();
 globalThis.localStorage = { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value) };
 try {
   const noop = () => {};
-  const palette = createPaletteController({ state, $: noop, $$: noop, clamp: (value, min, max) => Math.min(max, Math.max(min, value)),
+  const palette = createPaletteController({
+    state, $: noop, $$: noop, clamp: (value, min, max) => Math.min(max, Math.max(min, value)),
     escapeHtml: String, escapeAttribute: String, hexToRgb: noop, snapshot: noop, renderPaintGradientPreview: noop,
     setPaintColor: noop, updatePaintColorPickerVisual: noop, renderPaintColorPicker: noop, renderInspector: noop,
-    toast: noop, selected: noop, noteJournalOperation: noop, markDirty: noop, renderAll: noop });
+    toast: noop, selected: noop, noteJournalOperation: noop, markDirty: noop, renderAll: noop
+  });
   assert.equal(palette.paletteRows.length, 3);
   palette.compact = true;
   palette.saveCompactPreference();
   assert.equal(memory.get('cubebricks.palette-compact.v1'), 'true');
-  const picker = createColorPickerController({ state, inspector: {}, hexToRgb: noop, setPaintColor: noop,
+  const picker = createColorPickerController({
+    state, inspector: {}, hexToRgb: noop, setPaintColor: noop,
     renderPaintColorHistory: noop, recordPaintColorHistory: noop, renderInspector: noop, setTool: noop,
-    addPaintSwatchToSelection: noop });
+    addPaintSwatchToSelection: noop
+  });
   assert.equal(typeof picker.renderPaintColorPicker, 'function');
 } finally {
   if (previousStorage === undefined) delete globalThis.localStorage;

@@ -9,7 +9,8 @@ assert.deepEqual([...colored], [200, 80, 40, 128, 1, 2, 3, 0],
 
 class Canvas {
   constructor(pixel = [0, 0, 0, 0]) {
-    this._width = 1; this._height = 1;
+    this._width = 1;
+    this._height = 1;
     this.data = new Uint8ClampedArray(pixel);
     this.context = {
       globalAlpha: 1, globalCompositeOperation: 'source-over',
@@ -27,23 +28,33 @@ class Canvas {
     };
   }
   get width() { return this._width; }
-  set width(next) { this._width = next; this.data = new Uint8ClampedArray(next * this._height * 4); }
+  set width(next) {
+    this._width = next;
+    this.data = new Uint8ClampedArray(next * this._height * 4);
+  }
   get height() { return this._height; }
-  set height(next) { this._height = next; this.data = new Uint8ClampedArray(this._width * next * 4); }
+  set height(next) {
+    this._height = next;
+    this.data = new Uint8ClampedArray(this._width * next * 4);
+  }
   getContext() { return this.context; }
 }
 
-globalThis.document = { createElement: type => {
-  assert.equal(type, 'canvas');
-  return new Canvas();
-} };
+globalThis.document = {
+  createElement: type => {
+    assert.equal(type, 'canvas');
+    return new Canvas();
+  }
+};
 
 layerRasterCache.set('paint', { canvas: new Canvas([220, 40, 20, 255]) });
 layerRasterCache.set('mask', { canvas: new Canvas([255, 255, 255, 128]) });
-const asset = { layers: [
-  { uid: 'paint', visible: true, opacity: 100, blendMode: 'normal', maskLayerUid: 'mask' },
-  { uid: 'mask', visible: false, opacity: 100, blendMode: 'normal' }
-] };
+const asset = {
+  layers: [
+    { uid: 'paint', visible: true, opacity: 100, blendMode: 'normal', maskLayerUid: 'mask' },
+    { uid: 'mask', visible: false, opacity: 100, blendMode: 'normal' }
+  ]
+};
 assert.deepEqual([...compositeLayers(asset).data], [220, 40, 20, 128],
   'a hidden source layer still masks a visible layer');
 asset.layers[1].visible = true;

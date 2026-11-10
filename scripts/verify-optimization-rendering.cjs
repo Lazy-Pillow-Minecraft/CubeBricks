@@ -7,7 +7,8 @@ const { pathToFileURL } = require('node:url');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-optimization-verify-'));
 const baseline = process.argv.find(value => value.startsWith('--baseline='))?.slice(11)
   || 'a6dfa154184cd15f4d84a511ab39913865ccd6f3';
-app.setPath('userData', profile); app.setPath('sessionData', profile);
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
 app.whenReady().then(async () => {
   let report;
   try {
@@ -16,7 +17,8 @@ app.whenReady().then(async () => {
     const end = original.indexOf('\n// A group', start);
     if (start < 0 || end < 0) throw Error('Missing baseline compositor');
     const legacy = original.slice(start, end).replace('export function', 'function');
-    const page = path.join(profile, 'verify.html'); fs.writeFileSync(page, '<!doctype html><body style="margin:0">');
+    const page = path.join(profile, 'verify.html');
+    fs.writeFileSync(page, '<!doctype html><body style="margin:0">');
     const win = new BrowserWindow({ show: false, width: 400, height: 400, webPreferences: { backgroundThrottling: false } });
     await win.loadFile(page);
     const root = pathToFileURL(path.resolve('src')).href;
@@ -85,5 +87,6 @@ app.whenReady().then(async () => {
   } catch (error) { report = { ok: false, error: error.stack }; }
   fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
   fs.writeFileSync(path.resolve('build/performance/optimization-rendering.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report)); app.exit(report.ok ? 0 : 1);
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

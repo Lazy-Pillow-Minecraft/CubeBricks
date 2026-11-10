@@ -67,8 +67,12 @@ import {
   const renderer = Object.create(WebGLSceneRenderer.prototype);
   renderer.gl = { TRIANGLES: 4, DYNAMIC_DRAW: 5 };
   renderer.orderedFaceBuffer = {};
-  renderer.staticCache = { faces: [1, 2].map(depth => ({ uid: `face_${depth}`,
-    center: [0, 0, depth], vertices: Array(12).fill(depth) })) };
+  renderer.staticCache = {
+    faces: [1, 2].map(depth => ({
+      uid: `face_${depth}`,
+      center: [0, 0, depth], vertices: Array(12).fill(depth)
+    }))
+  };
   renderer.selectedCache = { faces: [] };
   renderer.cubeBirthStartByUid = new Map();
   renderer.uploadBuffer = (_buffer, vertices) => uploads.push([...vertices]);
@@ -96,9 +100,11 @@ import {
 }
 
 {
-  const faces = Array.from({ length: 24 }, (_, index) => ({ uid: `face_${index}`,
+  const faces = Array.from({ length: 24 }, (_, index) => ({
+    uid: `face_${index}`,
     quad: [[index * 3, 0, 0], [index * 3 + 1, 0, 0],
-      [index * 3, 1, 0], [index * 3 + 1, 1, 0]] }));
+    [index * 3, 1, 0], [index * 3 + 1, 1, 0]]
+  }));
   const tree = buildFaceBvh(faces);
   const ray = x => ({ origin: [x, .5, 10], direction: [0, 0, -1] });
   assert.deepEqual(queryFaceBvh(tree, ray(.5)).map(face => face.uid), ['face_0']);
@@ -111,9 +117,13 @@ import {
 }
 
 {
-  const probe = { lastViewport: { width: 200, height: 100 }, lastCameraInput: { zoom: 1 },
-    lastCameraState: { projection: 'orthographic', eye: [0, 0, 10], forward: [0, 0, -1],
-      right: [1, 0, 0], up: [0, 1, 0] } };
+  const probe = {
+    lastViewport: { width: 200, height: 100 }, lastCameraInput: { zoom: 1 },
+    lastCameraState: {
+      projection: 'orthographic', eye: [0, 0, 10], forward: [0, 0, -1],
+      right: [1, 0, 0], up: [0, 1, 0]
+    }
+  };
   const orthographic = WebGLSceneRenderer.prototype.rayAt.call(probe, 150, 50);
   assert.deepEqual(orthographic.direction, [0, 0, -1]);
   assert.ok(orthographic.origin[0] > 0, 'orthographic screen painting moves the ray origin');
@@ -125,8 +135,10 @@ import {
 
 {
   const renderer = { pickCurveNode: (_project, uid, _x, _y, _radius, excluded) => ({ uid, index: excluded === 1 ? 0 : 1 }) };
-  const project = { getNode: uid => uid === 'visible' ? { uid, type: 'bezier3d', visible: true } : null,
-    getGroupChain: () => [] };
+  const project = {
+    getNode: uid => uid === 'visible' ? { uid, type: 'bezier3d', visible: true } : null,
+    getGroupChain: () => []
+  };
   const pick = WebGLSceneRenderer.prototype.pickUnselectedCurveNode;
   assert.equal(pick.call(renderer, project, 0, 0, null), null,
     'nodes of curves without visible selected markers cannot intercept a click');
@@ -168,10 +180,12 @@ assert.deepEqual(transitionProbe.cubeTransitions[0].center, [6, 1, 1],
 assert.equal(transitionProbe.cubeTransitions[0].triangleCount, 12);
 
 assert.equal(hasAssignedFaceTexture(undefined), false, 'a cube face without a texture stays untextured');
-const importedLayers = normalizeTextureLayers({ uuid: 'bb_texture', layers: [
-  { name: 'base', data_url: 'data:image/png;base64,AA==', visible: true, opacity: 100 },
-  { name: 'detail', data_url: 'data:image/png;base64,BB==', visible: true, opacity: 80 }
-] });
+const importedLayers = normalizeTextureLayers({
+  uuid: 'bb_texture', layers: [
+    { name: 'base', data_url: 'data:image/png;base64,AA==', visible: true, opacity: 100 },
+    { name: 'detail', data_url: 'data:image/png;base64,BB==', visible: true, opacity: 80 }
+  ]
+});
 assert.equal(importedLayers.length, 2, 'Blockbench data_url layers are retained');
 assert.equal(importedLayers[0].source, 'data:image/png;base64,AA==');
 assert.equal('data_url' in importedLayers[0], false, 'pixel data is not duplicated in saved projects');
@@ -279,10 +293,12 @@ assert.deepEqual(getMinecraftRenderType('translucent'), {
 });
 
 {
-  const renderer = { lastOwnerPoints: new Map([
-    ['a', [[-2, 1, 4], [2, 5, 8]]],
-    ['b', [[4, -3, -2], [6, 3, 2]]]
-  ]) };
+  const renderer = {
+    lastOwnerPoints: new Map([
+      ['a', [[-2, 1, 4], [2, 5, 8]]],
+      ['b', [[4, -3, -2], [6, 3, 2]]]
+    ])
+  };
   const project = {
     getNode: uid => uid === 'group' ? { type: 'group' } : null,
     getDescendantElementUids: () => ['a', 'b']
@@ -314,10 +330,12 @@ assert.deepEqual(getMinecraftRenderType('translucent'), {
 }
 
 {
-  const renderer = { lastOwnerPoints: new Map([
-    ['visible', [[-2, -1, -3], [2, -1, -3], [-2, 3, 3], [2, 3, 3]]],
-    ['hidden', [[1000, 1000, 1000]]]
-  ]) };
+  const renderer = {
+    lastOwnerPoints: new Map([
+      ['visible', [[-2, -1, -3], [2, -1, -3], [-2, 3, 3], [2, 3, 3]]],
+      ['hidden', [[1000, 1000, 1000]]]
+    ])
+  };
   const project = {
     elements: [{ uid: 'visible', visible: true }, { uid: 'hidden', visible: false }],
     groups: []
@@ -368,8 +386,10 @@ assert.deepEqual(getMinecraftRenderType('translucent'), {
 {
   const oldCube = { uid: 'cube_a', type: 'cube', visible: true };
   const newCube = { uid: 'cube_a', type: 'cube', visible: true };
-  const project = { formatId: 'generic_model', textureSize: [16, 16], elements: [newCube], groups: [],
-    getNode: uid => uid === 'cube_a' ? newCube : null };
+  const project = {
+    formatId: 'generic_model', textureSize: [16, 16], elements: [newCube], groups: [],
+    getNode: uid => uid === 'cube_a' ? newCube : null
+  };
   const renderer = Object.create(WebGLSceneRenderer.prototype);
   const changedFace = { uid: 'cube_a', cube: oldCube };
   const untouchedFace = { uid: 'unrelated', cube: {} };
@@ -379,10 +399,14 @@ assert.deepEqual(getMinecraftRenderType('translucent'), {
       return Reflect.get(target, key);
     }
   });
-  renderer.staticCache = { project: { formatId: 'generic_model', textureSize: [16, 16],
-    elements: [oldCube], groups: [], getNode: uid => uid === 'cube_a' ? oldCube : null },
+  renderer.staticCache = {
+    project: {
+      formatId: 'generic_model', textureSize: [16, 16],
+      elements: [oldCube], groups: [], getNode: uid => uid === 'cube_a' ? oldCube : null
+    },
     paintExplode: false, faceDistinct: false, faces: indexedFaces,
-    facesByUid: new Map([['cube_a', [changedFace]], ['unrelated', [untouchedFace]]]) };
+    facesByUid: new Map([['cube_a', [changedFace]], ['unrelated', [untouchedFace]]])
+  };
   renderer.geometryRevision = 3;
   renderer.selectionRevision = 5;
   renderer.mirrorRevision = 2;
@@ -406,12 +430,16 @@ assert.deepEqual(getMinecraftRenderType('translucent'), {
   const cube = { uid: 'cube_a', type: 'cube', visible: true };
   const oldGroup = { uid: 'group_a', type: 'group', visible: true, children: ['cube_a'], pivot: [0, 0, 0] };
   const newGroup = { ...oldGroup, pivot: [2, 0, 0] };
-  const makeProject = group => ({ formatId: 'generic_model', textureSize: [16, 16],
-    elements: [cube], groups: [group], getNode: uid => uid === cube.uid ? cube : uid === group.uid ? group : null });
+  const makeProject = group => ({
+    formatId: 'generic_model', textureSize: [16, 16],
+    elements: [cube], groups: [group], getNode: uid => uid === cube.uid ? cube : uid === group.uid ? group : null
+  });
   const oldProject = makeProject(oldGroup), newProject = makeProject(newGroup);
   const renderer = Object.create(WebGLSceneRenderer.prototype);
-  renderer.staticCache = { project: oldProject, paintExplode: false, faceDistinct: false,
-    faces: [{ uid: cube.uid, cube }] };
+  renderer.staticCache = {
+    project: oldProject, paintExplode: false, faceDistinct: false,
+    faces: [{ uid: cube.uid, cube }]
+  };
   renderer.geometryRevision = renderer.selectionRevision = renderer.mirrorRevision = 0;
   renderer.commitSelectionGeometry = (_project, changed) => {
     assert.deepEqual([...changed], ['cube_a']);
@@ -528,7 +556,10 @@ assert.deepEqual(getMinecraftRenderType('translucent'), {
   const project = { renderType: 'translucent' };
   let depthReads = 0;
   const faces = Array.from({ length: 64 }, (_, index) => ({
-    uid: `face_${index}`, get center() { depthReads++; return [index, 0, 4]; },
+    uid: `face_${index}`, get center() {
+      depthReads++;
+      return [index, 0, 4];
+    },
     vertices: Array(72).fill(0)
   }));
   let uploads = 0;
@@ -571,10 +602,14 @@ assert.deepEqual(getMinecraftRenderType('translucent'), {
   renderer.cubeBirthStartByUid = new Map();
   renderer.geometryRevision = renderer.selectionRevision = 1;
   renderer.currentDynamicElementKey = renderer.currentLockedKey = '';
-  renderer.paintExplodeInstanceTransform = () => { transforms++; return [transforms]; };
+  renderer.paintExplodeInstanceTransform = () => {
+    transforms++;
+    return [transforms];
+  };
   renderer.drawBuffer = (_buffer, count, _primitive, _matrix, options) => draws.push({ count, options });
   const draw = () => renderer.drawMirrorInstances(new Set(), new Set(), renderer.gl.TRIANGLES, []);
-  draw(); draw();
+  draw();
+  draw();
   assert.equal(transforms, 1, 'camera frames reuse exploded modifier range and transform batches');
   assert.deepEqual(draws.map(entry => entry.count), [6, 6]);
   assert.equal(draws[1].options.flipWinding, true);

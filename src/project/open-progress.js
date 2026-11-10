@@ -18,5 +18,11 @@ export function beginProjectOpenProgress({ waitForProgress = false } = {}) {
     if (status) status.textContent = label || '正在載入項目…';
     if (percent) percent.textContent = `${Math.round(fraction * 100)}%`;
   });
-  return { finish() { clearTimeout(timer); unsubscribe?.(); if (dialog?.open) dialog.close(); } };
+  return {
+    finish() {
+      clearTimeout(timer);
+      unsubscribe?.();
+      if (dialog?.open) dialog.close();
+    }
+  };
 }

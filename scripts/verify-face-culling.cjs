@@ -3,7 +3,8 @@ const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-face-culling-'));
-app.setPath('userData', profile); app.setPath('sessionData', profile);
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
 app.whenReady().then(async () => {
   let report;
   const directory = path.resolve('build/performance');
@@ -11,8 +12,10 @@ app.whenReady().then(async () => {
   const page = path.join(directory, 'face-culling-preview.html');
   fs.writeFileSync(page, '<!doctype html><meta charset="utf-8"><body style="margin:0">');
   try {
-    const win = new BrowserWindow({ show: false, width: 400, height: 400,
-      webPreferences: { backgroundThrottling: false, contextIsolation: true } });
+    const win = new BrowserWindow({
+      show: false, width: 400, height: 400,
+      webPreferences: { backgroundThrottling: false, contextIsolation: true }
+    });
     await win.loadFile(page);
     const root = pathToFileURL(path.resolve('src')).href;
     const checks = await win.webContents.executeJavaScript(`(async()=>{
@@ -59,5 +62,6 @@ app.whenReady().then(async () => {
     report = { ok: true, ...checks };
   } catch (error) { report = { ok: false, error: error.stack }; }
   fs.writeFileSync(path.join(directory, 'face-culling-preview.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report)); app.exit(report.ok ? 0 : 1);
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

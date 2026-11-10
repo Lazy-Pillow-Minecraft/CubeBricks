@@ -19,7 +19,10 @@ const ignored = new Set();
 async function visit(folder) {
   for (const entry of await fs.readdir(folder, { withFileTypes: true })) {
     const file = path.join(folder, entry.name);
-    if (entry.isDirectory()) { if (entry.name !== 'assets') await visit(file); continue; }
+    if (entry.isDirectory()) {
+      if (entry.name !== 'assets') await visit(file);
+      continue;
+    }
     if (!/\.(?:js|html)$/.test(entry.name) || ignored.has(entry.name)) continue;
     const contents = await fs.readFile(file, 'utf8');
     const relative = path.relative(root, file).replaceAll('\\', '/');

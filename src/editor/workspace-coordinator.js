@@ -52,126 +52,126 @@ export function createWorkspaceCoordinator({
   getUvPreviewController, getUvEditorController, getTransformContext,
   scheduleAllPaintSymmetryBuilds, syncSubdivisionEdits
 }) {
-let toastTimer;
-function restoreProjectTextureView({ preserveAtlas = false, changedTextureUids = null } = {}) {
-  // Texture previews and the scene atlas are separate consumers. Rebuild the
-  // atlas as soon as a project becomes active; otherwise an image-load callback
-  // for the currently selected preview is the only thing that starts it.
-  getTextureAssetController().textureLoadRevision++;
-  if (changedTextureUids && getTextureAtlasController().restoreHistoryTextures(changedTextureUids)) {
+  let toastTimer;
+  function restoreProjectTextureView({ preserveAtlas = false, changedTextureUids = null } = {}) {
+    // Texture previews and the scene atlas are separate consumers. Rebuild the
+    // atlas as soon as a project becomes active; otherwise an image-load callback
+    // for the currently selected preview is the only thing that starts it.
+    getTextureAssetController().textureLoadRevision++;
+    if (changedTextureUids && getTextureAtlasController().restoreHistoryTextures(changedTextureUids)) {
+      renderTextureList();
+      const index = state.textureAssets.findIndex(asset => asset._uid === state.activeTextureUid);
+      if (changedTextureUids.includes(state.activeTextureUid) && index >= 0)
+        activateProjectTexture(index, { restoreSavedComposite: true });
+      return;
+    }
+    getTextureAtlasController().resetAtlas({ preserveGpu: preserveAtlas && state.textureAssets.length > 0 });
+    livePaintTextureSources.clear();
+    animationRasterCache.clear();
     renderTextureList();
-    const index = state.textureAssets.findIndex(asset => asset._uid === state.activeTextureUid);
-    if (changedTextureUids.includes(state.activeTextureUid) && index >= 0)
-      activateProjectTexture(index, { restoreSavedComposite: true });
-    return;
+    if (!state.textureAssets.length) {
+      renderTexture();
+      return;
+    }
+    let index = state.textureAssets.findIndex(asset => asset._uid === state.activeTextureUid);
+    if (index < 0) index = Math.max(0, state.textureAssets.findIndex(asset => asset.useAsDefault));
+    activateProjectTexture(index);
+    rebuildTextureAtlas();
   }
-  getTextureAtlasController().resetAtlas({ preserveGpu: preserveAtlas && state.textureAssets.length > 0 });
-  livePaintTextureSources.clear();
-  animationRasterCache.clear();
-  renderTextureList();
-  if (!state.textureAssets.length) {
-    renderTexture();
-    return;
+
+  function selected() {
+    return state.project.getNode(state.selectedUid);
   }
-  let index = state.textureAssets.findIndex(asset => asset._uid === state.activeTextureUid);
-  if (index < 0) index = Math.max(0, state.textureAssets.findIndex(asset => asset.useAsDefault));
-  activateProjectTexture(index);
-  rebuildTextureAtlas();
-}
-
-function selected() {
-  return state.project.getNode(state.selectedUid);
-}
 
 
-function toast(message) {
-  const node = $('#toast');
-  node.textContent = message;
-  node.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => node.classList.remove('show'), 2100);
-}
+  function toast(message) {
+    const node = $('#toast');
+    node.textContent = message;
+    node.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => node.classList.remove('show'), 2100);
+  }
 
-function renderAll(geometryScope = 'all', changedUids = null, previousProject = null) {
-  if (geometryScope === 'texture-journal') {
-    // The dock and the changed atlas regions were already updated. A brush
-    // undo has no reason to rebuild the inspector, tools or outliner.
+  function renderAll(geometryScope = 'all', changedUids = null, previousProject = null) {
+    if (geometryScope === 'texture-journal') {
+      // The dock and the changed atlas regions were already updated. A brush
+      // undo has no reason to rebuild the inspector, tools or outliner.
+      renderScene();
+      return;
+    }
+    else if (geometryScope === 'selection') invalidateSelectionRenderGeometry();
+    else if (geometryScope === 'journal' && sceneRenderer.restoreJournalGeometry(state.project, changedUids, state.selectedUids, state.mode)) {
+      getUvPreviewController().uvPreviewRenderDirty = true;
+      getUvEditorController().textureUvEntryCache = null;
+      getTransformContext().clearCache();
+      uvPreviewRenderer.invalidateGeometry();
+    }
+    else invalidateAllRenderGeometry();
+    const javaBlock = state.project.formatId === 'java_block_item';
+    const modeButton = document.querySelector('.mode-tab[data-mode="animate"], .mode-tab[data-mode="display"]');
+    if (modeButton && modeButton.dataset.mode !== (javaBlock ? 'display' : 'animate')) {
+      modeButton.dataset.mode = javaBlock ? 'display' : 'animate';
+      modeButton.innerHTML = javaBlock ? '<span>▣</span> 顯示設置' : '<span>⌁</span> 動畫';
+    }
+    $('#cullFaces').closest('.cull-toggle').hidden = javaBlock;
+    if (javaBlock && state.mode === 'animate') setMode('display');
+    else if (!javaBlock && state.mode === 'display') setMode('edit');
+    $('#minecraftRenderType').value = state.project.renderType;
+    $('#cullFaces').checked = javaBlock || state.project.cullFaces;
+    updateSnapButton();
+    updateRenderModeControl();
+    updateToolOptions();
+    if (geometryScope === 'journal' && canReuseJournalOutliner(previousProject, state.project, changedUids, state.outlinerRows)) {
+      // Visible rows are already correct. Only their model references need to
+      // follow the new project, avoiding a full tree walk and DOM replacement.
+      for (const row of state.outlinerRows) if (row.node && !row.curveNode && !row.copyNode)
+        row.node = state.project.getNode(row.node.uid);
+    } else renderOutliner();
+    renderInspector();
     renderScene();
-    return;
+    updateTextureStageTransform();
+    updateSelectionLabels();
   }
-  else if (geometryScope === 'selection') invalidateSelectionRenderGeometry();
-  else if (geometryScope === 'journal' && sceneRenderer.restoreJournalGeometry(state.project, changedUids, state.selectedUids, state.mode)) {
+
+  function invalidateAllRenderGeometry() {
+    sceneRenderer.invalidateGeometry();
+    uvPreviewRenderer.invalidateGeometry();
     getUvPreviewController().uvPreviewRenderDirty = true;
     getUvEditorController().textureUvEntryCache = null;
     getTransformContext().clearCache();
-    uvPreviewRenderer.invalidateGeometry();
-  }
-  else invalidateAllRenderGeometry();
-  const javaBlock = state.project.formatId === 'java_block_item';
-  const modeButton = document.querySelector('.mode-tab[data-mode="animate"], .mode-tab[data-mode="display"]');
-  if (modeButton && modeButton.dataset.mode !== (javaBlock ? 'display' : 'animate')) {
-    modeButton.dataset.mode = javaBlock ? 'display' : 'animate';
-    modeButton.innerHTML = javaBlock ? '<span>▣</span> 顯示設置' : '<span>⌁</span> 動畫';
-  }
-  $('#cullFaces').closest('.cull-toggle').hidden = javaBlock;
-  if (javaBlock && state.mode === 'animate') setMode('display');
-  else if (!javaBlock && state.mode === 'display') setMode('edit');
-  $('#minecraftRenderType').value = state.project.renderType;
-  $('#cullFaces').checked = javaBlock || state.project.cullFaces;
-  updateSnapButton();
-  updateRenderModeControl();
-  updateToolOptions();
-  if (geometryScope === 'journal' && canReuseJournalOutliner(previousProject, state.project, changedUids, state.outlinerRows)) {
-    // Visible rows are already correct. Only their model references need to
-    // follow the new project, avoiding a full tree walk and DOM replacement.
-    for (const row of state.outlinerRows) if (row.node && !row.curveNode && !row.copyNode)
-      row.node = state.project.getNode(row.node.uid);
-  } else renderOutliner();
-  renderInspector();
-  renderScene();
-  updateTextureStageTransform();
-  updateSelectionLabels();
-}
-
-function invalidateAllRenderGeometry() {
-  sceneRenderer.invalidateGeometry();
-  uvPreviewRenderer.invalidateGeometry();
-  getUvPreviewController().uvPreviewRenderDirty = true;
-  getUvEditorController().textureUvEntryCache = null;
-  getTransformContext().clearCache();
-  if (getUvPreviewController().uvPreviewProjectCache) getUvPreviewController().uvPreviewProjectCache.fit = null;
-  if (getTextureAtlasController().textureAtlasEntries.some(entry => entry.tileSourceUid)) rebuildTextureAtlas();
-  scheduleAllPaintSymmetryBuilds();
-}
-
-function selectionAffectsMirrorPreview() {
-  const selectedIds = state.selectedUids?.size
-    ? [...state.selectedUids]
-    : state.selectedUid ? [state.selectedUid] : [];
-  return selectionAffectsModifierResults(state.project, selectedIds);
-}
-
-function invalidateSelectionRenderGeometry(geometryChanged = true) {
-  if (geometryChanged) syncSubdivisionEdits();
-  sceneRenderer.invalidateSelectionGeometry(geometryChanged);
-  getUvPreviewController().uvPreviewRenderDirty = true;
-  getTransformContext().clearCache();
-  if (geometryChanged) {
-    if (selectionAffectsMirrorPreview()) sceneRenderer.invalidateMirrorGeometry();
-    uvPreviewRenderer.invalidateGeometry();
-    getUvEditorController().textureUvEntryCache = null;
     if (getUvPreviewController().uvPreviewProjectCache) getUvPreviewController().uvPreviewProjectCache.fit = null;
     if (getTextureAtlasController().textureAtlasEntries.some(entry => entry.tileSourceUid)) rebuildTextureAtlas();
+    scheduleAllPaintSymmetryBuilds();
   }
-}
 
-return {
-  restoreProjectTextureView,
-  selected,
-  toast,
-  renderAll,
-  invalidateAllRenderGeometry,
-  selectionAffectsMirrorPreview,
-  invalidateSelectionRenderGeometry,
-};
+  function selectionAffectsMirrorPreview() {
+    const selectedIds = state.selectedUids?.size
+      ? [...state.selectedUids]
+      : state.selectedUid ? [state.selectedUid] : [];
+    return selectionAffectsModifierResults(state.project, selectedIds);
+  }
+
+  function invalidateSelectionRenderGeometry(geometryChanged = true) {
+    if (geometryChanged) syncSubdivisionEdits();
+    sceneRenderer.invalidateSelectionGeometry(geometryChanged);
+    getUvPreviewController().uvPreviewRenderDirty = true;
+    getTransformContext().clearCache();
+    if (geometryChanged) {
+      if (selectionAffectsMirrorPreview()) sceneRenderer.invalidateMirrorGeometry();
+      uvPreviewRenderer.invalidateGeometry();
+      getUvEditorController().textureUvEntryCache = null;
+      if (getUvPreviewController().uvPreviewProjectCache) getUvPreviewController().uvPreviewProjectCache.fit = null;
+      if (getTextureAtlasController().textureAtlasEntries.some(entry => entry.tileSourceUid)) rebuildTextureAtlas();
+    }
+  }
+
+  return {
+    restoreProjectTextureView,
+    selected,
+    toast,
+    renderAll,
+    invalidateAllRenderGeometry,
+    selectionAffectsMirrorPreview,
+    invalidateSelectionRenderGeometry,
+  };
 }

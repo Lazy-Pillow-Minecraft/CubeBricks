@@ -8,15 +8,21 @@ assert.equal(combinedAnimation([animated(4, 12), animated(6, 24)]).count, 12);
 assert.throws(() => combinedAnimation([animated(127, 10), animated(131, 10)]));
 assert.throws(() => checkBakeSize(8192, 16384));
 const faces = [{ face: { tiling: { offsetX: -3, offsetY: 5, width: 9, height: 7 } } },
-  { face: { tiling: { offsetX: 5, offsetY: -3, width: 9, height: 7 } } }];
+{ face: { tiling: { offsetX: 5, offsetY: -3, width: 9, height: 7 } } }];
 const plane = texturePlane({ mode: 'tiled' }, { width: 4, height: 4 }, faces);
 assert.deepEqual(faces[0].pixelUv, [1, 1, 10, 8]);
 assert.deepEqual(faces[0].pixelUv, faces[1].pixelUv, 'whole-period offsets share exactly the same UV area');
 assert.deepEqual([plane.width, plane.height], [10, 8], 'two faces cost one shared periodic rectangle');
 assert.equal(packExportPlanes([plane]).side, 16);
-const bb = { textures: [{ uuid: 'first' }, { uuid: 'second' }], elements: [{ from: [0, 0, 0], to: [2, 2, 2],
-  box_uv: false, faces: { north: { texture: '#2', uv: [4, 3, 1, 0], rotation: 90 }, south: { texture: null },
-    up: { texture: 'second', uv: [0, 0, 2, 2] }, down: { uv: [0, 0, 2, 2] } } }] };
+const bb = {
+  textures: [{ uuid: 'first' }, { uuid: 'second' }], elements: [{
+    from: [0, 0, 0], to: [2, 2, 2],
+    box_uv: false, faces: {
+      north: { texture: '#2', uv: [4, 3, 1, 0], rotation: 90 }, south: { texture: null },
+      up: { texture: 'second', uv: [0, 0, 2, 2] }, down: { uv: [0, 0, 2, 2] }
+    }
+  }]
+};
 const entries = collectExportFaces(bb, [{ id: '2' }, { uuid: 'second' }]);
 assert.deepEqual(entries.map(entry => [entry.name, entry.index]), [['north', 0], ['up', 1]]);
 assert.deepEqual(entries[0].uv, [4, 3, 1, 0]);

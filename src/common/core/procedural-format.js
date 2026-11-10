@@ -24,7 +24,7 @@ export function constrainProceduralCubes(owner, cubes, project = null) {
 
 function outerFrames(owner, project) {
   return [{ pivot: owner.pivot || owner.origin || [0, 0, 0], rotation: owner.rotation || [0, 0, 0] },
-    ...(project?.getGroupChain(owner.uid) || []).slice().reverse()];
+  ...(project?.getGroupChain(owner.uid) || []).slice().reverse()];
 }
 const turnPoint = (point, frame, inverse = false) => (inverse ? inverseRotateVector : rotateVector)(
   point.map((value, axis) => value - frame.pivot[axis]), frame.rotation).map((value, axis) => value + frame.pivot[axis]);
@@ -42,22 +42,34 @@ export function proceduralCubeWorld(owner, cube, project = null) {
     const to = rescaleRotationPoint(cube.position.map((value, axis) => value + cube.size[axis] + sign[axis] * inflate), cube.pivot, cube.rotation, true);
     const faces = Object.fromEntries(['north', 'south', 'east', 'west', 'up', 'down'].map(name => [name,
       cube.faces?.[name] === null ? null : { ...cube.faces?.[name], uv: cube.faces?.[name]?.uv || getBlockbenchBoxUv(cube, name) }]));
-    cube = { ...cube, position: from, size: to.map((value, axis) => value - from[axis]), inflate: 0, rescale: false, uvMode: 'face', faces };
+    cube = {
+      ...cube,
+      position: from,
+      size: to.map((value, axis) => value - from[axis]),
+      inflate: 0,
+      rescale: false,
+      uvMode: 'face',
+      faces
+    };
   }
   const basePivot = cube.pivot.map((value, axis) => value + offset[axis]);
   const pivot = frames.reduce((point, frame) => turnPoint(point, frame), basePivot);
-  return { ...structuredClone(cube), pivot,
+  return {
+    ...structuredClone(cube), pivot,
     position: pivot.map((value, axis) => value + cube.position[axis] + offset[axis] - basePivot[axis]),
-    rotation: eulerFromQuaternion(quaternionMultiply(frameQuaternion(frames), quaternionFromEuler(cube.rotation || [0, 0, 0]))) };
+    rotation: eulerFromQuaternion(quaternionMultiply(frameQuaternion(frames), quaternionFromEuler(cube.rotation || [0, 0, 0])))
+  };
 }
 export function proceduralCubeLocal(owner, world, project = null) {
   const offset = owner.origin || [0, 0, 0], frames = outerFrames(owner, project);
   const outer = frameQuaternion(frames), inverse = outer.map((value, axis) => axis < 3 ? -value : value);
   const pivot = frames.slice().reverse().reduce((point, frame) => turnPoint(point, frame, true), world.pivot)
     .map((value, axis) => clean(value - offset[axis]));
-  return { ...world, pivot,
+  return {
+    ...world, pivot,
     position: pivot.map((value, axis) => clean(value + world.position[axis] - world.pivot[axis])),
-    rotation: eulerFromQuaternion(quaternionMultiply(inverse, quaternionFromEuler(world.rotation))).map(clean) };
+    rotation: eulerFromQuaternion(quaternionMultiply(inverse, quaternionFromEuler(world.rotation))).map(clean)
+  };
 }
 
 function rotatedCorners(cube, includeInflate = false) {
@@ -76,7 +88,8 @@ function constrainBedrockShape(cubes, context) {
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
   const corners = world.map(cube => rotatedCorners(cube, true));
   for (const points of corners) for (const point of points) for (let axis = 0; axis < 3; axis++) {
-    min[axis] = Math.min(min[axis], point[axis]); max[axis] = Math.max(max[axis], point[axis]);
+    min[axis] = Math.min(min[axis], point[axis]);
+    max[axis] = Math.max(max[axis], point[axis]);
   }
   const center = min.map((value, axis) => (value + max[axis]) / 2);
   const limitCenter = project?.formatData?.bedrockConstraintCenter || center.map((value, axis) =>
@@ -101,13 +114,18 @@ function constrainBedrockShape(cubes, context) {
     }
     if (candidate.length !== 3) continue;
     const distance = candidate.reduce((sum, value) => sum + value * value, 0);
-    if (distance < score) { score = distance; best = candidate; }
+    if (distance < score) {
+      score = distance;
+      best = candidate;
+    }
   }
   if (best) delta.splice(0, 3, ...best);
   if (scale === 1 && delta.every(value => Math.abs(value) < 1e-8)) return cubes;
   const point = vector => vector.map((value, axis) => (value - center[axis]) * scale + center[axis] + delta[axis]);
   world.forEach((cube, index) => {
-    cube.position = point(cube.position); cube.pivot = point(cube.pivot); cube.size = cube.size.map(value => value * scale);
+    cube.position = point(cube.position);
+    cube.pivot = point(cube.pivot);
+    cube.size = cube.size.map(value => value * scale);
     cube.inflate *= scale;
     const local = proceduralCubeLocal(owner, cube, project);
     local.inflate -= groupInflate;
@@ -138,8 +156,10 @@ function restoreFaceBasis(cube, source, turns) {
   }
   if (turns.length) {
     cube.faces = Object.fromEntries(['north', 'south', 'east', 'west', 'up', 'down'].map(name => [name,
-      source.faces?.[name] === null ? null : { ...structuredClone(source.faces?.[name] || {}),
-        uv: source.uvMode !== 'box' && source.faces?.[name]?.uv || getBlockbenchBoxUv(source, name) }]));
+      source.faces?.[name] === null ? null : {
+        ...structuredClone(source.faces?.[name] || {}),
+        uv: source.uvMode !== 'box' && source.faces?.[name]?.uv || getBlockbenchBoxUv(source, name)
+      }]));
     cube.uvMode = 'face';
   }
 }
@@ -149,7 +169,11 @@ export function constrainJavaProceduralCube(owner, cube, context) {
   const turns = [], source = context.preserveFaceBasis !== false ? { ...world, size: [...world.size] } : null;
   const weights = context.rotationWeights || world.size.map(value => Math.max(1e-6, value * value));
   const maximum = Math.max(...weights);
-  const rules = { ...context.rules, onQuarterTurn: matrix => turns.push(matrix), rotationWeights: weights.map(value => value / maximum) };
+  const rules = {
+    ...context.rules,
+    onQuarterTurn: matrix => turns.push(matrix),
+    rotationWeights: weights.map(value => value / maximum)
+  };
   const corners = context.rules.singleAxisRotation ? rotatedCorners(world) : null;
   if (corners) {
     const center = [0, 1, 2].map(axis => corners.reduce((sum, point) => sum + point[axis], 0) / corners.length);
@@ -175,7 +199,8 @@ export function constrainBuiltinShape(subject, context) {
   if (phase === 'parameters') {
     if (rules.javaBlock) owner.uvMode = 'face';
     if (rules.moddedEntity) {
-      owner.uvMode = 'box'; owner.autoUv = true;
+      owner.uvMode = 'box';
+      owner.autoUv = true;
       if (owner.origin) owner.origin = owner.origin.map(Math.round);
       if (owner.pivot) owner.pivot = owner.pivot.map(Math.round);
       for (const key of ['radius', 'height', 'innerRadius', 'thickness', 'cubeSize', 'segmentLength']) {
@@ -202,7 +227,9 @@ export function constrainBuiltinShape(subject, context) {
     const size = cube.size.map(value => value === 0 ? 0 : Math.sign(value) * Math.max(1,
       owner.type?.startsWith('bezier') ? Math.ceil(Math.abs(value) - 1e-7) : Math.round(Math.abs(value))));
     cube.position = cube.position.map((value, axis) => clean(value + (cube.size[axis] - size[axis]) / 2));
-    cube.size = size; cube.uvMode = 'box'; cube.autoUv = true;
+    cube.size = size;
+    cube.uvMode = 'box';
+    cube.autoUv = true;
     for (const face of Object.values(cube.faces || {})) if (face) delete face.uv;
     // Generated orientations become bone rotations when materialized. Do not
     // zero them here: the live shape must show the same oriented columns.

@@ -11,7 +11,9 @@ self.onmessage = ({ data: { id, source } }) => {
         blob = new Blob([bytes], { type: header.slice(5).split(';')[0] });
       } else blob = await (await fetch(source)).blob();
       const image = await createImageBitmap(blob), canvas = new OffscreenCanvas(image.width, image.height);
-      const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(image, 0, 0); image.close();
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.drawImage(image, 0, 0);
+      image.close();
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
       const dimensions = `${canvas.width}:${canvas.height}:`;
       const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', pixels.data)), n => n.toString(16).padStart(2, '0')).join('');

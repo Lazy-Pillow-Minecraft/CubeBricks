@@ -588,7 +588,8 @@ export class DockManager {
 
   startResize(event, panel, edge) {
     if (event.button !== 0) return;
-    event.preventDefault(); event.stopPropagation();
+    event.preventDefault();
+    event.stopPropagation();
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     const rect = panel.element.getBoundingClientRect();
@@ -680,7 +681,10 @@ export class DockManager {
 
 function readSavedLayout() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
-  catch { localStorage.removeItem(STORAGE_KEY); return {}; }
+  catch {
+    localStorage.removeItem(STORAGE_KEY);
+    return {};
+  }
 }
 
 function readSavedZones() {

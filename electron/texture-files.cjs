@@ -16,8 +16,10 @@ function registerTextureFiles(handleIpc, saveFileDialog, atomicWrite) {
     const bytes = pngBytes(payload.source);
     const supplied = typeof payload.filePath === 'string' && path.isAbsolute(payload.filePath) && /\.png$/i.test(payload.filePath) ? payload.filePath : null;
     const name = path.basename(String(payload.name || 'texture.png')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\.[^.]+$/, '') + '.png';
-    const picked = supplied ? { filePath: supplied } : await saveFileDialog(event, { title: 'ui.message-56',
-      defaultPath: name, filters: [{ name: 'PNG', extensions: ['png'] }] });
+    const picked = supplied ? { filePath: supplied } : await saveFileDialog(event, {
+      title: 'ui.message-56',
+      defaultPath: name, filters: [{ name: 'PNG', extensions: ['png'] }]
+    });
     if (picked.canceled || !picked.filePath) return null;
     const filePath = /\.png$/i.test(picked.filePath) ? picked.filePath : `${picked.filePath}.png`;
     let metadata = null;
@@ -34,7 +36,8 @@ function registerTextureFiles(handleIpc, saveFileDialog, atomicWrite) {
 }
 
 async function readTextureAssets(content, modelPath) {
-  let model; try { model = JSON.parse(content); } catch { return []; }
+  let model;
+  try { model = JSON.parse(content); } catch { return []; }
   const assets = [];
   for (const texture of Array.isArray(model.textures) ? model.textures : []) {
     let source = null, loadedPath = null;
@@ -46,19 +49,23 @@ async function readTextureAssets(content, modelPath) {
       try {
         const bytes = await fs.readFile(candidate), extension = path.extname(candidate).toLowerCase();
         const mime = extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.webp' ? 'image/webp' : extension === '.gif' ? 'image/gif' : 'image/png';
-        source = `data:${mime};base64,${bytes.toString('base64')}`; loadedPath = candidate; break;
+        source = `data:${mime};base64,${bytes.toString('base64')}`;
+        loadedPath = candidate;
+        break;
       } catch { /* An unresolved game resource remains assignable in the editor. */ }
     }
     if (!source && String(texture.source).startsWith('data:image/')) source = texture.source;
     if (!source) continue;
     const imported = model.meta?.model_format;
-    assets.push({ uuid: texture.uuid, id: texture.id, name: texture.name || path.basename(loadedPath || 'texture.png'), source,
+    assets.push({
+      uuid: texture.uuid, id: texture.id, name: texture.name || path.basename(loadedPath || 'texture.png'), source,
       uvWidth: texture.uv_width, uvHeight: texture.uv_height, useAsDefault: texture.use_as_default === true,
       groupId: texture.group_id || null, kind: texture.kind || 'IMAGE', templateUvIndependent: texture.template_uv_independent ?? null,
       mode: texture.mode === 'bitmap' || texture.mode === 'link' ? 'default' : texture.mode || 'default',
       layers: texture.layers || null, activeLayerUid: texture.active_layer_uid || null, animation: texture.animation || null,
       namespace: texture.namespace, externalFile: texture.external_file || (imported ? { imported: true, path: loadedPath } : null),
-      animationMetadata: loadedPath && imported ? await readTextureAnimationMetadata({ filePath: loadedPath }) : null });
+      animationMetadata: loadedPath && imported ? await readTextureAnimationMetadata({ filePath: loadedPath }) : null
+    });
   }
   return assets;
 }

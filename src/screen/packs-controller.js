@@ -151,8 +151,10 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
 
   async function runOperation(pack, operation) {
     if (operation === 'remove') {
-      if (!await showAppConfirm(`移除「${pack.name}」？`, { title: '移除資源包',
-        detail: '包會移到工作空間的 removed-packs，可以手動找回。', buttons: ['移除', '取消'] })) return;
+      if (!await showAppConfirm(`移除「${pack.name}」？`, {
+        title: '移除資源包',
+        detail: '包會移到工作空間的 removed-packs，可以手動找回。', buttons: ['移除', '取消']
+      })) return;
       await desktop.removeResourcePack(pack.id);
       await refresh({ shapes: pack.kind === 'shape' });
       toast('資源包已移除');
@@ -199,7 +201,10 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
     $('#installPackButton').addEventListener('click', async () => {
       try {
         const installed = await desktop.installResourcePack(kind);
-        if (installed) { await refresh({ shapes: kind === 'shape' }); toast('資源包已加入'); }
+        if (installed) {
+          await refresh({ shapes: kind === 'shape' });
+          toast('資源包已加入');
+        }
       } catch (error) { toast(`加入失敗：${error.message}`); }
     });
     dialog.querySelectorAll('[data-pack-kind]').forEach(button => button.addEventListener('click', () => {
@@ -240,7 +245,10 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
     });
     list.addEventListener('dragend', () => { draggedPackId = null; });
     fontSelect.addEventListener('change', () => configRegistry.set(ConfigKey.FONT, fontSelect.value, { source: 'font-setting' }));
-    configRegistry.subscribe(ConfigKey.FONT, () => { fontSelect.value = configRegistry.get(ConfigKey.FONT); void applyFont(); });
+    configRegistry.subscribe(ConfigKey.FONT, () => {
+      fontSelect.value = configRegistry.get(ConfigKey.FONT);
+      void applyFont();
+    });
     configRegistry.subscribe(ConfigKey.LANGUAGE, () => { void applyFont(); });
     window.addEventListener('cubebricks:workspace-change', () => { void refresh().catch(error => toast(error.message)); });
   }

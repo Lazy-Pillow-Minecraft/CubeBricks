@@ -27,8 +27,10 @@ const nodesMs = performance.now() - nodesStart;
 const constructStart = performance.now();
 const project = new CubeBricksProject(data);
 const constructMs = performance.now() - constructStart;
-const oneCubeData = { ...data, elements: data.elements.map((element, index) => index === 0
-  ? { ...element, position: [...(element.position || [0, 0, 0])] } : element) };
+const oneCubeData = {
+  ...data, elements: data.elements.map((element, index) => index === 0
+    ? { ...element, position: [...(element.position || [0, 0, 0])] } : element)
+};
 const undoConstructStart = performance.now();
 new CubeBricksProject(oneCubeData, {
   reuseElementsFrom: project, changedUids: [data.elements[0]?.uid]
@@ -69,8 +71,10 @@ console.log(JSON.stringify({
   shapes: project.elements.filter(node => node.type === 'shape' || node.type?.startsWith('bezier')).length,
   generatedCubes,
   modifierInstances: instances.length,
-  timingsMs: { unpack: unpackMs, readNodes: nodesMs, construct: constructMs,
+  timingsMs: {
+    unpack: unpackMs, readNodes: nodesMs, construct: constructMs,
     oneCubeUndoConstruct: oneCubeUndoConstructMs,
-    serialize: serializeMs, modifiersMedianOf5: modifierMs, shapes: shapesMs },
+    serialize: serializeMs, modifiersMedianOf5: modifierMs, shapes: shapesMs
+  },
   buckets: Object.fromEntries(buckets)
 }, null, 2));

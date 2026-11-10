@@ -23,7 +23,8 @@ test('only one owner may open or delete a working journal; crash claims can be r
     await first.releaseAll();
     assert.equal(await first.isLocked(directory), false);
   } finally {
-    await first.releaseAll(); await second.releaseAll();
+    await first.releaseAll();
+    await second.releaseAll();
     await fs.rm(root, { recursive: true, force: true });
   }
 });

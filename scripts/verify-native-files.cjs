@@ -1,24 +1,38 @@
 const { app, BrowserWindow, dialog } = require('electron');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-native-ui-')), output = path.join(profile, 'exports');
-fs.mkdirSync(output); app.setPath('userData', profile); app.setPath('sessionData', profile);
-const picks = [], errors = []; let serial = 0, cancelNext = false, lastModel = null;
+fs.mkdirSync(output);
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+const picks = [], errors = [];
+let serial = 0, cancelNext = false, lastModel = null;
 dialog.showSaveDialog = async options => {
   const name = path.basename(options.defaultPath || 'output'), extension = path.extname(name);
   picks.push(extension);
-  if (cancelNext) { cancelNext = false; return { canceled: true }; }
+  if (cancelNext) {
+    cancelNext = false;
+    return { canceled: true };
+  }
   const filePath = path.join(output, extension === '.png' ? `${++serial}_${name}` : name);
   if (extension === '.json' || extension === '.java') lastModel = filePath;
   return { canceled: false, filePath };
 };
 dialog.showOpenDialog = async () => ({ canceled: !lastModel, filePaths: lastModel ? [lastModel] : [] });
-app.on('browser-window-created', (_event, win) => { win.hide(); win.setSize(1800, 1000); win.webContents.setBackgroundThrottling(false); });
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.setSize(1800, 1000);
+  win.webContents.setBackgroundThrottling(false);
+});
 app.on('web-contents-created', (_event, contents) => contents.on('console-message', details => { if (details.level === 'error') errors.push(details.message); }));
 const archive = process.argv.find(value => value.startsWith('--app-asar='))?.slice('--app-asar='.length);
 require(path.join(archive ? path.resolve(archive) : path.resolve('.'), 'electron/main.cjs'));
 app.whenReady().then(async () => {
-  const checks = []; let report;
-  const check = (value, message) => { if (!value) throw Error(message); checks.push(message); };
+  const checks = [];
+  let report;
+  const check = (value, message) => {
+    if (!value) throw Error(message);
+    checks.push(message);
+  };
   try {
     const contents = BrowserWindow.getAllWindows()[0].webContents;
     if (contents.isLoading()) await new Promise(resolve => contents.once('did-finish-load', resolve));
@@ -62,16 +76,23 @@ app.whenReady().then(async () => {
     fs.writeFileSync(javaPath, java.replace('createBodyLayer', 'editedLayer'));
     const error = await contents.executeJavaScript(`window.cubeBricksDesktop.openProject(${JSON.stringify(javaPath)}).then(()=>null,error=>error.message)`);
     check(error?.includes('已被修改'), 'modified exported Java is rejected before importing geometry');
-    const count = picks.length; cancelNext = true;
+    const count = picks.length;
+    cancelNext = true;
     await contents.executeJavaScript(`(async()=>{${setup}
       $('[data-action="export"]').click();await until(()=>$('.project-export-dialog'),'cancel export');$('.project-export-dialog button[value="java"]').click();await wait(250);
     })()`);
     check(picks.length === count + 1 && picks.at(-1) === '.png', 'canceling texture saving aborts before any model filename is requested');
     const pngPath = path.join(path.dirname(jsonPath), references.textures[0].relative_path), pngData = fs.readFileSync(pngPath).toString('base64');
     const originalPng = fs.readFileSync(pngPath), text = Buffer.from('Comment\0CubeBricks pixel-fingerprint verification');
-    const chunk = Buffer.alloc(text.length + 12); chunk.writeUInt32BE(text.length); chunk.write('tEXt', 4); text.copy(chunk, 8);
+    const chunk = Buffer.alloc(text.length + 12);
+    chunk.writeUInt32BE(text.length);
+    chunk.write('tEXt', 4);
+    text.copy(chunk, 8);
     let crc = 0xffffffff;
-    for (const byte of chunk.subarray(4, -4)) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? 0xedb88320 ^ crc >>> 1 : crc >>> 1; }
+    for (const byte of chunk.subarray(4, -4)) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? 0xedb88320 ^ crc >>> 1 : crc >>> 1;
+    }
     chunk.writeUInt32BE((crc ^ 0xffffffff) >>> 0, chunk.length - 4);
     const equivalentPng = Buffer.concat([originalPng.subarray(0, -12), chunk, originalPng.subarray(-12)]).toString('base64');
     await contents.executeJavaScript(`(async()=>{
@@ -98,5 +119,6 @@ app.whenReady().then(async () => {
   } catch (error) { report = { ok: false, error: error.stack, errors, picks }; }
   fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
   fs.writeFileSync(path.resolve('build/performance/native-files.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report)); app.exit(report.ok ? 0 : 1);
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

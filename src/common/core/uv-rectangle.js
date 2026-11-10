@@ -2,7 +2,7 @@
 // Mirroring stays encoded in the stored endpoint order.
 export function uvRectangleFields(uv) {
   return [Math.min(uv[0], uv[2]), Math.min(uv[1], uv[3]),
-    Math.abs(uv[2] - uv[0]), Math.abs(uv[3] - uv[1])];
+  Math.abs(uv[2] - uv[0]), Math.abs(uv[3] - uv[1])];
 }
 
 export function editUvRectangleField(uv, coordinate, value, maximum) {

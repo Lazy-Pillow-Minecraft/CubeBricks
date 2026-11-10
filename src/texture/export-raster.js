@@ -5,7 +5,9 @@ import { checkBakeSize, positiveModulo } from './export-plan.js';
 
 export function bakeCanvas(width, height) {
   checkBakeSize(width, height);
-  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
   canvas.getContext('2d').imageSmoothingEnabled = false;
   return canvas;
 }
@@ -27,7 +29,10 @@ export async function captureExportTexture(asset) {
 }
 
 export function paintTexturePlane(context, source, plane, x, y) {
-  if (!plane.tiled) { context.drawImage(source, x, y); return; }
+  if (!plane.tiled) {
+    context.drawImage(source, x, y);
+    return;
+  }
   context.save();
   context.translate(x, y);
   context.fillStyle = context.createPattern(source, 'repeat');
@@ -39,7 +44,10 @@ export function paintBoxNet(context, net, sources, density, x, y, pixelCache = n
   for (const face of net.members) {
     const source = sources[face.index];
     let pixels = pixelCache.get(source);
-    if (!pixels) { pixels = source.getContext('2d').getImageData(0, 0, source.width, source.height); pixelCache.set(source, pixels); }
+    if (!pixels) {
+      pixels = source.getContext('2d').getImageData(0, 0, source.width, source.height);
+      pixelCache.set(source, pixels);
+    }
     const target = getBlockbenchBoxUv(net.cube, face.name), slots = createBlockbenchFaceUvSlots(face.pixelUv, face.rotation);
     const left = Math.min(target[0], target[2]), top = Math.min(target[1], target[3]);
     const width = Math.round(Math.abs(target[2] - target[0]) * density), height = Math.round(Math.abs(target[3] - target[1]) * density);

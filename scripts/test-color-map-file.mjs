@@ -6,8 +6,24 @@ const rows = [{
   marker: 0, gradientSegments: 'custom', gradientPositions: [0, 1],
   colorSpaceGradient: true, colorSpaceCurve: {
     mode: 'hsv_cylinder', nodes: [
-      { id: 'node-1', position: [.1, .2, .3], handleIn: [-.1, 0, 0], handleOut: [.1, 0, 0], autoTangent: false, handlesEnabled: true, symmetricHandles: false },
-      { id: 'node-2', position: [.8, .7, .6], handleIn: [-.2, 0, 0], handleOut: [.2, 0, 0], autoTangent: true, handlesEnabled: false, symmetricHandles: true }
+      {
+        id: 'node-1',
+        position: [.1, .2, .3],
+        handleIn: [-.1, 0, 0],
+        handleOut: [.1, 0, 0],
+        autoTangent: false,
+        handlesEnabled: true,
+        symmetricHandles: false
+      },
+      {
+        id: 'node-2',
+        position: [.8, .7, .6],
+        handleIn: [-.2, 0, 0],
+        handleOut: [.2, 0, 0],
+        autoTangent: true,
+        handlesEnabled: false,
+        symmetricHandles: true
+      }
     ]
   }
 }];

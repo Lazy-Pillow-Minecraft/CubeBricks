@@ -15,7 +15,7 @@ export async function pngPixels(source) {
   const bytes = typeof Uint8Array.fromBase64 === 'function' ? Uint8Array.fromBase64(base64)
     : Uint8Array.from(atob(base64), char => char.charCodeAt(0));
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if ([137,80,78,71,13,10,26,10].some((value, index) => bytes[index] !== value)) return null;
+  if ([137, 80, 78, 71, 13, 10, 26, 10].some((value, index) => bytes[index] !== value)) return null;
   let width, height, type, depth, palette, transparency, ended = false;
   const compressed = [];
   for (let offset = 8; offset + 12 <= bytes.length;) {
@@ -26,14 +26,20 @@ export async function pngPixels(source) {
     if (!width && name !== 'IHDR') throw Error('Missing PNG header');
     if (name === 'IHDR') {
       if (width || length !== 13) throw Error('Invalid PNG header');
-      width = dataView.getUint32(0); height = dataView.getUint32(4); depth = data[8]; type = data[9];
+      width = dataView.getUint32(0);
+      height = dataView.getUint32(4);
+      depth = data[8];
+      type = data[9];
       if (data[10] || data[11] || data[12]) return null;
     } else if (name === 'IDAT') compressed.push(data);
     else if (name === 'PLTE') palette = data;
     else if (name === 'tRNS') transparency = data;
     else if (name !== 'IEND' && !(name.charCodeAt(0) & 32)) return null;
     offset += length + 12;
-    if (name === 'IEND') { ended = length === 0; break; }
+    if (name === 'IEND') {
+      ended = length === 0;
+      break;
+    }
   }
   if (!ended || !compressed.length) throw Error('Incomplete PNG');
   if (!width || !height || width * height > 67108864 || depth !== 8) return null;
@@ -43,11 +49,17 @@ export async function pngPixels(source) {
     || type === 3 && (!palette || transparency.length > palette.length / 3) || type === 4 || type === 6)) throw Error('Invalid PNG transparency');
   const stride = width * channels, expected = (stride + 1) * height;
   const reader = new Blob(compressed).stream().pipeThrough(new DecompressionStream('deflate')).getReader();
-  const raw = new Uint8Array(expected); let offset = 0;
-  for (;;) {
-    const { value, done } = await reader.read(); if (done) break;
-    if (offset + value.length > expected) { await reader.cancel(); throw Error('Invalid PNG pixel count'); }
-    raw.set(value, offset); offset += value.length;
+  const raw = new Uint8Array(expected);
+  let offset = 0;
+  for (; ;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (offset + value.length > expected) {
+      await reader.cancel();
+      throw Error('Invalid PNG pixel count');
+    }
+    raw.set(value, offset);
+    offset += value.length;
   }
   if (offset !== expected) throw Error('Invalid PNG pixel count');
   const rgba = new Uint8Array(width * height * 4), transparent = transparency && new DataView(transparency.buffer, transparency.byteOffset, transparency.length);
@@ -80,7 +92,8 @@ export async function pngPixels(source) {
       } else {
         const color = row[input] * 3;
         if (!palette || color + 2 >= palette.length) throw Error('Invalid PNG palette');
-        rgba.set(palette.subarray(color, color + 3), output); rgba[output + 3] = transparency?.[row[input]] ?? 255;
+        rgba.set(palette.subarray(color, color + 3), output);
+        rgba[output + 3] = transparency?.[row[input]] ?? 255;
       }
     }
     previous = row;

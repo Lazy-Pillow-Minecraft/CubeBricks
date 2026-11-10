@@ -37,7 +37,12 @@
       </symbol>
       <symbol id="icon-truncated-icosahedron" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/>
-        <path d="m12 6 3.1 2.2-1.2 3.6h-3.8L8.9 8.2 12 6Zm-3.1 2.2-4-.7m-.7 6.8 5.9-2.5m3.8 0 5.9 2.5m-.7-6.8-4-.7m-5 5 1.9 5.4m1.9-5.4L12 17.2m-5.5 2.2 5.5-2.2 5.5 2.2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>
+        <path
+          d="m12 6 3.1 2.2-1.2 3.6h-3.8L8.9 8.2 12 6Zm-3.1 2.2-4-.7m-.7 6.8 5.9-2.5m3.8 0 5.9 2.5m-.7-6.8-4-.7m-5 5 1.9 5.4m1.9-5.4L12 17.2m-5.5 2.2 5.5-2.2 5.5 2.2"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.25"
+          stroke-linejoin="round"/>
       </symbol>
       <symbol id="icon-save" viewBox="0 0 159.76 153.52">
         <rect x="90.72" y="6.58" width="23.14" height="39.03" rx="5.84" ry="5.84"/><path d="M156.12,23.74l-20.1-20.1c-2.33-2.33-5.49-3.64-8.79-3.64H12.43C5.56,0,0,5.56,0,12.43v128.66c0,6.86,5.56,12.43,12.43,12.43h134.9c6.86,0,12.43-5.56,12.43-12.43V32.53c0-3.3-1.31-6.46-3.64-8.79ZM41.95,10.03c0-3.69,2.99-6.68,6.68-6.68h62.5c3.69,0,6.68,2.99,6.68,6.68v32.12c0,3.69-2.99,6.68-6.68,6.68h-62.5c-3.69,0-6.68-2.99-6.68-6.68V10.03ZM142.84,141.17c0,4.67-3.79,8.46-8.46,8.46H25.38c-4.67,0-8.46-3.79-8.46-8.46v-69.19c0-4.67,3.79-8.46,8.46-8.46h109c4.67,0,8.46,3.79,8.46,8.46v69.19Z"/>
@@ -302,7 +307,15 @@
           <svg class="transform-gizmo" id="transformGizmo" aria-hidden="true" focusable="false" hidden></svg>
           <div class="transform-tooltip" id="transformTooltip" role="status" hidden></div>
           <div class="viewport-render-menu" id="viewportRenderMenu">
-            <button class="render-mode-current" id="renderModeButton" type="button" data-mode="textured" data-tooltip="目前：紋理" aria-label="目前渲染模式：紋理" aria-expanded="false" aria-controls="renderModeMenu">
+            <button
+              class="render-mode-current"
+              id="renderModeButton"
+              type="button"
+              data-mode="textured"
+              data-tooltip="目前：紋理"
+              aria-label="目前渲染模式：紋理"
+              aria-expanded="false"
+              aria-controls="renderModeMenu">
               <svg data-icon-mode="wireframe" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4L12 2.8Zm0 0v9.3m8-4.7-8 4.7-8-4.7m8 4.7v9.1"/></svg>
               <svg data-icon-mode="solid" viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/></svg>
               <svg data-icon-mode="textured" viewBox="0 0 24 24" aria-hidden="true"><path class="face top" d="m12 2.8 8 4.6-8 4.7-8-4.7 8-4.6Z"/><path class="face side" d="m12 12.1 8-4.7v9.2l-8 4.6v-9.1Z"/><path class="face front" d="m4 7.4 8 4.7v9.1l-8-4.6V7.4Z"/><path class="texture-mark" d="m5.7 10.3 2 1.1v2.3l-2-1.1v-2.3Zm4 2.3 2 1.1V16l-2-1.1v-2.3Zm-4 2.3 2 1.1v2.3l-2-1.1v-2.3Z"/></svg>
@@ -582,7 +595,10 @@
     </form>
   </dialog>
 
-  <dialog id="projectOpenProgressDialog" class="theme-dialog texture-progress-dialog project-open-progress-dialog" aria-labelledby="projectOpenProgressStatus">
+  <dialog
+    id="projectOpenProgressDialog"
+    class="theme-dialog texture-progress-dialog project-open-progress-dialog"
+    aria-labelledby="projectOpenProgressStatus">
     <div class="dialog-heading"><div><span class="eyebrow">OPENING PROJECT</span><h2>正在打開項目</h2></div><output id="projectOpenProgressPercent">0%</output></div>
     <strong id="projectOpenProgressStatus">正在讀取項目檔案…</strong>
     <progress id="projectOpenProgressBar" max="1" value="0"></progress>

@@ -64,7 +64,11 @@ const child = spawn(process.execPath, [builder, '--win', 'nsis', '--x64', '--con
   `--config.extraMetadata.version=${installerVersion}`], {
   cwd: projectRoot, env: environment, stdio: 'inherit'
 });
-child.on('error', error => { console.error(error); cleanup(); process.exitCode = 1; });
+child.on('error', error => {
+  console.error(error);
+  cleanup();
+  process.exitCode = 1;
+});
 child.on('exit', (code, signal) => {
   cleanup();
   if (signal) process.kill(process.pid, signal);

@@ -25,7 +25,8 @@ export const shapeRegistry = Object.freeze({
         return (definition.constrainFormat || FormatConstraintDefinition.prototype.constrainFormat).call(this, subject, { ...context, utils: shapePackUtils });
       },
       supportsFormat: definition.supportsFormat || FormatConstraintDefinition.prototype.supportsFormat,
-      defaults: structuredClone(definition.defaults || {}), external, pack }));
+      defaults: structuredClone(definition.defaults || {}), external, pack
+    }));
     definitions.set(entry.id, entry);
     registerFormatDefinition('shape', entry);
     return entry;
@@ -35,7 +36,8 @@ export const shapeRegistry = Object.freeze({
   list() { return [...definitions.values()]; },
   removeExternal() {
     for (const [id, definition] of definitions) if (definition.external) {
-      definitions.delete(id); removeFormatDefinition('shape', id);
+      definitions.delete(id);
+      removeFormatDefinition('shape', id);
     }
   }
 });

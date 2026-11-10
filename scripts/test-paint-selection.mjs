@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { paintSelectionAllows, faceRectangleFrame, faceRectanglePlanePoint,
-  faceRectangleCoordinates, faceRectangleWorldPoint } from '../src/paint/selection-controller.js';
+import {
+  paintSelectionAllows, faceRectangleFrame, faceRectanglePlanePoint,
+  faceRectangleCoordinates, faceRectangleWorldPoint
+} from '../src/paint/selection-controller.js';
 import { transformSelectedPixels, mapSelectionPoint } from '../src/paint/selection-transform.js';
 import { captureSelectionPatch, preparePixelSelection, renderPixelSelection, selectionGestureMatrix } from '../src/paint/selection-gesture.js';
 import { HANDLE_SIZE, selectionHandleProjection } from '../src/paint/selection-frame.js';
@@ -20,22 +22,27 @@ assert.equal(paintSelectionAllows(state, 'a', 1, 0, 2, 2), true);
 assert.equal(paintSelectionAllows(state, 'a', 0, 0, 2, 2), false);
 assert.equal(paintSelectionAllows(state, 'b', 1, 0, 2, 2), false);
 assert.equal(paintSelectionAllows(state, 'a', 1, 0, 4, 4), false);
-const face = faceRectangleFrame({ point: [2, 2, 0], facePoints: [
-  [0, 0, 0], [4, 0, 0], [0, 4, 0], [4, 4, 0]
-] });
+const face = faceRectangleFrame({
+  point: [2, 2, 0], facePoints: [
+    [0, 0, 0], [4, 0, 0], [0, 4, 0], [4, 4, 0]
+  ]
+});
 assert.deepEqual(faceRectangleCoordinates(face, faceRectanglePlanePoint(face, {
   origin: [6, 2, 5], direction: [0, 0, -1]
 })), [1.5, .5], 'rectangle drag extends on the starting face plane beyond its visible quad');
 assert.deepEqual(faceRectangleWorldPoint(face, .5, .5), [2, 2, 0]);
-const oblique = faceRectangleFrame({ point: [1, 2, 1], facePoints: [
-  [0, 0, 0], [2, 0, 2], [0, 4, 0], [2, 4, 2]
-] });
+const oblique = faceRectangleFrame({
+  point: [1, 2, 1], facePoints: [
+    [0, 0, 0], [2, 0, 2], [0, 4, 0], [2, 4, 2]
+  ]
+});
 assert.deepEqual(faceRectangleCoordinates(oblique, faceRectanglePlanePoint(oblique, {
   origin: [1, 2, 6], direction: [0, 0, -1]
 })), [.5, .5], 'oblique faces use their actual 3D plane, independent of screen projection');
 const pixelSource = new Uint8ClampedArray(5 * 5 * 4);
 pixelSource.set([255, 0, 0, 255], (2 * 5 + 1) * 4);
-const pixelMask = new Uint8Array(25); pixelMask[2 * 5 + 1] = 1;
+const pixelMask = new Uint8Array(25);
+pixelMask[2 * 5 + 1] = 1;
 const moved = transformSelectedPixels(pixelSource, pixelMask, 5, 5, { dx: 2 });
 assert.equal(moved.pixels[(2 * 5 + 1) * 4 + 3], 0, 'moving cuts the original pixel');
 assert.equal(moved.pixels[(2 * 5 + 3) * 4], 255, 'moving places the selected pixel');
@@ -50,7 +57,8 @@ assert.equal(angled.pixels[(2 * 5 + 1) * 4 + 3] > 0, true,
 const big = new Uint8ClampedArray(13 * 13 * 4), bigMask = new Uint8Array(13 * 13);
 for (let y = 4; y < 9; y++) for (let x = 4; x < 9; x++) {
   const i = y * 13 + x;
-  bigMask[i] = 1; big.set([90, 170, 220, 255], i * 4);
+  bigMask[i] = 1;
+  big.set([90, 170, 220, 255], i * 4);
 }
 const free = transformSelectedPixels(big, bigMask, 13, 13, { angle: .47, scaleX: 1.3, scaleY: 1.1 });
 for (let y = 5; y < 8; y++) for (let x = 5; x < 8; x++)
@@ -87,19 +95,27 @@ for (const [[x, y], [u, v]] of quad.map((corner, i) => [
 
 const asset = { _uid: 'atlas' }, pixels = new Uint8ClampedArray(8 * 4 * 4), atlasMask = new Uint8Array(8 * 4);
 const offset = (x, y) => (y * 8 + x) * 4;
-pixels.set([255, 0, 0, 255], offset(1, 1)); pixels.set([0, 0, 255, 255], offset(6, 1));
-pixels.set([0, 255, 0, 255], offset(4, 1)); atlasMask[9] = 1;
-const primary = { asset, width: 8, height: 4, bounds: { left: 1, top: 1, right: 1, bottom: 1, cx: 1.5, cy: 1.5 },
-  clip: { left: 0, top: 0, right: 3, bottom: 4 }, inverse: [1 / 3, 0, 0, 1 / 4, 0, 0] };
-const mirror = { asset, width: 8, height: 4, clip: { left: 5, top: 0, right: 8, bottom: 4 },
-  slots: [[5, 0], [8, 0], [5, 4], [8, 4]], hit: { symmetryPermutation: [1, 0, 3, 2] } };
+pixels.set([255, 0, 0, 255], offset(1, 1));
+pixels.set([0, 0, 255, 255], offset(6, 1));
+pixels.set([0, 255, 0, 255], offset(4, 1));
+atlasMask[9] = 1;
+const primary = {
+  asset, width: 8, height: 4, bounds: { left: 1, top: 1, right: 1, bottom: 1, cx: 1.5, cy: 1.5 },
+  clip: { left: 0, top: 0, right: 3, bottom: 4 }, inverse: [1 / 3, 0, 0, 1 / 4, 0, 0]
+};
+const mirror = {
+  asset, width: 8, height: 4, clip: { left: 5, top: 0, right: 8, bottom: 4 },
+  slots: [[5, 0], [8, 0], [5, 4], [8, 4]], hit: { symmetryPermutation: [1, 0, 3, 2] }
+};
 let resultPixels;
 const surfaces = await preparePixelSelection(primary, [mirror], new Map([[asset._uid,
-  { width: 8, height: 4, pixels: atlasMask }]]), async () => ({
-    canvas: { width: 8, height: 4 },
-    context: { getImageData: () => ({ data: pixels }), createImageData: () => ({ data: new Uint8ClampedArray(pixels.length) }),
-      putImageData: image => { resultPixels = image.data; } }
-  }));
+{ width: 8, height: 4, pixels: atlasMask }]]), async () => ({
+  canvas: { width: 8, height: 4 },
+  context: {
+    getImageData: () => ({ data: pixels }), createImageData: () => ({ data: new Uint8ClampedArray(pixels.length) }),
+    putImageData: image => { resultPixels = image.data; }
+  }
+}));
 renderPixelSelection(surfaces, [1, 0, 0, 1, 1, 0], false);
 assert.deepEqual([...resultPixels.slice(offset(2, 1), offset(2, 1) + 4)], [255, 0, 0, 255]);
 assert.deepEqual([...resultPixels.slice(offset(5, 1), offset(5, 1) + 4)], [0, 0, 255, 255],
@@ -112,8 +128,10 @@ const patch = captureSelectionPatch(surfaces, [1, 0, 0, 1, 1, 0], 'nearest');
 assert.deepEqual({ ...patch, data: [...patch.data] }, { left: 2, top: 1, width: 1, height: 1, data: [255, 0, 0, 255] });
 const pasted = await preparePixelSelection({ ...primary, bounds: { left: 2, top: 0, right: 2, bottom: 0 } }, [], null, async () => ({
   canvas: { width: 8, height: 4 },
-  context: { getImageData: () => ({ data: pixels }), createImageData: () => ({ data: new Uint8ClampedArray(pixels.length) }),
-    putImageData: image => { resultPixels = image.data; } }
+  context: {
+    getImageData: () => ({ data: pixels }), createImageData: () => ({ data: new Uint8ClampedArray(pixels.length) }),
+    putImageData: image => { resultPixels = image.data; }
+  }
 }), patch);
 assert.equal(renderPixelSelection(pasted, [1, 0, 0, 1, 0, 0], false), true, 'paste places pixels without requiring a transform');
 assert.deepEqual([...resultPixels.slice(offset(2, 0), offset(2, 0) + 4)], [255, 0, 0, 255]);

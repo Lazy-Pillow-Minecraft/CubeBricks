@@ -2,15 +2,22 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-paint-gestures-'));
-app.setPath('userData', profile); app.setPath('sessionData', profile);
-app.on('browser-window-created', (_event, win) => { win.hide(); win.webContents.setBackgroundThrottling(false); });
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.webContents.setBackgroundThrottling(false);
+});
 const { WorkerProjectJournal } = require('../electron/journal-service.cjs');
 const commit = WorkerProjectJournal.prototype.commit;
 let gate, release, blocked = 0;
 const io = { started: 0, passedGate: 0, completed: 0, checkouts: 0 };
 WorkerProjectJournal.prototype.commit = async function (...args) {
   io.started++;
-  if (gate) { blocked++; await gate; }
+  if (gate) {
+    blocked++;
+    await gate;
+  }
   io.passedGate++;
   try { return await commit.apply(this, args); }
   finally { io.completed++; }
@@ -148,7 +155,8 @@ app.whenReady().then(async () => {
       t.finalSource=t.layerSource();
       return {size:1024,layers:t.asset().layers.length,strokes:t.points.length,undo,redo,branched:true,previews:t.previews};
     })()`);
-    gate = null; release();
+    gate = null;
+    release();
     report.persisted = await wc.executeJavaScript(`(async()=>{
       const t=window.paintTest;
       await t.until(()=>t.receipts>=t.previews||t.mismatches,'complete all delayed paint history receipts',3000);
@@ -444,7 +452,10 @@ app.whenReady().then(async () => {
       t.assert(docks.layers.stackActive,'saved dock tab survives mode fallback');
       return {journalId:t.journalId,byMode:true,byProject:true,stackSelection:true,independentSpaces:true};
     })()`);
-    await new Promise(resolve=>{wc.once('did-finish-load',resolve);wc.reload();});
+    await new Promise(resolve => {
+      wc.once('did-finish-load', resolve);
+      wc.reload();
+    });
     report.reopened = await wc.executeJavaScript(`(async()=>{
       const $=s=>document.querySelector(s),{state}=await import('./editor/state.js');
       const {configRegistry,ConfigKey}=await import('./common/config/app-config.js');
@@ -475,10 +486,17 @@ app.whenReady().then(async () => {
       await until(()=>draws>idleDraws,'viewport still renders when zoom changes');
       return {projectTools:true,dockSelection:true,spaces:true,sceneFps:true};
     })()`);
-    report.heldCommits = blocked; report.ok = true;
+    report.heldCommits = blocked;
+    report.ok = true;
   } catch (error) { report.error = error.stack; }
-  finally { gate = null; release?.(); report.io = io; report.heldCommits = blocked; }
+  finally {
+    gate = null;
+    release?.();
+    report.io = io;
+    report.heldCommits = blocked;
+  }
   fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
   fs.writeFileSync(path.resolve('build/performance/paint-gestures.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report)); app.exit(report.ok ? 0 : 1);
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

@@ -62,7 +62,10 @@ function unpackZip(bytes, { maxEntrySize = 512 * 1024 * 1024, maxTotalSize = 2 *
   const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   let end = -1;
   for (let index = buffer.length - 22; index >= Math.max(0, buffer.length - 65557); index--) {
-    if (buffer.readUInt32LE(index) === 0x06054b50) { end = index; break; }
+    if (buffer.readUInt32LE(index) === 0x06054b50) {
+      end = index;
+      break;
+    }
   }
   if (end < 0) throw new Error('不是有效的 ZIP／cbmodel 文件');
   const count = buffer.readUInt16LE(end + 10);

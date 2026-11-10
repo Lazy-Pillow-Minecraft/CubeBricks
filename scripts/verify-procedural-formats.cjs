@@ -3,11 +3,13 @@ const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-procedural-formats-'));
-app.setPath('userData', profile); app.setPath('sessionData', profile);
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
 app.whenReady().then(async () => {
   let report;
   try {
-    const page = path.join(profile, 'verify.html'); fs.writeFileSync(page, '<!doctype html><body style="margin:0">');
+    const page = path.join(profile, 'verify.html');
+    fs.writeFileSync(page, '<!doctype html><body style="margin:0">');
     const win = new BrowserWindow({ show: false, width: 400, height: 400, webPreferences: { backgroundThrottling: false } });
     await win.loadFile(page);
     const root = pathToFileURL(path.resolve('src')).href;
@@ -63,7 +65,9 @@ app.whenReady().then(async () => {
     })()`);
     report = { ok: true, ...checks };
   } catch (error) { report = { ok: false, error: error.stack }; }
-  const directory = path.resolve('build/performance'); fs.mkdirSync(directory, { recursive: true });
+  const directory = path.resolve('build/performance');
+  fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, 'procedural-formats.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report)); app.exit(report.ok ? 0 : 1);
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

@@ -17,19 +17,27 @@ function image(color) {
   return encodePng({ width: 16, height: 16, rgba });
 }
 function model(nodes, textures = []) {
-  return JSON.stringify({ name: 'test', formatVersion: 3, outliner: nodes.map(node => node.uid),
-    elements: nodes, groups: [], textures });
+  return JSON.stringify({
+    name: 'test', formatVersion: 3, outliner: nodes.map(node => node.uid),
+    elements: nodes, groups: [], textures
+  });
 }
 test('undo restores curve nodes and their local handles without mixing node identities', async () => {
   const directory = await fs.mkdtemp(path.join(__dirname, '..', '.journal-curve-node-test-'));
   try {
-    const curve = { uid: 'curve_a', type: 'bezier3d', origin: [0, 0, 0], rotation: [0, 0, 0],
+    const curve = {
+      uid: 'curve_a', type: 'bezier3d', origin: [0, 0, 0], rotation: [0, 0, 0],
       nodes: [
-        { uid: 'node_a', position: [0, 0, 0], rotation: [0, -90, -90],
-          handleIn: [0, 0, -2], handleOut: [0, 0, 2], autoTangent: false },
-        { uid: 'node_b', position: [0, 8, 0], rotation: [0, -90, -90],
-          handleIn: [0, 0, -2], handleOut: [0, 0, 2], autoTangent: false }
-      ] };
+        {
+          uid: 'node_a', position: [0, 0, 0], rotation: [0, -90, -90],
+          handleIn: [0, 0, -2], handleOut: [0, 0, 2], autoTangent: false
+        },
+        {
+          uid: 'node_b', position: [0, 8, 0], rotation: [0, -90, -90],
+          handleIn: [0, 0, -2], handleOut: [0, 0, 2], autoTangent: false
+        }
+      ]
+    };
     const journal = await new ProjectJournal(directory).initialize(model([curve]));
     const edited = structuredClone(curve);
     edited.nodes.splice(1, 0, { ...structuredClone(curve.nodes[0]), uid: 'node_added', position: [2, 4, 0] });
@@ -69,9 +77,13 @@ test('CBM2 groups text, deduplicates images and restores exact file bytes', asyn
   const entries = [
     ['transactions/1.json', Buffer.from(JSON.stringify({ image: source, value: 1 }, null, 2))],
     ['textures/example/current', Buffer.from(JSON.stringify({ source, value: 2 }, null, 2))],
-    ['texture_changes/2/example.json', Buffer.from(JSON.stringify({ image: { kind: 'tiles', tiles: [
-      { x: 0, y: 0, before: tile, after: tile }
-    ] } }))],
+    ['texture_changes/2/example.json', Buffer.from(JSON.stringify({
+      image: {
+        kind: 'tiles', tiles: [
+          { x: 0, y: 0, before: tile, after: tile }
+        ]
+      }
+    }))],
     ['empty', Buffer.alloc(0)]
   ];
   const bytes = await packArchive(entries);
@@ -177,8 +189,10 @@ test('reference images are stored once and indexed by every journal state', asyn
     };
     const content = (position, offset) => JSON.stringify({
       ...JSON.parse(model([{ ...cube, position: [position, 0, 0] }])),
-      referenceImages: { ...referenceImages,
-        general: [{ ...referenceImages.general[0], offset: [offset, 0] }] }
+      referenceImages: {
+        ...referenceImages,
+        general: [{ ...referenceImages.general[0], offset: [offset, 0] }]
+      }
     });
     const working = path.join(root, 'working');
     const journal = await new ProjectJournal(working).initialize(content(0, 0));
@@ -373,16 +387,27 @@ test('committed texture staging finishes after crash, incomplete staging rolls b
 }));
 
 test('bulk texture assignment undoes all faces, UV flags, hierarchy and texture folders together', () => withJournal(async root => {
-  const nodes = ['a', 'b'].map(id => ({ uid: `cube_${id}`, type: 'cube', autoUv: true,
-    position: [0, 0, 0], faces: { north: { texture: 'old_texture', uv: [2, 3, 6, 9] } } }));
+  const nodes = ['a', 'b'].map(id => ({
+    uid: `cube_${id}`, type: 'cube', autoUv: true,
+    position: [0, 0, 0], faces: { north: { texture: 'old_texture', uv: [2, 3, 6, 9] } }
+  }));
   const before = JSON.parse(model(nodes));
-  before.groups = [{ uid: 'group_a', type: 'group', children: nodes.map(node => node.uid), pivot: [1, 2, 3], rotation: [12, 17, 26] }];
+  before.groups = [{
+    uid: 'group_a',
+    type: 'group',
+    children: nodes.map(node => node.uid),
+    pivot: [1, 2, 3],
+    rotation: [12, 17, 26]
+  }];
   before.outliner = ['group_a'];
   before.textureGroups = [{ uid: 'folder_a', name: 'folder' }];
   const journal = await new ProjectJournal(root).initialize(before);
   before.projectUuid = journal.projectUuid;
   const after = structuredClone(before);
-  after.elements.forEach(cube => { cube.faces.north.texture = 'new_texture'; cube.autoUv = false; });
+  after.elements.forEach(cube => {
+    cube.faces.north.texture = 'new_texture';
+    cube.autoUv = false;
+  });
   const result = await journal.commit(after, 'core.texture.assign');
   assert.equal(result.globalSequence, '2_T');
   assert.deepEqual(JSON.parse((await journal.navigate('undo')).content), before);
@@ -445,7 +470,8 @@ test('duplicate node IDs are rejected rather than overwriting a different snapsh
 function withPngComment(source) {
   const chunk = Buffer.alloc(16);
   chunk.writeUInt32BE(4, 0);
-  chunk.write('tEXt', 4); chunk.write('test', 8);
+  chunk.write('tEXt', 4);
+  chunk.write('test', 8);
   let crc = 0xffffffff;
   for (const byte of chunk.subarray(4, 12)) {
     crc ^= byte;
@@ -471,10 +497,12 @@ test('reencoded PNG after undo does not create a false edit or destroy redo', ()
 }));
 
 test('undo preserves source-less layer groups and empty image sources', () => withJournal(async root => {
-  const texture = { uuid: 'texture_a', source: image(10), layers: [
-    { uid: 'group_a', type: 'group', name: 'group' },
-    { uid: 'layer_a', parentUid: 'group_a', source: '' }
-  ] };
+  const texture = {
+    uuid: 'texture_a', source: image(10), layers: [
+      { uid: 'group_a', type: 'group', name: 'group' },
+      { uid: 'layer_a', parentUid: 'group_a', source: '' }
+    ]
+  };
   const cube = { uid: 'cube_a', type: 'cube', position: [0, 0, 0] };
   const journal = await new ProjectJournal(root).initialize(model([cube], [texture]));
   await journal.commit(model([{ ...cube, position: [1, 0, 0] }], [{
@@ -494,14 +522,18 @@ test('undo keeps a texture without a top-level image source absent', () => withJ
 }));
 
 test('older layer deltas do not invent a source for group layers', () => withJournal(async root => {
-  const texture = { uuid: 'texture_a', source: image(10), layers: [
-    { uid: 'group_a', type: 'group', name: 'group' },
-    { uid: 'layer_a', parentUid: 'group_a', source: image(10) }
-  ] };
+  const texture = {
+    uuid: 'texture_a', source: image(10), layers: [
+      { uid: 'group_a', type: 'group', name: 'group' },
+      { uid: 'layer_a', parentUid: 'group_a', source: image(10) }
+    ]
+  };
   const journal = await new ProjectJournal(root).initialize(model([], [texture]));
-  await journal.commit(model([], [{ ...texture, layers: [
-    { ...texture.layers[0], name: 'renamed' }, texture.layers[1]
-  ] }]), 'core.texture.property');
+  await journal.commit(model([], [{
+    ...texture, layers: [
+      { ...texture.layers[0], name: 'renamed' }, texture.layers[1]
+    ]
+  }]), 'core.texture.property');
   const filename = path.join(root, 'texture_changes', '2', 'texture_a.json');
   const older = JSON.parse(await fs.readFile(filename, 'utf8'));
   delete older.layerSourcePresence;

@@ -13,8 +13,10 @@ function unionBounds(boxes) {
 }
 
 function shifted(box, amount) {
-  return { min: box.min.map((value, axis) => value + amount[axis]),
-    max: box.max.map((value, axis) => value + amount[axis]) };
+  return {
+    min: box.min.map((value, axis) => value + amount[axis]),
+    max: box.max.map((value, axis) => value + amount[axis])
+  };
 }
 
 // Groups are indivisible at their parent's level. Nested groups are laid out
@@ -43,7 +45,10 @@ export function buildPaintExplodeOffsets(project, ownerPoints, gap = 2) {
     for (const item of items) {
       const at = center(item.box);
       let bucket = coincident.find(entry => entry.center.every((value, axis) => Math.abs(value - at[axis]) < 1e-6));
-      if (!bucket) { bucket = { center: at, items: [] }; coincident.push(bucket); }
+      if (!bucket) {
+        bucket = { center: at, items: [] };
+        coincident.push(bucket);
+      }
       bucket.items.push(item);
     }
     for (const bucket of coincident) {
@@ -103,8 +108,10 @@ export function buildPaintExplodeOffsets(project, ownerPoints, gap = 2) {
     const items = coreBox ? [{ box: coreBox, uids: core }, ...children] : children;
     const original = unionBounds(items.map(item => item.box));
     if (!original) return null;
-    return { box: pack(items, center(original)),
-      uids: items.flatMap(item => item.uids) };
+    return {
+      box: pack(items, center(original)),
+      uids: items.flatMap(item => item.uids)
+    };
   };
   visit(project.outliner || []);
   return offsets;
@@ -139,6 +146,8 @@ export function applyPaintExplodeOffsets(geometry, offsets) {
   }
   // These arrays share corner references with ownerPoints, so no second move.
   const bounds = unionBounds([...geometry.ownerPoints.values()].map(boundsOf));
-  geometry.bounds = bounds ? { ...bounds,
-    center: bounds.min.map((value, axis) => (value + bounds.max[axis]) / 2) } : null;
+  geometry.bounds = bounds ? {
+    ...bounds,
+    center: bounds.min.map((value, axis) => (value + bounds.max[axis]) / 2)
+  } : null;
 }

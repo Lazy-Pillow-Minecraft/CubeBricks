@@ -1,29 +1,33 @@
-const {app,BrowserWindow}=require('electron');
-const fs=require('node:fs');
-const path=require('node:path');
-const os=require('node:os');
-const profile=fs.mkdtempSync(path.join(os.tmpdir(),'cubebricks-history-dialog-'));
-app.setPath('userData',profile);app.setPath('sessionData',profile);
-const errors=[];
-let initialCapture=null,markedCapture=null;
-app.on('web-contents-created',(_event,contents)=>contents.on('console-message',details=>{
-  if(details.level==='error')errors.push(details.message);
-  if(details.message==='CB_HISTORY_READY')initialCapture=contents.capturePage().then(capture=>{
-    fs.mkdirSync(path.resolve('build/performance'),{recursive:true});
-    fs.writeFileSync(path.resolve('build/performance/history-dialog-branches.png'),capture.toPNG());
+const { app, BrowserWindow } = require('electron');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-history-dialog-'));
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+const errors = [];
+let initialCapture = null, markedCapture = null;
+app.on('web-contents-created', (_event, contents) => contents.on('console-message', details => {
+  if (details.level === 'error') errors.push(details.message);
+  if (details.message === 'CB_HISTORY_READY') initialCapture = contents.capturePage().then(capture => {
+    fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+    fs.writeFileSync(path.resolve('build/performance/history-dialog-branches.png'), capture.toPNG());
   });
-  if(details.message==='CB_HISTORY_MARK_READY')markedCapture=contents.capturePage().then(capture=>{
-    fs.writeFileSync(path.resolve('build/performance/history-dialog-marked.png'),capture.toPNG());
+  if (details.message === 'CB_HISTORY_MARK_READY') markedCapture = contents.capturePage().then(capture => {
+    fs.writeFileSync(path.resolve('build/performance/history-dialog-marked.png'), capture.toPNG());
   });
 }));
-app.on('browser-window-created',(_event,win)=>{win.hide();win.webContents.setBackgroundThrottling(false);});
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.webContents.setBackgroundThrottling(false);
+});
 require('../electron/main.cjs');
-app.whenReady().then(async()=>{
+app.whenReady().then(async () => {
   let report;
-  try{
-    const contents=BrowserWindow.getAllWindows()[0].webContents;
-    if(contents.isLoading())await new Promise(resolve=>contents.once('did-finish-load',resolve));
-    report=await contents.executeJavaScript(`(async()=>{
+  try {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    if (contents.isLoading()) await new Promise(resolve => contents.once('did-finish-load', resolve));
+    report = await contents.executeJavaScript(`(async()=>{
       const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       const check=(value,message)=>{if(!value)throw Error(message);};
       const until=async(test,message)=>{for(let i=0;i<150;i++){if(await test())return;await wait(30);}throw Error(message);};
@@ -207,13 +211,16 @@ app.whenReady().then(async()=>{
       svg.dispatchEvent(new PointerEvent('pointerleave',{bubbles:true}));
       return {ok:true,checks:['button placement','history setting creates no node','settings preserve undo and redo','mixed model and settings edit','child window','radial branches','all intermediate edges','ordinary node size and color','hover tooltip','six mark shapes','shared color picker','literal node names','constant label size','current marked node size and 3px white outline','R focus','Shift+R reset','checkerboard backgrounds','mark persistence, editing and removal','state checkout','inactive branch prune','active branch rollback','single-node deletion','virtual center','detached branch checkout','last-state protection','zoom and constant dot size'],nodes:svg.querySelectorAll('[data-history-node]').length};
     })()`);
-    if(errors.length)throw Error(errors.join('\n'));
+    if (errors.length) throw Error(errors.join('\n'));
     await initialCapture;
     await markedCapture;
-    const capture=await contents.capturePage();
-    fs.mkdirSync(path.resolve('build/performance'),{recursive:true});
-    fs.writeFileSync(path.resolve('build/performance/history-dialog.png'),capture.toPNG());
-  }catch(error){report={ok:false,error:error.stack,errors};}
-  const output=path.resolve('build/performance/history-dialog.json');fs.mkdirSync(path.dirname(output),{recursive:true});
-  fs.writeFileSync(output,JSON.stringify(report,null,2));console.log(JSON.stringify(report));app.exit(report.ok?0:1);
+    const capture = await contents.capturePage();
+    fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+    fs.writeFileSync(path.resolve('build/performance/history-dialog.png'), capture.toPNG());
+  } catch (error) { report = { ok: false, error: error.stack, errors }; }
+  const output = path.resolve('build/performance/history-dialog.json');
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

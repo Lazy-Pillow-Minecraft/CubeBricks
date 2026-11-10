@@ -25,10 +25,12 @@ mapLayerTonePixels(anchored, { ...discrete, anchorEnabled: true, anchorColorInde
 assert.deepEqual([anchored[0], anchored[4], anchored[8]], [255, 128, 0],
   'the chosen discrete palette color maps to the specified gray level');
 
-const continuous = { paletteType: 'continuous', paletteSamples: Array.from({ length: 101 }, (_, i) => {
-  const hex = Math.round(255 * (1 - i / 100)).toString(16).padStart(2, '0');
-  return `#${hex}${hex}${hex}`;
-}), segmentCount: 5, anchorEnabled: true, anchorPercent: 35, anchorGray: 128 };
+const continuous = {
+  paletteType: 'continuous', paletteSamples: Array.from({ length: 101 }, (_, i) => {
+    const hex = Math.round(255 * (1 - i / 100)).toString(16).padStart(2, '0');
+    return `#${hex}${hex}${hex}`;
+  }), segmentCount: 5, anchorEnabled: true, anchorPercent: 35, anchorGray: 128
+};
 const stops = toneMapStops(continuous);
 assert.equal(stops.length, 5);
 assert.deepEqual(stops[1], [166, 166, 166], 'the nearest segment is snapped to the selected palette position');

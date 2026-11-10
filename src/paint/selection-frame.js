@@ -36,6 +36,6 @@ export function selectionHandleProjection([a, b, c, d]) {
   const g = (ex * dy - dx * ey) / determinant, h = (bx * ey - ex * by) / determinant;
   const s = HANDLE_SIZE;
   return [(b[0] - a[0] + g * b[0]) / s, (b[1] - a[1] + g * b[1]) / s, 0, g / s,
-    (d[0] - a[0] + h * d[0]) / s, (d[1] - a[1] + h * d[1]) / s, 0, h / s,
+  (d[0] - a[0] + h * d[0]) / s, (d[1] - a[1] + h * d[1]) / s, 0, h / s,
     0, 0, 1, 0, a[0], a[1], 0, 1];
 }

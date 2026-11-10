@@ -121,8 +121,14 @@ export class ConfigRegistry {
   importValues(values, { source = 'import' } = {}) {
     const result = { applied: [], rejected: [], unknown: [] };
     for (const [id, value] of Object.entries(values || {})) {
-      if (!this.has(id)) { result.unknown.push(id); continue; }
-      try { this.set(id, value, { source }); result.applied.push(id); }
+      if (!this.has(id)) {
+        result.unknown.push(id);
+        continue;
+      }
+      try {
+        this.set(id, value, { source });
+        result.applied.push(id);
+      }
       catch { result.rejected.push(id); }
     }
     return result;

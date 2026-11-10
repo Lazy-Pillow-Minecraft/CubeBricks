@@ -56,9 +56,15 @@ class Canvas {
     };
   }
   get width() { return this._width; }
-  set width(value) { this._width = value; this.pixels = new Uint8ClampedArray(value * this.height * 4); }
+  set width(value) {
+    this._width = value;
+    this.pixels = new Uint8ClampedArray(value * this.height * 4);
+  }
   get height() { return this._height; }
-  set height(value) { this._height = value; this.pixels = new Uint8ClampedArray(this.width * value * 4); }
+  set height(value) {
+    this._height = value;
+    this.pixels = new Uint8ClampedArray(this.width * value * 4);
+  }
   getContext() { return this.context; }
 }
 
@@ -100,16 +106,19 @@ try {
   base.pixels.set([30, 40, 50, 255], (1 * 4 + 1) * 4);
   layerRasterCache.set('live-base', { canvas: base, savedSource: 'base' });
   layerRasterCache.set('live-edit', { canvas: editable, savedSource: 'edit' });
-  const asset = { _uid: 'live-asset', name: 'test.png', source: 'saved', uvWidth: 4, uvHeight: 4,
+  const asset = {
+    _uid: 'live-asset', name: 'test.png', source: 'saved', uvWidth: 4, uvHeight: 4,
     activeLayerUid: 'live-edit', layers: [
       { uid: 'live-base', source: 'base', visible: true, opacity: 100, blendMode: 'normal' },
       { uid: 'live-edit', source: 'edit', visible: true, opacity: 100, blendMode: 'normal' }
-    ] };
+    ]
+  };
   const state = { project: { elements: [], textureSize: [4, 4] }, textureAssets: [asset], activeTextureUid: asset._uid };
   const scene = renderer(), previewRenderer = renderer(), previewCanvas = new Canvas(4, 4);
   const liveSources = new Map(), rasterCache = new Map();
   let frames = 0;
-  const controller = createTextureAtlasController({ state, $: () => ({}), textureCanvas: editable,
+  const controller = createTextureAtlasController({
+    state, $: () => ({}), textureCanvas: editable,
     textureCtx: editable.getContext('2d'), sceneRenderer: scene, uvPreviewRenderer: previewRenderer,
     uvPreviewController: {}, uvEditorController: {}, livePaintTextureSources: liveSources,
     animationRasterCache: rasterCache, CUBE_FACE_NAMES: [], loadTextureAssetImage: async () => base,
@@ -123,7 +132,8 @@ try {
     },
     refreshDerivedTileEntries: () => {}, uvPreviewIsActive: () => false,
     syncTexturePreviewPriority: () => {}, resetTextureView: () => {},
-    activeTextureAsset: () => asset, getTextureAssetController: () => ({}) });
+    activeTextureAsset: () => asset, getTextureAssetController: () => ({})
+  });
   await controller.rebuildTextureAtlasNow();
   let entry = controller.textureAtlasEntries[0];
   editable.pixels.set([240, 20, 10, 255], (1 * 4 + 1) * 4);
@@ -142,14 +152,19 @@ try {
   assert.deepEqual(scene.patchSizes[1], [1, 1], 'later live updates retain the small dirty upload');
   assert.ok(frames >= 2);
   const callbacks = [];
-  globalThis.requestAnimationFrame = callback => { callbacks.push(callback); return callbacks.length; };
+  globalThis.requestAnimationFrame = callback => {
+    callbacks.push(callback);
+    return callbacks.length;
+  };
   globalThis.cancelAnimationFrame = () => {};
   const uploads = [];
   let liveRenders = 0;
-  const stroke = createPaintStrokeController({ state: { paintColor: '#ffffff', activeTextureUid: 'other' },
+  const stroke = createPaintStrokeController({
+    state: { paintColor: '#ffffff', activeTextureUid: 'other' },
     syncRendererTextureAsset: (_asset, _canvas, _composited, dirty) => uploads.push(dirty),
     scheduleSceneRender: () => {}, renderScene: () => { liveRenders++; },
-    paintHitAlphaCache: new Map(), $$: () => [], markDirty: () => {} });
+    paintHitAlphaCache: new Map(), $$: () => [], markDirty: () => {}
+  });
   const painted = { pendingSyncDirty: { minX: 1, minY: 1, maxX: 1, maxY: 1 } };
   stroke.queuePaintedTextureSync(asset, painted);
   painted.pendingSyncDirty = { minX: 3, minY: 1, maxX: 3, maxY: 1 };
@@ -159,9 +174,11 @@ try {
   assert.deepEqual(uploads, [{ x: 1, y: 1, width: 3, height: 1 }]);
   assert.equal(liveRenders, 1, 'the model draws in the same frame as the atlas upload');
   const releaseAsset = { _uid: 'release', layers: null };
-  const releaseCanvas = { width: 1, height: 1, pendingSyncDirty: {
-    minX: 0, minY: 0, maxX: 0, maxY: 0
-  }, toDataURL: () => 'data:image/png;base64,AA==' };
+  const releaseCanvas = {
+    width: 1, height: 1, pendingSyncDirty: {
+      minX: 0, minY: 0, maxX: 0, maxY: 0
+    }, toDataURL: () => 'data:image/png;base64,AA=='
+  };
   stroke.queuePaintedTextureSync(releaseAsset, releaseCanvas);
   stroke.finishTexturePaintDrag({ asset: releaseAsset, canvas: releaseCanvas });
   assert.equal(uploads.length, 2, 'releasing a stroke uploads only its final image');

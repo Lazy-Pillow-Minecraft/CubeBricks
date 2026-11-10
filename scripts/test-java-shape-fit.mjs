@@ -18,8 +18,10 @@ const contains = (cube, point) => {
 
 for (const version of [JavaBlockVersion.LEGACY, JavaBlockVersion.SINGLE_AXIS]) {
   for (const rotation of [[0, 0, 0], [22.5, 0, 0], [13, 21, 8]]) {
-    const project = new CubeBricksProject({ formatId: 'java_block_item', formatData: { javaBlockVersion: version },
-      elements: [new Shape({ origin: [0, 2, 0], rotation, parameters: { radius: 6, height: 8, sides: 12 } })] });
+    const project = new CubeBricksProject({
+      formatId: 'java_block_item', formatData: { javaBlockVersion: version },
+      elements: [new Shape({ origin: [0, 2, 0], rotation, parameters: { radius: 6, height: 8, sides: 12 } })]
+    });
     const shape = project.elements[0], raw = shape.toBaseCubes(), cubes = shape.toCubes();
     assert.equal(cubes.length, raw.length, 'polygon fitting retains oriented edge beams, with no voxel fill');
     let rotated = 0;
@@ -34,9 +36,13 @@ for (const version of [JavaBlockVersion.LEGACY, JavaBlockVersion.SINGLE_AXIS]) {
   }
 
   for (const [dimension, end, rotation] of [[2, [16, 0, 5], [-90, 0, 0]], [3, [16, 7, 4], [0, 0, 0]]]) {
-    const project = new CubeBricksProject({ formatId: 'java_block_item', formatData: { javaBlockVersion: version },
-      elements: [new BezierElement({ rotation, nodes: [{ position: [0, 0, 0] }, { position: end }],
-        parameters: { thickness: 1, segmentationMode: 'angle', angleStep: 30 } }, dimension)] });
+    const project = new CubeBricksProject({
+      formatId: 'java_block_item', formatData: { javaBlockVersion: version },
+      elements: [new BezierElement({
+        rotation, nodes: [{ position: [0, 0, 0] }, { position: end }],
+        parameters: { thickness: 1, segmentationMode: 'angle', angleStep: 30 }
+      }, dimension)]
+    });
     const owner = project.elements[0], raw = owner.toBaseCubes(), cubes = owner.toCubes();
     const world = cubes.map(cube => proceduralCubeWorld(owner, cube, project));
     assert.ok(cubes.length >= raw.length && cubes.length <= 12, 'fit a sparse set of rotated beams instead of filling a voxel volume');
@@ -53,15 +59,25 @@ for (const version of [JavaBlockVersion.LEGACY, JavaBlockVersion.SINGLE_AXIS]) {
   }
 }
 
-const unrestricted = new CubeBricksProject({ formatId: 'java_block_item', formatData: { javaBlockVersion: JavaBlockVersion.UNRESTRICTED },
-  elements: [new BezierElement({ nodes: [{ position: [0, 0, 0] }, { position: [16, 7, 4] }],
-    parameters: { thickness: 1, segmentationMode: 'angle', angleStep: 30 } }, 3)] });
+const unrestricted = new CubeBricksProject({
+  formatId: 'java_block_item', formatData: { javaBlockVersion: JavaBlockVersion.UNRESTRICTED },
+  elements: [new BezierElement({
+    nodes: [{ position: [0, 0, 0] }, { position: [16, 7, 4] }],
+    parameters: { thickness: 1, segmentationMode: 'angle', angleStep: 30 }
+  }, 3)]
+});
 const owner = unrestricted.elements[0], raw = owner.toBaseCubes(), cubes = owner.toCubes();
 assert.equal(cubes.length, raw.length);
-cubes.forEach((cube, index) => { near(cube.size, raw[index].size, 'unrestricted shapes retain original dimensions');
-  near(cube.rotation, raw[index].rotation, 'unrestricted shapes retain original rotations'); });
-const zeroRadius = new CubeBricksProject({ elements: [new BezierElement({ variant: 'envelope',
-  nodes: [{ position: [0, 0, 0] }, { position: [16, 7, 4] }],
-  parameters: { radius: 0, segmentationMode: 'angle' } }, 3)] }).elements[0];
+cubes.forEach((cube, index) => {
+  near(cube.size, raw[index].size, 'unrestricted shapes retain original dimensions');
+  near(cube.rotation, raw[index].rotation, 'unrestricted shapes retain original rotations');
+});
+const zeroRadius = new CubeBricksProject({
+  elements: [new BezierElement({
+    variant: 'envelope',
+    nodes: [{ position: [0, 0, 0] }, { position: [16, 7, 4] }],
+    parameters: { radius: 0, segmentationMode: 'angle' }
+  }, 3)]
+}).elements[0];
 assert.equal(zeroRadius.toCubes().length, zeroRadius.toBaseCubes().length, 'zero-radius curves cannot create thousands of invisible fitting segments');
 console.log('Java Shape fitting preserves beam thickness and centers, uses legal oblique angles, and continuously follows the 3D path.');

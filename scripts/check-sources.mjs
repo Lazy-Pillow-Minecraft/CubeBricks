@@ -50,9 +50,12 @@ if (!process.exitCode) {
       return;
     }
     if (visited.has(file)) return;
-    active.add(file); stack.push(file);
+    active.add(file);
+    stack.push(file);
     for (const target of graph.get(file) || []) visit(target);
-    stack.pop(); active.delete(file); visited.add(file);
+    stack.pop();
+    active.delete(file);
+    visited.add(file);
   };
   for (const file of graph.keys()) visit(file);
 }

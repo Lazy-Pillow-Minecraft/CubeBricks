@@ -1,18 +1,23 @@
 // Isolated Electron integration check; never opens the user's projects.
-const {app,BrowserWindow}=require('electron');
-const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const profile=fs.mkdtempSync(path.join(os.tmpdir(),'cubebricks-frame-links-'));
-app.setPath('userData',profile);app.setPath('sessionData',profile);
-const errors=[];
-app.on('web-contents-created',(_event,contents)=>contents.on('console-message',details=>{if(details.level==='error')errors.push(details.message);}));
-app.on('browser-window-created',(_event,win)=>{win.hide();win.setSize(1900,1050);win.webContents.setBackgroundThrottling(false);});
+const { app, BrowserWindow } = require('electron');
+const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-frame-links-'));
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+const errors = [];
+app.on('web-contents-created', (_event, contents) => contents.on('console-message', details => { if (details.level === 'error') errors.push(details.message); }));
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.setSize(1900, 1050);
+  win.webContents.setBackgroundThrottling(false);
+});
 require('../electron/main.cjs');
-app.whenReady().then(async()=>{
+app.whenReady().then(async () => {
   let report;
-  try{
-    const contents=BrowserWindow.getAllWindows()[0].webContents;
-    if(contents.isLoading())await new Promise(resolve=>contents.once('did-finish-load',resolve));
-    report=await contents.executeJavaScript(`(async()=>{
+  try {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    if (contents.isLoading()) await new Promise(resolve => contents.once('did-finish-load', resolve));
+    report = await contents.executeJavaScript(`(async()=>{
       const $=selector=>document.querySelector(selector),wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       const check=(value,message)=>{if(!value)throw Error(message);};
       const until=async(test,message)=>{for(let i=0;i<150;i++){if(await test())return;await wait(40);}throw Error(message);};
@@ -111,8 +116,13 @@ app.whenReady().then(async()=>{
       layerScroller.style.maxHeight='';layerScroller.scrollTop=0;$('#textureFrameList').scrollTop=0;asset().animation.frames=entries;select(ids[0]);await wait(80);
       return {ok:true,checks:['conditional panel and ports','additive width and half-column gap','bidirectional many-to-many links','group composition and layer order','2D live preview','exclusive latest-selection highlighting','stroke-only hit testing','right-click disconnection','undo','retained data on disable','hidden mask sources','dirty-region preview','scrolling port alignment']};
     })()`);
-    if(errors.length)throw Error(errors.join('\n'));
-    const capture=await contents.capturePage();fs.mkdirSync(path.resolve('build/performance'),{recursive:true});fs.writeFileSync(path.resolve('build/performance/frame-connections.png'),capture.toPNG());
-  }catch(error){report={ok:false,error:error.stack,errors};}
-  fs.mkdirSync(path.resolve('build/performance'),{recursive:true});fs.writeFileSync(path.resolve('build/performance/frame-connections.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));app.exit(report.ok?0:1);
+    if (errors.length) throw Error(errors.join('\n'));
+    const capture = await contents.capturePage();
+    fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+    fs.writeFileSync(path.resolve('build/performance/frame-connections.png'), capture.toPNG());
+  } catch (error) { report = { ok: false, error: error.stack, errors }; }
+  fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+  fs.writeFileSync(path.resolve('build/performance/frame-connections.json'), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

@@ -196,8 +196,8 @@ export function translateEnglishUiText(text, language, translateUiText) {
     '依新 UV 重排各圖層像素，保留組與混合設定': 'Rearrange each layer for the new UVs while preserving groups and blend settings'
   };
   if (upcoming[text]) return upcoming[text];
-  if(text.startsWith('動畫配置讀取失敗：'))return `Could not load animation metadata: ${translateUiText(text.slice('動畫配置讀取失敗：'.length),language)}`;
-  if(text.startsWith('已導入動畫貼圖 '))return `Imported animated texture ${text.slice('已導入動畫貼圖 '.length)}`;
+  if (text.startsWith('動畫配置讀取失敗：')) return `Could not load animation metadata: ${translateUiText(text.slice('動畫配置讀取失敗：'.length), language)}`;
+  if (text.startsWith('已導入動畫貼圖 ')) return `Imported animated texture ${text.slice('已導入動畫貼圖 '.length)}`;
   let match = text.match(/^背景：(純黑|目前背景|棋盤格)$/);
   if (match) return `Background: ${translateUiText(match[1], language)}`;
   match = text.match(/^不支援拖入 (.+)$/);
@@ -274,9 +274,11 @@ export function translateEnglishUiText(text, language, translateUiText) {
   if (match) return `${translateUiText(match[1], language)} failed: ${translateUiText(match[2], language)}`;
   match = text.match(/^已(建立|新增|打開|導入|導出|複製|剪切|刪除|恢復|剔除|選|套用|烘焙)\s*(.+)$/);
   if (match) {
-    const verbs = { 建立: 'Created', 新增: 'Added', 打開: 'Opened', 導入: 'Imported', 導出: 'Exported',
+    const verbs = {
+      建立: 'Created', 新增: 'Added', 打開: 'Opened', 導入: 'Imported', 導出: 'Exported',
       複製: 'Copied', 剪切: 'Cut', 刪除: 'Deleted', 恢復: 'Restored', 剔除: 'Culled',
-      選: 'Selected', 套用: 'Applied', 烘焙: 'Baked' };
+      選: 'Selected', 套用: 'Applied', 烘焙: 'Baked'
+    };
     return `${verbs[match[1]]} ${translateUiText(match[2], language)}`;
   }
   match = text.match(/^(目前渲染模式|目前|預覽)：(.+)$/);

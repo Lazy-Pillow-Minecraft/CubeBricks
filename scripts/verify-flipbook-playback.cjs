@@ -1,15 +1,22 @@
-const {app,BrowserWindow}=require('electron');
-const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const profile=fs.mkdtempSync(path.join(os.tmpdir(),'cubebricks-flipbook-'));
-app.setPath('userData',profile);app.setPath('sessionData',profile);const errors=[];
-app.on('web-contents-created',(_event,contents)=>contents.on('console-message',details=>{if(details.level==='error')errors.push(details.message);}));
-app.on('browser-window-created',(_event,win)=>{win.hide();win.setSize(1900,1050);win.webContents.setBackgroundThrottling(false);});
+const { app, BrowserWindow } = require('electron');
+const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-flipbook-'));
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+const errors = [];
+app.on('web-contents-created', (_event, contents) => contents.on('console-message', details => { if (details.level === 'error') errors.push(details.message); }));
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.setSize(1900, 1050);
+  win.webContents.setBackgroundThrottling(false);
+});
 require('../electron/main.cjs');
-app.whenReady().then(async()=>{
-  let report;try{
-    const contents=BrowserWindow.getAllWindows()[0].webContents;
-    if(contents.isLoading())await new Promise(resolve=>contents.once('did-finish-load',resolve));
-    report=await contents.executeJavaScript(`(async()=>{try{
+app.whenReady().then(async () => {
+  let report;
+  try {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    if (contents.isLoading()) await new Promise(resolve => contents.once('did-finish-load', resolve));
+    report = await contents.executeJavaScript(`(async()=>{try{
       const $=s=>document.querySelector(s),wait=ms=>new Promise(r=>setTimeout(r,ms)),check=(v,m)=>{if(!v)throw Error(m);};
       const until=async(f,m)=>{for(let i=0;i<150;i++){if(await f())return;await wait(40);}throw Error(m);};
       await until(()=>!$('#startupCover'),'startup');$('[data-home-format="bedrock_entity"]').click();$('[data-action="addCube"]').click();
@@ -122,8 +129,13 @@ app.whenReady().then(async()=>{
       }
       return {ok:true,checks:['root links','per-frame visibility','global visibility preserved','paint target restriction and memory','timeline scrub','FPS playback','frame crossfade','main/child visibility UI','membership edges','independent frame copy','unlit composite picking','transparent ray traversal','Ctrl Alt picking',...extra]};
     }catch(error){return {ok:false,error:error.stack};}})()`);
-    if(errors.length)throw Error(errors.join('\n'));
-    const capture=await contents.capturePage();fs.mkdirSync(path.resolve('build/performance'),{recursive:true});fs.writeFileSync(path.resolve('build/performance/flipbook-playback.png'),capture.toPNG());
-  }catch(error){report={ok:false,error:error.stack,errors};}
-  fs.mkdirSync(path.resolve('build/performance'),{recursive:true});fs.writeFileSync(path.resolve('build/performance/flipbook-playback.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));app.exit(report.ok?0:1);
+    if (errors.length) throw Error(errors.join('\n'));
+    const capture = await contents.capturePage();
+    fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+    fs.writeFileSync(path.resolve('build/performance/flipbook-playback.png'), capture.toPNG());
+  } catch (error) { report = { ok: false, error: error.stack, errors }; }
+  fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+  fs.writeFileSync(path.resolve('build/performance/flipbook-playback.json'), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

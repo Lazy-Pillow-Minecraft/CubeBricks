@@ -85,7 +85,10 @@ export function constrainNode(node, rules, project = null) {
     }
     if ('uvMode' in node) {
       if (!rules.allowBoxUv) node.uvMode = 'face';
-      if (!rules.allowFaceUv) { node.uvMode = 'box'; node.autoUv = true; }
+      if (!rules.allowFaceUv) {
+        node.uvMode = 'box';
+        node.autoUv = true;
+      }
     }
     invokeFormatHook('shape', node.shapeType || node.type, node, { phase: 'parameters', owner: node, project, rules });
   }
@@ -118,9 +121,14 @@ const BEDROCK_CENTER_TRAVEL = 7;
 function rotate(point, pivot, angles = [0, 0, 0]) {
   let [x, y, z] = point.map((value, axis) => value - (pivot?.[axis] || 0));
   const [rx, ry, rz] = angles.map(value => (Number(value) || 0) * DEG);
-  let c = Math.cos(rx), s = Math.sin(rx); [y, z] = [y * c - z * s, y * s + z * c];
-  c = Math.cos(ry); s = Math.sin(ry); [x, z] = [x * c + z * s, -x * s + z * c];
-  c = Math.cos(rz); s = Math.sin(rz); [x, y] = [x * c - y * s, x * s + y * c];
+  let c = Math.cos(rx), s = Math.sin(rx);
+  [y, z] = [y * c - z * s, y * s + z * c];
+  c = Math.cos(ry);
+  s = Math.sin(ry);
+  [x, z] = [x * c + z * s, -x * s + z * c];
+  c = Math.cos(rz);
+  s = Math.sin(rz);
+  [x, y] = [x * c - y * s, x * s + y * c];
   return [x, y, z].map((value, axis) => value + (pivot?.[axis] || 0));
 }
 
@@ -149,7 +157,8 @@ export function projectSizeBounds(project, { includeModifiers = true } = {}) {
       const cubeRotated = cube.rotation?.some(value => Math.abs(Number(value) || 0) > 1e-8);
       if (!cubeRotated && !ownerRotated && !groupRotated) {
         for (let axis = 0; axis < 3; axis++) {
-          cubeMin[axis] = axes[axis][0]; cubeMax[axis] = axes[axis][1];
+          cubeMin[axis] = axes[axis][0];
+          cubeMax[axis] = axes[axis][1];
           min[axis] = Math.min(min[axis], cubeMin[axis]);
           max[axis] = Math.max(max[axis], cubeMax[axis]);
         }
@@ -173,7 +182,8 @@ export function projectSizeBounds(project, { includeModifiers = true } = {}) {
   }
   const generatedBounds = includeModifiers ? project?.getModifierFormatBounds?.() : null;
   if (generatedBounds) for (let axis = 0; axis < 3; axis++) {
-    min[axis] = Math.min(min[axis], generatedBounds.min[axis]); max[axis] = Math.max(max[axis], generatedBounds.max[axis]);
+    min[axis] = Math.min(min[axis], generatedBounds.min[axis]);
+    max[axis] = Math.max(max[axis], generatedBounds.max[axis]);
   }
   return min[0] === Infinity ? null : { min, max, hasBaseCube };
 }
@@ -199,8 +209,10 @@ export function bedrockLimitBox(bounds) {
   const center = bounds?.min.map((value, axis) => Math.max(BEDROCK_CENTER[axis] - BEDROCK_CENTER_TRAVEL,
     Math.min(BEDROCK_CENTER[axis] + BEDROCK_CENTER_TRAVEL,
       (value + bounds.max[axis]) / 2))) || [...BEDROCK_CENTER];
-  return { min: center.map(value => value - 15), max: center.map(value => value + 15),
-    valid: bedrockSizeIsValid(bounds) };
+  return {
+    min: center.map(value => value - 15), max: center.map(value => value + 15),
+    valid: bedrockSizeIsValid(bounds)
+  };
 }
 
 export function javaBlockSizeViolation(project) {

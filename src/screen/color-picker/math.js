@@ -20,7 +20,7 @@ export function hsvToRgb(hue, saturation, value) {
   const s = clamp(Number(saturation) || 0, 0, 1), v = clamp(Number(value) || 0, 0, 1);
   const chroma = v * s, intermediate = chroma * (1 - Math.abs(h % 2 - 1)), offset = v - chroma;
   const segments = [[chroma, intermediate, 0], [intermediate, chroma, 0], [0, chroma, intermediate],
-    [0, intermediate, chroma], [intermediate, 0, chroma], [chroma, 0, intermediate]];
+  [0, intermediate, chroma], [intermediate, 0, chroma], [chroma, 0, intermediate]];
   return segments[Math.min(5, Math.floor(h))].map(channel => Math.round((channel + offset) * 255));
 }
 

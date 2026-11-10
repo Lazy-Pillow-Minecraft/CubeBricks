@@ -2,8 +2,12 @@ const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-workflow-audit-'));
 const suffix = process.argv.find(value => value.startsWith('--suffix='))?.slice(9).replace(/[^\w-]/g, '') || '';
-app.setPath('userData', profile); app.setPath('sessionData', profile);
-app.on('browser-window-created', (_event, win) => { win.hide(); win.webContents.setBackgroundThrottling(false); });
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.webContents.setBackgroundThrottling(false);
+});
 require(path.resolve('electron/main.cjs'));
 app.whenReady().then(async () => {
   let report;
@@ -57,9 +61,13 @@ app.whenReady().then(async () => {
         estimatedRgbaBytes:retained.reduce((sum,entry)=>sum+entry.canvas.width*entry.canvas.height*4,0)};
       return {ok:true,undoMs:undo,redoMs:redo,persistedPreviewBranch:true,summary:performanceReport.summary,slowEvents:performanceReport.slowEvents,layerCacheLifecycle:{before,after}};
     })()`);
-  } catch(error) {report={ok:false,error:error.stack};}
-  fs.mkdirSync(path.resolve('build/performance'),{recursive:true});
-  fs.writeFileSync(path.resolve(`build/performance/audit-workflow-2026-11-05${suffix ? '-' + suffix : ''}.json`),JSON.stringify(report,null,2));
-  console.log(JSON.stringify({...report,summary:report.summary&&Object.fromEntries(Object.entries(report.summary).filter(([name])=>name.startsWith('journal.'))),slowEvents:undefined}));
-  app.exit(report.ok?0:1);
+  } catch (error) { report = { ok: false, error: error.stack }; }
+  fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+  fs.writeFileSync(path.resolve(`build/performance/audit-workflow-2026-11-05${suffix ? '-' + suffix : ''}.json`), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify({
+    ...report,
+    summary: report.summary && Object.fromEntries(Object.entries(report.summary).filter(([name]) => name.startsWith('journal.'))),
+    slowEvents: undefined
+  }));
+  app.exit(report.ok ? 0 : 1);
 });

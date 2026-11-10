@@ -1,13 +1,15 @@
 export function screenPaintGrid(rect, virtualHeight) {
   const height = Math.max(32, Math.min(4096, Math.round(Number(virtualHeight) || 512)));
   const width = Math.max(1, Math.round(height * rect.width / Math.max(1, rect.height)));
-  return { width, height, left: rect.left, top: rect.top,
-    scaleX: width / Math.max(1, rect.width), scaleY: height / Math.max(1, rect.height) };
+  return {
+    width, height, left: rect.left, top: rect.top,
+    scaleX: width / Math.max(1, rect.width), scaleY: height / Math.max(1, rect.height)
+  };
 }
 
 export function screenPaintPoint(grid, clientX, clientY) {
   return [Math.floor((clientX - grid.left) * grid.scaleX),
-    Math.floor((clientY - grid.top) * grid.scaleY)];
+  Math.floor((clientY - grid.top) * grid.scaleY)];
 }
 
 export function screenPaintClientPoint(grid, x, y) {
@@ -101,8 +103,10 @@ export function rasterScreenPaint(tool, start, end, grid, options = {}) {
         for (let x = Math.max(0, minX - half); x <= Math.min(grid.width - 1, maxX + size - half - 1); x++)
           pixels.set(y * grid.width + x, 1);
     } else {
-      line([minX, minY], [maxX, minY]); line([maxX, minY], [maxX, maxY]);
-      line([maxX, maxY], [minX, maxY]); line([minX, maxY], [minX, minY]);
+      line([minX, minY], [maxX, minY]);
+      line([maxX, minY], [maxX, maxY]);
+      line([maxX, maxY], [minX, maxY]);
+      line([minX, maxY], [minX, minY]);
     }
   } else if (tool === 'ellipse') {
     const centerX = (start[0] + end[0]) / 2, centerY = (start[1] + end[1]) / 2;
@@ -118,7 +122,8 @@ export function rasterScreenPaint(tool, start, end, grid, options = {}) {
       for (let index = 1; index <= steps; index++) {
         const angle = index / steps * Math.PI * 2;
         const next = [Math.round(centerX + Math.cos(angle) * radiusX), Math.round(centerY + Math.sin(angle) * radiusY)];
-        line(previous, next); previous = next;
+        line(previous, next);
+        previous = next;
       }
     }
   }

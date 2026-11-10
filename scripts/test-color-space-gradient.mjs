@@ -45,16 +45,20 @@ assert.equal(gradientRatioToUniform(1, [.2, .8]), 1, 'custom last stop can move 
 
 let previewDraws = 0, previewBlits = 0;
 const preview = Object.create(ColorSpaceCurveViewport.prototype);
-preview.yaw = 0; preview.pitch = .5; preview.perspective = false;
+preview.yaw = 0;
+preview.pitch = .5;
+preview.perspective = false;
 preview.canvas = { clientWidth: 500 };
 preview.context = { drawImage: () => previewBlits++ };
 preview.spacePreviewRenderer = {
   canvas: {}, program: {}, key: null, position: 0, color: 1, stride: 24,
   meshes: new Map(['rgb_cube', 'hsv_cube', 'hsv_cylinder'].map(mode => [mode,
     { vertexBuffer: {}, indexBuffer: {}, indexCount: 12 }])),
-  gl: { COLOR_BUFFER_BIT: 1, DEPTH_BUFFER_BIT: 2, TRIANGLES: 4, UNSIGNED_SHORT: 5, ARRAY_BUFFER: 6,
+  gl: {
+    COLOR_BUFFER_BIT: 1, DEPTH_BUFFER_BIT: 2, TRIANGLES: 4, UNSIGNED_SHORT: 5, ARRAY_BUFFER: 6,
     ELEMENT_ARRAY_BUFFER: 7, FLOAT: 8, useProgram() {}, bindBuffer() {}, vertexAttribPointer() {},
-    uniform3fv() {}, uniform1f() {}, clear() {}, drawElements() { previewDraws++; } }
+    uniform3fv() {}, uniform1f() {}, clear() {}, drawElements() { previewDraws++; }
+  }
 };
 preview.drawMergedSpacePreview('hsv_cylinder');
 preview.drawMergedSpacePreview('hsv_cylinder');
@@ -72,19 +76,36 @@ assert.equal(previewDraws, 4, 'unchanged HSV cube does not redraw its mesh');
 
 const gizmo = Object.create(ColorSpaceCurveViewport.prototype);
 gizmo.canvas = { clientWidth: 500, clientHeight: 500, getBoundingClientRect: () => ({ left: 0, top: 0 }) };
-gizmo.context = { beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, fill() {}, save() {}, restore() {} };
-gizmo.yaw = -.72; gizmo.pitch = .5; gizmo.perspective = false; gizmo.axisMode = 'all';
-gizmo.drag = null; gizmo.hover = null; gizmo.selected = 0;
+gizmo.context = {
+  beginPath() {},
+  moveTo() {},
+  lineTo() {},
+  closePath() {},
+  stroke() {},
+  fill() {},
+  save() {},
+  restore() {}
+};
+gizmo.yaw = -.72;
+gizmo.pitch = .5;
+gizmo.perspective = false;
+gizmo.axisMode = 'all';
+gizmo.drag = null;
+gizmo.hover = null;
+gizmo.selected = 0;
 gizmo.curve = { mode: 'rgb_cube' };
 gizmo.line = () => {};
 for (const zoom of [.45, 1, 3]) {
-  gizmo.zoom = zoom; gizmo.hitTargets = [];
+  gizmo.zoom = zoom;
+  gizmo.hitTargets = [];
   gizmo.drawGizmo([.5, .5, .5]);
   const origin = gizmo.project([.5, .5, .5]);
   assert.ok(gizmo.hitTargets.every(target => Math.abs(Math.hypot(target.x - origin.x, target.y - origin.y) - 54) < .001),
     'straight gizmo handles keep a constant screen length when zoom changes');
 }
-gizmo.curve.mode = 'hsv_cylinder'; gizmo.zoom = .45; gizmo.hitTargets = [];
+gizmo.curve.mode = 'hsv_cylinder';
+gizmo.zoom = .45;
+gizmo.hitTargets = [];
 let hueArc = null;
 gizmo.line = points => { if (points.length === 31) hueArc = points; };
 gizmo.drawGizmo([.03, .5, 0]);

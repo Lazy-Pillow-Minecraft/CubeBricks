@@ -95,63 +95,89 @@ app.whenReady().then(async () => {
       return {x:Math.round(r.x+r.width*.3),y:Math.round(r.y+r.height*.5),width:r.width,height:r.height};
     })()`);
     await wait(1200);
-    contents.sendInputEvent({ type:'mouseDown', x:bounds.x, y:bounds.y, button:'middle', clickCount:1 });
+    contents.sendInputEvent({ type: 'mouseDown', x: bounds.x, y: bounds.y, button: 'middle', clickCount: 1 });
     let previous = performance.now();
     const started = previous, generatedGaps = [];
     let generated = 0;
     const timer = setInterval(() => {
       const now = performance.now();
-      if (now - previous > 30) generatedGaps.push({at:performance.timeOrigin+now,ms:now-previous});
-      previous = now; generated++;
-      const t = (now-started)/1000;
-      contents.sendInputEvent({ type:'mouseMove', button:'middle', modifiers:['middlebuttondown'],
-        x:Math.round(bounds.x+Math.sin(t*2)*bounds.width*.22),
-        y:Math.round(bounds.y+Math.sin(t*1.3)*bounds.height*.12) });
+      if (now - previous > 30) generatedGaps.push({ at: performance.timeOrigin + now, ms: now - previous });
+      previous = now;
+      generated++;
+      const t = (now - started) / 1000;
+      contents.sendInputEvent({
+        type: 'mouseMove', button: 'middle', modifiers: ['middlebuttondown'],
+        x: Math.round(bounds.x + Math.sin(t * 2) * bounds.width * .22),
+        y: Math.round(bounds.y + Math.sin(t * 1.3) * bounds.height * .12)
+      });
     }, 8);
     // Warm up the moving overlays, shaders and input path before measuring.
     await wait(4000);
     if (settle) {
-      for (let attempt=0;attempt<300 && currentOperations().some(entry=>entry.name.startsWith('project:'));attempt++) await wait(100);
+      for (let attempt = 0; attempt < 300 && currentOperations().some(entry => entry.name.startsWith('project:')); attempt++) await wait(100);
       await wait(500);
     }
     let background = null, backgroundTimer = null, backgroundPending = null, backgroundCommits = 0;
     if (backgroundCubes) {
       const { WorkerProjectJournal } = require(path.join(electronDirectory, 'journal-service.cjs'));
       background = new WorkerProjectJournal(path.join(profile, 'background-journal'));
-      const data = {name:'background',elements:Array.from({length:backgroundCubes},(_,i)=>({
-        type:'cube',uid:`background_${i}`,position:[i,0,0],size:[2,2,2],pivot:[0,0,0],rotation:[0,0,0]
-      })),groups:[],textures:[]};
+      const data = {
+        name: 'background', elements: Array.from({ length: backgroundCubes }, (_, i) => ({
+          type: 'cube', uid: `background_${i}`, position: [i, 0, 0], size: [2, 2, 2], pivot: [0, 0, 0], rotation: [0, 0, 0]
+        })), groups: [], textures: []
+      };
       await background.initialize(JSON.stringify(data), 'core.project.create');
       backgroundTimer = setInterval(() => {
         if (backgroundPending) return;
         backgroundCommits++;
         for (const node of data.elements) node.position[1] = backgroundCommits;
-        backgroundPending = background.commit(JSON.stringify(data),'core.element.move')
-          .catch(error=>errors.push(error.message)).finally(()=>{backgroundPending=null;});
-      },400);
+        backgroundPending = background.commit(JSON.stringify(data), 'core.element.move')
+          .catch(error => errors.push(error.message)).finally(() => { backgroundPending = null; });
+      }, 400);
     }
     if (tracing) await contentTracing.startRecording({
-      included_categories: ['toplevel','blink','devtools.timeline','v8','disabled-by-default-devtools.timeline',
-        'disabled-by-default-v8.gc','accessibility'], recording_mode: 'record-until-full'
+      included_categories: ['toplevel', 'blink', 'devtools.timeline', 'v8', 'disabled-by-default-devtools.timeline',
+        'disabled-by-default-v8.gc', 'accessibility'], recording_mode: 'record-until-full'
     });
     const capture = contents.executeJavaScript(`window.cubeBricksPerf.capture(${duration})`);
-    generatedGaps.length = 0; generated = 0;
+    generatedGaps.length = 0;
+    generated = 0;
     const report = await capture;
     if (backgroundTimer) clearInterval(backgroundTimer);
     report.cameraState = await contents.executeJavaScript(`import('./editor/state.js').then(({state})=>({drag:state.dragging?.type,tool:state.tool,yaw:state.yaw,pitch:state.pitch,selected:state.selectedUid}))`);
     if (report.cameraState.drag !== 'orbit' || !report.summary['scene.cameraFrameInterval'])
       errors.push('Camera drag did not remain active throughout the capture.');
     clearInterval(timer);
-    contents.sendInputEvent({ type:'mouseUp', x:bounds.x, y:bounds.y, button:'middle', clickCount:1 });
-    report.generatedInput = {count:generated,gaps:generatedGaps};
-    report.background = {cubeCount:backgroundCubes,commits:backgroundCommits};
-    report.test = {cubeCount,tool,scene,visible,accessibility,legacySvg,profile,electron:process.versions.electron,chromium:process.versions.chrome,errors};
-    fs.mkdirSync(path.dirname(output), {recursive:true});
-    fs.writeFileSync(output, JSON.stringify(report,null,2));
-    if (tracing) await contentTracing.stopRecording(output.replace(/\.json$/,'.trace.json'));
+    contents.sendInputEvent({ type: 'mouseUp', x: bounds.x, y: bounds.y, button: 'middle', clickCount: 1 });
+    report.generatedInput = { count: generated, gaps: generatedGaps };
+    report.background = { cubeCount: backgroundCubes, commits: backgroundCommits };
+    report.test = {
+      cubeCount,
+      tool,
+      scene,
+      visible,
+      accessibility,
+      legacySvg,
+      profile,
+      electron: process.versions.electron,
+      chromium: process.versions.chrome,
+      errors
+    };
+    fs.mkdirSync(path.dirname(output), { recursive: true });
+    fs.writeFileSync(output, JSON.stringify(report, null, 2));
+    if (tracing) await contentTracing.stopRecording(output.replace(/\.json$/, '.trace.json'));
     if (backgroundPending) await backgroundPending;
     if (background) await background.dispose();
-    console.log(JSON.stringify({output,summary:report.summary,mainProcess:report.mainProcess,generatedInput:report.generatedInput,errors}));
+    console.log(JSON.stringify({
+      output,
+      summary: report.summary,
+      mainProcess: report.mainProcess,
+      generatedInput: report.generatedInput,
+      errors
+    }));
     app.exit(errors.length ? 1 : 0);
-  } catch(error) { console.error(error); app.exit(1); }
+  } catch (error) {
+    console.error(error);
+    app.exit(1);
+  }
 });

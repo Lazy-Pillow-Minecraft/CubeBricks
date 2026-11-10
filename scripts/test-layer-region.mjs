@@ -3,7 +3,8 @@ import { compositeLayers, layerRasterCache, tiledFaceRaster } from '../src/commo
 
 class RasterCanvas {
   constructor(width = 1, height = 1) {
-    this._width = width; this._height = height;
+    this._width = width;
+    this._height = height;
     this.data = new Uint8ClampedArray(width * height * 4);
     this.context = {
       globalAlpha: 1, globalCompositeOperation: 'source-over',
@@ -30,9 +31,15 @@ class RasterCanvas {
     };
   }
   get width() { return this._width; }
-  set width(value) { this._width = value; this.data = new Uint8ClampedArray(value * this._height * 4); }
+  set width(value) {
+    this._width = value;
+    this.data = new Uint8ClampedArray(value * this._height * 4);
+  }
   get height() { return this._height; }
-  set height(value) { this._height = value; this.data = new Uint8ClampedArray(this._width * value * 4); }
+  set height(value) {
+    this._height = value;
+    this.data = new Uint8ClampedArray(this._width * value * 4);
+  }
   getContext() { return this.context; }
 }
 
@@ -48,11 +55,13 @@ try {
   layerRasterCache.set('region-bottom', { canvas: bottom });
   layerRasterCache.set('region-top', { canvas: top });
   layerRasterCache.set('region-mask', { canvas: mask });
-  const asset = { layers: [
-    { uid: 'region-bottom', visible: true, opacity: 100, blendMode: 'normal' },
-    { uid: 'region-top', visible: true, opacity: 60, blendMode: 'normal', maskLayerUid: 'region-mask' },
-    { uid: 'region-mask', visible: false, opacity: 100, blendMode: 'normal' }
-  ] };
+  const asset = {
+    layers: [
+      { uid: 'region-bottom', visible: true, opacity: 100, blendMode: 'normal' },
+      { uid: 'region-top', visible: true, opacity: 60, blendMode: 'normal', maskLayerUid: 'region-mask' },
+      { uid: 'region-mask', visible: false, opacity: 100, blendMode: 'normal' }
+    ]
+  };
   const full = compositeLayers(asset);
   const region = compositeLayers(asset, null, null, { x: 1, y: 1, width: 2, height: 2 });
   for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) {

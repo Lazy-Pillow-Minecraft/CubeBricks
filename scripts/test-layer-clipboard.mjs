@@ -3,7 +3,15 @@ import { binarizePixelAlpha, captureLayerBranch, instantiateLayerBranch } from '
 import { layerDisplayRows } from '../src/common/core/texture-features.js';
 
 const original = [
-  { uid: 'leaf', parentUid: 'nested', source: 'red', name: 'Ink', opacity: 70, blendMode: 'multiply', maskLayerUid: 'mask' },
+  {
+    uid: 'leaf',
+    parentUid: 'nested',
+    source: 'red',
+    name: 'Ink',
+    opacity: 70,
+    blendMode: 'multiply',
+    maskLayerUid: 'mask'
+  },
   { uid: 'nested', type: 'group', parentUid: 'group', name: 'Nested', opacity: 60 },
   { uid: 'mask', parentUid: 'group', source: 'white', visible: false, name: 'Mask' },
   { uid: 'group', type: 'group', name: 'Group', parentUid: null, collapsed: true },

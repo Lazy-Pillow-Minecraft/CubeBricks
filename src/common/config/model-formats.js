@@ -39,7 +39,13 @@ modelFormatRegistry.registerMany([
     placeholderReason: '多面體編輯尚未實現',
     snap: standardSnap,
     defaults: { uvMode: 'face', textureSize: [16, 16], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, elements: ['cube', 'mesh', 'shape', 'group', 'locator'], meshes: true, locators: true, animation: true }
+    capabilities: {
+      ...cubeCapabilities,
+      elements: ['cube', 'mesh', 'shape', 'group', 'locator'],
+      meshes: true,
+      locators: true,
+      animation: true
+    }
   },
   {
     id: ModelFormatId.IMAGE,
@@ -52,7 +58,15 @@ modelFormatRegistry.registerMany([
     placeholderReason: '圖像編輯尚未實現',
     snap: standardSnap,
     defaults: { uvMode: 'face', textureSize: [16, 16], renderType: 'cutout', cullFaces: false },
-    capabilities: { elements: [], meshes: false, locators: false, animation: false, texturePainting: true, boxUv: false, faceUv: false }
+    capabilities: {
+      elements: [],
+      meshes: false,
+      locators: false,
+      animation: false,
+      texturePainting: true,
+      boxUv: false,
+      faceUv: false
+    }
   },
   {
     id: ModelFormatId.JAVA_BLOCK_ITEM,
@@ -78,7 +92,13 @@ modelFormatRegistry.registerMany([
     aliases: ['bedrock_entity'],
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 64], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true, singleTexture: true }
+    capabilities: {
+      ...cubeCapabilities,
+      elements: ['cube', 'shape', 'group', 'locator'],
+      locators: true,
+      animation: true,
+      singleTexture: true
+    }
   },
   {
     id: ModelFormatId.BEDROCK_BLOCK,
@@ -103,7 +123,14 @@ modelFormatRegistry.registerMany([
     aliases: ['java_entity'],
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 32], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true, faceUv: false, singleTexture: true }
+    capabilities: {
+      ...cubeCapabilities,
+      elements: ['cube', 'shape', 'group', 'locator'],
+      locators: true,
+      animation: true,
+      faceUv: false,
+      singleTexture: true
+    }
   },
   {
     id: ModelFormatId.MINECRAFT_SKIN,
@@ -132,7 +159,13 @@ modelFormatRegistry.registerMany([
     placeholderReason: 'GeckoLib 模型目前暫停新建',
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 64], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, elements: ['cube', 'shape', 'group', 'locator'], locators: true, animation: true, singleTexture: true }
+    capabilities: {
+      ...cubeCapabilities,
+      elements: ['cube', 'shape', 'group', 'locator'],
+      locators: true,
+      animation: true,
+      singleTexture: true
+    }
   }
 ]);
 

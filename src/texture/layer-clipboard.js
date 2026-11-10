@@ -11,12 +11,14 @@ export function layerBranchEntries(layers, uid) {
 export function captureLayerBranch(layers, uid, sourceFor = layer => layer.source) {
   const entries = layerBranchEntries(layers, uid);
   if (!entries.length) return null;
-  return { rootUid: uid, entries: entries.map(layer => {
-    const copy = structuredClone(layer);
-    if (layer.type !== 'group') copy.source = sourceFor(layer);
-    if (layer.uid === uid) copy.parentUid = null;
-    return copy;
-  }) };
+  return {
+    rootUid: uid, entries: entries.map(layer => {
+      const copy = structuredClone(layer);
+      if (layer.type !== 'group') copy.source = sourceFor(layer);
+      if (layer.uid === uid) copy.parentUid = null;
+      return copy;
+    })
+  };
 }
 
 export function instantiateLayerBranch(layers, clipboard, selectedUid, { inPlace = false, createUid = () => crypto.randomUUID() } = {}) {
@@ -34,7 +36,8 @@ export function instantiateLayerBranch(layers, clipboard, selectedUid, { inPlace
     return copy;
   });
   const index = selected ? layers.indexOf(selected) + (selected.type === 'group' && !inPlace ? 0 : 1) : layers.length;
-  const next = [...layers]; next.splice(index, 0, ...entries);
+  const next = [...layers];
+  next.splice(index, 0, ...entries);
   const frameVisibility = Object.fromEntries(Object.entries(clipboard.frameVisibility || {})
     .filter(([uid]) => ids.has(uid)).map(([uid, visible]) => [ids.get(uid), visible]));
   return { layers: next, entries, rootUid: ids.get(clipboard.rootUid), frameVisibility };
@@ -43,7 +46,10 @@ export function instantiateLayerBranch(layers, clipboard, selectedUid, { inPlace
 export function binarizePixelAlpha(pixels) {
   let changed = 0;
   for (let index = 3; index < pixels.length; index += 4) {
-    if (pixels[index] > 0 && pixels[index] < 255) { pixels[index] = 255; changed++; }
+    if (pixels[index] > 0 && pixels[index] < 255) {
+      pixels[index] = 255;
+      changed++;
+    }
   }
   return changed;
 }

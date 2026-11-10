@@ -3,15 +3,28 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-recent-history-'));
-app.setPath('userData', profile); app.setPath('sessionData', profile);
-app.on('browser-window-created', (_event, win) => { win.hide(); win.webContents.setBackgroundThrottling(false); });
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.webContents.setBackgroundThrottling(false);
+});
 const { WorkerProjectJournal } = require('../electron/journal-service.cjs');
 const originalCommit = WorkerProjectJournal.prototype.commit;
 let blocked = false, release, gate, heldCommits = 0;
-function stopWrites() { blocked = true; gate = new Promise(resolve => { release = resolve; }); }
-function resumeWrites() { blocked = false; release?.(); }
+function stopWrites() {
+  blocked = true;
+  gate = new Promise(resolve => { release = resolve; });
+}
+function resumeWrites() {
+  blocked = false;
+  release?.();
+}
 WorkerProjectJournal.prototype.commit = async function (...args) {
-  if (blocked) { heldCommits++; await gate; }
+  if (blocked) {
+    heldCommits++;
+    await gate;
+  }
   return originalCommit.apply(this, args);
 };
 require('../electron/main.cjs');
@@ -87,10 +100,12 @@ app.whenReady().then(async () => {
       const data=JSON.parse((await window.cubeBricksDesktop.checkoutProjectJournal({journalId:t.journalId,sequence:head.activeHead})).content);
       t.check(data.textures[0].layers.length===t.state.textureAssets[0].layers.length,'durable layers disagree');return true;
     })()`);
-    report.heldCommits = heldCommits; report.ok = true;
+    report.heldCommits = heldCommits;
+    report.ok = true;
   } catch (error) { report.error = error.stack; }
   finally { resumeWrites(); }
   fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
   fs.writeFileSync(path.resolve('build/performance/recent-history.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report)); app.exit(report.ok ? 0 : 1);
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

@@ -144,8 +144,8 @@ const coreOperations = {
   'core.history.undo': '撤銷',
   'core.history.redo': '重做',
   'core.history.checkout': '切換歷史狀態',
-    'core.history.mark': '標記歷史節點',
-    'core.history.delete': '刪除單個歷史節點',
+  'core.history.mark': '標記歷史節點',
+  'core.history.delete': '刪除單個歷史節點',
   'core.history.prune': '刪除歷史分支'
 };
 for (const [id, label] of Object.entries(coreOperations)) registerOperation(id, label);

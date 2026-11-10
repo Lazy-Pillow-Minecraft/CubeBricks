@@ -10,10 +10,16 @@ http.createServer((request, response) => {
   const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const filePath = path.resolve(root, relative);
   if (!filePath.startsWith(root)) {
-    response.writeHead(403); response.end('Forbidden'); return;
+    response.writeHead(403);
+    response.end('Forbidden');
+    return;
   }
   fs.readFile(filePath, (error, data) => {
-    if (error) { response.writeHead(404); response.end('Not found'); return; }
+    if (error) {
+      response.writeHead(404);
+      response.end('Not found');
+      return;
+    }
     response.writeHead(200, { 'Content-Type': `${mime[path.extname(filePath)] || 'application/octet-stream'}; charset=utf-8` });
     response.end(data);
   });

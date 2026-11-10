@@ -4,21 +4,36 @@ import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv } from '../src/common/c
 import { CubeBricksProject } from '../src/model.js';
 
 export async function verifyExportBake() {
-  const checks = [], check = (value, message) => { if (!value) throw Error(message); checks.push(message); };
+  const checks = [], check = (value, message) => {
+    if (!value) throw Error(message);
+    checks.push(message);
+  };
   const png = (width, height, pixel) => {
-    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d'), data = ctx.createImageData(width, height);
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) data.data.set(pixel(x, y), (y * width + x) * 4);
-    ctx.putImageData(data, 0, 0); return canvas.toDataURL();
+    ctx.putImageData(data, 0, 0);
+    return canvas.toDataURL();
   };
   const solid = color => png(4, 4, () => color);
   const colors = [[255, 0, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255], [255, 255, 0, 255], [255, 0, 255, 255]];
-  const asset = (id, indexes, fps, mode = 'default') => ({ uuid: id, _uid: id, id, mode, uvWidth: 4, uvHeight: 4,
+  const asset = (id, indexes, fps, mode = 'default') => ({
+    uuid: id, _uid: id, id, mode, uvWidth: 4, uvHeight: 4,
     source: solid(colors[indexes[0]]), layers: indexes.map((n, i) => ({ uid: `${id}_${i}`, source: solid(colors[n]), visible: false, opacity: 100 })),
-    animation: { enabled: true, fps, interpolate: true, frames: indexes.map((_, i) => ({ uid: `${id}_f${i}`, layerUids: [`${id}_${i}`], duration: i + 1 })) } });
-  const model = (format, assets, faces) => ({ meta: { model_format: format, box_uv: false }, name: 'Export test', resolution: { width: 4, height: 4 },
+    animation: {
+      enabled: true,
+      fps,
+      interpolate: true,
+      frames: indexes.map((_, i) => ({ uid: `${id}_f${i}`, layerUids: [`${id}_${i}`], duration: i + 1 }))
+    }
+  });
+  const model = (format, assets, faces) => ({
+    meta: { model_format: format, box_uv: false }, name: 'Export test', resolution: { width: 4, height: 4 },
     textures: assets.map((a, index) => ({ uuid: a.uuid, id: String(index), name: `${a.uuid}.png`, source: a.source, uv_width: 4, uv_height: 4 })),
-    elements: [{ uuid: 'cube', from: [0, 0, 0], to: [2, 2, 2], box_uv: false, uv_offset: [0, 0], faces }], outliner: ['cube'] });
+    elements: [{ uuid: 'cube', from: [0, 0, 0], to: [2, 2, 2], box_uv: false, uv_offset: [0, 0], faces }], outliner: ['cube']
+  });
   const sample = (raster, texture, uv, frame = 0) => {
     const width = texture.uv_width, height = texture.uv_height, scale = raster.width / width;
     return [...raster.getContext('2d').getImageData(Math.floor((uv[0] + uv[2]) / 2 * scale),
@@ -26,10 +41,12 @@ export async function verifyExportBake() {
   };
   const same = (a, b) => a.join(',') === b.join(',');
   const assets = [asset('redblue', [0, 1], 10), asset('three', [2, 3, 4], 20),
-    { uuid: 'static', mode: 'default', uvWidth: 4, uvHeight: 4, source: solid([50, 70, 90, 128]) }];
+  { uuid: 'static', mode: 'default', uvWidth: 4, uvHeight: 4, source: solid([50, 70, 90, 128]) }];
   const original = JSON.stringify(assets), cacheSize = layerRasterCache.size;
-  const faces = { north: { texture: 'redblue', uv: [0, 0, 4, 4] }, south: { texture: 'three', uv: [0, 0, 4, 4] },
-    east: { texture: 'static', uv: [0, 0, 4, 4] }, west: { texture: null, uv: [0, 0, 4, 4] }, up: { uv: [0, 0, 4, 4] } };
+  const faces = {
+    north: { texture: 'redblue', uv: [0, 0, 4, 4] }, south: { texture: 'three', uv: [0, 0, 4, 4] },
+    east: { texture: 'static', uv: [0, 0, 4, 4] }, west: { texture: null, uv: [0, 0, 4, 4] }, up: { uv: [0, 0, 4, 4] }
+  };
   const merged = await bakeBlockbenchTextures(model('bedrock', assets, structuredClone(faces)), assets);
   const texture = merged.textures[0], raster = await loadRaster(texture.source);
   check(merged.textures.length === 1 && raster.height === raster.width * 6, 'single-texture format merges the exact LCM sequence into one strip');
@@ -50,9 +67,11 @@ export async function verifyExportBake() {
 
   const pattern = png(4, 4, (x, y) => [x * 60, y * 60, 120, 255]);
   const tile = { uuid: 'tile', mode: 'tiled', uvWidth: 4, uvHeight: 4, source: pattern };
-  const tiledFaces = { north: { texture: 'tile', uv: [100, 100, 200, 200], tiling: { offsetX: -3, offsetY: 1, width: 9, height: 7 } },
+  const tiledFaces = {
+    north: { texture: 'tile', uv: [100, 100, 200, 200], tiling: { offsetX: -3, offsetY: 1, width: 9, height: 7 } },
     south: { texture: 'tile', tiling: { offsetX: 5, offsetY: -3, width: 9, height: 7 } },
-    up: { texture: 'tile', tiling: { offsetX: 2, offsetY: 0, width: 4, height: 4 } } };
+    up: { texture: 'tile', tiling: { offsetX: 2, offsetY: 0, width: 4, height: 4 } }
+  };
   const tiled = await bakeBlockbenchTextures(model('java_block', [tile], structuredClone(tiledFaces)), [tile]);
   const tr = await loadRaster(tiled.textures[0].source), tf = tiled.elements[0].faces;
   check(tr.width === 10 && tr.height === 8, 'tiled faces reuse a compact periodic plane, independent of saved ordinary UVs');
@@ -85,18 +104,25 @@ export async function verifyExportBake() {
   const highBaked = await bakeBlockbenchTextures(highModel, [high, assets[0]]), highUv = highBaked.elements[0].faces.north.uv;
   check(highUv[2] - highUv[0] === 4 && highUv[3] - highUv[1] === 4, 'high-resolution textures inherit missing logical UV dimensions from the exported model');
   const rectangular = asset('rectangle', [0, 1], 10);
-  rectangular.uvWidth = 2; rectangular.uvHeight = 1;
+  rectangular.uvWidth = 2;
+  rectangular.uvHeight = 1;
   const rectangleBake = await bakeBlockbenchTextures(model('java_block', [rectangular], { north: { texture: 'rectangle', uv: [0, 0, 2, 1] } }), [rectangular]);
   check(rectangleBake.textures[0].uv_width === 4 && rectangleBake.textures[0].uv_height === 4
     && same(rectangleBake.elements[0].faces.north.uv, [0, 0, 4, 4]), 'animation frame dimensions and face UVs are converted together to physical pixels');
 
-  const project = new CubeBricksProject({ formatId: 'bedrock_entity', name: 'Source', elements: [{ type: 'cube', uid: 'owner', position: [0, 0, 0], size: [2, 2, 2],
-    uvMode: 'face', faces: { north: { texture: 'redblue', uv: [0, 0, 4, 4] } } }], outliner: ['owner'] });
+  const project = new CubeBricksProject({
+    formatId: 'bedrock_entity', name: 'Source', elements: [{
+      type: 'cube', uid: 'owner', position: [0, 0, 0], size: [2, 2, 2],
+      uvMode: 'face', faces: { north: { texture: 'redblue', uv: [0, 0, 4, 4] } }
+    }], outliner: ['owner']
+  });
   const serialized = JSON.stringify(project);
   const baked = await createBakedBlockbenchExport(project, [assets[0]]);
   check(JSON.stringify(project) === serialized && baked.elements[0].uuid === 'owner', 'shared export wrapper preserves original project and hierarchy identities');
   let rejected = false;
-  try { await bakeBlockbenchTextures(model('java_block', [tile], { north: { texture: 'tile', tiling: { width: 20000, height: 16 } } }), [tile]); }
+  try {
+    await bakeBlockbenchTextures(model('java_block', [tile], { north: { texture: 'tile', tiling: { width: 20000, height: 16 } } }), [tile]);
+  }
   catch { rejected = true; }
   check(rejected, 'oversize bake is rejected instead of truncating a tiled face');
   return checks;

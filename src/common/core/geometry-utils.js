@@ -17,9 +17,14 @@ export function getEffectiveInflate(cube, groupChain = []) {
 export function rotatePoint(point, pivot, rotation) {
   let x = point[0] - pivot[0], y = point[1] - pivot[1], z = point[2] - pivot[2];
   const [rx, ry, rz] = rotation.map(value => value * DEG);
-  let c = Math.cos(rx), s = Math.sin(rx); [y, z] = [y * c - z * s, y * s + z * c];
-  c = Math.cos(ry); s = Math.sin(ry); [x, z] = [x * c + z * s, -x * s + z * c];
-  c = Math.cos(rz); s = Math.sin(rz); [x, y] = [x * c - y * s, x * s + y * c];
+  let c = Math.cos(rx), s = Math.sin(rx);
+  [y, z] = [y * c - z * s, y * s + z * c];
+  c = Math.cos(ry);
+  s = Math.sin(ry);
+  [x, z] = [x * c + z * s, -x * s + z * c];
+  c = Math.cos(rz);
+  s = Math.sin(rz);
+  [x, y] = [x * c - y * s, x * s + y * c];
   return [x + pivot[0], y + pivot[1], z + pivot[2]];
 }
 

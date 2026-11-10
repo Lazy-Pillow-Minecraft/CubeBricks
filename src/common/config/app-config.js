@@ -103,7 +103,10 @@ function compileTranslationPattern(source, translation) {
   const captures = [];
   const expression = source.split(/(\{\d+\})/).map(part => {
     const index = part.match(/^\{(\d+)\}$/);
-    if (index) { captures.push(index[1]); return '(.+?)'; }
+    if (index) {
+      captures.push(index[1]);
+      return '(.+?)';
+    }
     return part.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&');
   }).join('');
   return { expression: new RegExp(`^${expression}$`), captures, translation, specificity: source.length };
@@ -158,20 +161,43 @@ configRegistry.register({
 });
 
 configRegistry.registerMany([
-  { id: ConfigKey.FONT, type: ConfigType.STRING, scope: ConfigScope.APPLICATION, defaultValue: 'system', validate: value => typeof value === 'string' && value.length < 256, description: 'Interface font pack.' },
+  {
+    id: ConfigKey.FONT,
+    type: ConfigType.STRING,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 'system',
+    validate: value => typeof value === 'string' && value.length < 256,
+    description: 'Interface font pack.'
+  },
   ...Object.values(TOOL_TRANSFORM_SPACE).map(id => ({
     id, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'self',
     options: [{ value: 'global', label: '全局' }, { value: 'parent', label: '父級' }, { value: 'self', label: '自身' }],
     description: 'Coordinate system for this transform tool.'
   })),
-  { id: ConfigKey.PAINT_SELECTION_SAMPLING, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'nearest',
+  {
+    id: ConfigKey.PAINT_SELECTION_SAMPLING, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'nearest',
     options: [{ value: 'nearest', label: '最近鄰' }, { value: 'smooth', label: '平滑' }],
-    description: 'Sampling for non-right-angle pixel selection rotations.' },
-  { id: ConfigKey.HISTORY_LIMIT, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 200,
+    description: 'Sampling for non-right-angle pixel selection rotations.'
+  },
+  {
+    id: ConfigKey.HISTORY_LIMIT, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 200,
     validate: value => Number.isInteger(value) && value >= 0 && value <= 10000,
-    description: 'Default maximum number of persisted undo operations per project.' },
-  { id: ConfigKey.SEPARATE_UV_MODE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Separate UV editing from model editing into its own workspace mode.' },
-  { id: ConfigKey.BLOCKBENCH_CONTROLS, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Use left drag to orbit, right drag to pan, and Shift+left drag to box-select in the modeling viewport.' },
+    description: 'Default maximum number of persisted undo operations per project.'
+  },
+  {
+    id: ConfigKey.SEPARATE_UV_MODE,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: false,
+    description: 'Separate UV editing from model editing into its own workspace mode.'
+  },
+  {
+    id: ConfigKey.BLOCKBENCH_CONTROLS,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: false,
+    description: 'Use left drag to orbit, right drag to pan, and Shift+left drag to box-select in the modeling viewport.'
+  },
   {
     id: ConfigKey.SNAP,
     type: ConfigType.NUMBER,
@@ -180,20 +206,78 @@ configRegistry.registerMany([
     validate: value => value > 0,
     description: 'Transform snap subdivisions; the step is 16 divided by this value.'
   },
-  { id: ConfigKey.ALLOW_NEGATIVE_SIZE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Allow cube dimensions to cross zero into negative values.' },
-  { id: ConfigKey.PAINT_EXPLODE_GAP, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 2,
+  {
+    id: ConfigKey.ALLOW_NEGATIVE_SIZE,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: false,
+    description: 'Allow cube dimensions to cross zero into negative values.'
+  },
+  {
+    id: ConfigKey.PAINT_EXPLODE_GAP, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 2,
     validate: value => Number.isFinite(value) && value >= 0 && value <= 1000,
-    description: 'Minimum world-space clearance between exploded paint groups.' },
-  { id: ConfigKey.PAINT_SCREEN_HEIGHT, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 512,
+    description: 'Minimum world-space clearance between exploded paint groups.'
+  },
+  {
+    id: ConfigKey.PAINT_SCREEN_HEIGHT, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 512,
     validate: value => Number.isInteger(value) && value >= 32 && value <= 4096,
-    description: 'Virtual pixel height of the Ctrl screen-space painting plane.' },
-  { id: ConfigKey.SHIFT_SNAP_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'multiplier', options: [{ value: 'value', label: '數值' }, { value: 'multiplier', label: '乘數' }], description: 'How Shift modifies snap subdivisions.' },
-  { id: ConfigKey.SHIFT_SNAP_VALUE, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 4, validate: value => value > 0, description: 'Shift snap value or multiplier.' },
-  { id: ConfigKey.CTRL_SNAP_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'multiplier', options: [{ value: 'value', label: '數值' }, { value: 'multiplier', label: '乘數' }], description: 'How Ctrl modifies snap subdivisions.' },
-  { id: ConfigKey.CTRL_SNAP_VALUE, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 8, validate: value => value > 0, description: 'Ctrl snap value or multiplier.' },
-  { id: ConfigKey.SHIFT_CTRL_SNAP_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'multiplier', options: [{ value: 'value', label: '數值' }, { value: 'multiplier', label: '乘數' }], description: 'How Shift+Ctrl modifies snap subdivisions.' },
-  { id: ConfigKey.SHIFT_CTRL_SNAP_VALUE, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 64, validate: value => value > 0, description: 'Shift+Ctrl snap value or multiplier.' },
-  { id: ConfigKey.ALPHA_LOCK, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Preserve texture alpha while painting.' },
+    description: 'Virtual pixel height of the Ctrl screen-space painting plane.'
+  },
+  {
+    id: ConfigKey.SHIFT_SNAP_MODE,
+    type: ConfigType.ENUM,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 'multiplier',
+    options: [{ value: 'value', label: '數值' }, { value: 'multiplier', label: '乘數' }],
+    description: 'How Shift modifies snap subdivisions.'
+  },
+  {
+    id: ConfigKey.SHIFT_SNAP_VALUE,
+    type: ConfigType.NUMBER,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 4,
+    validate: value => value > 0,
+    description: 'Shift snap value or multiplier.'
+  },
+  {
+    id: ConfigKey.CTRL_SNAP_MODE,
+    type: ConfigType.ENUM,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 'multiplier',
+    options: [{ value: 'value', label: '數值' }, { value: 'multiplier', label: '乘數' }],
+    description: 'How Ctrl modifies snap subdivisions.'
+  },
+  {
+    id: ConfigKey.CTRL_SNAP_VALUE,
+    type: ConfigType.NUMBER,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 8,
+    validate: value => value > 0,
+    description: 'Ctrl snap value or multiplier.'
+  },
+  {
+    id: ConfigKey.SHIFT_CTRL_SNAP_MODE,
+    type: ConfigType.ENUM,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 'multiplier',
+    options: [{ value: 'value', label: '數值' }, { value: 'multiplier', label: '乘數' }],
+    description: 'How Shift+Ctrl modifies snap subdivisions.'
+  },
+  {
+    id: ConfigKey.SHIFT_CTRL_SNAP_VALUE,
+    type: ConfigType.NUMBER,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 64,
+    validate: value => value > 0,
+    description: 'Shift+Ctrl snap value or multiplier.'
+  },
+  {
+    id: ConfigKey.ALPHA_LOCK,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: false,
+    description: 'Preserve texture alpha while painting.'
+  },
   {
     id: ConfigKey.PROJECTION,
     type: ConfigType.ENUM,
@@ -202,22 +286,108 @@ configRegistry.registerMany([
     options: [{ value: 'perspective', label: '透視' }, { value: 'orthographic', label: '正交' }],
     description: 'Viewport camera projection.'
   },
-  { id: ConfigKey.PREVIEW_SHADE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Enable face shading in the viewport when the element also allows shading.' },
-  { id: ConfigKey.SHOW_PLAYER_REFERENCE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Show the non-editable player scale reference in the viewport.' },
-  { id: ConfigKey.PLAYER_REFERENCE_TEXTURE, type: ConfigType.OBJECT, scope: ConfigScope.APPLICATION, defaultValue: { name: '內置玩家紋理', source: '' }, validate: value => typeof value.name === 'string' && typeof value.source === 'string', description: 'Custom skin used by the non-editable player reference.' },
-  { id: ConfigKey.SHOW_GEOMETRY_ONLY, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Hide helper objects such as locators without changing their individual visibility.' },
-  { id: ConfigKey.MODIFIER_RESULT_GHOST, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Display generated modifier results at 75% opacity and disable their selection.' },
-  { id: ConfigKey.SHOW_GRID, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Show the viewport floor grid.' },
-  { id: ConfigKey.BACKGROUND_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'grid',
+  {
+    id: ConfigKey.PREVIEW_SHADE,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: true,
+    description: 'Enable face shading in the viewport when the element also allows shading.'
+  },
+  {
+    id: ConfigKey.SHOW_PLAYER_REFERENCE,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: false,
+    description: 'Show the non-editable player scale reference in the viewport.'
+  },
+  {
+    id: ConfigKey.PLAYER_REFERENCE_TEXTURE,
+    type: ConfigType.OBJECT,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: { name: '內置玩家紋理', source: '' },
+    validate: value => typeof value.name === 'string' && typeof value.source === 'string',
+    description: 'Custom skin used by the non-editable player reference.'
+  },
+  {
+    id: ConfigKey.SHOW_GEOMETRY_ONLY,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: false,
+    description: 'Hide helper objects such as locators without changing their individual visibility.'
+  },
+  {
+    id: ConfigKey.MODIFIER_RESULT_GHOST,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: false,
+    description: 'Display generated modifier results at 75% opacity and disable their selection.'
+  },
+  {
+    id: ConfigKey.SHOW_GRID,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: true,
+    description: 'Show the viewport floor grid.'
+  },
+  {
+    id: ConfigKey.BACKGROUND_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'grid',
     options: [{ value: 'black', label: '純黑' }, { value: 'current', label: '目前背景' }, { value: 'grid', label: '棋盤格' }],
-    description: 'Viewport background fill; independent of the floor reference grid.' },
-  { id: ConfigKey.SHOW_WIREFRAME, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Show model wireframe bounds.' },
-  { id: ConfigKey.CUBE_BIRTH_MS, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 60, validate: value => value >= 0 && value <= 500, description: 'Cube appearance animation in milliseconds; zero disables it.' },
-  { id: ConfigKey.CUBE_DEATH_MS, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 60, validate: value => value >= 0 && value <= 500, description: 'Cube disappearance animation in milliseconds; zero disables it.' },
-  { id: ConfigKey.LOCKED_DEFAULT_ALPHA, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 100, validate: value => value >= 0 && value <= 100, description: 'Opacity percentage used for locked viewport objects.' },
-  { id: ConfigKey.LOCKED_HOVER_FADE, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Fade a locked object while the pointer is over it.' },
-  { id: ConfigKey.LOCKED_HOVER_ALPHA, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 50, validate: value => value >= 0 && value <= 100, description: 'Opacity percentage at the center of the pointer fade region.' },
-  { id: ConfigKey.LOCKED_HOVER_RADIUS, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 120, validate: value => value >= 8 && value <= 2048, description: 'Screen-space radius in pixels for the locked-object pointer fade region.' }
+    description: 'Viewport background fill; independent of the floor reference grid.'
+  },
+  {
+    id: ConfigKey.SHOW_WIREFRAME,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: false,
+    description: 'Show model wireframe bounds.'
+  },
+  {
+    id: ConfigKey.CUBE_BIRTH_MS,
+    type: ConfigType.NUMBER,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 60,
+    validate: value => value >= 0 && value <= 500,
+    description: 'Cube appearance animation in milliseconds; zero disables it.'
+  },
+  {
+    id: ConfigKey.CUBE_DEATH_MS,
+    type: ConfigType.NUMBER,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 60,
+    validate: value => value >= 0 && value <= 500,
+    description: 'Cube disappearance animation in milliseconds; zero disables it.'
+  },
+  {
+    id: ConfigKey.LOCKED_DEFAULT_ALPHA,
+    type: ConfigType.NUMBER,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 100,
+    validate: value => value >= 0 && value <= 100,
+    description: 'Opacity percentage used for locked viewport objects.'
+  },
+  {
+    id: ConfigKey.LOCKED_HOVER_FADE,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: true,
+    description: 'Fade a locked object while the pointer is over it.'
+  },
+  {
+    id: ConfigKey.LOCKED_HOVER_ALPHA,
+    type: ConfigType.NUMBER,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 50,
+    validate: value => value >= 0 && value <= 100,
+    description: 'Opacity percentage at the center of the pointer fade region.'
+  },
+  {
+    id: ConfigKey.LOCKED_HOVER_RADIUS,
+    type: ConfigType.NUMBER,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: 120,
+    validate: value => value >= 8 && value <= 2048,
+    description: 'Screen-space radius in pixels for the locked-object pointer fade region.'
+  }
 ]);
 
 export function getLanguageLabel(language = configRegistry.get(ConfigKey.LANGUAGE)) {
@@ -293,7 +463,7 @@ const attributeSources = new WeakMap();
 const TRANSLATED_ATTRIBUTES = ['title', 'aria-label', 'placeholder', 'data-tooltip'];
 
 function translateTextNode(node) {
-  if(node.parentElement?.closest('[translate="no"]'))return;
+  if (node.parentElement?.closest('[translate="no"]')) return;
   const current = node.nodeValue || '';
   const trimmed = current.trim();
   if (!trimmed) return;
@@ -310,7 +480,10 @@ function translateTextNode(node) {
 function translateElementAttributes(element) {
   if (!TRANSLATED_ATTRIBUTES.some(attribute => element.hasAttribute(attribute))) return;
   let sources = attributeSources.get(element);
-  if (!sources) { sources = {}; attributeSources.set(element, sources); }
+  if (!sources) {
+    sources = {};
+    attributeSources.set(element, sources);
+  }
   for (const attribute of TRANSLATED_ATTRIBUTES) {
     if (!element.hasAttribute(attribute)) continue;
     const current = element.getAttribute(attribute);
@@ -326,7 +499,10 @@ function translateElementAttributes(element) {
 
 function translateSubtree(root) {
   if (!root) return;
-  if (root.nodeType === 3) { translateTextNode(root); return; }
+  if (root.nodeType === 3) {
+    translateTextNode(root);
+    return;
+  }
   if (root.nodeType !== 1 && root.nodeType !== 9) return;
   if (root.nodeType === 1 && root.namespaceURI === 'http://www.w3.org/2000/svg'
     && root.closest('#transformGizmo,#mirrorGuideOverlay,#locatorOverlay')) {

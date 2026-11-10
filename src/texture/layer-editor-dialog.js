@@ -2,7 +2,18 @@ import { LAYER_BLEND_MODES } from '../common/core/layer-blend.js';
 import { activeLayer, compositeLayers, flipbookFrame, layerRasterCache, loadRaster, prepareLayers, selectedLayerEntry } from '../common/core/texture-features.js';
 import { tonePaletteSnapshot } from './tone-palette.js';
 
-export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, samplePaletteGradient, getCompositeSource, onPropertyInput, onPropertyCommit, onClose, onRender, toast }) {
+export function createLayerEditorDialog({
+  $,
+  activeTextureAsset,
+  paletteRows,
+  samplePaletteGradient,
+  getCompositeSource,
+  onPropertyInput,
+  onPropertyCommit,
+  onClose,
+  onRender,
+  toast
+}) {
   const dialog = $('#layerEditorDialog');
   const layerList = $('#textureFeatureControls').closest('.texture-layer-panel-scroll');
   const dockSlot = document.createComment('layer-list-dock-slot');
@@ -86,9 +97,11 @@ export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, sa
     if (!layer) return;
     const initial = layer.toneMap || paletteSnapshot(paletteRows.find(row => row.colors.length || row.colorSpaceGradient));
     if (!initial) return toast('請先建立有顏色的色卡');
-    const next = { ...initial, grayUnit: 'percent',
+    const next = {
+      ...initial, grayUnit: 'percent',
       anchorGray: initial.grayUnit === 'percent' ? initial.anchorGray : Math.round((initial.anchorGray ?? 128) / 255 * 1000) / 10,
-      ...change };
+      ...change
+    };
     onPropertyInput(layer, 'toneMap', next);
     onPropertyCommit();
     scheduleRender();
@@ -133,15 +146,19 @@ export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, sa
     paintPreview(currentPreview, current, current?.width || 16, current?.height || 16);
   }
 
-  function refreshPreview(){
-    if(!dialog.open)return;const asset=activeTextureAsset();
-    const composite=flipbookFrame(asset,getCompositeSource?.(asset)||(asset?.layers?.length?compositeLayers(asset):fallbackRaster));
-    paintPreview(compositePreview,composite,composite?.width||16,composite?.height||16);
+  function refreshPreview() {
+    if (!dialog.open) return;
+    const asset = activeTextureAsset();
+    const composite = flipbookFrame(asset, getCompositeSource?.(asset) || (asset?.layers?.length ? compositeLayers(asset) : fallbackRaster));
+    paintPreview(compositePreview, composite, composite?.width || 16, composite?.height || 16);
   }
 
   function scheduleRender() {
     if (!dialog.open || frame !== null) return;
-    frame = requestAnimationFrame(() => { frame = null; render(); });
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      render();
+    });
   }
 
   function editOpacity(input, commit = false) {
@@ -197,7 +214,10 @@ export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, sa
     const layer = selectedLayerEntry(activeTextureAsset()) || activeLayer(activeTextureAsset());
     if (!layer) return;
     const name = nameInput.value.trim();
-    if (!name) { nameInput.value = layer.name; return; }
+    if (!name) {
+      nameInput.value = layer.name;
+      return;
+    }
     if (name === layer.name) return;
     onPropertyInput(layer, 'name', name);
     onPropertyCommit();
@@ -224,7 +244,10 @@ export function createLayerEditorDialog({ $, activeTextureAsset, paletteRows, sa
     fallbackRaster = null;
     render();
     if (!asset.layers?.length && asset.source) loadRaster(asset.source).then(raster => {
-      if (dialog.open && pendingAsset === asset) { fallbackRaster = raster; scheduleRender(); }
+      if (dialog.open && pendingAsset === asset) {
+        fallbackRaster = raster;
+        scheduleRender();
+      }
     }).catch(error => toast(error.message));
     prepareLayers(asset).then(() => {
       if (dialog.open && pendingAsset === asset) scheduleRender();

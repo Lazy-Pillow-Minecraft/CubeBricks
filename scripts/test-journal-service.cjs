@@ -15,15 +15,22 @@ async function workspace(t) {
     assert.ok(path.basename(target).startsWith('.journal-worker-test-'));
     await fs.rm(target, { recursive: true, force: true });
   });
-  return { root, journal(name) {
-    const journal = new WorkerProjectJournal(path.join(root, name));
-    journals.push(journal);
-    return journal;
-  }, track(journal) { journals.push(journal); return journal; } };
+  return {
+    root, journal(name) {
+      const journal = new WorkerProjectJournal(path.join(root, name));
+      journals.push(journal);
+      return journal;
+    }, track(journal) {
+      journals.push(journal);
+      return journal;
+    }
+  };
 }
-const content = x => JSON.stringify({ name: 'worker', elements: [
-  { type:'cube', uid:'cube_one', position:[x,0,0], size:[2,2,2], pivot:[0,0,0], rotation:[0,0,0] }
-], groups:[], textures:[] });
+const content = x => JSON.stringify({
+  name: 'worker', elements: [
+    { type: 'cube', uid: 'cube_one', position: [x, 0, 0], size: [2, 2, 2], pivot: [0, 0, 0], rotation: [0, 0, 0] }
+  ], groups: [], textures: []
+});
 
 test('journal worker keeps undo, redo, UUID and archive progress across the process boundary', async t => {
   const store = await workspace(t), journal = store.journal('source');
@@ -57,18 +64,19 @@ test('journal worker returns validation failures and recovers without changing c
 });
 
 test('history import reports background progress while current elements and undo remain available', async t => {
-  const store=await workspace(t),journal=store.journal('history-source');
-  await journal.initialize(content(0),'core.project.create');
-  for(let i=1;i<5;i++)await journal.commit(content(i),'core.element.move');
-  const archive=path.join(store.root,'history.cbmodel');await journal.archive(archive);
-  const progress=[];
-  const stop=onHistoryProgress(event=>{if(event.directory===path.join(store.root,'staged-history'))progress.push(event);});
+  const store = await workspace(t), journal = store.journal('history-source');
+  await journal.initialize(content(0), 'core.project.create');
+  for (let i = 1; i < 5; i++)await journal.commit(content(i), 'core.element.move');
+  const archive = path.join(store.root, 'history.cbmodel');
+  await journal.archive(archive);
+  const progress = [];
+  const stop = onHistoryProgress(event => { if (event.directory === path.join(store.root, 'staged-history')) progress.push(event); });
   t.after(stop);
-  const restored=store.track(await WorkerProjectJournal.fromArchive(await fs.readFile(archive),
-    path.join(store.root,'staged-history'),null,null,{deferHistory:true,historyThreshold:1}));
-  assert.equal(JSON.parse(await restored.content()).elements[0].position[0],4);
-  assert.equal(JSON.parse((await restored.navigate('undo')).content).elements[0].position[0],3);
+  const restored = store.track(await WorkerProjectJournal.fromArchive(await fs.readFile(archive),
+    path.join(store.root, 'staged-history'), null, null, { deferHistory: true, historyThreshold: 1 }));
+  assert.equal(JSON.parse(await restored.content()).elements[0].position[0], 4);
+  assert.equal(JSON.parse((await restored.navigate('undo')).content).elements[0].position[0], 3);
   await restored.finishHistoryImport();
-  assert.ok(progress.some(event=>event.value===0));
-  assert.ok(progress.some(event=>event.value===1));
+  assert.ok(progress.some(event => event.value === 0));
+  assert.ok(progress.some(event => event.value === 1));
 });

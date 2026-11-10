@@ -76,6 +76,8 @@ import { createWorkspaceCoordinator } from './editor/workspace-coordinator.js';
 import { createDockSystem } from './screen/dock-bootstrap.js';
 import { showAppChoice } from './screen/prompt-dialog.js';
 
+// Compose the editor once. Forwarding functions let controllers refer to
+// each other without importing each other or calling a partially built controller.
 let textureFileController = null;
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -86,9 +88,6 @@ const livePaintTextureSources = new Map();
 const animationRasterCache = new Map();
 const paintHitAlphaCache = new Map();
 let preciseRotationInput = null;
-
-
-
 
 state.selectedUid = state.project.elements[0]?.uid;
 if (state.selectedUid) state.selectedUids.add(state.selectedUid);
@@ -122,14 +121,14 @@ const { updatePaintColorPickerVisual, renderPaintColorPicker, openColorPickerPop
 });
 const { selectedMirrorGuideGroup, mirrorControllerWorldFrame, symmetryModifierAngles,
   finiteWorldGuideMarkup, updateMirrorGuideOverlay } = createMirrorGuideController({
-  state, $, sceneCanvas, sceneRenderer, selected, isShapeElement,
-  projectViewportPoint, addScaled3, clamp
-});
+    state, $, sceneCanvas, sceneRenderer, selected, isShapeElement,
+    projectViewportPoint, addScaled3, clamp
+  });
 const { paintSymmetryFaceKey, paintSymmetryRelatedHits, scheduleAllPaintSymmetryBuilds,
   schedulePaintSymmetryBuild, ensurePaintSymmetryCache } = createPaintSymmetryController({
-  state, sceneRenderer, faceUvPixelSlots, symmetryModifierAngles,
-  mirrorControllerWorldFrame, barycentricPoint, renderInspector, PAINT_FACE_EDGES
-});
+    state, sceneRenderer, faceUvPixelSlots, symmetryModifierAngles,
+    mirrorControllerWorldFrame, barycentricPoint, renderInspector, PAINT_FACE_EDGES
+  });
 const projectState = $('#projectState');
 const projectTabsNode = $('#projectTabs');
 const projectInfoDialog = $('#projectInfoDialog');
@@ -157,10 +156,10 @@ const { bakeCameraPan, cancelCameraFocus, focusSelected, focusSceneOrigin, curre
   beginAxisWidgetDrag, moveAxisWidgetDrag, endAxisWidgetDrag } = cameraController;
 const { captureModel, captureProjectCover, saveModelCapture, copyModelCapture, clearModelCapture,
   updateModelCaptureCrop } = createModelCaptureController({
-  state, $, sceneCanvas, sceneRenderer, textureCanvas,
-  getTextureAtlasEntries: () => textureAtlasController.textureAtlasEntries, getTextureAtlasCanvas: () => textureAtlasController.textureAtlasCanvas,
-  currentProjection, toast
-});
+    state, $, sceneCanvas, sceneRenderer, textureCanvas,
+    getTextureAtlasEntries: () => textureAtlasController.textureAtlasEntries, getTextureAtlasCanvas: () => textureAtlasController.textureAtlasCanvas,
+    currentProjection, toast
+  });
 let projectCoverController = null;
 const setSceneFpsActive = bindSceneFps($('#sceneFps'));
 window.addEventListener('cubebricks:project-home', () => setSceneFpsActive(false));
@@ -178,8 +177,10 @@ const projectTabsController = createProjectTabsController({
   onProjectClosing: tab => projectCoverController?.flush(tab),
   onProjectDisposed: (tab, retained) => textureAssetController?.releaseTextureAssets(tab.session.textureAssets, retained)
 });
-projectCoverController = createProjectCoverController({ projectTabsController, captureProjectCover,
-  isInteracting: () => Boolean(state.dragging || sceneCanvas.classList.contains('is-orbiting')) });
+projectCoverController = createProjectCoverController({
+  projectTabsController, captureProjectCover,
+  isInteracting: () => Boolean(state.dragging || sceneCanvas.classList.contains('is-orbiting'))
+});
 window.addEventListener('cubebricks:texture-change', () => {
   projectCoverController.schedule(projectTabsController.tabs.find(tab => tab.id === projectTabsController.activeId));
 });
@@ -207,10 +208,10 @@ const journalController = createProjectJournalController({
 });
 const { getKnifePreviewLabel, updateKnifeHover, refreshKnifeFromModifierEvent,
   cancelKnifeSelection, useKnifePoint, buildEditorOverlayLines } = createKnifeController({
-  state, sceneCanvas, sceneRenderer, worldPointToCubeLocal, cubeLocalPointToWorld,
-  snapValue, clamp, updateToolOptions, renderScene, renderAll,
-  freezeCubeUvs, snapshot, markDirty, toast, isBezierElement, selected, selectItem, hexToRgb
-});
+    state, sceneCanvas, sceneRenderer, worldPointToCubeLocal, cubeLocalPointToWorld,
+    snapValue, clamp, updateToolOptions, renderScene, renderAll,
+    freezeCubeUvs, snapshot, markDirty, toast, isBezierElement, selected, selectItem, hexToRgb
+  });
 const { createTextureTemplate, registerGeneratedTexture } = createTextureTemplateController({
   state, $, CUBE_FACE_NAMES, getSelectionExpansion, isProceduralShape,
   getSubdivisionSession: () => inspectorController.subdivisionSession, subdivisionPatch, syncSubdivisionEdits,
@@ -243,7 +244,10 @@ function snapshot(...args) { return journalController.snapshot(...args); }
 function restore(...args) { return journalController.restore(...args); }
 function undo(...args) { return journalController.undo(...args); }
 function redo(...args) { return journalController.redo(...args); }
-function markDirty(...args) { textureFileController?.refresh(); return journalController.markDirty(...args); }
+function markDirty(...args) {
+  textureFileController?.refresh();
+  return journalController.markDirty(...args);
+}
 function startProjectJournal(...args) { return journalController.startProjectJournal(...args); }
 function scheduleProjectJournal(...args) { return journalController.scheduleProjectJournal(...args); }
 function noteJournalOperation(...args) { return journalController.noteJournalOperation(...args); }
@@ -651,10 +655,10 @@ const textureAssetController = createTextureAssetController({
   uvPreviewIsActive, pushTexturePaintHistory, renderAll,
   invalidateAllRenderGeometry, registerGeneratedTexture, renderScene,
   updateTexturePreviewFrame, syncRendererTexture, syncRendererTextureAsset,
-  getAllTextureAssets:()=>[...state.textureAssets,...projectTabsController.tabs.flatMap(tab=>tab.session?.textureAssets||[])],selectedElementUids,
-  texturePlaybackKey:asset=>{
-    const tabId=state.textureAssets.includes(asset)?projectTabsController.activeId:projectTabsController.tabs.find(tab=>tab.session?.textureAssets?.includes(asset))?.id;
-    return tabId?`${tabId}:${asset._uid}`:asset;
+  getAllTextureAssets: () => [...state.textureAssets, ...projectTabsController.tabs.flatMap(tab => tab.session?.textureAssets || [])], selectedElementUids,
+  texturePlaybackKey: asset => {
+    const tabId = state.textureAssets.includes(asset) ? projectTabsController.activeId : projectTabsController.tabs.find(tab => tab.session?.textureAssets?.includes(asset))?.id;
+    return tabId ? `${tabId}:${asset._uid}` : asset;
   },
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
@@ -756,9 +760,11 @@ function mapProjectionZoom(...args) { return settingsController.mapProjectionZoo
 function setConfigFromControl(...args) { return settingsController.setConfigFromControl(...args); }
 
 function initializeDockSystem() {
-  dockManager = createDockSystem({ state, $, stopUvPreviewAnimation, refreshUvPreview,
+  dockManager = createDockSystem({
+    state, $, stopUvPreviewAnimation, refreshUvPreview,
     uvPreviewController, syncUvPreviewPanelAspect, syncTexturePreviewPriority,
-    scheduleOutlinerWindow, renderScene });
+    scheduleOutlinerWindow, renderScene
+  });
   applyModePanelVisibility();
 }
 
@@ -788,7 +794,16 @@ function setActiveTextureItem(...args) { return contextMenuController.setActiveT
 function showElementContextMenu(...args) { return contextMenuController.showElementContextMenu(...args); }
 function bindContextMenus(...args) { return contextMenuController.bindContextMenus(...args); }
 
-createProjectHistoryDialog({$,state,projectTabsController,journalController,showContextMenu,closeContextMenu,openColorPickerPopup,toast});
+createProjectHistoryDialog({
+  $,
+  state,
+  projectTabsController,
+  journalController,
+  showContextMenu,
+  closeContextMenu,
+  openColorPickerPopup,
+  toast
+});
 
 const curvePlacementController = createCurvePlacementController({
   state, sceneCanvas, sceneRenderer, intersectRayPlane, snapValue,
@@ -998,7 +1013,10 @@ initializeProjectTabs();
 bindProjectHistoryProgress();
 if (window.cubeBricksDesktop?.onCloseRequested) {
   window.cubeBricksDesktop.onCloseRequested(requestProjectClose);
-  $('#closeProjectsForm').addEventListener('submit', event => { event.preventDefault(); void confirmProjectClose(); });
+  $('#closeProjectsForm').addEventListener('submit', event => {
+    event.preventDefault();
+    void confirmProjectClose();
+  });
   $('[data-action="cancelCloseProjects"]').addEventListener('click', () => $('#closeProjectsDialog').close());
 }
 renderTexture();

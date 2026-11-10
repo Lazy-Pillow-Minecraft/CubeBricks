@@ -10,9 +10,13 @@ const faceDropSource = fs.readFileSync(path.join(__dirname, '../src/texture/face
 
 function install(context, names) {
   context.CustomEvent ||= CustomEvent;
-  if(context.window)context.window.dispatchEvent ||= ()=>{};
+  if (context.window) context.window.dispatchEvent ||= () => {};
   for (const name of names) {
-    const expression = new RegExp(`(?:async )?function ${name}\\([^]*?\\n}`);
+    // These fixtures evaluate individual controller functions with injected
+    // dependencies. Match the closing brace at the declaration's indentation.
+    const expression = new RegExp(
+      `^([ \\t]*)(?:async )?function ${name}\\((?:[^\\r\\n]*\\) *\\{[^\\r\\n]*\\}$|[\\s\\S]*?^\\1\\})`, 'm'
+    );
     const match = journalSource.match(expression) || fileSource.match(expression)
       || faceDropSource.match(expression) || source.match(expression);
     assert.ok(match, `missing function ${name}`);
@@ -25,8 +29,10 @@ function setup() {
     constructor(data) { Object.assign(this, data); }
     getNode(uid) { return this.elements.find(node => node.uid === uid); }
   }
-  const session = number => ({ project: new Project({ elements: [{ uid: 'cube', position: [number, 0, 0] }] }),
-    selectedUids: new Set(['cube']), selectedUid: 'cube', textureAssets: [], textureGroups: [], selectedCurveNodeIndex: null });
+  const session = number => ({
+    project: new Project({ elements: [{ uid: 'cube', position: [number, 0, 0] }] }),
+    selectedUids: new Set(['cube']), selectedUid: 'cube', textureAssets: [], textureGroups: [], selectedCurveNodeIndex: null
+  });
   const tabs = ['a', 'b'].map((id, index) => ({ id, journalId: id, session: session(index + 10) }));
   const state = { ...tabs[0].session };
   let finish;
@@ -46,12 +52,14 @@ function setup() {
     toast() {}, renderProjectTabs() {}, restoreProjectTextureView() {}, renderAll() {}, scheduleProjectJournal() {},
     clearSubdivisionSession() { context.subdivisionSession = null; },
     markDirty(value, options) { assert.equal(options.constrain, false); },
-    window: { cubeBricksDesktop: {
-      projectJournalState: async () => ({ activeHead: 10 }),
-      checkoutProjectJournal: payload => payload.sequence
-        ? Promise.resolve(result(payload.sequence))
-        : new Promise(resolve => { finish = resolve; })
-    } }
+    window: {
+      cubeBricksDesktop: {
+        projectJournalState: async () => ({ activeHead: 10 }),
+        checkoutProjectJournal: payload => payload.sequence
+          ? Promise.resolve(result(payload.sequence))
+          : new Promise(resolve => { finish = resolve; })
+      }
+    }
   });
   context.projectTabsController = {
     tabs,
@@ -64,15 +72,21 @@ function setup() {
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
 test('browser layer undo and redo preserve frame links alongside the layer identity graph', () => {
-  const asset = { _uid: 'texture', source: 'new-pixels', layers: [{ uid: 'new-layer', source: 'new-pixels' }],
-    activeLayerUid: 'new-layer', animation: { enabled: true, frames: [{ uid: 'frame', layerUids: ['new-layer'], paintLayerUid: 'new-layer' }] } };
+  const asset = {
+    _uid: 'texture', source: 'new-pixels', layers: [{ uid: 'new-layer', source: 'new-pixels' }],
+    activeLayerUid: 'new-layer', animation: { enabled: true, frames: [{ uid: 'frame', layerUids: ['new-layer'], paintLayerUid: 'new-layer' }] }
+  };
   const state = { textureAssets: [asset] };
-  const context = vm.createContext({ structuredClone, Object, state, textureCanvas: { width: 4, height: 4 },
-    renderTextureList() {}, activateProjectTexture() {}, rebuildTextureAtlas() {}, markDirty() {} });
+  const context = vm.createContext({
+    structuredClone, Object, state, textureCanvas: { width: 4, height: 4 },
+    renderTextureList() {}, activateProjectTexture() {}, rebuildTextureAtlas() {}, markDirty() {}
+  });
   install(context, ['restoreTexturePaintHistory']);
-  const undo = [{ uid: 'texture', source: 'old-pixels', layers: [{ uid: 'old-layer', source: 'old-pixels' }],
+  const undo = [{
+    uid: 'texture', source: 'old-pixels', layers: [{ uid: 'old-layer', source: 'old-pixels' }],
     activeLayerUid: 'old-layer', width: 4, height: 4,
-    animation: { enabled: true, frames: [{ uid: 'frame', layerUids: ['old-layer'], paintLayerUid: 'old-layer' }] } }];
+    animation: { enabled: true, frames: [{ uid: 'frame', layerUids: ['old-layer'], paintLayerUid: 'old-layer' }] }
+  }];
   const redo = [];
   assert.equal(context.restoreTexturePaintHistory(undo, redo), true);
   assert.deepEqual(asset.animation.frames[0].layerUids, ['old-layer']);
@@ -81,8 +95,12 @@ test('browser layer undo and redo preserve frame links alongside the layer ident
   assert.deepEqual(asset.animation.frames[0].layerUids, ['new-layer']);
   assert.equal(asset.animation.frames[0].paintLayerUid, asset.activeLayerUid);
 });
-const result = number => ({ sequence: number, content: JSON.stringify({ elements: [{ uid: 'cube', position: [number, 0, 0] }],
-  textures: [], textureGroups: [{ uid: 'folder', name: 'Textures' }] }) });
+const result = number => ({
+  sequence: number, content: JSON.stringify({
+    elements: [{ uid: 'cube', position: [number, 0, 0] }],
+    textures: [], textureGroups: [{ uid: 'folder', name: 'Textures' }]
+  })
+});
 
 test('asynchronous undo updates its original tab, never a newly active tab', async () => {
   const { context, tabs, state, finish } = setup();
@@ -123,21 +141,25 @@ test('geometry-only undo keeps the existing texture assets and atlas', async () 
   assert.equal(context.state.project.elements[0].position[0], 5);
 });
 
-test('undo restores model state while preserving the current project history-limit setting',async()=>{
-  const {context,state,finish}=setup();
-  state.project.historyLimit=300;
-  const pending=context.navigateProjectJournal('undo');await turn();
-  const previous=result(5),data=JSON.parse(previous.content);data.historyLimit=10;
-  finish({...previous,content:JSON.stringify(data)});await pending;
-  assert.equal(state.project.historyLimit,300);
-  assert.equal(state.project.elements[0].position[0],5);
+test('undo restores model state while preserving the current project history-limit setting', async () => {
+  const { context, state, finish } = setup();
+  state.project.historyLimit = 300;
+  const pending = context.navigateProjectJournal('undo');
+  await turn();
+  const previous = result(5), data = JSON.parse(previous.content);
+  data.historyLimit = 10;
+  finish({ ...previous, content: JSON.stringify(data) });
+  await pending;
+  assert.equal(state.project.historyLimit, 300);
+  assert.equal(state.project.elements[0].position[0], 5);
 });
 
 test('rapid undo requests execute in order', async () => {
   const { context, state } = setup();
   let running = 0, maximum = 0, head = 10;
   context.window.cubeBricksDesktop.checkoutProjectJournal = async () => {
-    running++; maximum = Math.max(maximum, running);
+    running++;
+    maximum = Math.max(maximum, running);
     await turn();
     running--;
     return result(--head);
@@ -153,7 +175,10 @@ test('desktop paint mode uses the same ordered undo and redo as model edits', as
     state: { mode: 'paint', paintHistory: [{ uid: 'texture_a' }], paintFuture: [{ uid: 'texture_a' }] },
     window: { cubeBricksDesktop: { checkoutProjectJournal() {} } },
     finishActivePaintGesture() {},
-    navigateProjectJournal: async direction => { directions.push(direction); return true; },
+    navigateProjectJournal: async direction => {
+      directions.push(direction);
+      return true;
+    },
     restoreTexturePaintHistory: () => { throw new Error('paint-only history must not run on desktop'); }
   });
   install(context, ['undo', 'redo']);
@@ -184,7 +209,10 @@ test('same-tool paint gestures flush independently while a multi-face gesture st
   const context = vm.createContext({
     state: {}, projectTabsController: { activeId: tab.id }, projectTabById: () => tab,
     requireOperation: id => id, scheduleProjectJournal() {},
-    flushProjectJournal(current) { flushed.push(current.journalPendingGroup); current.journalPending = null; }
+    flushProjectJournal(current) {
+      flushed.push(current.journalPendingGroup);
+      current.journalPending = null;
+    }
   });
   install(context, ['noteJournalOperation']);
   context.noteJournalOperation('core.texture.brush', 'first');
@@ -240,7 +268,10 @@ test('recent model undo displays immediately while storage remains queued', asyn
   tabs[0].recentModelHistory = { navigate: () => ({ data: JSON.parse(result(5).content), changedUids: ['cube'], matches: () => true }), reset() {} };
   const pending = context.navigateProjectJournal('undo');
   assert.equal(state.project.elements[0].position[0], 5, 'visible model does not await the storage queue');
-  releaseWrite(); await turn(); finish({ ...result(5), textureChanged: false }); await pending;
+  releaseWrite();
+  await turn();
+  finish({ ...result(5), textureChanged: false });
+  await pending;
   assert.equal(tabs[0].journalHead, 5);
   assert.equal(tabs[0].journalPreviewCount, 0);
   assert.notEqual(tabs[0].journalWriteBlocked, true);
@@ -251,15 +282,29 @@ test('worker-prepared pixel undo displays while storage is blocked and preserves
   let releaseWrite, releasePixels;
   const project = state.project;
   tabs[0].journalWrites = new Promise(resolve => { releaseWrite = resolve; });
-  const data = { ...JSON.parse(result(10).content), textures: [{ uuid: 'texture', source: 'old-pixels',
-    layers: [{ uid: 'layer', source: 'old-pixels' }], active_layer_uid: 'layer' }] };
+  const data = {
+    ...JSON.parse(result(10).content), textures: [{
+      uuid: 'texture', source: 'old-pixels',
+      layers: [{ uid: 'layer', source: 'old-pixels' }], active_layer_uid: 'layer'
+    }]
+  };
   tabs[0].recentModelHistory = { navigate: () => new Promise(resolve => { releasePixels = resolve; }), reset() {} };
   const pending = context.navigateProjectJournal('undo');
-  releasePixels({ data, changedUids: [], textureChanged: true, modelChanged: false, geometryChanged: false, matches: async () => true });
+  releasePixels({
+    data,
+    changedUids: [],
+    textureChanged: true,
+    modelChanged: false,
+    geometryChanged: false,
+    matches: async () => true
+  });
   await turn();
   assert.equal(state.textureAssets[0].source, 'old-pixels', 'texture recovery does not await a queued commit');
   assert.equal(state.project, project, 'painting does not reconstruct geometry');
-  releaseWrite(); await turn(); finish({ ...result(10), textureChanged: true }); await pending;
+  releaseWrite();
+  await turn();
+  finish({ ...result(10), textureChanged: true });
+  await pending;
   assert.notEqual(tabs[0].journalWriteBlocked, true);
   assert.equal(tabs[0].journalPreviewCount, 0);
 });
@@ -267,13 +312,18 @@ test('worker-prepared pixel undo displays while storage is blocked and preserves
 test('an edit made during pixel proof cancels the stale local undo before disk checkout', async () => {
   const { context, tabs, state } = setup();
   let releasePixels, calls = 0;
-  context.window.cubeBricksDesktop.checkoutProjectJournal = async () => { calls++; return result(5); };
+  context.window.cubeBricksDesktop.checkoutProjectJournal = async () => {
+    calls++;
+    return result(5);
+  };
   tabs[0].recentModelHistory = { navigate: () => new Promise(resolve => { releasePixels = resolve; }), reset() {} };
   const pending = context.navigateProjectJournal('undo');
-  state.project.elements[0].position[0] = 99; tabs[0].journalEditRevision = 1;
+  state.project.elements[0].position[0] = 99;
+  tabs[0].journalEditRevision = 1;
   releasePixels({ data: JSON.parse(result(5).content), changedUids: ['cube'], matches: () => true });
   await pending;
-  assert.equal(calls, 0); assert.equal(state.project.elements[0].position[0], 99);
+  assert.equal(calls, 0);
+  assert.equal(state.project.elements[0].position[0], 99);
   assert.notEqual(tabs[0].journalWriteBlocked, true);
 });
 
@@ -291,11 +341,18 @@ test('edits after a recent undo preview remain on the target branch without comp
   const { context, tabs, state, finish } = setup();
   let restores = 0;
   const checkout = context.window.cubeBricksDesktop.checkoutProjectJournal;
-  context.window.cubeBricksDesktop.checkoutProjectJournal = payload => { if (payload.sequence) restores++; return checkout(payload); };
+  context.window.cubeBricksDesktop.checkoutProjectJournal = payload => {
+    if (payload.sequence) restores++;
+    return checkout(payload);
+  };
   tabs[0].recentModelHistory = { navigate: () => ({ data: JSON.parse(result(5).content), changedUids: ['cube'], matches: () => true }), reset() {} };
-  const pending = context.navigateProjectJournal('undo'); await turn();
-  state.project.elements[0].position[0] = 99; tabs[0].journalEditRevision = 1; tabs[0].journalPending = 'core.element.move';
-  finish({ ...result(5), textureChanged: false }); await pending;
+  const pending = context.navigateProjectJournal('undo');
+  await turn();
+  state.project.elements[0].position[0] = 99;
+  tabs[0].journalEditRevision = 1;
+  tabs[0].journalPending = 'core.element.move';
+  finish({ ...result(5), textureChanged: false });
+  await pending;
   assert.equal(state.project.elements[0].position[0], 99);
   assert.equal(tabs[0].journalHead, 5);
   assert.equal(restores, 0, 'new edits were made against the previewed target, not the old head');
@@ -303,20 +360,26 @@ test('edits after a recent undo preview remain on the target branch without comp
 
 test('recent undo preserves selection changed since the last saved tab session', async () => {
   const { context, tabs, state, finish } = setup();
-  tabs[0].session.selectedUid = null; tabs[0].session.selectedUids = new Set();
-  state.selectedUid = 'cube'; state.selectedUids = new Set(['cube']);
+  tabs[0].session.selectedUid = null;
+  tabs[0].session.selectedUids = new Set();
+  state.selectedUid = 'cube';
+  state.selectedUids = new Set(['cube']);
   tabs[0].recentModelHistory = { navigate: () => ({ data: JSON.parse(result(5).content), changedUids: ['cube'], matches: () => true }), reset() {} };
-  const pending = context.navigateProjectJournal('undo'); await turn();
+  const pending = context.navigateProjectJournal('undo');
+  await turn();
   assert.equal(state.selectedUid, 'cube');
   assert.equal(state.selectedUids.has('cube'), true);
-  finish({ ...result(5), textureChanged: false }); await pending;
+  finish({ ...result(5), textureChanged: false });
+  await pending;
 });
 
 test('preview mismatch blocks subsequent writes and preserves the visible work', async () => {
   const { context, tabs, state, finish } = setup();
   tabs[0].recentModelHistory = { navigate: () => ({ data: JSON.parse(result(5).content), changedUids: ['cube'], matches: () => false }), reset() {} };
-  const pending = context.navigateProjectJournal('undo'); await turn();
-  finish({ ...result(4), textureChanged: false }); await pending;
+  const pending = context.navigateProjectJournal('undo');
+  await turn();
+  finish({ ...result(4), textureChanged: false });
+  await pending;
   assert.equal(state.project.elements[0].position[0], 5);
   assert.equal(tabs[0].journalWriteBlocked, true);
 });
@@ -327,14 +390,18 @@ test('failed pending storage blocks a queued preview navigation', async () => {
   tabs[0].journalWrites = new Promise(resolve => { releaseWrite = resolve; });
   tabs[0].recentModelHistory = { navigate: () => ({ data: JSON.parse(result(5).content), changedUids: ['cube'], matches: () => true }), reset() {} };
   const pending = context.navigateProjectJournal('undo');
-  tabs[0].journalWriteBlocked = true; releaseWrite(); await pending;
+  tabs[0].journalWriteBlocked = true;
+  releaseWrite();
+  await pending;
   assert.equal(tabs[0].journalWriteBlocked, true);
   assert.equal(tabs[0].journalPreviewCount, 0);
 });
 
 test('dragging a texture onto multiple cube faces records one operation before mutations', () => {
-  const cubes = [0, 1].map(index => ({ uid: `cube_${index}`, uvMode: 'per_face', autoUv: true,
-    faces: { north: { uv: [1, 2, 5, 6], texture: 'old', enabled: false } } }));
+  const cubes = [0, 1].map(index => ({
+    uid: `cube_${index}`, uvMode: 'per_face', autoUv: true,
+    faces: { north: { uv: [1, 2, 5, 6], texture: 'old', enabled: false } }
+  }));
   const records = [];
   const context = vm.createContext({
     CUBE_FACE_NAMES: ['north'], CULLED_FACE_TEXTURE_KEY: 'culledTexture', UV_FACE_LABELS: {},

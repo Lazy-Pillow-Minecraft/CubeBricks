@@ -6,12 +6,14 @@ const pixelOnly = process.argv.includes('--pixels');
 const renderOnly = process.argv.includes('--render');
 const suffix = process.argv.find(value => value.startsWith('--suffix='))?.slice(9).replace(/[^\w-]/g, '') || '';
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-animation-audit-'));
-app.setPath('userData', profile); app.setPath('sessionData', profile);
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
 app.whenReady().then(async () => {
   let report;
   try {
     const win = new BrowserWindow({ show: false, width: 1000, height: 800, webPreferences: { backgroundThrottling: false } });
-    const page = path.join(profile, 'audit.html'); fs.writeFileSync(page, '<!doctype html><body style="margin:0">');
+    const page = path.join(profile, 'audit.html');
+    fs.writeFileSync(page, '<!doctype html><body style="margin:0">');
     await win.loadFile(page);
     const root = pathToFileURL(path.resolve('src')).href;
     report = await win.webContents.executeJavaScript(`(async()=>{
@@ -105,8 +107,9 @@ app.whenReady().then(async () => {
       }
       return {ok:true,environment:{userAgent:navigator.userAgent,webglRenderer:gl.getParameter(gl.RENDERER),viewport:[800,600]},results,notes};
     })()`);
-  } catch(error) {report={ok:false,error:error.stack};}
-  fs.mkdirSync(path.resolve('build/performance'),{recursive:true});
-  fs.writeFileSync(path.resolve('build/performance/audit-animation-performance'+(pixelOnly?'-pixels':renderOnly?'-render':'')+'-2026-11-05'+(suffix?'-'+suffix:'')+'.json'),JSON.stringify(report,null,2));
-  console.log(JSON.stringify(report));app.exit(report.ok?0:1);
+  } catch (error) { report = { ok: false, error: error.stack }; }
+  fs.mkdirSync(path.resolve('build/performance'), { recursive: true });
+  fs.writeFileSync(path.resolve('build/performance/audit-animation-performance' + (pixelOnly ? '-pixels' : renderOnly ? '-render' : '') + '-2026-11-05' + (suffix ? '-' + suffix : '') + '.json'), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

@@ -4,12 +4,16 @@ export function selectionBounds(mask, width, height, clip = {}) {
   let left = width, top = height, right = -1, bottom = -1;
   for (let y = clip.top ?? 0; y < (clip.bottom ?? height); y++)
     for (let x = clip.left ?? 0; x < (clip.right ?? width); x++) {
-    if (!mask[y * width + x]) continue;
-    left = Math.min(left, x); top = Math.min(top, y);
-    right = Math.max(right, x); bottom = Math.max(bottom, y);
-  }
-  return right < left ? null : { left, top, right, bottom,
-    cx: (left + right + 1) / 2, cy: (top + bottom + 1) / 2 };
+      if (!mask[y * width + x]) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  return right < left ? null : {
+    left, top, right, bottom,
+    cx: (left + right + 1) / 2, cy: (top + bottom + 1) / 2
+  };
 }
 
 export const mapSelectionPoint = ([a, b, c, d, x, y], [u, v]) => [a * u + c * v + x, b * u + d * v + y];
@@ -23,7 +27,7 @@ export function invertSelectionTransform([a, b, c, d, x, y]) {
 }
 export function selectionFrameMatrix([origin, right, bottom]) {
   return [right[0] - origin[0], right[1] - origin[1],
-    bottom[0] - origin[0], bottom[1] - origin[1], ...origin];
+  bottom[0] - origin[0], bottom[1] - origin[1], ...origin];
 }
 export function selectionTransformMatrix(bounds, { dx = 0, dy = 0, angle = 0, scaleX = 1, scaleY = 1,
   pivot = [bounds.cx, bounds.cy] } = {}) {
@@ -74,7 +78,9 @@ export function transformSelectedPixels(source, mask, width, height,
       if (sx < 0 || sy < 0 || sx >= width || sy >= height || mask && !mask[sy * width + sx]) continue;
       const index = (sy * width + sx) * 4;
       const alpha = source[index + 3] / 255;
-      red += source[index] * alpha; green += source[index + 1] * alpha; blue += source[index + 2] * alpha;
+      red += source[index] * alpha;
+      green += source[index + 1] * alpha;
+      blue += source[index + 2] * alpha;
       opacity += alpha;
       covered++;
     }

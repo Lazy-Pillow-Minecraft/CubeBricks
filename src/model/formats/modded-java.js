@@ -13,13 +13,15 @@ export function javaClassName(filename) {
 const float = n => `${Number.isInteger(cleanNumber(n)) ? cleanNumber(n) + '.0' : cleanNumber(n)}F`;
 
 export async function exportModdedJava(bb, filename, locations) {
-  const className = javaClassName(filename || bb.name), lines = [], groups = new Map(); let serial = 0;
+  const className = javaClassName(filename || bb.name), lines = [], groups = new Map();
+  let serial = 0;
   if (filename && fileStem(filename) !== className) throw Error('Java 文件名必须是合法的类名，请使用字母、数字或下划线');
   const add = (group, parents, cubes) => {
     const parent = parents.at(-1), parentOrigin = vector(parent?.origin), origin = vector(group.origin);
     const offset = origin.map((n, i) => i === 2 ? n - parentOrigin[i] : parentOrigin[i] - n);
     if (!parent) offset[1] += 24;
-    const name = `part${++serial}`, parentVariable = parent ? groups.get(parent.uuid) : 'root'; groups.set(group.uuid, name);
+    const name = `part${++serial}`, parentVariable = parent ? groups.get(parent.uuid) : 'root';
+    groups.set(group.uuid, name);
     const pathName = `${group.name || 'part'}_${serial}`;
     let builder = 'CubeListBuilder.create()';
     for (const cube of cubes) {
@@ -41,8 +43,10 @@ export async function exportModdedJava(bb, filename, locations) {
     add(node, parents, node.children.filter(item => typeof item === 'string').map(uid => elements.get(uid)).filter(cube => cube?.from && cube.export !== false));
   });
   const restore = structuredClone(bb);
-  restore.textures = restore.textures.map((texture, index) => ({ ...texture, source: undefined,
-    path: locations[index]?.filePath || '', relative_path: undefined, resource: locations[index]?.resource }));
+  restore.textures = restore.textures.map((texture, index) => ({
+    ...texture, source: undefined,
+    path: locations[index]?.filePath || '', relative_path: undefined, resource: locations[index]?.resource
+  }));
   restore._cubebricksNativeJava = true;
   const payload = bytesToBase64(new TextEncoder().encode(JSON.stringify(restore)));
   const body = `// CubeBricks Java model layer; Minecraft 1.17+ Mojang mappings.\n// Texture: ${JSON.stringify(locations[0]?.resource || '')}\nimport net.minecraft.client.model.geom.PartPose;\nimport net.minecraft.client.model.geom.builders.CubeDeformation;\nimport net.minecraft.client.model.geom.builders.CubeListBuilder;\nimport net.minecraft.client.model.geom.builders.LayerDefinition;\nimport net.minecraft.client.model.geom.builders.MeshDefinition;\nimport net.minecraft.client.model.geom.builders.PartDefinition;\n\npublic final class ${className} {\n    private ${className}() {}\n\n    public static LayerDefinition createBodyLayer() {\n        MeshDefinition mesh = new MeshDefinition();\n        PartDefinition root = mesh.getRoot();\n${lines.join('\n')}\n        return LayerDefinition.create(mesh, ${bb.resolution.width}, ${bb.resolution.height});\n    }\n}\n\n/* CubeBricks-Restore-v1\n${payload}\n*/\n`;

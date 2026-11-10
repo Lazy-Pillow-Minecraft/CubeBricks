@@ -5,15 +5,22 @@ function pixelDigest(source) {
   if (!pixelWorker) {
     pixelWorker = new Worker(new URL('./save-fingerprint-worker.js', import.meta.url), { type: 'module' });
     pixelWorker.onmessage = ({ data }) => {
-      const request = pendingDigests.get(data.id); pendingDigests.delete(data.id);
+      const request = pendingDigests.get(data.id);
+      pendingDigests.delete(data.id);
       if (data.error) request?.reject(new Error(data.error)); else request?.resolve(data.result);
     };
     pixelWorker.onerror = error => {
       for (const request of pendingDigests.values()) request.reject(new Error(error.message));
-      pendingDigests.clear(); pixelWorker?.terminate(); pixelWorker = null;
+      pendingDigests.clear();
+      pixelWorker?.terminate();
+      pixelWorker = null;
     };
   }
-  return new Promise((resolve, reject) => { const id = ++requestId; pendingDigests.set(id, { resolve, reject }); pixelWorker.postMessage({ id, source }); });
+  return new Promise((resolve, reject) => {
+    const id = ++requestId;
+    pendingDigests.set(id, { resolve, reject });
+    pixelWorker.postMessage({ id, source });
+  });
 }
 async function digest(text) {
   const bytes = new TextEncoder().encode(text);
@@ -45,32 +52,56 @@ export async function textureSaveFingerprint(asset) {
   const layers = asset.layers || [];
   const normalized = layers.map(layer => {
     const { uid, parentUid, type, visible, opacity, blendMode, maskLayerUid, toneMap } = layer;
-    return { uid, parentUid, type, visible, opacity, blendMode, maskLayerUid, toneMap: structuredClone(toneMap), source: sourceDigest(layer, layer.source) };
+    return {
+      uid,
+      parentUid,
+      type,
+      visible,
+      opacity,
+      blendMode,
+      maskLayerUid,
+      toneMap: structuredClone(toneMap),
+      source: sourceDigest(layer, layer.source)
+    };
   });
-  const animation = asset.animation?.enabled ? { enabled: true, fps: asset.animation.fps, interpolate: asset.animation.interpolate,
-    frames: (asset.animation.frames || []).map(frame => ({ layerUids: [...(frame.layerUids || [])], duration: frame.duration,
-      visibility: structuredClone(frame.visibility) })) } : null;
+  const animation = asset.animation?.enabled ? {
+    enabled: true, fps: asset.animation.fps, interpolate: asset.animation.interpolate,
+    frames: (asset.animation.frames || []).map(frame => ({
+      layerUids: [...(frame.layerUids || [])], duration: frame.duration,
+      visibility: structuredClone(frame.visibility)
+    }))
+  } : null;
   const source = layers.length ? null : sourceDigest(asset, asset.source);
   await Promise.all(normalized.map(async layer => { layer.source = await layer.source; }));
   return digest(JSON.stringify({ source: source ? await source : null, layers: normalized, animation }));
 }
 
 export function createTextureSaveIndicators({ state, root = () => document.getElementById('textureList') }) {
-  const dirty = new WeakMap(), revisions = new WeakMap(), checked = new WeakMap(); let queued = false, forcePaint = false;
+  const dirty = new WeakMap(), revisions = new WeakMap(), checked = new WeakMap();
+  let queued = false, forcePaint = false;
   const importedBaselines = new WeakMap(), savedFiles = new Map();
   const projectKey = () => state.project?.projectUuid || 'default';
   function registerImported(asset) {
     const external = asset.externalFile;
     if (!external?.imported || external.fingerprint || importedBaselines.has(external)) return;
     const pending = textureSaveFingerprint(asset);
-    importedBaselines.set(external, pending); void pending.catch(() => {});
+    importedBaselines.set(external, pending);
+    void pending.catch(() => {});
   }
-  const stamp = asset => ({ sources: asset.layers?.length ? asset.layers.map(layer => layer.source) : [asset.source],
-    metadata: JSON.stringify({ layers: asset.layers?.map(layer => ({ uid: layer.uid, parentUid: layer.parentUid, type: layer.type,
-      visible: layer.visible, opacity: layer.opacity, blendMode: layer.blendMode, maskLayerUid: layer.maskLayerUid, toneMap: layer.toneMap })),
-      animation: asset.animation?.enabled ? { fps: asset.animation.fps, interpolate: asset.animation.interpolate,
-        frames: asset.animation.frames?.map(frame => ({ layerUids: frame.layerUids, duration: frame.duration, visibility: frame.visibility })) } : null,
-      baseline: asset.externalFile?.fingerprint, imported: asset.externalFile?.imported }) });
+  const stamp = asset => ({
+    sources: asset.layers?.length ? asset.layers.map(layer => layer.source) : [asset.source],
+    metadata: JSON.stringify({
+      layers: asset.layers?.map(layer => ({
+        uid: layer.uid, parentUid: layer.parentUid, type: layer.type,
+        visible: layer.visible, opacity: layer.opacity, blendMode: layer.blendMode, maskLayerUid: layer.maskLayerUid, toneMap: layer.toneMap
+      })),
+      animation: asset.animation?.enabled ? {
+        fps: asset.animation.fps, interpolate: asset.animation.interpolate,
+        frames: asset.animation.frames?.map(frame => ({ layerUids: frame.layerUids, duration: frame.duration, visibility: frame.visibility }))
+      } : null,
+      baseline: asset.externalFile?.fingerprint, imported: asset.externalFile?.imported
+    })
+  });
   function paint(asset, value) {
     dirty.set(asset, value);
     const row = root()?.querySelector(`[data-texture-uid="${CSS.escape(asset._uid)}"]`);
@@ -84,11 +115,16 @@ export function createTextureSaveIndicators({ state, root = () => document.getEl
     const current = stamp(asset), previous = checked.get(asset);
     if (previous && previous.metadata === current.metadata && previous.sources.length === current.sources.length
       && previous.sources.every((source, index) => source === current.sources[index])) {
-      if (repaint) paint(asset, dirty.get(asset) ?? !asset.externalFile); return;
+      if (repaint) paint(asset, dirty.get(asset) ?? !asset.externalFile);
+      return;
     }
     checked.set(asset, current);
-    const revision = (revisions.get(asset) || 0) + 1; revisions.set(asset, revision);
-    if (!asset.externalFile) { paint(asset, true); return; }
+    const revision = (revisions.get(asset) || 0) + 1;
+    revisions.set(asset, revision);
+    if (!asset.externalFile) {
+      paint(asset, true);
+      return;
+    }
     const external = asset.externalFile;
     const fingerprintTask = textureSaveFingerprint(asset);
     if (!external.fingerprint && external.imported) external.fingerprint = await importedBaselines.get(external);
@@ -105,13 +141,20 @@ export function createTextureSaveIndicators({ state, root = () => document.getEl
     isDirty: asset => dirty.get(asset) ?? !asset.externalFile,
     refresh({ paint: repaintRequested = false } = {}) {
       forcePaint ||= repaintRequested;
-      if (queued) return; queued = true;
-      queueMicrotask(() => { const repaint = forcePaint; forcePaint = false; queued = false;
-        for (const asset of state.textureAssets) void refreshAsset(asset, repaint).catch(() => paint(asset, true)); });
+      if (queued) return;
+      queued = true;
+      queueMicrotask(() => {
+        const repaint = forcePaint;
+        forcePaint = false;
+        queued = false;
+        for (const asset of state.textureAssets) void refreshAsset(asset, repaint).catch(() => paint(asset, true));
+      });
     },
     async markSaved(asset, fingerprint, { filePath, resource, ownFile = true, projectUuid = projectKey() } = {}) {
-      asset.externalFile = { ...asset.externalFile, fingerprint, imported: false,
-        ...(ownFile ? { path: filePath, resource } : { exportPath: filePath }) };
+      asset.externalFile = {
+        ...asset.externalFile, fingerprint, imported: false,
+        ...(ownFile ? { path: filePath, resource } : { exportPath: filePath })
+      };
       if (!savedFiles.has(projectUuid)) savedFiles.set(projectUuid, new Map());
       savedFiles.get(projectUuid).set(asset._uid, asset.externalFile);
       if (projectUuid === projectKey() && state.textureAssets.includes(asset)) await refreshAsset(asset);

@@ -12,12 +12,19 @@ export function materializeFormatCubeRotations(project, cubes, createGroup, rule
       const parent = project.getParentGroup(cube.uid), siblings = parent ? parent.children : project.outliner;
       const index = siblings.indexOf(cube.uid);
       if (index < 0) continue;
-      const group = createGroup({ name: cube.name, unnamed: false, pivot: [...cube.pivot], rotation,
+      const group = createGroup({
+        name: cube.name, unnamed: false, pivot: [...cube.pivot], rotation,
         children: [cube.uid], uvMode: rules.moddedEntity ? 'box' : 'face', autoUv: rules.moddedEntity || cube.autoUv,
         modifiers: cube.modifiers, operators: cube.operators, appliedTransform: cube.appliedTransform,
-        visible: cube.visible, locked: cube.locked, exported: cube.exported, shade: cube.shade });
-      cube.rotation = [0, 0, 0]; cube.modifiers = []; cube.operators = []; cube.appliedTransform = null;
-      siblings.splice(index, 1, group.uid); project.groups.push(group); groups.push(group);
+        visible: cube.visible, locked: cube.locked, exported: cube.exported, shade: cube.shade
+      });
+      cube.rotation = [0, 0, 0];
+      cube.modifiers = [];
+      cube.operators = [];
+      cube.appliedTransform = null;
+      siblings.splice(index, 1, group.uid);
+      project.groups.push(group);
+      groups.push(group);
       project.invalidateHierarchyIndex();
     }
     if (rules.moddedEntity) constrainCube(cube, { moddedEntity: true, allowCubeRotation: false, allowBoxUv: true, allowFaceUv: false });

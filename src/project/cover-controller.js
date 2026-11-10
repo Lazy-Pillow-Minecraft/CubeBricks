@@ -18,7 +18,10 @@ export function createProjectCoverController({ projectTabsController, capturePro
     }
     let dataUrl;
     try { dataUrl = captureProjectCover(); }
-    catch (error) { console.warn('項目封面渲染失敗', error); return; }
+    catch (error) {
+      console.warn('項目封面渲染失敗', error);
+      return;
+    }
     const previous = writes.get(tab.journalId) || Promise.resolve();
     const write = previous.catch(() => {}).then(async () => {
       await tab.journalReady;

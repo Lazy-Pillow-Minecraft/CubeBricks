@@ -11,8 +11,15 @@ export function beginTextureExportProgress() {
     async progress(value) {
       if (bar) bar.value = value;
       if (percent) percent.textContent = `${Math.round(value * 100)}%`;
-      if (performance.now() - lastYield > 16) { await new Promise(resolve => setTimeout(resolve, 0)); lastYield = performance.now(); }
+      if (performance.now() - lastYield > 16) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        lastYield = performance.now();
+      }
     },
-    finish() { finished = true; clearTimeout(timer); if (dialog?.open) dialog.close(); }
+    finish() {
+      finished = true;
+      clearTimeout(timer);
+      if (dialog?.open) dialog.close();
+    }
   };
 }

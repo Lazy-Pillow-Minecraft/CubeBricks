@@ -1,8 +1,10 @@
 import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv } from '../common/core/geometry-utils.js';
 import { faceTilingValues } from '../common/core/face-tiling.js';
-import { cutSelection, invertSelectionTransform, mapSelectionPoint, multiplySelectionTransforms,
+import {
+  cutSelection, invertSelectionTransform, mapSelectionPoint, multiplySelectionTransforms,
   selectionBounds, selectionCorners, selectionFrameMatrix, selectionTransformMatrix,
-  transformSelectedPixels } from './selection-transform.js';
+  transformSelectedPixels
+} from './selection-transform.js';
 import { releasePaintCanvas } from './canvas-layer-binding.js';
 
 export const selectionHandleKinds = ['scale', 'rotate', 'scale', 'rotate'];
@@ -101,8 +103,10 @@ export async function preparePixelSelection(primary, counterparts, masks, loadCa
         for (const surface of surfaces.values()) releasePaintCanvas(surface.canvas);
         return null;
       }
-      surface = { ...loaded, asset: target.asset, width: target.width, height: target.height,
-        source: loaded.context.getImageData(0, 0, target.width, target.height) };
+      surface = {
+        ...loaded, asset: target.asset, width: target.width, height: target.height,
+        source: loaded.context.getImageData(0, 0, target.width, target.height)
+      };
       surfaces.set(target.asset, surface);
     }
     const sourceMap = patch ? [1, 0, 0, 1, primary.bounds.left, primary.bounds.top] : inverse;
@@ -168,7 +172,8 @@ export function selectionLayerCanvases(session, matrix, sampling) {
   const layers = new Map();
   for (const [asset, surface] of session.surfaces) {
     const canvas = document.createElement('canvas');
-    canvas.width = surface.width; canvas.height = surface.height;
+    canvas.width = surface.width;
+    canvas.height = surface.height;
     const context = canvas.getContext('2d');
     const image = context.createImageData(surface.width, surface.height);
     const claimed = session.regions.length > 1 ? new Uint8Array(surface.width * surface.height) : null;

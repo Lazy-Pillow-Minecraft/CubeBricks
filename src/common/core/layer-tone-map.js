@@ -50,7 +50,10 @@ function toneMapLookup(settings) {
     let nearest = 0, distance = Infinity;
     for (let index = 0; index < grayStops.length; index++) {
       const next = Math.abs(grayStops[index] - brightness);
-      if (next < distance) { distance = next; nearest = index; }
+      if (next < distance) {
+        distance = next;
+        nearest = index;
+      }
     }
     lookup.set(stops[nearest], brightness * 3);
   }
@@ -64,7 +67,9 @@ export function mapLayerTonePixels(pixels, settings) {
   for (let offset = 0; offset < pixels.length; offset += 4) {
     if (!pixels[offset + 3]) continue;
     const colorOffset = clamp(Math.round(gray(pixels[offset], pixels[offset + 1], pixels[offset + 2])), 0, 255) * 3;
-    pixels[offset] = lookup[colorOffset]; pixels[offset + 1] = lookup[colorOffset + 1]; pixels[offset + 2] = lookup[colorOffset + 2];
+    pixels[offset] = lookup[colorOffset];
+    pixels[offset + 1] = lookup[colorOffset + 1];
+    pixels[offset + 2] = lookup[colorOffset + 2];
   }
   return pixels;
 }

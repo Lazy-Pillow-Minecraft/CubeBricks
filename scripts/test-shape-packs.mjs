@@ -43,8 +43,10 @@ try {
   await writeFile(path.join(root, 'ZipPack.zip'), packZip([
     ['ZipPack/', Buffer.alloc(0)],
     ['ZipPack/shapes/', Buffer.alloc(0)],
-    ['ZipPack/package.json', Buffer.from(JSON.stringify({ version: '2.0.0',
-      shapes: [{ id: 'zip_arch', label: 'Zip Arch', file: 'arch.js' }] }))],
+    ['ZipPack/package.json', Buffer.from(JSON.stringify({
+      version: '2.0.0',
+      shapes: [{ id: 'zip_arch', label: 'Zip Arch', file: 'arch.js' }]
+    }))],
     ['ZipPack/shapes/arch.js', Buffer.from(source.replaceAll('sample_arch', 'zip_arch'))]
   ]));
   const zipped = await listShapePacks(root);

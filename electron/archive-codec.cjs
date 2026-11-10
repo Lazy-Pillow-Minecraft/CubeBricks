@@ -11,10 +11,12 @@ const MAX_MANIFEST = 32 * 1024 * 1024;
 const MAX_ENTRY = 512 * 1024 * 1024;
 const MAX_TOTAL = 2 * 1024 * 1024 * 1024;
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
-const BROTLI_OPTIONS = { params: {
-  [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
-  [zlib.constants.BROTLI_PARAM_LGWIN]: 24
-} };
+const BROTLI_OPTIONS = {
+  params: {
+    [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+    [zlib.constants.BROTLI_PARAM_LGWIN]: 24
+  }
+};
 
 function validName(name) {
   if (typeof name !== 'string' || !name || name.startsWith('/') || name.includes('\\') || name.includes(':')) return false;
@@ -28,13 +30,17 @@ function detachImages(bytes, blobs, name) {
   const pattern = /data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}/g;
   for (const match of source.matchAll(pattern)) {
     const comma = match[0].indexOf(',');
-    matches.push({ at: match.index, length: match[0].length,
-      prefix: match[0].slice(0, comma + 1), encoded: match[0].slice(comma + 1) });
+    matches.push({
+      at: match.index, length: match[0].length,
+      prefix: match[0].slice(0, comma + 1), encoded: match[0].slice(comma + 1)
+    });
   }
   if (/^texture_changes\/\d+\/[^/]+\.json$/.test(name)) {
     for (const match of source.matchAll(/"(?:before|after)"\s*:\s*"([A-Za-z0-9+/]+={0,2})"/g)) {
-      matches.push({ at: match.index + match[0].indexOf(match[1]), length: match[1].length,
-        prefix: '', encoded: match[1] });
+      matches.push({
+        at: match.index + match[0].indexOf(match[1]), length: match[1].length,
+        prefix: '', encoded: match[1]
+      });
     }
   }
   matches.sort((left, right) => left.at - right.at);
@@ -45,7 +51,8 @@ function detachImages(bytes, blobs, name) {
     const image = Buffer.from(match.encoded, 'base64');
     if (image.toString('base64') !== match.encoded) continue;
     const preceding = bytes.subarray(cursor, match.at);
-    pieces.push(preceding); length += preceding.length;
+    pieces.push(preceding);
+    length += preceding.length;
     const hash = sha(image);
     if (!blobs.has(hash)) blobs.set(hash, image);
     images.push({ at: length, hash, prefix: match.prefix });
@@ -82,7 +89,8 @@ async function packArchive(entries) {
     const plain = Buffer.concat(pending, pendingSize);
     const encoded = await compress(plain, BROTLI_OPTIONS);
     blocks.push({ bytes: encoded, size: plain.length, hash: sha(plain) });
-    pending = []; pendingSize = 0;
+    pending = [];
+    pendingSize = 0;
   };
   const names = new Set();
   let totalOriginal = 0;
@@ -97,20 +105,25 @@ async function packArchive(entries) {
     const offset = pendingSize;
     pending.push(detached.bytes);
     pendingSize += detached.bytes.length;
-    files.push({ name, block, offset, length: detached.bytes.length,
-      originalLength: original.length, hash: sha(original), images: detached.images });
+    files.push({
+      name, block, offset, length: detached.bytes.length,
+      originalLength: original.length, hash: sha(original), images: detached.images
+    });
     if (pendingSize >= MAX_BLOCK) await flush();
   }
   await flush();
   if (files.length > 200000 || blocks.length > 200000 || blobs.size > 200000) throw new Error('CBMODEL 文件項目過多');
-  const manifest = { format: 'cubebricks-archive', version: 2, files,
+  const manifest = {
+    format: 'cubebricks-archive', version: 2, files,
     blocks: blocks.map(({ bytes, size, hash }) => ({ length: bytes.length, size, hash })),
-    blobs: [...blobs].map(([hash, bytes]) => ({ hash, length: bytes.length })) };
+    blobs: [...blobs].map(([hash, bytes]) => ({ hash, length: bytes.length }))
+  };
   const header = Buffer.from(JSON.stringify(manifest));
   if (header.length > MAX_MANIFEST) throw new Error('CBMODEL 文件索引過大');
   const compressedHeader = await compress(header, BROTLI_OPTIONS);
   if (compressedHeader.length > MAX_MANIFEST) throw new Error('CBMODEL 壓縮索引過大');
-  const size = Buffer.alloc(4); size.writeUInt32LE(compressedHeader.length);
+  const size = Buffer.alloc(4);
+  size.writeUInt32LE(compressedHeader.length);
   return Buffer.concat([MAGIC, size, compressedHeader, ...blocks.map(block => block.bytes), ...blobs.values()]);
 }
 
@@ -135,7 +148,8 @@ function unpackArchive(bytes) {
       || cursor + block.length > bytes.length) throw new Error('CBMODEL 壓縮區塊損壞');
     const plain = zlib.brotliDecompressSync(bytes.subarray(cursor, cursor + block.length), { maxOutputLength: Math.max(1, block.size) });
     if (plain.length !== block.size || sha(plain) !== block.hash) throw new Error('CBMODEL 壓縮區塊校驗失敗');
-    blocks.push(plain); cursor += block.length;
+    blocks.push(plain);
+    cursor += block.length;
   }
   const blobs = new Map();
   for (const blob of manifest.blobs) {
@@ -144,7 +158,8 @@ function unpackArchive(bytes) {
       || cursor + blob.length > bytes.length || blobs.has(blob.hash)) throw new Error('CBMODEL 圖片區塊損壞');
     const image = bytes.subarray(cursor, cursor + blob.length);
     if (sha(image) !== blob.hash) throw new Error('CBMODEL 圖片區塊校驗失敗');
-    blobs.set(blob.hash, image); cursor += blob.length;
+    blobs.set(blob.hash, image);
+    cursor += blob.length;
   }
   if (cursor !== bytes.length) throw new Error('CBMODEL 文件末尾包含額外資料');
   const result = new Map();
@@ -194,7 +209,8 @@ async function unpackArchiveWithProgress(bytes, onProgress = () => {}) {
       || cursor + block.length > bytes.length) throw new Error('CBMODEL 壓縮區塊損壞');
     const plain = await decompress(bytes.subarray(cursor, cursor + block.length), { maxOutputLength: Math.max(1, block.size) });
     if (plain.length !== block.size || sha(plain) !== block.hash) throw new Error('CBMODEL 壓縮區塊校驗失敗');
-    blocks.push(plain); cursor += block.length;
+    blocks.push(plain);
+    cursor += block.length;
     advance(`正在解壓區塊 ${blocks.length} / ${manifest.blocks.length}`);
   }
   for (const blob of manifest.blobs) {
@@ -203,7 +219,8 @@ async function unpackArchiveWithProgress(bytes, onProgress = () => {}) {
       || cursor + blob.length > bytes.length || blobs.has(blob.hash)) throw new Error('CBMODEL 圖片區塊損壞');
     const image = bytes.subarray(cursor, cursor + blob.length);
     if (sha(image) !== blob.hash) throw new Error('CBMODEL 圖片區塊校驗失敗');
-    blobs.set(blob.hash, image); cursor += blob.length;
+    blobs.set(blob.hash, image);
+    cursor += blob.length;
     advance(`正在驗證圖片 ${blobs.size} / ${manifest.blobs.length}`);
     if (completed % 32 === 0) await new Promise(resolve => setImmediate(resolve));
   }

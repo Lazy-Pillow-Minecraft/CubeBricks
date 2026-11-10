@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { Cube, Group, Shape, BezierElement, CubeBricksProject, addModifier, bakeModifier, bakeProceduralShape,
-  exportBlockbench, importBlockbench, buildModifierRenderInstances } from '../src/model.js';
+import {
+  Cube, Group, Shape, BezierElement, CubeBricksProject, addModifier, bakeModifier, bakeProceduralShape,
+  exportBlockbench, importBlockbench, buildModifierRenderInstances
+} from '../src/model.js';
 import { rotatePoint, applyGroupTransforms } from '../src/common/core/geometry-utils.js';
 import { shapeRegistry } from '../src/shapes/builtins.js';
 import { FormatConstraintDefinition } from '../src/common/core/format-hooks.js';
@@ -42,12 +44,16 @@ function geometry(project, modifiers = false) {
   return points;
 }
 function shape(type, variant = 'standard') {
-  if (type.startsWith('bezier')) return new BezierElement({ uid: type + variant, variant, origin: [0, 2, 0],
+  if (type.startsWith('bezier')) return new BezierElement({
+    uid: type + variant, variant, origin: [0, 2, 0],
     rotation: type === 'bezier2d' ? [-90, 0, 0] : [0, 0, 0],
     nodes: [{ position: [0, 0, 0] }, { position: [3, type === 'bezier2d' ? 0 : 4, 5] }, { position: [-1, type === 'bezier2d' ? 0 : 8, 9] }],
-    parameters: { thickness: 1.4, radius: .8, segmentLength: 2.6, segmentationMode: 'distance' } }, type === 'bezier2d' ? 2 : 3);
-  return new Shape({ uid: type, type, origin: [0, 2, 0], rotation: [13, 21, 8],
-    parameters: { radius: 3.3, height: 6.7, sides: 7 } });
+    parameters: { thickness: 1.4, radius: .8, segmentLength: 2.6, segmentationMode: 'distance' }
+  }, type === 'bezier2d' ? 2 : 3);
+  return new Shape({
+    uid: type, type, origin: [0, 2, 0], rotation: [13, 21, 8],
+    parameters: { radius: 3.3, height: 6.7, sides: 7 }
+  });
 }
 const definitions = ['polygon_prism', 'bezier2d', 'bezier3d', 'dodecahedron', 'truncated_icosahedron'];
 assert.equal(new FormatConstraintDefinition().constrainFormat({}, {}), undefined);
@@ -55,12 +61,15 @@ assert.equal(new FormatConstraintDefinition().supportsFormat({}), true);
 
 for (const version of Object.values(JavaBlockVersion)) for (const type of definitions) {
   const source = shape(type), parent = new Group({ uid: 'parent', pivot: [0, 2, 0], rotation: [15, 24, -10], children: [source.uid] });
-  const project = new CubeBricksProject({ formatId: 'java_block_item', formatData: { javaBlockVersion: version },
-    elements: [source], groups: [parent], outliner: [parent.uid] });
+  const project = new CubeBricksProject({
+    formatId: 'java_block_item', formatData: { javaBlockVersion: version },
+    elements: [source], groups: [parent], outliner: [parent.uid]
+  });
   const owner = project.getNode(source.uid), rules = formatRules(project);
   if (type.includes('hedron') && rules.singleAxisRotation) {
     assert.equal(owner.toCubes().length, 0, 'unsupported low-version polyhedra do not generate illegal cubes');
-    assert.throws(() => exportBlockbench(project), /不支持/); continue;
+    assert.throws(() => exportBlockbench(project), /不支持/);
+    continue;
   }
   const before = JSON.stringify(project), cubes = owner.toCubes();
   assert.ok(cubes.length, type + ': generated geometry remains available');
@@ -77,7 +86,8 @@ for (const version of Object.values(JavaBlockVersion)) for (const type of defini
   assertGeometry(geometry(importBlockbench(bb)), preview, `${type}/${version}: Java preview and export use the same fitted geometry`);
   assert.equal(JSON.stringify(project), before, 'format evaluation and export do not edit the source document');
   const baked = bakeProceduralShape(project, owner.uid);
-  assert.ok(baked); assertGeometry(geometry(project), preview, `${type}/${version}: manual bake preserves the preview`);
+  assert.ok(baked);
+  assertGeometry(geometry(project), preview, `${type}/${version}: manual bake preserves the preview`);
 }
 
 for (const type of definitions) for (const variant of type.startsWith('bezier') ? ['standard', 'envelope'] : ['standard']) {
@@ -102,9 +112,13 @@ for (const formatId of ['java_block_item', 'bedrock_block', 'modded_entity']) {
   const root = project.getNode(group.uid);
   const radial = addModifier(root, 'symmetry', { mode: 'radial', copies: 3, ignoreDuplicateCubes: false }, project);
   const copy = addModifier(root, 'element_copy', {}, project);
-  copy.nodes[0].position = [100, 50, -100]; copy.nodes[0].rotation = [13, 27, 39];
+  copy.nodes[0].position = [100, 50, -100];
+  copy.nodes[0].rotation = [13, 27, 39];
   constrainProject(project);
-  if (formatId === 'java_block_item') { assert.equal(radial.copies, 4); assert.ok(javaBlockSizeIsValid(project)); }
+  if (formatId === 'java_block_item') {
+    assert.equal(radial.copies, 4);
+    assert.ok(javaBlockSizeIsValid(project));
+  }
   if (formatId === 'bedrock_block') assert.ok(bedrockSizeIsValid(projectSizeBounds(project)), 'modifier results participate in the dynamic Bedrock bounds');
   const preview = geometry(project, true), bb = exportBlockbench(project);
   assertGeometry(geometry(importBlockbench(bb)), preview, formatId + ': stacked modifier export matches the constrained preview');
@@ -114,7 +128,8 @@ for (const formatId of ['java_block_item', 'bedrock_block', 'modded_entity']) {
 
 for (const type of definitions) {
   const source = shape(type);
-  source.origin = [100, 120, -200]; source.pivot = [...source.origin];
+  source.origin = [100, 120, -200];
+  source.pivot = [...source.origin];
   if (source.parameters.radius) source.parameters.radius = 60;
   if (source.parameters.height) source.parameters.height = 70;
   const project = new CubeBricksProject({ formatId: 'bedrock_block', elements: [source] });
@@ -131,13 +146,16 @@ for (const [version, mode, copies, distribution, start, end, angle] of [
   [JavaBlockVersion.SINGLE_AXIS, 'radial', 3, 'full', 0, 360, 13],
   [JavaBlockVersion.SINGLE_AXIS, 'mandala', 3, 'full', 0, 360, 13]
 ]) {
-  const project = new CubeBricksProject({ formatId: 'java_block_item', formatData: { javaBlockVersion: version },
-    elements: [{ type: 'cube', uid: 'source', position: [1, 1, 1], size: [2, 3, 2], rotation: [0, angle, 0] }] });
+  const project = new CubeBricksProject({
+    formatId: 'java_block_item', formatData: { javaBlockVersion: version },
+    elements: [{ type: 'cube', uid: 'source', position: [1, 1, 1], size: [2, 3, 2], rotation: [0, angle, 0] }]
+  });
   const owner = project.elements[0];
   const modifier = addModifier(owner, 'symmetry', { mode, copies, distribution, rangeStart: start, rangeEnd: end, ignoreDuplicateCubes: false }, project);
   assert.equal(modifier.copies, copies, 'retain non-quarter-turn counts when the actual source geometry supports them');
   const copy = addModifier(owner, 'element_copy', {}, project);
-  copy.nodes[0].position = [8, 1, 0]; copy.nodes[0].rotation = [0, angle + 45, 0];
+  copy.nodes[0].position = [8, 1, 0];
+  copy.nodes[0].rotation = [0, angle + 45, 0];
   constrainNode(owner, formatRules(project), project);
   assert.equal(copy.nodes[0].rotation[1], angle + 45, 'retain a valid relative copy angle instead of forcing a quarter turn');
   const preview = geometry(project, true);
@@ -147,9 +165,11 @@ for (const [version, mode, copies, distribution, start, end, angle] of [
 {
   const faces = Object.fromEntries(['north', 'south', 'east', 'west', 'up', 'down'].map((name, index) => [name,
     { texture: index, uv: [index + 5, index, index, index + 3], rotation: index % 4 * 90 }]));
-  const project = new CubeBricksProject({ formatId: 'java_block_item', elements: [
-    { uid: 'cube', type: 'cube', size: [-3, 4, 2], rotation: [0, 0, 0], faces }],
-    groups: [{ uid: 'parent', type: 'group', children: ['cube'], rotation: [0, 90, 0] }], outliner: ['parent'] });
+  const project = new CubeBricksProject({
+    formatId: 'java_block_item', elements: [
+      { uid: 'cube', type: 'cube', size: [-3, 4, 2], rotation: [0, 0, 0], faces }],
+    groups: [{ uid: 'parent', type: 'group', children: ['cube'], rotation: [0, 90, 0] }], outliner: ['parent']
+  });
   const cube = project.elements[0], modifier = addModifier(cube, 'element_copy', {}, project), node = modifier.nodes[0];
   constrainNode(cube, formatRules(project), project);
   assert.equal(cube.modifiers[0], modifier, 'format changes retain the active modifier object');
@@ -172,9 +192,11 @@ for (const formatId of ['java_block_item', 'modded_entity', 'bedrock_block']) {
 }
 
 for (const formatId of ['java_block_item', 'modded_entity']) {
-  const project = new CubeBricksProject({ formatId, elements: [
-    { type: 'cube', uid: 'edited', size: [2, 2, 2] },
-    { type: 'cube', uid: 'unrelated', size: [-3, 4, 2], rotation: [0, 90, 0] }] });
+  const project = new CubeBricksProject({
+    formatId, elements: [
+      { type: 'cube', uid: 'edited', size: [2, 2, 2] },
+      { type: 'cube', uid: 'unrelated', size: [-3, 4, 2], rotation: [0, 90, 0] }]
+  });
   const unrelated = project.getNode('unrelated'), before = JSON.stringify(unrelated);
   const modifier = addModifier(project.elements[0], 'symmetry', { ignoreDuplicateCubes: false }, project);
   bakeModifier(project, project.elements[0], modifier.uid);
@@ -184,30 +206,43 @@ for (const formatId of ['java_block_item', 'modded_entity']) {
 
 {
   const calls = [];
-  shapeRegistry.register({ id: 'format_probe', label: 'Format probe', defaults: { width: 1 },
+  shapeRegistry.register({
+    id: 'format_probe', label: 'Format probe', defaults: { width: 1 },
     constrainFormat(subject, context) {
       assert.equal(typeof context.utils.format.procedural.constrainBuiltinShape, 'function');
       calls.push(context.phase);
       if (context.phase === 'parameters') subject.parameters.width = 3;
       if (context.phase === 'geometry') subject[0].size[0] = 5;
-    }, generate: (owner, { Cube }) => [new Cube({ size: [owner.parameters.width, 2, 2] })] }, { external: true });
+    }, generate: (owner, { Cube }) => [new Cube({ size: [owner.parameters.width, 2, 2] })]
+  }, { external: true });
   const project = new CubeBricksProject({ formatId: 'java_block_item', elements: [{ type: 'format_probe' }] });
   assert.equal(project.elements[0].parameters.width, 3);
   assert.equal(project.elements[0].toCubes()[0].size[0], 5);
   assert.ok(calls.includes('parameters') && calls.includes('geometry'), 'external Shape definitions override both format phases');
   shapeRegistry.removeExternal();
 
-  modifierRegistry.register({ id: 'format_probe', targets: ['cube'], createDefault: () => ({}),
+  modifierRegistry.register({
+    id: 'format_probe', targets: ['cube'], createDefault: () => ({}),
     supportsFormat: rules => !rules.moddedEntity,
-    constrainFormat(subject, context) { subject.evaluations = (subject.evaluations || 0) + 1; assert.ok(context.utils); } });
-  const cube = new Cube(); project.addElement(cube);
+    constrainFormat(subject, context) {
+      subject.evaluations = (subject.evaluations || 0) + 1;
+      assert.ok(context.utils);
+    }
+  });
+  const cube = new Cube();
+  project.addElement(cube);
   addModifier(cube, 'format_probe', {}, project);
   const before = JSON.stringify(cube.modifiers);
   buildModifierRenderInstances(project);
   assert.equal(JSON.stringify(cube.modifiers), before, 'read-only evaluation runs modifier hooks on isolated data');
   assert.ok(!modifierRegistry.listFor('cube', formatRules({ formatId: 'modded_entity' })).some(definition => definition.id === 'format_probe'));
   const separate = new ModifierRegistry();
-  separate.register({ id: 'symmetry', label: modifierRegistry.get('symmetry').label, targets: ['cube'], constrainFormat() { throw Error('Registry isolation failed'); } });
+  separate.register({
+    id: 'symmetry',
+    label: modifierRegistry.get('symmetry').label,
+    targets: ['cube'],
+    constrainFormat() { throw Error('Registry isolation failed'); }
+  });
   const ordinary = new CubeBricksProject({ elements: [new Cube()] });
   assert.ok(addModifier(ordinary.elements[0], 'symmetry', {}, ordinary), 'independent registries cannot replace built-in format hooks');
 }

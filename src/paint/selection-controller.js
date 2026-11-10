@@ -3,10 +3,14 @@
 import { activeLayer, tiledFaceRaster } from '../common/core/texture-features.js';
 import { ConfigKey, configRegistry, translateUiKey } from '../common/config/app-config.js';
 import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv } from '../common/core/geometry-utils.js';
-import { invertSelectionTransform, mapSelectionPoint, multiplySelectionTransforms, selectionBounds,
-  selectionCorners, selectionTransformMatrix } from './selection-transform.js';
-import { captureSelectionPatch, preparePixelSelection, renderPixelSelection, selectionFaceLayout, selectionGestureMatrix,
-  selectionHandleKinds, selectionLayerCanvases } from './selection-gesture.js';
+import {
+  invertSelectionTransform, mapSelectionPoint, multiplySelectionTransforms, selectionBounds,
+  selectionCorners, selectionTransformMatrix
+} from './selection-transform.js';
+import {
+  captureSelectionPatch, preparePixelSelection, renderPixelSelection, selectionFaceLayout, selectionGestureMatrix,
+  selectionHandleKinds, selectionLayerCanvases
+} from './selection-gesture.js';
 import { HANDLE_SIZE, projectSelectionFrame, selectionHandleIcons, selectionHandleProjection } from './selection-frame.js';
 import { beginPaintGesture, pendingPaintCommit, trackPaintCommit } from './commit-order.js';
 import { releasePaintCanvas } from './canvas-layer-binding.js';
@@ -38,8 +42,10 @@ export function faceRectangleFrame(hit) {
   const uvDot = dot(uAxis, vAxis);
   const normalLengthSquared = dot(normal, normal);
   if (uLengthSquared < 1e-10 || vLengthSquared < 1e-10 || normalLengthSquared < 1e-10) return null;
-  return { origin, uAxis, vAxis, normal, uLengthSquared, vLengthSquared,
-    uvDot, normalLengthSquared, points: hit.facePoints, anchor: hit.point };
+  return {
+    origin, uAxis, vAxis, normal, uLengthSquared, vLengthSquared,
+    uvDot, normalLengthSquared, points: hit.facePoints, anchor: hit.point
+  };
 }
 
 export function faceRectanglePlanePoint(frame, ray) {
@@ -55,7 +61,7 @@ export function faceRectangleCoordinates(frame, point) {
   const offset = difference(point, frame.origin);
   const u = dot(offset, frame.uAxis), v = dot(offset, frame.vAxis);
   return [(u * frame.vLengthSquared - v * frame.uvDot) / frame.normalLengthSquared,
-    (v * frame.uLengthSquared - u * frame.uvDot) / frame.normalLengthSquared];
+  (v * frame.uLengthSquared - u * frame.uvDot) / frame.normalLengthSquared];
 }
 
 export function faceRectangleWorldPoint(frame, u, v) {
@@ -113,7 +119,8 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     const key = [mask.revision || 0, ...(clip ? Object.values(clip) : [])].join(':');
     let cache = boundsCache.get(mask);
     if (!cache || cache.revision !== (mask.revision || 0)) {
-      cache = { revision: mask.revision || 0, values: new Map() }; boundsCache.set(mask, cache);
+      cache = { revision: mask.revision || 0, values: new Map() };
+      boundsCache.set(mask, cache);
     }
     if (!cache.values.has(key)) {
       if (cache.values.size > 24) cache.values.clear();
@@ -124,13 +131,13 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
   function texturePoint(clientX, clientY) {
     const point = clientToTextureUv(clientX, clientY), asset = activeAsset();
     return [point[0] * textureCanvas.width / Math.max(1, asset?.uvWidth || textureCanvas.width),
-      point[1] * textureCanvas.height / Math.max(1, asset?.uvHeight || textureCanvas.height)];
+    point[1] * textureCanvas.height / Math.max(1, asset?.uvHeight || textureCanvas.height)];
   }
   function assetPixels(asset) {
     if (asset?._uid === state.activeTextureUid) return [textureCanvas.width, textureCanvas.height];
     const entry = getTextureAtlasEntries().find(item => item.uid === asset?._uid);
     return [entry?.width || asset?.uvWidth || state.project.textureSize?.[0] || 16,
-      entry?.height || asset?.uvHeight || state.project.textureSize?.[1] || 16];
+    entry?.height || asset?.uvHeight || state.project.textureSize?.[1] || 16];
   }
   function maskFor(asset, width, height) {
     if (!asset) return null;
@@ -142,11 +149,15 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     return mask;
   }
   function setPixel(mask, x, y, operation) {
-    x = Math.floor(x); y = Math.floor(y);
+    x = Math.floor(x);
+    y = Math.floor(y);
     if (!mask || x < 0 || y < 0 || x >= mask.width || y >= mask.height) return;
     const index = y * mask.width + x;
     const value = operation === 'erase' ? 0 : 1;
-    if (mask.pixels[index] !== value) { mask.pixels[index] = value; mask.revision = (mask.revision || 0) + 1; }
+    if (mask.pixels[index] !== value) {
+      mask.pixels[index] = value;
+      mask.revision = (mask.revision || 0) + 1;
+    }
   }
   function stamp(mask, x, y, radius, operation) {
     const reach = Math.max(0, Math.floor(radius));
@@ -258,15 +269,15 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
         [limit(minU), limit(maxV)], [limit(maxU), limit(maxV)]
       ].map(([u, v]) => slots[0].map((value, axis) =>
         (value + (slots[1][axis] - value) * u + (slots[2][axis] - value) * v)
-          * (axis === 0 ? width / Math.max(1, asset.uvWidth || width)
-            : height / Math.max(1, asset.uvHeight || height))));
+        * (axis === 0 ? width / Math.max(1, asset.uvWidth || width)
+          : height / Math.max(1, asset.uvHeight || height))));
       const left = Math.max(0, Math.floor(Math.min(...uvCorners.map(point => point[0]))));
       const right = Math.min(width, Math.ceil(Math.max(...uvCorners.map(point => point[0]))));
       const top = Math.max(0, Math.floor(Math.min(...uvCorners.map(point => point[1]))));
       const bottom = Math.min(height, Math.ceil(Math.max(...uvCorners.map(point => point[1]))));
       for (let y = top; y < bottom; y++) for (let x = left; x < right; x++) {
         const uvPoint = [(x + .5) * (asset.uvWidth || width) / width,
-          (y + .5) * (asset.uvHeight || height) / height];
+        (y + .5) * (asset.uvHeight || height) / height];
         for (const triangle of FACE_TRIANGLES) {
           const weights = barycentric(uvPoint, ...triangle.map(slot => slots[slot]));
           if (!weights) continue;
@@ -364,7 +375,7 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     if (drag?.source === 'texture' && drag.mode !== 'brush' && !drag.transform && drag.points.length > 1) {
       const points = drag.mode === 'rectangle'
         ? [drag.points[0], [drag.points.at(-1)[0], drag.points[0][1]], drag.points.at(-1),
-          [drag.points[0][0], drag.points.at(-1)[1]], drag.points[0]]
+        [drag.points[0][0], drag.points.at(-1)[1]], drag.points[0]]
         : drag.points;
       context.beginPath();
       points.forEach(([x, y], index) => index
@@ -411,14 +422,20 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       || drag.source !== 'scene' || drag.transform || drag.mode === 'brush' || drag.points.length < 2;
     sceneGesture.toggleAttribute('hidden', Boolean(hidden));
     sceneTransformNodes = null;
-    if (hidden) { if (sceneGesture.firstChild) sceneGesture.replaceChildren(); return; }
+    if (hidden) {
+      if (sceneGesture.firstChild) sceneGesture.replaceChildren();
+      return;
+    }
     const rect = sceneCanvas.getBoundingClientRect();
     sceneGesture.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
     let points;
     if (drag.mode === 'rectangle' && drag.faceFrame) {
       const frame = drag.faceFrame;
       const end = scenePlanePoint(drag.points.at(-1), frame);
-      if (!end) { sceneGesture.setAttribute('hidden', ''); return; }
+      if (!end) {
+        sceneGesture.setAttribute('hidden', '');
+        return;
+      }
       const [u0, v0] = faceRectangleCoordinates(frame, frame.anchor);
       const [u1, v1] = faceRectangleCoordinates(frame, end);
       const limit = value => Math.max(0, Math.min(1, value));
@@ -428,7 +445,7 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
         .map(projected => [projected.x + rect.left, projected.y + rect.top]);
     } else points = drag.mode === 'rectangle'
       ? [drag.points[0], [drag.points.at(-1)[0], drag.points[0][1]], drag.points.at(-1),
-        [drag.points[0][0], drag.points.at(-1)[1]], drag.points[0]]
+      [drag.points[0][0], drag.points.at(-1)[1]], drag.points[0]]
       : drag.points;
     const path = points.map(([x, y], index) => `${index ? 'L' : 'M'}${x - rect.left},${y - rect.top}`).join(' ');
     sceneGesture.innerHTML = `<defs><pattern id="paintSelectionGestureStripes" patternUnits="userSpaceOnUse"
@@ -451,8 +468,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     sceneMaskAtlas.width = entries.length ? atlas.width : textureCanvas.width;
     sceneMaskAtlas.height = entries.length ? atlas.height : textureCanvas.height;
     sceneMaskContext.clearRect(0, 0, sceneMaskAtlas.width, sceneMaskAtlas.height);
-    const placements = entries.length ? entries : [{ uid: state.activeTextureUid, x: 0, y: 0,
-      width: textureCanvas.width, height: textureCanvas.height }];
+    const placements = entries.length ? entries : [{
+      uid: state.activeTextureUid, x: 0, y: 0,
+      width: textureCanvas.width, height: textureCanvas.height
+    }];
     const sourceMasks = new Map();
     for (const entry of placements) {
       const mask = state.paintSelection.masks.get(entry.tileSourceUid || entry.uid);
@@ -493,11 +512,17 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     const mask = asset && selection.masks.get(asset._uid);
     overlay.hidden = state.mode !== 'paint' || !selection.active;
     if (border) border.hidden = overlay.hidden && !displayTransform('texture');
-    if (overlay.hidden) { edges = []; overlayMask = null; drawBorder(); return; }
+    if (overlay.hidden) {
+      edges = [];
+      overlayMask = null;
+      drawBorder();
+      return;
+    }
     const width = textureCanvas.width, height = textureCanvas.height;
     if (overlayMask === mask && overlayRevision === (mask?.revision || 0)
       && overlayAssetUid === asset?._uid && overlay.width === width && overlay.height === height) {
-      drawBorder(); return;
+      drawBorder();
+      return;
     }
     overlayMask = mask;
     overlayRevision = mask?.revision || 0;
@@ -510,7 +535,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     edges = [];
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
       const index = y * width + x, offset = index * 4;
-      if (!matches?.[index]) { image.data[offset + 3] = 100; continue; }
+      if (!matches?.[index]) {
+        image.data[offset + 3] = 100;
+        continue;
+      }
       if (x === 0 || !matches[index - 1]) edges.push([x, y, x, y + 1]);
       if (x === width - 1 || !matches[index + 1]) edges.push([x + 1, y, x + 1, y + 1]);
       if (y === 0 || !matches[index - width]) edges.push([x, y, x + 1, y]);
@@ -522,7 +550,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
   function renderOverlay() {
     if (renderFrame !== null) return;
     if (state.mode === 'paint' && (state.paintSelection.active || floating)) ensureAnimation();
-    renderFrame = window.setTimeout(() => { renderFrame = null; renderOverlayNow(); }, drag ? 90 : 0);
+    renderFrame = window.setTimeout(() => {
+      renderFrame = null;
+      renderOverlayNow();
+    }, drag ? 90 : 0);
   }
   function ensureAnimation() {
     if (animation !== null) return;
@@ -552,8 +583,12 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     state.paintSelection = { active: false, masks: new Map() };
     sceneMaskDirty = true;
     overlayMask = null;
-    sceneFocus = null; sceneTransformNodes = null;
-    if (sceneGesture) { sceneGesture.setAttribute('hidden', ''); sceneGesture.replaceChildren(); }
+    sceneFocus = null;
+    sceneTransformNodes = null;
+    if (sceneGesture) {
+      sceneGesture.setAttribute('hidden', '');
+      sceneGesture.replaceChildren();
+    }
     renderOverlay();
   }
   function sceneHit(clientX, clientY) {
@@ -574,7 +609,14 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     const asset = activeAsset(), mask = asset && state.paintSelection.masks.get(asset._uid);
     if (!asset || requireMask && !mask || mask && (mask.width !== textureCanvas.width || mask.height !== textureCanvas.height)) return null;
     const { width, height } = textureCanvas;
-    return { asset, mask, width, height, bounds: maskBounds(mask), clip: { left: 0, top: 0, right: width, bottom: height } };
+    return {
+      asset,
+      mask,
+      width,
+      height,
+      bounds: maskBounds(mask),
+      clip: { left: 0, top: 0, right: width, bottom: height }
+    };
   }
   function displayTransform(source) {
     if (state.mode !== 'paint' || state.tool !== 'paintSelection') return null;
@@ -617,7 +659,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       if (sides.some(side => side > 0) && sides.some(side => side < 0)) return;
       const [cx, cy] = layout.points[index];
       const distance = Math.hypot(x - cx, y - cy);
-      if (distance < nearest) { nearest = distance; corner = index; }
+      if (distance < nearest) {
+        nearest = distance;
+        corner = index;
+      }
     });
     if (corner == null) return null;
     const [cx, cy] = layout.points[corner];
@@ -668,8 +713,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     const counterpart = target.hit && useSymmetry
       ? paintSymmetryRelatedHits(target.hit).slice(1).map(faceTarget).filter(Boolean) : [];
     const assets = [...new Set([target, ...counterpart].map(entry => entry.asset))];
-    const transform = { target, source, assets, project: state.project, activeTextureUid: state.activeTextureUid,
-      copy: state.paintSelectionCopy, patch, matrix: IDENTITY, frame: null };
+    const transform = {
+      target, source, assets, project: state.project, activeTextureUid: state.activeTextureUid,
+      copy: state.paintSelectionCopy, patch, matrix: IDENTITY, frame: null
+    };
     const masks = state.paintSelection.masks;
     transform.ready = Promise.resolve(pendingPaintCommit(transform.project)).then(() => {
       if (transform.cancelled || !transformSourcesMatch(transform)) return null;
@@ -721,7 +768,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
           || transform.drawn === transform.matrix && transform.sampling === state.paintSelectionSampling) return;
         renderTransform(transform, session);
         for (const { asset, canvas } of session.surfaces.values()) previewFloatingTexture(asset, canvas);
-      }).catch(error => { if (floating === transform) discardTransform(); toast(error.message); });
+      }).catch(error => {
+        if (floating === transform) discardTransform();
+        toast(error.message);
+      });
     });
   }
   function detachTransform() {
@@ -752,7 +802,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     return true;
   }
   function placeTransform(action = 'place') {
-    if (!floating || !transformIsCurrent(floating)) { discardTransform(); return; }
+    if (!floating || !transformIsCurrent(floating)) {
+      discardTransform();
+      return;
+    }
     const transform = detachTransform();
     beginPaintGesture(transform.project);
     const work = transform.ready.then(async session => {
@@ -784,7 +837,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
         clearFloatingTextures();
         releaseTransformSession(session);
       }
-    }).catch(error => { toast(error.message); return false; });
+    }).catch(error => {
+      toast(error.message);
+      return false;
+    });
     return trackPaintCommit(transform.project, work);
   }
   function floatingPointIsInside(transform, point, includeTransparent = false) {
@@ -832,12 +888,16 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     }
     const target = floating?.target || displayTransform(focusSource)?.target || textureTarget();
     if (!target?.bounds) return;
-    if (floating && !transformIsCurrent(floating)) { discardTransform(); return; }
+    if (floating && !transformIsCurrent(floating)) {
+      discardTransform();
+      return;
+    }
     const transform = floating || liftTransform(target, target.frame ? 'scene' : 'texture');
     const [cx, cy] = mapSelectionPoint(transform.matrix, [target.bounds.cx, target.bounds.cy]);
     transform.matrix = multiplySelectionTransforms(selectionTransformMatrix({ cx, cy }, options), transform.matrix);
     queueTransformPreview(transform);
-    drawSceneGesture(); drawBorder();
+    drawSceneGesture();
+    drawBorder();
   }
 
   function sameTargetFace(a, b) {
@@ -858,8 +918,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       if (!handle && (!onTarget || !floatingPointIsInside(floating, point, true))) return;
     } else if (!state.paintSelection.active || !insideTarget(target, point)) return;
 
-    const context = { target: target || floating.target, point: point || targetPoint(floating.target, client),
-      source, floating, project: state.project, textureUid: state.activeTextureUid };
+    const context = {
+      target: target || floating.target, point: point || targetPoint(floating.target, client),
+      source, floating, project: state.project, textureUid: state.activeTextureUid
+    };
     const item = (label, command, properties = {}) => ({
       label: translateUiKey(`ui.selection-${label}`), ...properties,
       action: () => { void runPixelCommand(command, context); }
@@ -883,7 +945,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     if (!original && state.paintSelection.masks.get(target.asset._uid) !== target.mask) return;
     commandPending = true;
     try {
-      if (command === 'delete' || command === 'layer') { await placeTransform(command); return; }
+      if (command === 'delete' || command === 'layer') {
+        await placeTransform(command);
+        return;
+      }
       let patch = clipboard;
       if (command !== 'paste') {
         const transform = original || prepareTransform(target, source, null, false);
@@ -915,8 +980,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       const destination = inPlace && original ? original.target : target;
       const left = inPlace ? patch.left : Math.round(point[0] - patch.width / 2);
       const top = inPlace ? patch.top : Math.round(point[1] - patch.height / 2);
-      const bounds = { left, top, right: left + patch.width - 1, bottom: top + patch.height - 1,
-        cx: left + patch.width / 2, cy: top + patch.height / 2 };
+      const bounds = {
+        left, top, right: left + patch.width - 1, bottom: top + patch.height - 1,
+        cx: left + patch.width / 2, cy: top + patch.height / 2
+      };
       const transform = liftTransform({ ...destination, bounds }, inPlace && original ? original.source : source, patch);
       transform.operation = inPlace ? 'core.texture.selection-duplicate' : 'core.texture.selection-paste';
       queueTransformPreview(transform);
@@ -951,8 +1018,12 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
   function begin(event, source) {
     if (state.mode !== 'paint' || state.tool !== 'paintSelection' || drag) return;
     const surface = source === 'texture' ? texturePreview : sceneCanvas;
-    if (event.button !== 0) { setHandleCursor(surface, null); return; }
-    event.preventDefault(); event.stopImmediatePropagation();
+    if (event.button !== 0) {
+      setHandleCursor(surface, null);
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
     if (commandPending) return;
     const client = [event.clientX, event.clientY], point = source === 'texture' ? texturePoint(...client) : client;
     if (floating && !transformIsCurrent(floating)) discardTransform();
@@ -984,10 +1055,13 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     if (target?.bounds && start && (usingHandle || !event.shiftKey && !event.ctrlKey && insideTarget(target, start))) {
       surface.setPointerCapture(event.pointerId);
       if (target.hit) sceneFocus = { project: state.project, hit: target.hit };
-      drag = { source, pointerId: event.pointerId, points: [point], client, transform: { target },
-        gesture: { start, corner: usingHandle ? handle.corner : null, base: IDENTITY } };
+      drag = {
+        source, pointerId: event.pointerId, points: [point], client, transform: { target },
+        gesture: { start, corner: usingHandle ? handle.corner : null, base: IDENTITY }
+      };
       setHandleCursor(surface, usingHandle, true);
-      drawSceneGesture(); drawBorder();
+      drawSceneGesture();
+      drawBorder();
       return;
     }
     setHandleCursor(surface, null);
@@ -1004,12 +1078,15 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     if (!event.ctrlKey && !event.shiftKey) clear();
     state.paintSelection.active = true;
     sceneMaskDirty = true;
-    drag = { source, pointerId: event.pointerId, operation, mode: state.paintSelectionMode,
+    drag = {
+      source, pointerId: event.pointerId, operation, mode: state.paintSelectionMode,
       points: [point], singleFace, faceFrame: faceRectangleFrame(faceHit), faceHit, client,
-      visited: source === 'scene' && state.paintSelectionMode === 'brush' ? new Set() : null };
+      visited: source === 'scene' && state.paintSelectionMode === 'brush' ? new Set() : null
+    };
     if (drag.mode === 'brush') brushLine(point, point, source, operation);
     drawSceneGesture();
-    renderOverlay(); ensureAnimation();
+    renderOverlay();
+    ensureAnimation();
   }
   function move(event, source) {
     if (!drag) {
@@ -1033,7 +1110,8 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       return;
     }
     if (drag.source !== source || drag.pointerId !== event.pointerId) return;
-    event.preventDefault(); event.stopImmediatePropagation();
+    event.preventDefault();
+    event.stopImmediatePropagation();
     const distance = Math.hypot(event.clientX - drag.client[0], event.clientY - drag.client[1]);
     if (drag.outside) {
       if (distance >= 3) drag.place = false;
@@ -1044,7 +1122,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       if (!drag.moved && distance < 3) return;
       drag.moved = true;
       const transform = floating || liftTransform(drag.transform.target, source);
-      if (!transformIsCurrent(transform)) { discardTransform(); return; }
+      if (!transformIsCurrent(transform)) {
+        discardTransform();
+        return;
+      }
       drag.transform = transform;
       const current = targetPoint(transform.target, [event.clientX, event.clientY]);
       if (!current) return;
@@ -1053,7 +1134,8 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
         transform.matrix = matrix;
         queueTransformPreview(transform);
       }
-      drawSceneGesture(); drawBorder();
+      drawSceneGesture();
+      drawBorder();
       return;
     }
     if (drag.mode === 'brush') brushLine(drag.points.at(-1), point, source, drag.operation);
@@ -1063,13 +1145,17 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
   }
   function end(event, source) {
     if (!drag || drag.source !== source || drag.pointerId !== event.pointerId) return;
-    event.preventDefault(); event.stopImmediatePropagation();
+    event.preventDefault();
+    event.stopImmediatePropagation();
     const point = source === 'texture' ? texturePoint(event.clientX, event.clientY) : [event.clientX, event.clientY];
     if (drag.transform || drag.outside) {
       if (event.type === 'pointerup') {
         move(event, source);
         if (!drag) return;
-        if (drag.place && floating) { placeTransform(); return; }
+        if (drag.place && floating) {
+          placeTransform();
+          return;
+        }
       }
     }
     else if (event.type === 'pointerup' && drag.mode !== 'brush') applyArea(point);
@@ -1109,8 +1195,14 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       sceneMaskDirty = true;
       renderOverlay();
     });
-    $('#paintSelectionMode')?.addEventListener('change', event => { state.paintSelectionMode = event.target.value; updateToolOptions(); });
-    $('#paintSelectionCopy')?.addEventListener('click', () => { state.paintSelectionCopy = !state.paintSelectionCopy; updateToolOptions(); });
+    $('#paintSelectionMode')?.addEventListener('change', event => {
+      state.paintSelectionMode = event.target.value;
+      updateToolOptions();
+    });
+    $('#paintSelectionCopy')?.addEventListener('click', () => {
+      state.paintSelectionCopy = !state.paintSelectionCopy;
+      updateToolOptions();
+    });
     $('#paintSelectionRotateLeft')?.addEventListener('click', () => transformCommand({ angle: -Math.PI / 2 }));
     $('#paintSelectionRotateRight')?.addEventListener('click', () => transformCommand({ angle: Math.PI / 2 }));
     $('#paintSelectionFlipX')?.addEventListener('click', () => transformCommand({ scaleX: -1 }));
@@ -1131,7 +1223,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
       if (!drag) clearHandleCursors();
       renderOverlay();
     });
-    window.addEventListener('cubebricks:atlas-change', () => { sceneMaskDirty = true; renderOverlay(); });
+    window.addEventListener('cubebricks:atlas-change', () => {
+      sceneMaskDirty = true;
+      renderOverlay();
+    });
     window.addEventListener('cubebricks:texture-view-change', drawBorder);
     ensureAnimation();
   }
@@ -1140,8 +1235,10 @@ export function createPaintSelectionController({ state, $, sceneCanvas, sceneRen
     if (discardTransform()) return true;
     if (!drag) return;
     const { client, pointerId, source } = drag;
-    end({ type: 'pointercancel', clientX: client[0], clientY: client[1], pointerId,
-      preventDefault() {}, stopImmediatePropagation() {} }, source);
+    end({
+      type: 'pointercancel', clientX: client[0], clientY: client[1], pointerId,
+      preventDefault() {}, stopImmediatePropagation() {}
+    }, source);
   }
   return { bind, clear, renderOverlay, drawSceneGesture, finishActive, handleShortcut };
 }

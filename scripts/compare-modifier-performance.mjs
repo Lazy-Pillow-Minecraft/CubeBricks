@@ -14,18 +14,24 @@ const results = [];
 for (const count of [1000, 5000]) for (const dedup of [true, false]) {
   const row = { count, dedup };
   for (const [name, api] of [['baseline', previous], ['optimized', current]]) {
-    const elements = Array.from({ length: count }, (_, index) => new api.Cube({ uid: `cube-${index}`,
-      position: [index % 25 * 2, Math.floor(index / 625) * 2, Math.floor(index / 25) % 25 * 2], size: [1, 1, 1] }));
+    const elements = Array.from({ length: count }, (_, index) => new api.Cube({
+      uid: `cube-${index}`,
+      position: [index % 25 * 2, Math.floor(index / 625) * 2, Math.floor(index / 25) % 25 * 2], size: [1, 1, 1]
+    }));
     const group = new api.Group({ uid: 'root', children: elements.map(cube => cube.uid) });
     const project = new api.CubeBricksProject({ formatId: 'bedrock_entity', elements, groups: [group], outliner: [group.uid] });
     api.addModifier(project.groups[0], 'symmetry', { axes: { x: true, y: true, z: true }, ignoreDuplicateCubes: dedup });
-    api.buildModifierRenderInstances(project); api.buildModifierRenderInstances(project);
+    api.buildModifierRenderInstances(project);
+    api.buildModifierRenderInstances(project);
     const samples = [];
     for (let i = 0; i < 7; i++) {
-      const start = performance.now(); const instances = api.buildModifierRenderInstances(project);
-      samples.push(performance.now() - start); row.instances = instances.length;
+      const start = performance.now();
+      const instances = api.buildModifierRenderInstances(project);
+      samples.push(performance.now() - start);
+      row.instances = instances.length;
     }
-    samples.sort((a, b) => a - b); row[name] = { p50: samples[3], p95: samples[6] };
+    samples.sort((a, b) => a - b);
+    row[name] = { p50: samples[3], p95: samples[6] };
   }
   results.push(row);
 }

@@ -3,9 +3,14 @@ import { normalize3 } from './vector3.js';
 export function rotateVector(vector, rotation) {
   let [x, y, z] = vector;
   const [rx, ry, rz] = rotation.map(value => value * Math.PI / 180);
-  let c = Math.cos(rx), s = Math.sin(rx); [y, z] = [y * c - z * s, y * s + z * c];
-  c = Math.cos(ry); s = Math.sin(ry); [x, z] = [x * c + z * s, -x * s + z * c];
-  c = Math.cos(rz); s = Math.sin(rz); [x, y] = [x * c - y * s, x * s + y * c];
+  let c = Math.cos(rx), s = Math.sin(rx);
+  [y, z] = [y * c - z * s, y * s + z * c];
+  c = Math.cos(ry);
+  s = Math.sin(ry);
+  [x, z] = [x * c + z * s, -x * s + z * c];
+  c = Math.cos(rz);
+  s = Math.sin(rz);
+  [x, y] = [x * c - y * s, x * s + y * c];
   return [x, y, z];
 }
 
@@ -22,9 +27,9 @@ export function shortestAngleDelta(previous, current) {
 
 export function quaternionMultiply(a, b) {
   return [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
-    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
-    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
-    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+  a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+  a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+  a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
 }
 
 export function quaternionFromEuler(rotation) {

@@ -14,7 +14,10 @@ const pointInParent = (point, owner, project, reverse = false) => {
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const bounds = points => {
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
-  for (const point of points) for (let axis = 0; axis < 3; axis++) { min[axis] = Math.min(min[axis], point[axis]); max[axis] = Math.max(max[axis], point[axis]); }
+  for (const point of points) for (let axis = 0; axis < 3; axis++) {
+    min[axis] = Math.min(min[axis], point[axis]);
+    max[axis] = Math.max(max[axis], point[axis]);
+  }
   return { min, max };
 };
 const matrixFor = rotation => [0, 1, 2].map(axis => rotateVector([0, 1, 2].map(col => col === axis ? 1 : 0), rotation))
@@ -39,7 +42,12 @@ function fitSymmetryCenter(modifier, context, geometry) {
       const row = matrix[axis], coefficients = row.map((value, col) => (col === axis ? 1 : 0) - value);
       const length = coefficients.reduce((sum, value) => sum + value * value, 0);
       if (length < 1e-10) continue;
-      planes.push({ coefficients, length, low: geometry.domain.min[axis] - limits.min[axis], high: geometry.domain.max[axis] - limits.max[axis] });
+      planes.push({
+        coefficients,
+        length,
+        low: geometry.domain.min[axis] - limits.min[axis],
+        high: geometry.domain.max[axis] - limits.max[axis]
+      });
     }
   }
   for (let iteration = 0; iteration < 32; iteration++) for (const plane of planes) {
@@ -47,8 +55,10 @@ function fitSymmetryCenter(modifier, context, geometry) {
     const delta = clamp(value, plane.low, plane.high) - value;
     center = center.map((value, axis) => value + plane.coefficients[axis] * delta / plane.length);
   }
-  const valid = planes.every(plane => { const value = plane.coefficients.reduce((sum, coefficient, axis) => sum + coefficient * center[axis], 0);
-    return value >= plane.low - 1e-6 && value <= plane.high + 1e-6; });
+  const valid = planes.every(plane => {
+    const value = plane.coefficients.reduce((sum, coefficient, axis) => sum + coefficient * center[axis], 0);
+    return value >= plane.low - 1e-6 && value <= plane.high + 1e-6;
+  });
   if (!valid) return false;
   const parentPoint = pointInParent(center, owner, project, true);
   modifier.anchor.position = inverseRotateVector(parentPoint.map((value, axis) => value - pivot[axis]), owner.rotation || [0, 0, 0])
@@ -116,11 +126,14 @@ export function constrainCopyFormat(modifier, context) {
     let deltaEuler = eulerFromQuaternion(delta), points = geometry && project.transformFormatSourcePoints(geometry.points, matrixFor(deltaEuler));
     let limits = points && bounds(points);
     if (geometry && rules.bedrockBlock && [0, 1, 2].some(axis => limits.max[axis] - limits.min[axis] > 30 + 1e-6)) {
-      delta = [0, 0, 0, 1]; deltaEuler = [0, 0, 0]; points = geometry.points.map(point => point.map((value, axis) => value - baseCenter[axis]));
+      delta = [0, 0, 0, 1];
+      deltaEuler = [0, 0, 0];
+      points = geometry.points.map(point => point.map((value, axis) => value - baseCenter[axis]));
       limits = bounds(points);
     } else if (geometry) {
       const centerDelta = rotateVector(baseCenter, deltaEuler);
-      limits.min = limits.min.map((value, axis) => value - centerDelta[axis]); limits.max = limits.max.map((value, axis) => value - centerDelta[axis]);
+      limits.min = limits.min.map((value, axis) => value - centerDelta[axis]);
+      limits.max = limits.max.map((value, axis) => value - centerDelta[axis]);
     }
     node.rotation = cleanEuler(quaternionMultiply(inverse(parent), quaternionMultiply(delta, frame)));
     if (geometry) {

@@ -25,7 +25,10 @@ function share(value, previous) {
 
 function comparable(data) {
   const { historyLimit, ...rest } = data;
-  if (rest.meta) { rest.meta = { ...rest.meta }; delete rest.meta.modifiedAt; }
+  if (rest.meta) {
+    rest.meta = { ...rest.meta };
+    delete rest.meta.modifiedAt;
+  }
   return rest;
 }
 
@@ -53,13 +56,19 @@ export function historySnapshot(text, assets, groups, shareModel = false) {
 // uses the same lossless RGBA semantics as the journal (not PNG encoding bytes).
 export class RecentModelHistory {
   constructor(text, assets, { byteLimit = 64 * 1024 * 1024, countLimit = 9, fingerprint = historyImageFingerprint, groups } = {}) {
-    this.byteLimit = byteLimit; this.countLimit = countLimit; this.fingerprint = fingerprint;
-    this.canonicalTextures = new WeakMap(); this.generation = 0;
+    this.byteLimit = byteLimit;
+    this.countLimit = countLimit;
+    this.fingerprint = fingerprint;
+    this.canonicalTextures = new WeakMap();
+    this.generation = 0;
     this.reset(text, assets, groups);
   }
   reset(text, assets, groups) {
-    this.generation++; this.pendingNavigation = null;
-    this.references = new Map(); this.bytes = 0; this.modelText = this.modelData = null;
+    this.generation++;
+    this.pendingNavigation = null;
+    this.references = new Map();
+    this.bytes = 0;
+    this.modelText = this.modelData = null;
     this.entries = text && this.countLimit ? [this.entry(this.capture(text, assets, groups))] : [];
     for (const entry of this.entries) this.account(entry.data, 1);
     this.cursor = this.entries.length - 1;
@@ -67,7 +76,10 @@ export class RecentModelHistory {
   }
   capture(text, assets, groups) {
     if (typeof text !== 'string' || assets == null) return historySnapshot(text, assets, groups);
-    if (this.modelText !== text) { this.modelText = text; this.modelData = JSON.parse(text); }
+    if (this.modelText !== text) {
+      this.modelText = text;
+      this.modelData = JSON.parse(text);
+    }
     return historySnapshot(this.modelData, assets, groups, true);
   }
   textureKey(texture) {
@@ -97,7 +109,10 @@ export class RecentModelHistory {
       return entry;
     }
     const textures = data.textures?.map(texture => this.textureKey(texture));
-    const finish = textures => { entry.key = comparable({ ...data, ...(data.textures ? { textures } : {}) }); entry.ready = null; };
+    const finish = textures => {
+      entry.key = comparable({ ...data, ...(data.textures ? { textures } : {}) });
+      entry.ready = null;
+    };
     if (textures?.some(texture => texture instanceof Promise)) {
       entry.ready = Promise.all(textures).then(finish, () => { entry.ready = null; });
     } else finish(textures);
@@ -107,7 +122,10 @@ export class RecentModelHistory {
   // on each brush stroke defeated sharing even when its geometry was fixed.
   account(value, delta) {
     if (value == null) return;
-    if (typeof value !== 'object' && typeof value !== 'string') { this.bytes += delta * 8; return; }
+    if (typeof value !== 'object' && typeof value !== 'string') {
+      this.bytes += delta * 8;
+      return;
+    }
     const references = this.references.get(value) || 0;
     if (references + delta > 0) this.references.set(value, references + delta);
     else this.references.delete(value);
@@ -118,18 +136,25 @@ export class RecentModelHistory {
     }
     this.bytes += delta * 24;
     for (const [key, item] of Object.entries(value)) {
-      this.bytes += delta * (key.length * 2 + 8); this.account(item, delta);
+      this.bytes += delta * (key.length * 2 + 8);
+      this.account(item, delta);
     }
   }
   trim() {
     while (this.entries.length && (this.entries.length > this.countLimit || this.bytes > this.byteLimit)) {
-      if (this.cursor > 0) { this.account(this.entries.shift().data, -1); this.cursor--; }
+      if (this.cursor > 0) {
+        this.account(this.entries.shift().data, -1);
+        this.cursor--;
+      }
       else this.account(this.entries.pop().data, -1);
     }
     if (!this.entries.length) this.cursor = -1;
   }
   push(text, assets, operationId, groups, { ordinal = null, canKeepForkParent = () => false } = {}) {
-    if (!this.countLimit) { this.reset(null, null); return; }
+    if (!this.countLimit) {
+      this.reset(null, null);
+      return;
+    }
     const previous = this.entries[this.cursor], next = this.entry(this.capture(text, assets, groups), previous);
     if (previous && sameValue(comparable(previous.data), comparable(next.data))) return previous;
     next.ordinal = ordinal;
@@ -144,7 +169,10 @@ export class RecentModelHistory {
       this.entries.splice(0, start).forEach(entry => this.account(entry.data, -1));
       this.cursor = this.entries.length - 1;
     }
-    this.entries.push(next); this.account(next.data, 1); this.cursor++; this.trim();
+    this.entries.push(next);
+    this.account(next.data, 1);
+    this.cursor++;
+    this.trim();
     return next;
   }
   navigate(direction, { textureOnlyData = false } = {}) {
@@ -160,12 +188,19 @@ export class RecentModelHistory {
         if (!target || !previous.valid || !target.valid) return null;
         const pixelChange = knownPixelChange(previous.data, target.data);
         if (!pixelChange && (previous.ready || target.ready)) return Promise.all([previous.ready, target.ready]).then(() => {
-          previous.ready = target.ready = null; return find();
+          previous.ready = target.ready = null;
+          return find();
         });
         if (!pixelChange && (!previous.key || !target.key)) return null;
         // Re-encoding an unchanged PNG is not an undoable journal transaction.
-        if (!pixelChange && sameValue(previous.key, target.key)) { next += step; return find(); }
-        const model = data => { const { textures, textureGroups, ...rest } = data; return comparable(rest); };
+        if (!pixelChange && sameValue(previous.key, target.key)) {
+          next += step;
+          return find();
+        }
+        const model = data => {
+          const { textures, textureGroups, ...rest } = data;
+          return comparable(rest);
+        };
         const modelChanged = !sameValue(model(previous.data), model(target.data));
         let changedUids = [];
         if (modelChanged) {
@@ -179,7 +214,8 @@ export class RecentModelHistory {
           .map(texture => texture.uuid);
         this.cursor = next;
         const { textures, textureGroups } = target.data;
-        return { data: structuredClone(!modelChanged && textureOnlyData ? { textures, textureGroups } : target.data), changedUids, changedTextureUids,
+        return {
+          data: structuredClone(!modelChanged && textureOnlyData ? { textures, textureGroups } : target.data), changedUids, changedTextureUids,
           textureChanged: pixelChange || !sameValue(previous.key.textures, target.key.textures) || !sameValue(previous.key.textureGroups, target.key.textureGroups),
           modelChanged, geometryChanged: modelChanged || !sameValue(layout(previous.data), layout(target.data)),
           matches: data => {
@@ -188,14 +224,16 @@ export class RecentModelHistory {
             return actual.ready || target.ready
               ? Promise.all([actual.ready, target.ready]).then(() => Boolean(actual.key && target.key && sameValue(target.key, actual.key)))
               : Boolean(actual.key && target.key && sameValue(target.key, actual.key));
-          } };
+          }
+        };
       };
       return find();
     };
     const result = this.pendingNavigation ? this.pendingNavigation.then(navigate) : navigate();
     if (result instanceof Promise) {
       const pending = result.finally(() => { if (this.pendingNavigation === pending) this.pendingNavigation = null; });
-      this.pendingNavigation = pending; return pending;
+      this.pendingNavigation = pending;
+      return pending;
     }
     return result;
   }
@@ -203,6 +241,7 @@ export class RecentModelHistory {
     this.reset(null, null);
     this.entries = direction === 'undo' ? [this.entry(after), this.entry(before)] : [this.entry(before), this.entry(after)];
     for (const entry of this.entries) this.account(entry.data, 1);
-    this.cursor = direction === 'undo' ? 0 : 1; this.trim();
+    this.cursor = direction === 'undo' ? 0 : 1;
+    this.trim();
   }
 }

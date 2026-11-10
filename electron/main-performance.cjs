@@ -43,7 +43,10 @@ function startMainPerformanceCapture() {
       });
     });
     capture.observer.observe({ entryTypes: ['gc'] });
-  } catch { capture.observer?.disconnect(); capture.observer = null; }
+  } catch {
+    capture.observer?.disconnect();
+    capture.observer = null;
+  }
   active = capture;
   return { startedAt };
 }
@@ -75,15 +78,20 @@ function trackMainOperation(name, handler) {
     pendingOperations.add(operation);
     const finish = () => {
       pendingOperations.delete(operation);
-      if (active && !name.startsWith('app:perf-')) append(active.operations, { ...operation,
-        durationMs: Number((performance.timeOrigin + performance.now() - operation.startedAt).toFixed(1)) });
+      if (active && !name.startsWith('app:perf-')) append(active.operations, {
+        ...operation,
+        durationMs: Number((performance.timeOrigin + performance.now() - operation.startedAt).toFixed(1))
+      });
     };
     try {
       const result = handler.apply(this, args);
       if (result && typeof result.then === 'function') return result.finally(finish);
       finish();
       return result;
-    } catch (error) { finish(); throw error; }
+    } catch (error) {
+      finish();
+      throw error;
+    }
   };
 }
 

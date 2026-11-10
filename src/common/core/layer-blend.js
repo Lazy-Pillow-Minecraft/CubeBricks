@@ -25,7 +25,9 @@ const limit = value => Math.max(0, Math.min(255, value));
 const luminance = ([r, g, b]) => .2126 * r + .7152 * g + .0722 * b;
 
 function rgbToHsv([r, g, b]) {
-  r /= 255; g /= 255; b /= 255;
+  r /= 255;
+  g /= 255;
+  b /= 255;
   const highest = Math.max(r, g, b), lowest = Math.min(r, g, b), delta = highest - lowest;
   let hue = 0;
   if (delta) {
@@ -96,7 +98,7 @@ export function blendLayerImageData(lower, upper, opacity, mode) {
     if (componentMode) {
       const key = componentCache
         ? ((lower[index] * 256 + lower[index + 1]) * 256 + lower[index + 2]) * 16777216
-          + (upper[index] * 256 + upper[index + 1]) * 256 + upper[index + 2]
+        + (upper[index] * 256 + upper[index + 1]) * 256 + upper[index + 2]
         : null;
       blend = componentCache?.get(key);
       if (blend) componentHits++;

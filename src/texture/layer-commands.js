@@ -5,9 +5,11 @@ import { binarizePixelAlpha, captureLayerBranch, instantiateLayerBranch, layerBr
 export function createLayerCommands({ state, activeTextureAsset, textureCanvas, finishLayerEdit,
   pushTexturePaintHistory, refreshLayeredTexture, onChange, root, toast }) {
   let clipboard = null, queue = Promise.resolve();
-  const context = uid => ({ project: state.project, asset: activeTextureAsset(),
+  const context = uid => ({
+    project: state.project, asset: activeTextureAsset(),
     uid: uid || selectedLayerEntry(activeTextureAsset())?.uid || activeLayer(activeTextureAsset())?.uid,
-    frameUid: activeTextureFrame(activeTextureAsset())?.uid });
+    frameUid: activeTextureFrame(activeTextureAsset())?.uid
+  });
   const valid = scope => state.project === scope.project && activeTextureAsset() === scope.asset
     && state.textureAssets.includes(scope.asset);
   const enqueue = action => {
@@ -16,7 +18,9 @@ export function createLayerCommands({ state, activeTextureAsset, textureCanvas, 
     return pending;
   };
   const blank = (width, height) => {
-    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, width); canvas.height = Math.max(1, height);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, width);
+    canvas.height = Math.max(1, height);
     return canvas;
   };
 
@@ -84,7 +88,14 @@ export function createLayerCommands({ state, activeTextureAsset, textureCanvas, 
         const canvas = asset.source ? await loadRaster(asset.source) : blank(textureCanvas.width, textureCanvas.height);
         if (!valid(scope)) return false;
         base = { canvas, uid: crypto.randomUUID() };
-        layers = [{ uid: base.uid, name: '底图', source: canvas.toDataURL('image/png'), visible: true, opacity: 100, blendMode: 'normal' }];
+        layers = [{
+          uid: base.uid,
+          name: '底图',
+          source: canvas.toDataURL('image/png'),
+          visible: true,
+          opacity: 100,
+          blendMode: 'normal'
+        }];
       } else if (!await prepare(scope, layers)) return false;
       const created = instantiateLayerBranch(layers, snapshot, scope.uid, { inPlace });
       if (!created) return false;
@@ -109,7 +120,10 @@ export function createLayerCommands({ state, activeTextureAsset, textureCanvas, 
       asset.activeLayerUid = created.rootUid;
       connectToFrame(asset, scope.frameUid, created);
       await refreshLayeredTexture(asset);
-      if (valid(scope)) { onChange(created.rootUid); root?.focus({ preventScroll: true }); }
+      if (valid(scope)) {
+        onChange(created.rootUid);
+        root?.focus({ preventScroll: true });
+      }
       return true;
     });
   }
@@ -120,11 +134,13 @@ export function createLayerCommands({ state, activeTextureAsset, textureCanvas, 
     if (!frame) return;
     const included = frameLayerUids(asset, frame);
     const leaf = created.entries.filter(layer => layer.type !== 'group' && !layer.locked && created.frameVisibility[layer.uid] !== false).at(-1);
-    asset.animation = { ...asset.animation, frames: asset.animation.frames.map(entry => entry === frame ? {
-      ...frame, layerUids: included.has(created.rootUid) ? frame.layerUids : [...(frame.layerUids || []), created.rootUid],
-      visibility: { ...frame.visibility, ...created.frameVisibility },
-      paintLayerUid: leaf?.uid || frame.paintLayerUid
-    } : entry) };
+    asset.animation = {
+      ...asset.animation, frames: asset.animation.frames.map(entry => entry === frame ? {
+        ...frame, layerUids: included.has(created.rootUid) ? frame.layerUids : [...(frame.layerUids || []), created.rootUid],
+        visibility: { ...frame.visibility, ...created.frameVisibility },
+        paintLayerUid: leaf?.uid || frame.paintLayerUid
+      } : entry)
+    };
   }
 
   function binarizeAlpha(uid) {
@@ -138,7 +154,8 @@ export function createLayerCommands({ state, activeTextureAsset, textureCanvas, 
         const current = layerRasterCache.get(layer.uid).canvas;
         const pixels = current.getContext('2d').getImageData(0, 0, current.width, current.height);
         if (!binarizePixelAlpha(pixels.data)) continue;
-        const canvas = blank(current.width, current.height); canvas.getContext('2d').putImageData(pixels, 0, 0);
+        const canvas = blank(current.width, current.height);
+        canvas.getContext('2d').putImageData(pixels, 0, 0);
         changes.push({ layer, canvas, source: canvas.toDataURL('image/png') });
       }
       if (!changes.length || !valid(scope)) return false;
@@ -158,7 +175,8 @@ export function createLayerCommands({ state, activeTextureAsset, textureCanvas, 
     const key = event.key.toLowerCase();
     if (!(event.ctrlKey || event.metaKey) || !['c', 'v', 'd'].includes(key)
       || event.target.closest('input,select,textarea,[contenteditable="true"]')) return;
-    event.preventDefault(); event.stopImmediatePropagation();
+    event.preventDefault();
+    event.stopImmediatePropagation();
     if (event.repeat) return;
     (key === 'c' ? copy() : paste({ inPlace: key === 'd' })).catch(error => toast(error.message));
   });

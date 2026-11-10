@@ -9,8 +9,11 @@ export function createNativeExportController({ serializableTextureAssets, textur
   return async function exportNative(kind, project, originalAssets) {
     const assets = structuredClone(await serializableTextureAssets(originalAssets));
     const fingerprints = await Promise.all(assets.map(textureSaveFingerprint));
-    const progress = beginTextureExportProgress(); let bb;
-    try { bb = await createBakedBlockbenchExport(project, assets, { progress: progress.progress, forceBoxBake: kind === 'java' }); }
+    const progress = beginTextureExportProgress();
+    let bb;
+    try {
+      bb = await createBakedBlockbenchExport(project, assets, { progress: progress.progress, forceBoxBake: kind === 'java' });
+    }
     finally { progress.finish(); }
     const api = window.cubeBricksDesktop, locations = [];
     // The model picker is deliberately last. Cancellation leaves already saved
@@ -22,7 +25,10 @@ export function createNativeExportController({ serializableTextureAssets, textur
       if (api?.saveTexture) location = await api.saveTexture({ name: suggestedPng, source: texture.source, metadata, namespace: assets[index]?.namespace });
       else {
         const name = String(texture.name || `texture_${index}.png`).replace(/\.[^.]+$/, '') + '.png';
-        const link = document.createElement('a'); link.href = texture.source; link.download = name; link.click();
+        const link = document.createElement('a');
+        link.href = texture.source;
+        link.download = name;
+        link.click();
         if (metadata) download(JSON.stringify(metadata, null, 2), `${name}.mcmeta`, 'application/json');
         location = { filePath: name, resource: `${assets[index]?.namespace || 'minecraft'}:${name.replace(/\.png$/i, '')}` };
       }
@@ -37,8 +43,10 @@ export function createNativeExportController({ serializableTextureAssets, textur
     if (!picked) return false;
     const content = kind === 'java' ? await exportModdedJava(bb, picked.filePath.split(/[\\/]/).at(-1), locations)
       : JSON.stringify(encodeNativeJson(bb, locations, project.formatId, project.formatData), null, 2);
-    if (api?.exportProject) await api.exportProject({ extension: kind, filePath: picked.filePath, modelContent: content,
-      formatId: project.formatId, textureLocations: locations });
+    if (api?.exportProject) await api.exportProject({
+      extension: kind, filePath: picked.filePath, modelContent: content,
+      formatId: project.formatId, textureLocations: locations
+    });
     else download(content, picked.filePath, kind === 'java' ? 'text/x-java-source' : 'application/json');
     if (originalAssets.length) await onSaved?.(project);
     await Promise.all(originalAssets.map(async (asset, index) => {

@@ -2,20 +2,24 @@ const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const profile = fs.mkdtempSync(path.join(os.tmpdir(),'cubebricks-lifecycle-'));
-app.setPath('userData',profile);app.setPath('sessionData',profile);
-const errors=[];
-app.on('web-contents-created',(_event,contents)=>contents.on('console-message',details=>{
-  if(details.level==='error')errors.push(details.message);
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-lifecycle-'));
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+const errors = [];
+app.on('web-contents-created', (_event, contents) => contents.on('console-message', details => {
+  if (details.level === 'error') errors.push(details.message);
 }));
-app.on('browser-window-created',(_event,win)=>{win.hide();win.webContents.setBackgroundThrottling(false);});
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.webContents.setBackgroundThrottling(false);
+});
 require('../electron/main.cjs');
-app.whenReady().then(async()=>{
+app.whenReady().then(async () => {
   let report;
   try {
-    const contents=BrowserWindow.getAllWindows()[0].webContents;
-    if(contents.isLoading())await new Promise(resolve=>contents.once('did-finish-load',resolve));
-    report=await contents.executeJavaScript(`(async()=>{
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    if (contents.isLoading()) await new Promise(resolve => contents.once('did-finish-load', resolve));
+    report = await contents.executeJavaScript(`(async()=>{
       const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
       const check=(value,message)=>{if(!value)throw Error(message);};
       const until=async(test,message)=>{for(let i=0;i<100;i++){if(await test())return;await wait(40);}throw Error(message);};
@@ -85,8 +89,11 @@ app.whenReady().then(async()=>{
       check(document.querySelector('#projectOpenProgressDialog').open,'slow open displays progress after half a second');slow.finish();
       return {ok:true,checks:['home tab','replace home on creation/open','left aligned plus','save retention','saved dirty close','unsaved close choices','confirmed delete','open project delete','500ms progress']};
     })()`);
-    if(errors.length)throw Error(errors.join('\n'));
-  }catch(error){report={ok:false,error:error.stack,errors};}
-  const output=path.resolve('build/performance/project-lifecycle.json');fs.mkdirSync(path.dirname(output),{recursive:true});
-  fs.writeFileSync(output,JSON.stringify(report,null,2));console.log(JSON.stringify(report));app.exit(report.ok?0:1);
+    if (errors.length) throw Error(errors.join('\n'));
+  } catch (error) { report = { ok: false, error: error.stack, errors }; }
+  const output = path.resolve('build/performance/project-lifecycle.json');
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

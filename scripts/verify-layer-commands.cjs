@@ -2,8 +2,12 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cubebricks-layer-commands-'));
-app.setPath('userData', profile); app.setPath('sessionData', profile);
-app.on('browser-window-created', (_event, win) => { win.hide(); win.webContents.setBackgroundThrottling(false); });
+app.setPath('userData', profile);
+app.setPath('sessionData', profile);
+app.on('browser-window-created', (_event, win) => {
+  win.hide();
+  win.webContents.setBackgroundThrottling(false);
+});
 require('../electron/main.cjs');
 app.whenReady().then(async () => {
   let report;
@@ -106,7 +110,9 @@ app.whenReady().then(async () => {
       return {ok:true,checks};
     })()`);
   } catch (error) { report = { ok: false, error: error.stack }; }
-  const directory = path.resolve('build/performance'); fs.mkdirSync(directory, { recursive: true });
+  const directory = path.resolve('build/performance');
+  fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, 'layer-commands.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report)); app.exit(report.ok ? 0 : 1);
+  console.log(JSON.stringify(report));
+  app.exit(report.ok ? 0 : 1);
 });

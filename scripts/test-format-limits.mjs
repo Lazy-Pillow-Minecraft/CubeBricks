@@ -8,8 +8,10 @@ import {
 const java = new CubeBricksProject({ formatId: 'java_block_item' });
 const javaRules = formatRules(java);
 assert.equal(javaRules.forceCullFaces, true);
-const diagonal = new Cube({ position: [29, -20, -18], size: [8, 8, 8],
-  pivot: [29, -20, -18], rotation: [0, 45, 0] });
+const diagonal = new Cube({
+  position: [29, -20, -18], size: [8, 8, 8],
+  pivot: [29, -20, -18], rotation: [0, 45, 0]
+});
 constrainCube(diagonal, javaRules);
 assert.deepEqual(diagonal.position, [24, -16, -16]);
 assert.deepEqual(diagonal.rotation, [0, 45, 0]);
@@ -20,9 +22,11 @@ const legacyTurn = new Cube({ rotation: [0, 90, 0] });
 constrainCube(legacyTurn, javaRules);
 assert.deepEqual(legacyTurn.rotation, [0, 0, 0], 'whole quarter turns are baked instead of being clamped to 45 degrees');
 
-const bedrock = new CubeBricksProject({ formatId: 'bedrock_block', elements: [
-  { type: 'cube', position: [-8, 0, -8], size: [16, 16, 16], pivot: [0, 8, 0] }
-] });
+const bedrock = new CubeBricksProject({
+  formatId: 'bedrock_block', elements: [
+    { type: 'cube', position: [-8, 0, -8], size: [16, 16, 16], pivot: [0, 8, 0] }
+  ]
+});
 assert.equal(bedrockSizeIsValid(projectSizeBounds(bedrock)), true);
 assert.deepEqual(bedrockLimitBox(projectSizeBounds(bedrock)).min, [-15, -7, -15]);
 const cube = bedrock.elements[0];
@@ -45,9 +49,11 @@ assert.equal(bedrockSizeIsValid(projectSizeBounds(bedrock)), true);
 cube.position[1] = 16;
 assert.equal(bedrockSizeIsValid(projectSizeBounds(bedrock)), false);
 
-const rotated = new CubeBricksProject({ formatId: 'bedrock_block', elements: [
-  { type: 'cube', position: [-1, 0, -1], size: [2, 2, 2], pivot: [0, 0, 0], rotation: [0, 45, 0] }
-] });
+const rotated = new CubeBricksProject({
+  formatId: 'bedrock_block', elements: [
+    { type: 'cube', position: [-1, 0, -1], size: [2, 2, 2], pivot: [0, 0, 0], rotation: [0, 45, 0] }
+  ]
+});
 const bounds = projectSizeBounds(rotated);
 assert.ok(bounds.max[0] > 1.4 && bounds.min[0] < -1.4);
 console.log('format limit checks passed');

@@ -16,20 +16,27 @@ export function checkBakeSize(width, height) {
 
 export function combinedAnimation(assets) {
   const animated = assets.filter(asset => asset.animation?.enabled && asset.animation.frames?.length);
-  const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return a; };
+  const gcd = (a, b) => {
+    while (b) [a, b] = [b, a % b];
+    return a;
+  };
   let count = 1;
   for (const asset of animated) {
     const n = asset.animation.frames.length;
     count = count / gcd(count, n) * n;
     checkBakeSize(1, count);
   }
-  return { count, fps: animated.length ? animated.reduce((sum, asset) => sum + (Number(asset.animation.fps) || 20), 0) / animated.length : 20,
-    animated: animated.length > 0 };
+  return {
+    count, fps: animated.length ? animated.reduce((sum, asset) => sum + (Number(asset.animation.fps) || 20), 0) / animated.length : 20,
+    animated: animated.length > 0
+  };
 }
 
 export function exportedCubeView(element) {
-  return { size: element.to.map((value, axis) => Math.abs(value - element.from[axis])),
-    uv: element.uv_offset || [0, 0], uvScale: 1, mirrorUv: element.mirror_uv === true };
+  return {
+    size: element.to.map((value, axis) => Math.abs(value - element.from[axis])),
+    uv: element.uv_offset || [0, 0], uvScale: 1, mirrorUv: element.mirror_uv === true
+  };
 }
 
 export function collectExportFaces(bbmodel, assets) {
@@ -53,7 +60,15 @@ export function collectExportFaces(bbmodel, assets) {
       const index = references.get(String(face.texture).replace(/^#/, ''));
       if (index === undefined) continue;
       const uv = element.box_uv || !face.uv ? getBlockbenchBoxUv(cube, name) : [...face.uv];
-      result.push({ element, name, face, index, uv, wasBox: element.box_uv, rotation: element.box_uv ? 0 : Number(face.rotation) || 0 });
+      result.push({
+        element,
+        name,
+        face,
+        index,
+        uv,
+        wasBox: element.box_uv,
+        rotation: element.box_uv ? 0 : Number(face.rotation) || 0
+      });
     }
   }
   return result;
@@ -94,7 +109,10 @@ export function boxExportPlan(bbmodel, faces, planes = []) {
   }
   const entries = [], signatures = new Map();
   let density = 1;
-  const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return a; };
+  const gcd = (a, b) => {
+    while (b) [a, b] = [b, a % b];
+    return a;
+  };
   const fraction = value => {
     for (let denominator = 1; denominator <= 256; denominator++) {
       const numerator = Math.round(Math.abs(value) * denominator);
@@ -117,13 +135,15 @@ export function boxExportPlan(bbmodel, faces, planes = []) {
   };
   for (const [element, members] of byElement) {
     const cube = exportedCubeView(element);
-    cube.uv = [0, 0]; cube.mirrorUv = false;
+    cube.uv = [0, 0];
+    cube.mirrorUv = false;
     const [x, y, z] = cube.size;
     const signature = JSON.stringify([cube.size, members.map(face => [face.name, face.index, face.pixelUv, face.rotation])]);
     let net = signatures.get(signature);
     if (!net) {
       net = { width: Math.max(1, 2 * (x + z)), height: Math.max(1, y + z), members, cube, elements: [] };
-      signatures.set(signature, net); entries.push(net);
+      signatures.set(signature, net);
+      entries.push(net);
       for (const face of members) {
         const target = getBlockbenchBoxUv(cube, face.name), source = createBlockbenchFaceUvSlots(face.pixelUv, face.rotation);
         const w = Math.abs(target[2] - target[0]), h = Math.abs(target[3] - target[1]);
@@ -138,7 +158,13 @@ export function boxExportPlan(bbmodel, faces, planes = []) {
   density = Math.ceil(density);
   const used = new Set(faces.map(face => face.index));
   planes.forEach((plane, index) => {
-    if (!used.has(index)) entries.push({ width: Math.ceil(plane.width / density), height: Math.ceil(plane.height / density), plane, index, elements: [] });
+    if (!used.has(index)) entries.push({
+      width: Math.ceil(plane.width / density),
+      height: Math.ceil(plane.height / density),
+      plane,
+      index,
+      elements: []
+    });
   });
   const packed = packExportPlanes(entries);
   return { ...packed, entries, density };

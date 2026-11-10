@@ -16,7 +16,7 @@ const corners = new Map([
 ]);
 const offsets = buildPaintExplodeOffsets(project, corners, 2);
 const interval = uid => [corners.get(uid)[0][0] + (offsets.get(uid)?.[0] || 0),
-  corners.get(uid)[1][0] + (offsets.get(uid)?.[0] || 0)];
+corners.get(uid)[1][0] + (offsets.get(uid)?.[0] || 0)];
 assert.ok(interval('a')[1] + 2 <= interval('b')[0]);
 assert.ok(interval('b')[1] + 2 <= interval('c')[0]);
 assert.equal((interval('a')[0] + interval('c')[1]) / 2, 0);
@@ -38,7 +38,7 @@ const nestedCorners = new Map([
 ]);
 const nestedOffsets = buildPaintExplodeOffsets(nested, nestedCorners, 2);
 const nestedInterval = uid => [0 + (nestedOffsets.get(uid)?.[0] || 0),
-  2 + (nestedOffsets.get(uid)?.[0] || 0)];
+2 + (nestedOffsets.get(uid)?.[0] || 0)];
 const left = [nestedInterval('d')[0], nestedInterval('e')[1]];
 const right = nestedInterval('f');
 assert.ok(nestedInterval('d')[1] + 2 <= nestedInterval('e')[0]);
@@ -48,9 +48,11 @@ const zMirrors = new Map([
   ['a', [[-1, 0, -2], [1, 2, 0]]],
   ['c', [[-1, 0, 0], [1, 2, 2]]]
 ]);
-const zOffsets = buildPaintExplodeOffsets({ outliner: ['left', 'right'], groups: [
-  { uid: 'left', children: ['a'] }, { uid: 'right', children: ['c'] }
-] }, zMirrors, 2);
+const zOffsets = buildPaintExplodeOffsets({
+  outliner: ['left', 'right'], groups: [
+    { uid: 'left', children: ['a'] }, { uid: 'right', children: ['c'] }
+  ]
+}, zMirrors, 2);
 assert.equal(zOffsets.get('a')[0], 0);
 assert.equal(zOffsets.get('c')[0], 0);
 assert.equal(zOffsets.get('a')[2], -zOffsets.get('c')[2]);

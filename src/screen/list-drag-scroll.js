@@ -2,7 +2,10 @@ export function createListDragAutoScroll(container, isDragging, onScroll = () =>
   let frame = null;
   let lastTime = 0;
   let pointer = null;
-  const updatePointer = event => { pointer = { x: event.clientX, y: event.clientY }; schedule(); };
+  const updatePointer = event => {
+    pointer = { x: event.clientX, y: event.clientY };
+    schedule();
+  };
   const speedAtPointer = () => {
     if (!pointer) return 0;
     const rect = container.getBoundingClientRect();
@@ -46,7 +49,9 @@ export function createListDragAutoScroll(container, isDragging, onScroll = () =>
       document.removeEventListener('pointermove', updatePointer, true);
       container.classList.remove('is-drag-scrolling');
       if (frame !== null) cancelAnimationFrame(frame);
-      frame = null; lastTime = 0; pointer = null;
+      frame = null;
+      lastTime = 0;
+      pointer = null;
     }
   };
 }
