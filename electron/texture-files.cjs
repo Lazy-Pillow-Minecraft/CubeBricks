@@ -11,12 +11,12 @@ function pngBytes(source) {
   return bytes;
 }
 
-function registerTextureFiles(handleIpc, dialog, atomicWrite) {
-  handleIpc('texture:save', async (_event, payload = {}) => {
+function registerTextureFiles(handleIpc, saveFileDialog, atomicWrite) {
+  handleIpc('texture:save', async (event, payload = {}) => {
     const bytes = pngBytes(payload.source);
     const supplied = typeof payload.filePath === 'string' && path.isAbsolute(payload.filePath) && /\.png$/i.test(payload.filePath) ? payload.filePath : null;
     const name = path.basename(String(payload.name || 'texture.png')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\.[^.]+$/, '') + '.png';
-    const picked = supplied ? { filePath: supplied } : await dialog.showSaveDialog({ title: '保存贴图',
+    const picked = supplied ? { filePath: supplied } : await saveFileDialog(event, { title: 'ui.message-56',
       defaultPath: name, filters: [{ name: 'PNG', extensions: ['png'] }] });
     if (picked.canceled || !picked.filePath) return null;
     const filePath = /\.png$/i.test(picked.filePath) ? picked.filePath : `${picked.filePath}.png`;

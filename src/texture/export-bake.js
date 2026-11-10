@@ -60,11 +60,12 @@ export async function bakeBlockbenchTextures(bbmodel, assets, { progress = async
     const canvas = bakeCanvas(side, side * animation.count), context = canvas.getContext('2d');
     for (let frame = 0; frame < animation.count; frame++) {
       const sources = captures.map(capture => capture.frame(frame));
+      const pixelCache = new Map();
       if (needsBoxBake) {
         for (const net of packed.entries) {
           const { x, y } = packed.placements.get(net);
           if (net.plane) paintTexturePlane(context, sources[net.index], net.plane, x * density, (frame * packed.side + y) * density);
-          else paintBoxNet(context, net, sources, density, x * density, (frame * packed.side + y) * density);
+          else paintBoxNet(context, net, sources, density, x * density, (frame * packed.side + y) * density, pixelCache);
         }
       } else for (let index = 0; index < planes.length; index++) {
         const plane = planes[index], { x, y } = packed.placements.get(plane);

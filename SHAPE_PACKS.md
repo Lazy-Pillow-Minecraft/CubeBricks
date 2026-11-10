@@ -62,9 +62,33 @@ export default {
 
 `generate(shape, api)` 必须同步返回 Cube 数组；也可返回传入 `new Cube(...)` 的普通数据对象。生成的 Cube 使用 Shape 的局部坐标，编辑器在后续统一套用 Shape 自身的 `origin`、`pivot`、`rotation`、父组变换、细分覆盖与修改器。不要在 `generate` 内自行重复加上 `origin`。`shape.parameters` 保存可编辑参数；当前通用属性面板自动呈现 `fields` 中的数值栏位。参数、细分覆盖及 Shape ID 随 `.cbmodel` 保存；未安装对应包时保留数据但不生成几何，重新安装后恢复。
 
-`utils` 暴露当前 `src/utils/` 的全部公共模块：`utils.math.vector3`、`utils.math.rotation`、`utils.shape.polyhedronGeometry`、`utils.shape.bezierGeometry`、`utils.templatePacker`。使用命名空间可避免不同模块的同名函数冲突；新增公共工具时同步更新 `src/utils/index.js`。工具只提供计算，不会替包脚本绕过 Cube 数量和格式约束。
+`utils` 暴露当前 `src/utils/` 的全部公共模块：`utils.math.vector3`、`utils.math.rotation`、`utils.shape.polyhedronGeometry`、`utils.shape.bezierGeometry`、`utils.shape.javaCurveFit`、`utils.templatePacker`。使用命名空间可避免不同模块的同名函数冲突；新增公共工具时同步更新 `src/utils/index.js`。工具只提供计算，不会替包脚本绕过 Cube 数量和格式约束。
 
 内置 Shape 也按同一注册界面拆分在 `src/shapes/`；多边形、正十二面体、足球和两种贝塞尔各有自己的定义文件，共用几何计算放在 `src/utils/shape/`。
+
+## 可选的格式适配
+
+Shape 和修改器注册定义共用 `FormatConstraintDefinition` 的默认接口：`constrainFormat(subject, context)` 默认不处理，`supportsFormat(rules)` 默认返回 `true`。原有包不需要补写方法；需要受限格式支持的包可以覆盖它们。
+
+```js
+constrainFormat(subject, context) {
+  // 复用内置适配；也可以按自己的几何规则实现。
+  return context.utils.format.procedural.constrainBuiltinShape(subject, context);
+},
+supportsFormat(rules) {
+  return true;
+}
+```
+
+`context` 包含 `phase`、`owner`、`project`、`rules` 和共享 `utils`。`phase: 'parameters'` 的 `subject` 是 Shape 对象，在创建、加载和编辑约束时处理参数；`phase: 'geometry'` 的 `subject` 是生成的 Cube 数组，可以原地调整或返回替换数组。几何计算不能修改源 Shape、项目或外部缓存。存在细分覆盖时，会先适配基础几何，再应用覆盖并重新约束，因此几何方法应当可重复执行而不累计偏差。`toBaseCubes()` 保留原始生成结果，`toFormatBaseCubes()` 提供适配后的细分编辑基准，`toCubes()` 提供最终结果。
+
+`rules` 包含 `javaBlock`、`bedrockBlock`、`moddedEntity`、`version`、`singleAxisRotation`、`rotationStep`、`integerCubeSize`、`allowCubeRotation`、`allowBoxUv` 等能力信息。也可使用 `utils.format.constraints` 中的共用规则函数。不支持的格式应通过 `supportsFormat` 明确返回 `false`，创建入口会禁用，已有对象的数据保留，导出会提示切换格式。
+
+内置适配为 Java 的两种单轴版本拟合合法旋转，保留面对应与 UV；基岩方块整体等比拟合到动态范围；模组实体生成整数尺寸、箱型 UV，烘焙时将方向交给组旋转。两个球体暂不支持 Java 的两种单轴版本。只提供空的默认接口不会自动让任意外部算法符合所有模型格式，包作者仍需决定具体适配方式。
+
+Java 旋转拟合按几何方向和尺寸选择合法角度，保持柱子的截面与物理中心，不将斜柱扩大成包围盒。曲线优先匹配切线；只有旋转误差会使路径离开原截面时，才沿路径细分为更多斜柱，保留原有粗细与连续性。无限制版本仍使用原有几何。
+
+修改器定义使用相同接口，当前在 `parameters` 阶段处理修改器自身数据。上下文额外提供前序结果求值缓存 `evaluation`；内置对称和元素拷贝据此约束轴、角度、份数及节点范围。只读预览使用修改器副本执行，不会把预览计算写进项目历史。该接口目前不意味着开放外部修改器包。
 
 ## 安全提示
 

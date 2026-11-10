@@ -5,7 +5,7 @@ export function createSceneController({
   uvPreviewController, LOCATOR_ICON_SHAPES, getSelectionExpansion,
   getTransformPivot, updateTransformGizmo, refreshUvPreview,
   currentProjection, buildEditorOverlayLines, updateMirrorGuideOverlay,
-  updateAxisWidget, updateReferenceImageLayer
+  updateAxisWidget, updateReferenceImageLayer, updatePaintSelection = () => {}
 }) {
 let lockedHoverFrame = null;
 let lockedHoverPickFrame = null;
@@ -59,6 +59,7 @@ function renderScene() {
   updateAxisWidget();
   const axisEnd = profile ? performance.now() : 0;
   updateReferenceImageLayer();
+  if (hidePaintSelection && state.tool === 'paintSelection') updatePaintSelection();
   const overlaysEnd = profile ? performance.now() : 0;
   refreshUvPreview(false);
   if (profile) {

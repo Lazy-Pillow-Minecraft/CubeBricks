@@ -3,11 +3,16 @@ const fs=require('node:fs/promises');
 async function historyRoute(journal, source, target) {
   const backward=[],forward=[];
   let current=source,destination=target;
+  const parent=async record=>{
+    if(record.parent===null)return null;
+    if(!Number.isInteger(record.parent)||record.parent<1||record.parent>=record.sequence)throw Error('歷史父節點無效或形成循環');
+    return journal.manifest(record.parent);
+  };
   while(current?.sequence!==destination?.sequence){
     if(current&&(!destination||current.sequence>destination.sequence)){
-      backward.push(current);current=current.parent===null?null:await journal.manifest(current.parent);
+      backward.push(current);current=await parent(current);
     }else{
-      forward.push(destination);destination=destination.parent===null?null:await journal.manifest(destination.parent);
+      forward.push(destination);destination=await parent(destination);
     }
   }
   forward.reverse();

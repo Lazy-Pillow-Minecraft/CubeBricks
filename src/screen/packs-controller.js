@@ -1,4 +1,4 @@
-import { ConfigKey, configRegistry, replaceLanguagePacks } from '../common/config/app-config.js';
+import { ConfigKey, configRegistry, replaceLanguagePacks, resolveUiLanguage } from '../common/config/app-config.js';
 import { showAppConfirm } from './prompt-dialog.js';
 
 const KIND_LABELS = { language: '語言包', font: '字體包', shape: 'Shape 包' };
@@ -29,20 +29,12 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
     const generation = ++fontGeneration;
     clearFontFaces();
     const selected = configRegistry.get(ConfigKey.FONT);
-    if (selected === 'pixel') {
-      document.documentElement.style.removeProperty('--ui-font');
-      return;
-    }
-    if (selected === 'system') {
-      document.documentElement.style.setProperty('--ui-font', 'system-ui, sans-serif');
-      return;
-    }
+    document.documentElement.toggleAttribute('data-pixel-font', selected === 'pixel');
+    document.documentElement.style.removeProperty('--ui-font');
+    if (selected === 'pixel' || selected === 'system') return;
     const pack = packs.find(entry => entry.kind === 'font' && entry.id === selected);
-    if (!pack) {
-      document.documentElement.style.removeProperty('--ui-font');
-      return;
-    }
-    const language = configRegistry.get(ConfigKey.LANGUAGE).toLowerCase();
+    if (!pack) return;
+    const language = resolveUiLanguage().toLowerCase();
     if (!fontSourceCache.has(pack.id)) {
       try { fontSourceCache.set(pack.id, await desktop.readFontPack(pack.id)); }
       catch (error) {

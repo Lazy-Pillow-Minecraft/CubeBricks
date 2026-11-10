@@ -1,11 +1,11 @@
-import { ConfigKey, applyLanguage, getLanguageLabel, translateUiText } from '../common/config/app-config.js';
+import { ConfigKey, applyLanguage, getLanguageLabel, translateUiText, TOOL_TRANSFORM_SPACE } from '../common/config/app-config.js';
 
 export function createSettingsController({
   state, $, $$, sceneRenderer, hexToRgb, renderScene, toast,
   configRegistry, languageSelect, modelFormatRegistry, getDockManager,
   setMode, updateToolVisibility, applyModePanelVisibility,
   toolSupportsMode, setTool, updateSnapButton, updatePlayerReferenceTexture,
-  clearSelection, updateProjectionControls, animateLockedHoverStrength
+  clearSelection, updateProjectionControls, animateLockedHoverStrength, updateToolOptions
 }) {
 const themePresets = {
   moss: { '--accent': '#b9f55a', '--selection-outline': '#d8f59b', '--bg': '#11130f', '--panel': '#1b1f18', '--viewport': '#20251e', '--panel-2': '#22271f', '--panel-3': '#292f25', '--text': '#e9eee3', '--muted': '#8f9b86', '--subtle': '#5f6959', '--line': 'rgba(226, 239, 213, .1)', '--line-strong': 'rgba(226, 239, 213, .18)', '--danger': '#ff7d68', '--accent-contrast': '#17200e', '--surface-tint': '#2b3327', '--dialog-tint': '#38432e', '--viewport-glow': '#53604d' },
@@ -100,10 +100,14 @@ function applyRegisteredConfig(id, value, notify = false) {
       updateToolVisibility();
       getDockManager()?.setMode(state.mode);
       applyModePanelVisibility();
-      if (!toolSupportsMode(state.tool)) setTool(state.mode === 'uv' ? 'faceSelect' : 'move');
+      if (!toolSupportsMode(state.tool)) setTool(state.mode === 'uv' ? 'faceSelect' : 'move', { remember: false });
     }
   }
   if (id === ConfigKey.BLOCKBENCH_CONTROLS) { state.blockbenchControls = value; renderScene(); }
+  if (id === TOOL_TRANSFORM_SPACE[state.tool]) {
+    state.transformSpace = value;
+    updateToolOptions();
+  }
   if (id === ConfigKey.SNAP) {
     state.settingsSnap = value;
     updateSnapButton();

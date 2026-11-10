@@ -560,7 +560,7 @@ class ProjectJournal {
           operationId, directoryChanged: true, directory: null,
           storageDirectory: previous.folder, deleted: true, state: null
         });
-        return { uid, removed: true };
+        return { uid, removed: true, snapshot: { folder: previous.folder, local } };
       }
       const folder = nodeFolder(node);
       const previous = old.pointers[uid];
@@ -572,7 +572,7 @@ class ProjectJournal {
         operationId, directoryChanged, directory: placements[uid] || null,
         storageDirectory: folder, deleted: false, state: node
       });
-      return { uid, pointer: { folder, local } };
+      return { uid, pointer: { folder, local }, snapshot: { folder, local } };
     });
     const affected = writtenNodes.map(record => record.uid);
     for (const record of writtenNodes) {
@@ -591,7 +591,7 @@ class ProjectJournal {
       information: data.information, elementOrder: data.elements.map(node => node.uid),
       groupOrder: data.groups.map(node => node.uid), textureIds, pointers, placements,
       nodeHashes, textureHashes, textureHashVersion: 2,
-      changed: affected, textureChanges: textureChanges.map(change => change.id)
+      changed: affected, writtenSnapshots: writtenNodes.map(record => record.snapshot), textureChanges: textureChanges.map(change => change.id)
     };
     await writeJson(this.file(`transactions/${sequence}.json`), manifest);
     this.state = { format: FORMAT, version: VERSION, status: 'complete', sequence,
@@ -675,9 +675,19 @@ class ProjectJournal {
         };
         return { groups: target.groupOrder.map(node), elements: target.elementOrder.map(node) };
       })() : await this.readNodes(target);
-    const textureStates = shared ? new Map() : await readHistoryTextureRoot(this,forward[0]);
-    if(shared)for(const manifest of backward)await this.applyTextureChange(manifest,'before',textureStates);
-    for(const manifest of shared?forward:forward.slice(1))await this.applyTextureChange(manifest,'after',textureStates);
+    const textureStates = new Map();
+    if (cachedData && target.textureHashVersion === 2 && previousManifest.textureHashVersion === 2) {
+      // A materialized recent target already contains the exact old pixels.
+      // Validate them below, then stage only changed textures; replaying every
+      // delta here defeated the backend cache for large layered textures.
+      const cachedTextures = new Map(target.textureIds.map((id,index) => [id,cachedData.textures[index]]));
+      for (const id of new Set([...previousManifest.textureIds,...target.textureIds]))
+        if (previousManifest.textureHashes[id] !== target.textureHashes[id]) textureStates.set(id,cachedTextures.get(id) || null);
+    } else {
+      if (!shared) for (const [id,texture] of await readHistoryTextureRoot(this,forward[0])) textureStates.set(id,texture);
+      if(shared)for(const manifest of backward)await this.applyTextureChange(manifest,'before',textureStates);
+      for(const manifest of shared?forward:forward.slice(1))await this.applyTextureChange(manifest,'after',textureStates);
+    }
     const textureChanged = textureStates.size > 0
       || comparable(previousManifest.textureIds) !== comparable(target.textureIds)
       || comparable(previousManifest.information.textureGroups) !== comparable(target.information.textureGroups);

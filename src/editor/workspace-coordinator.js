@@ -5,14 +5,14 @@ export function selectionAffectsModifierResults(project, selectedIds) {
   for (const uidValue of selectedIds) {
     const node = project.getNode(uidValue);
     if (node?.type === 'group') selectedGroup = true;
-    if (node?.modifiers?.some(modifier => modifier.type === 'symmetry' && modifier.enabled)) return true;
+    if (node?.modifiers?.some(modifier => ['symmetry', 'element_copy'].includes(modifier.type) && modifier.enabled)) return true;
     if (project.getGroupChain(uidValue).some(group =>
-      group.modifiers?.some(modifier => modifier.type === 'symmetry' && modifier.enabled))) return true;
+      group.modifiers?.some(modifier => ['symmetry', 'element_copy'].includes(modifier.type) && modifier.enabled))) return true;
   }
   if (!selectedGroup) return false;
   // Transforming a selected ancestor also moves an embedded modifier frame.
   return [...project.groups, ...project.elements].some(owner => owner.modifiers?.some(modifier =>
-    modifier.type === 'symmetry' && modifier.enabled)
+    ['symmetry', 'element_copy'].includes(modifier.type) && modifier.enabled)
     && project.getGroupChain(owner.uid).some(parent => selectedSet.has(parent.uid)));
 }
 
@@ -53,11 +53,18 @@ export function createWorkspaceCoordinator({
   scheduleAllPaintSymmetryBuilds, syncSubdivisionEdits
 }) {
 let toastTimer;
-function restoreProjectTextureView({ preserveAtlas = false } = {}) {
+function restoreProjectTextureView({ preserveAtlas = false, changedTextureUids = null } = {}) {
   // Texture previews and the scene atlas are separate consumers. Rebuild the
   // atlas as soon as a project becomes active; otherwise an image-load callback
   // for the currently selected preview is the only thing that starts it.
   getTextureAssetController().textureLoadRevision++;
+  if (changedTextureUids && getTextureAtlasController().restoreHistoryTextures(changedTextureUids)) {
+    renderTextureList();
+    const index = state.textureAssets.findIndex(asset => asset._uid === state.activeTextureUid);
+    if (changedTextureUids.includes(state.activeTextureUid) && index >= 0)
+      activateProjectTexture(index, { restoreSavedComposite: true });
+    return;
+  }
   getTextureAtlasController().resetAtlas({ preserveGpu: preserveAtlas && state.textureAssets.length > 0 });
   livePaintTextureSources.clear();
   animationRasterCache.clear();
@@ -86,7 +93,13 @@ function toast(message) {
 }
 
 function renderAll(geometryScope = 'all', changedUids = null, previousProject = null) {
-  if (geometryScope === 'selection') invalidateSelectionRenderGeometry();
+  if (geometryScope === 'texture-journal') {
+    // The dock and the changed atlas regions were already updated. A brush
+    // undo has no reason to rebuild the inspector, tools or outliner.
+    renderScene();
+    return;
+  }
+  else if (geometryScope === 'selection') invalidateSelectionRenderGeometry();
   else if (geometryScope === 'journal' && sceneRenderer.restoreJournalGeometry(state.project, changedUids, state.selectedUids, state.mode)) {
     getUvPreviewController().uvPreviewRenderDirty = true;
     getUvEditorController().textureUvEntryCache = null;

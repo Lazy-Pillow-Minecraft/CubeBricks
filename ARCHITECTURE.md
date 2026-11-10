@@ -2,6 +2,10 @@
 
 [English](ARCHITECTURE.en.md) · [返回 README](README.md) · [操作教程](docs/USER_GUIDE.md) · [附加包索引](docs/ADDON_PACKS.md)
 
+[动画开发前的结构与性能审查（2026-11-05）](docs/PRE_ANIMATION_AUDIT_2026-11-05.md) 记录本机量测、已确认瓶颈、资源生命周期问题和接入动画前的改造顺序。
+
+[第一轮优化结果（2026-11-06）](docs/OPTIMIZATION_2026-11-06.md) 记录已实现的索引排序、组预览、修改器复用、最近撤销、资源清理及其验证边界。
+
 `src/app.js` 是编辑器的组装入口，只负责建立控制器、接入依赖、初始化与启动。状态、工具表、工程分页／文件与日志、停靠、摄像机与参考图、对象属性、主视图手柄与变换交互、UV 编辑与预览、贴图管理与图集、色卡与选色器、三维／二维绘画、绘画对称、刀具、模型截图、纹理模板生成，以及场景层级的渲染、拖动、事件和元素命令，均按职责放入独立模块。新增功能不要写进入口。
 
 ## 目录职责
@@ -31,9 +35,9 @@
 
 ## 入口边界
 
-`model/formats/` 将 Java JSON、基岩 geometry 和带完整性校验的 Java 模型层分开实现，模型格式注册表通过 `nativeExport` 声明原生导出能力。`project/export-dialog.js` 选择格式，`native-export-controller.js` 编排先贴图、后模型的流程；桌面路径解析和图片写入放在 `electron/native-model-io.cjs`、`texture-files.cjs`。`texture/save-state.js` 只在内容变化时更新状态，像素校验由专用 Worker 串行执行，避免 PNG 重编码误报和拖动视图时重新处理图像。
+`common/core/format-hooks.js` 提供 Shape 和修改器定义共用的空默认格式接口及对象上下文；它不反向依赖注册表或模型。`procedural-format.js` 负责 Shape 参数与生成 Cube 的格式适配，`modifier-format.js` 负责利用前序结果约束修改器。预览仅处理求值数据，旋转折算不改变实时面的身份；`model/format-materialization.js` 将模组实体的方向转成组旋转，`model/formats/procedural-format-export.js` 将 Java 的组姿态落成合法 Cube 数据。细分编辑比较适配后的基础几何，避免把格式补偿误存成用户编辑。扩展接口见 [Shape 包规范](SHAPE_PACKS.md#可选的格式适配)。
 
-贴图导出由 `texture/export-bake.js` 连接已有几何烘焙结果；`export-plan.js` 负责引用解析、周期范围复用、最小公倍数和图集／箱型布局，`export-raster.js` 负责独立快照合成与像素烘焙，`export-progress.js` 管理延迟显示的进度窗。格式注册表用 `singleTexture` 声明合并规则。导出不依赖当前帧选择、全局图层光栅缓存或可编辑画布，不向工程写入烘焙结果。
+`model/formats/` 将 Java JSON、基岩 geometry 和带完整性校验的 Java 模型层分开实现，模型格式注册表通过 `nativeExport` 声明原生导出能力。`project/export-dialog.js` 选择格式，`native-export-controller.js` 编排先贴图、后模型的流程；桌面路径解析和图片写入放在 `electron/native-model-io.cjs`、`texture-files.cjs`。`texture/save-state.js` 只在内容变化时更新状态，像素校验由专用 Worker 串行执行，避免 PNG 重编码误报和拖动视图时重新处理图像。
 
 贴图导出由 `texture/export-bake.js` 连接已有几何烘焙结果；`export-plan.js` 负责引用解析、周期范围复用、最小公倍数和图集／箱型布局，`export-raster.js` 负责独立快照合成与像素烘焙，`export-progress.js` 管理延迟显示的进度窗。格式注册表用 `singleTexture` 声明合并规则。导出不依赖当前帧选择、全局图层光栅缓存或可编辑画布，不向工程写入烘焙结果。
 

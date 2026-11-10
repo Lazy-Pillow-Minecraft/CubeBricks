@@ -1,4 +1,4 @@
-import { activeLayer, compositeLayers, createLayerGroup, imageCanvas, insertLayerNearSelection, layerDescendantUids, layerEntryRaster, layerRasterCache, layerTreeItems, loadRaster, normalizeTextureLayers, prepareLayers, reorderLayerStack, selectedLayerEntry, tiledFaceRaster } from '../common/core/texture-features.js';
+import { activeLayer, compositeLayers, createLayerGroup, imageCanvas, insertLayerNearSelection, layerDescendantUids, layerEntryRaster, layerRasterCache, layerTreeItems, loadRaster, normalizeTextureLayers, prepareLayers, releaseLayerRaster, releaseTextureRasters, reorderLayerStack, selectedLayerEntry, tiledFaceRaster } from '../common/core/texture-features.js';
 import { formatRules } from '../common/core/format-constraints.js';
 import { createListDragAutoScroll } from '../screen/list-drag-scroll.js';
 import { verticalDropTarget } from '../screen/vertical-drop.js';
@@ -8,11 +8,13 @@ import { faceTilingValues, setFaceTilingCoordinate } from '../common/core/face-t
 import { migrateTextureAnimationMode, createTextureFrameElement, textureFrameElements } from './frame-elements.js';
 import { createTextureFrameList } from './frame-list-controller.js';
 import { createFrameConnections } from './frame-connections-controller.js';
-import { activeTextureFrame, frameLayerUids, framePaintLayer, frameVisibilityControls, rememberFramePaintLayer, setFrameLayerVisibility } from '../common/core/frame-links.js';
+import { activeTextureFrame, frameLayerUids, framePaintLayer, frameVisibilityControls, rememberFramePaintLayer, setFrameLayerLink, setFrameLayerVisibility } from '../common/core/frame-links.js';
 import { createFramePlayback } from './frame-playback-controller.js';
 import { readCompanionAnimation, splitTextureAnimation } from './animation-import.js';
-import { paintCanvasIsBound } from '../paint/canvas-layer-binding.js';
+import { paintCanvasIsBound, rememberEditablePaintSource } from '../paint/canvas-layer-binding.js';
 import { isolateTextureLayerIds, reidentifyTextureLayers } from '../common/core/texture-layer-identity.js';
+import { createLayerCommands } from './layer-commands.js';
+import { decodedRasterImage } from '../utils/image/raster-cache.js';
 
 const CUBE_FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
 const TEXTURE_MODE_LABEL = '貼圖模式';
@@ -65,6 +67,10 @@ const layerEditor = createLayerEditorDialog({ $, activeTextureAsset, toast, pale
   },
   onPropertyCommit: finishLayerEdit,
   onClose(){finishLayerEdit();updateFrameLayerIndicators();}
+});
+const layerCommands = createLayerCommands({ state, activeTextureAsset, textureCanvas, finishLayerEdit,
+  pushTexturePaintHistory, refreshLayeredTexture, root: $('#textureFeatureControls'), toast,
+  onChange(uid) { frameConnections.selectLayer(uid); renderTextureFeatureControls(); layerEditor.render(); }
 });
 
 function finishLayerEdit() {
@@ -128,22 +134,10 @@ function renderTextureList() {
   textureSaveIndicators?.refresh({ paint: true });
 }
 
-function addTextureGroup() {
-  noteJournalOperation('core.texture.group');
-  const group = { id: `texture_group_${crypto.randomUUID()}`, name: `貼圖組 ${state.textureGroups.length + 1}`, collapsed: false };
-  state.textureGroups.push(group);
-  const active = state.textureAssets.find(asset => asset._uid === state.activeTextureUid);
-  if (active) active.groupId = group.id;
-  renderTextureList();
-  layerEditor.render();
-  markDirty();
-  toast('已新增貼圖組');
-}
-
-function updateLayerCompositePreview(asset, canvas, dirty = null) {
+function updateLayerCompositePreview(asset, canvas, dirty = null, floating = false) {
   if (asset && asset._uid !== state.activeTextureUid) return;
   const preview = $('#textureLayerComposite');
-  const showComposite = Boolean((asset?.layers?.length || asset?.animation?.enabled && activeTextureFrame(asset)) && canvas?.width && canvas?.height);
+  const showComposite = Boolean((floating || asset?.layers?.length || asset?.animation?.enabled && activeTextureFrame(asset)) && canvas?.width && canvas?.height);
   preview.hidden = !showComposite;
   textureCanvas.style.opacity = showComposite ? '0' : '';
   if (!asset) textureCanvas.style.visibility = '';
@@ -294,7 +288,7 @@ async function refreshLayeredTexture(asset) {
   });
   if (!cached) {
     await prepareLayers(asset);
-    if (layerRefreshRevision.get(asset) !== revision) return;
+    if (layerRefreshRevision.get(asset) !== revision || !state.textureAssets.includes(asset)) return;
   }
   const canvas = compositeLayers(asset);
   if (!canvas) return;
@@ -321,13 +315,15 @@ function showLayerComposite(asset, canvas) {
 
 function showEditableLayer(asset, fallback = null) {
   if(paintCanvasIsBound(textureCanvas))return;
-  const editable = layerRasterCache.get(activeLayer(asset)?.uid)?.canvas;
+  const layer = activeLayer(asset), raster = layerRasterCache.get(layer?.uid);
+  const editable = raster?.savedSource === layer?.source ? raster?.canvas : null;
   if (!editable && !fallback) return;
   textureCanvas.width = editable?.width || fallback.width;
   textureCanvas.height = editable?.height || fallback.height;
   textureCtx.imageSmoothingEnabled = false;
   textureCtx.clearRect(0, 0, textureCanvas.width, textureCanvas.height);
   if (editable) textureCtx.drawImage(editable, 0, 0);
+  if (editable) rememberEditablePaintSource(asset, textureCanvas, layer);
 }
 
 function discardMissingLayerMasks(asset) {
@@ -357,6 +353,30 @@ async function addTextureLayer() {
   asset.activeLayerUid = layer.uid;
   await refreshLayeredTexture(asset);
   renderTextureFeatureControls();
+}
+
+async function moveSelectionToLayer(asset, sourceLayer, remaining, pixels) {
+  const remainingSource = remaining.toDataURL('image/png');
+  const pixelSource = pixels.toDataURL('image/png');
+  if (!sourceLayer) {
+    sourceLayer = { uid: crypto.randomUUID(), name: '底圖', visible: true, opacity: 100, blendMode: 'normal' };
+    asset.layers = [sourceLayer];
+  }
+  sourceLayer.source = remainingSource;
+  layerRasterCache.set(sourceLayer.uid, { canvas: remaining, savedSource: sourceLayer.source });
+  const count = asset.layers.filter(entry => entry.type !== 'group').length + 1;
+  const layer = { uid: crypto.randomUUID(), name: `圖層 ${count}`, source: pixelSource,
+    visible: true, opacity: 100, blendMode: 'normal' };
+  layerRasterCache.set(layer.uid, { canvas: pixels, savedSource: layer.source });
+  asset.layers = insertLayerNearSelection(asset.layers, layer, sourceLayer.uid);
+  asset.activeLayerUid = layer.uid;
+  if (asset.animation?.enabled) {
+    const frame = activeTextureFrame(asset);
+    if (frame && !frameLayerUids(asset, frame).has(layer.uid)) setFrameLayerLink(asset, frame.uid, layer.uid, true);
+    rememberFramePaintLayer(asset, layer.uid);
+  }
+  await refreshLayeredTexture(asset);
+  if (asset === activeTextureAsset()) renderTextureFeatureControls();
 }
 
 async function addTextureLayerGroup() {
@@ -672,19 +692,7 @@ function loadTextureAssetImage(asset) {
   const source = asset.source;
   const cached = decodedTextureImages.get(asset);
   if (cached?.source === source) return cached.promise;
-  const promise = new Promise(resolve => {
-    const image = new Image();
-    image.onload = () => {
-      if (asset.source !== source && decodedTextureImages.get(asset)?.source === source)
-        decodedTextureImages.delete(asset);
-      resolve(asset.source === source ? image : null);
-    };
-    image.onerror = () => {
-      if (decodedTextureImages.get(asset)?.source === source) decodedTextureImages.delete(asset);
-      resolve(null);
-    };
-    image.src = source;
-  });
+  const promise = decodedRasterImage(source).then(image => asset.source === source ? image : null, () => null);
   decodedTextureImages.set(asset, { source, promise });
   return promise;
 }
@@ -719,12 +727,26 @@ function copyTexture(asset = activeTextureAsset()) {
   return true;
 }
 
+function releaseTextureAssets(assets, retained = []) {
+  const retainedUids = new Set(retained.map(asset => asset._uid));
+  for (const asset of assets) {
+    releaseTextureRasters(asset, retained);
+    if (retained.includes(asset)) continue;
+    framePlayback.release(asset);
+    if (!retainedUids.has(asset._uid)) {
+      livePaintTextureSources.delete(asset._uid);
+      animationRasterCache.delete(asset._uid);
+    }
+  }
+}
+
 function removeTexture(asset = activeTextureAsset(), operation = 'core.texture.delete') {
   if (!asset) return false;
   if (operation) noteJournalOperation(operation);
   const previousAssets = [...state.textureAssets];
   const removedIndex = state.textureAssets.indexOf(asset);
   state.textureAssets = state.textureAssets.filter(entry => entry !== asset);
+  releaseTextureAssets([asset], (getAllTextureAssets?.() || state.textureAssets).filter(entry => entry !== asset));
   remapNumericFaceTextureReferences(previousAssets);
   if (state.activeTextureUid === asset._uid) {
     const next = state.textureAssets[Math.min(removedIndex, state.textureAssets.length - 1)];
@@ -749,7 +771,7 @@ async function removeTextureLayer(uid) {
     ? new Set([selected.uid, ...layerDescendantUids(asset.layers, selected.uid)])
     : new Set([selected.uid]);
   asset.layers = asset.layers.filter(layer => !removed.has(layer.uid));
-  for (const removedUid of removed) layerRasterCache.delete(removedUid);
+  for (const removedUid of removed) releaseLayerRaster(removedUid);
   discardMissingLayerMasks(asset);
   if (!asset.layers.some(layer => layer.type !== 'group')) {
     const canvas = document.createElement('canvas');
@@ -791,7 +813,7 @@ async function mergeTextureLayerDown(uid) {
   pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer');
   const source = merged.toDataURL('image/png');
   asset.layers = asset.layers.filter(layer => !removed.has(layer.uid) || layer.uid === lower.uid);
-  for (const removedUid of removed) if (removedUid !== lower.uid) layerRasterCache.delete(removedUid);
+  for (const removedUid of removed) if (removedUid !== lower.uid) releaseLayerRaster(removedUid);
   Object.assign(lower, { type: 'layer', source, visible: true, opacity: 100,
     blendMode: 'normal', maskLayerUid: null, toneMap: null });
   layerRasterCache.set(lower.uid, { canvas: merged, savedSource: source });
@@ -930,6 +952,7 @@ function importTexture(file) {
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, image.naturalWidth, image.naturalHeight);
     textureCtx.drawImage(image, 0, 0);
+    if (asset) rememberEditablePaintSource(asset, textureCanvas);
     textureCanvas.style.visibility = '';
     window.dispatchEvent(new Event('cubebricks:texture-change'));
     syncRendererTexture(textureCanvas);
@@ -945,11 +968,12 @@ function importTexture(file) {
   image.src = url;
 }
 
-function loadTextureSource(source, name) {
+function loadTextureSource(source, name, { updateAtlas = true } = {}) {
   const revision = ++textureLoadRevision;
   const loaded = image => {
     if (revision !== textureLoadRevision) return;
     pendingTextureImage = null;
+    if (paintCanvasIsBound(textureCanvas)) return;
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
     const asset = activeTextureAsset();
@@ -966,12 +990,13 @@ function loadTextureSource(source, name) {
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, width, height);
     textureCtx.drawImage(image, 0, 0);
+    if (asset) rememberEditablePaintSource(asset, textureCanvas);
     textureCanvas.style.visibility = '';
     window.dispatchEvent(new Event('cubebricks:texture-change'));
     updateTexturePreviewFrame(asset?.uvWidth || width, asset?.uvHeight || height);
     const activeName = $('.texture-item.active strong');
     if (activeName) activeName.textContent = name;
-    syncRendererTexture(textureCanvas);
+    if (updateAtlas) syncRendererTexture(textureCanvas);
     renderScene();
     renderTextureFeatureControls();
   };
@@ -1009,7 +1034,7 @@ function installProjectTextures(assets) {
   activateProjectTexture(defaultIndex >= 0 ? defaultIndex : 0);
 }
 
-function activateProjectTexture(index) {
+function activateProjectTexture(index, { restoreSavedComposite = false } = {}) {
   const asset = state.textureAssets[index];
   if (!asset) return;
   const switchingAsset = state.activeTextureUid !== asset._uid;
@@ -1025,6 +1050,29 @@ function activateProjectTexture(index) {
   if (asset.uvWidth && asset.uvHeight) updateTexturePreviewFrame(asset.uvWidth, asset.uvHeight);
   $$('.texture-item').forEach(item => item.classList.toggle('active', item.dataset.textureUid === asset._uid));
   renderTextureFeatureControls();
+  if (restoreSavedComposite) {
+    const source = asset.source;
+    if (!asset.layers?.length) loadTextureSource(source, asset.name, { updateAtlas: false });
+    else {
+      // A journal snapshot already has the merged image. Show it directly
+      // instead of loading and compositing every editable layer first.
+      const layer = activeLayer(asset);
+      const ready = layer && layerRasterCache.get(layer.uid);
+      if (layer && ready?.savedSource === layer.source) showEditableLayer(asset);
+      else if (layer?.source) {
+        const layerSource = layer.source;
+        void loadRaster(layerSource).then(canvas => {
+          if (activationRevision !== textureLoadRevision || layerSource !== layer.source || asset.source !== source
+            || paintCanvasIsBound(textureCanvas)) return;
+          layerRasterCache.set(layer.uid, { canvas, savedSource: layerSource });
+          showEditableLayer(asset); renderTextureFeatureControls();
+        }).catch(error => toast(error.message));
+      }
+      window.dispatchEvent(new Event('cubebricks:texture-change'));
+    }
+    scheduleTextureAnimation();
+    return;
+  }
   if (asset.layers?.length) prepareLayers(asset).then(() => {
     if (state.activeTextureUid !== asset._uid || activationRevision !== textureLoadRevision) return;
     const composite = compositeLayers(asset);
@@ -1049,9 +1097,11 @@ return {
   set textureLoadRevision(value) { textureLoadRevision = value; },
   get pendingTextureImage() { return pendingTextureImage; },
   set pendingTextureImage(value) { pendingTextureImage = value; },
-  textureUid, renderTextureList, addTextureGroup, updateLayerCompositePreview, renderTextureTileControls, refreshDerivedTileEntries, scheduleTextureAnimation, textureAssetForReference, isFaceTiled, remapNumericFaceTextureReferences, loadTextureAssetImage, createSimpleTexture, updateTextureCreateDialog, openTextureCreateDialog, importTexture, loadTextureSource, installProjectTextures, activateProjectTexture, invalidateUvPreviewTextureState,
+  textureUid, renderTextureList, updateLayerCompositePreview, renderTextureTileControls, refreshDerivedTileEntries, scheduleTextureAnimation, textureAssetForReference, isFaceTiled, remapNumericFaceTextureReferences, loadTextureAssetImage, createSimpleTexture, updateTextureCreateDialog, openTextureCreateDialog, importTexture, loadTextureSource, installProjectTextures, activateProjectTexture, invalidateUvPreviewTextureState,
   selectedTilingFaces, setTilingCoordinate,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeActiveLayer, removeTextureLayer, mergeTextureLayerDown,
-  syncToneMappedPalettes
+  copyTextureLayer: layerCommands.copy, pasteTextureLayer: layerCommands.paste,
+  binarizeTextureLayerAlpha: layerCommands.binarizeAlpha, canPasteTextureLayer: layerCommands.canPaste,
+  syncToneMappedPalettes, releaseTextureAssets, moveSelectionToLayer
 };
 }

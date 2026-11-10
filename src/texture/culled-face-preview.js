@@ -1,4 +1,5 @@
 import { isCubeFaceCulled } from '../common/core/geometry-utils.js';
+import { constrainElementCube, proceduralFormatContext } from '../common/core/procedural-format.js';
 
 const FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
 export function createUvPreviewElement(source) {
@@ -15,7 +16,7 @@ export function createUvPreviewElement(source) {
     }));
     return preview;
   };
-  const element = source.type === 'cube' ? previewCube(source)
+  const element = source.type === 'cube' ? previewCube(constrainElementCube(proceduralFormatContext(source).project, source))
     : Object.assign(Object.create(source), { visible: true, locked: false, modifiers: [] });
   if (source.type !== 'cube' && typeof element.toCubes === 'function') {
     const cubes = element.toCubes().map(previewCube);

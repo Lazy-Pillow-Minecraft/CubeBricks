@@ -1,4 +1,9 @@
 import { TOOL_REGISTRY, PAINT_TOOLS, PAINT_ERASE_TOOLS } from './tool-registry.js';
+import { shapeRegistry } from '../shapes/builtins.js';
+import { formatRules } from '../common/core/format-constraints.js';
+import { configRegistry, TOOL_TRANSFORM_SPACE } from '../common/config/app-config.js';
+
+const DEFAULT_TOOLS = { edit: 'move', uv: 'faceSelect', paint: 'brush', animate: 'move' };
 
 export function createToolModeController({
   state, $, $$, inspectorController, exitSubdivisionEdit, renderOutliner,
@@ -8,7 +13,7 @@ export function createToolModeController({
   paintToolErasing, paintSetting, getKnifePreviewLabel,
   updateTransformSpaceButtons, updateRotationModeButtons,
   updateScaleHandleModeButtons, updateMultiTransformModeButtons,
-  getDockManager
+  getDockManager, finishPaintSelection, saveProjectTools
 }) {
 let temporaryPaintTool = null;
 let renderModeBeforePaint = null;
@@ -34,6 +39,7 @@ function setMode(mode) {
   if (mode === 'display' && state.project.formatId !== 'java_block_item') mode = 'edit';
   if (mode === 'animate' && state.project.formatId === 'java_block_item') mode = 'display';
   if (mode === 'uv' && !state.separateUvMode) mode = 'edit';
+  if (state.mode === 'paint' && mode !== 'paint') finishPaintSelection?.();
   if (mode === 'paint' && inspectorController.subdivisionSession) exitSubdivisionEdit(false);
   if (mode === 'paint' && state.mode !== 'paint') {
     renderModeBeforePaint = state.renderMode;
@@ -42,6 +48,7 @@ function setMode(mode) {
     state.renderMode = renderModeBeforePaint;
     renderModeBeforePaint = null;
   }
+  const previousMode = state.mode;
   state.mode = mode;
   $('#displaySettingsPlaceholder').hidden = mode !== 'display';
   $('#animationEditorPlaceholder').hidden = mode !== 'animate';
@@ -61,10 +68,11 @@ function setMode(mode) {
   applyModePanelVisibility();
   $$('.mode-tab').forEach(button => button.classList.toggle('active', button.dataset.mode === mode));
   updateToolVisibility();
-  if (!toolSupportsMode(state.tool, mode)) setTool(mode === 'paint' ? 'brush' : mode === 'uv' ? 'faceSelect' : 'move');
+  if (mode !== previousMode || !toolSupportsMode(state.tool, mode)) restoreModeTool();
+  else updateToolOptions();
   $('#viewLabel').textContent = mode === 'paint' ? '三維繪畫' : mode === 'uv' ? 'UV 編輯' : mode === 'animate' ? '動畫編輯' : mode === 'display' ? '顯示設置' : '實體著色';
-  if (mode === 'paint') activateDock('palette');
-  if (mode === 'animate') activateDock('timeline');
+  if (mode === 'paint') activateDock('palette', { expand: false });
+  if (mode === 'animate') activateDock('timeline', { expand: false });
   renderInspector();
   renderScene();
   toast({ edit: '編輯模式', uv: 'UV 編輯模式', paint: '繪畫模式', animate: '動畫編輯（開發中）', display: '顯示設置（開發中）' }[mode]);
@@ -78,7 +86,16 @@ function updateToolVisibility() {
   });
 }
 
-function setTool(tool, { temporary = false } = {}) {
+function restoreModeTool() {
+  temporaryPaintTool = null;
+  const remembered = state.toolsByMode[state.mode];
+  const usable = toolSupportsMode(remembered) && (remembered !== 'knife' || !inspectorController.subdivisionSession);
+  const tool = usable ? remembered : DEFAULT_TOOLS[state.mode];
+  if (tool) setTool(tool, { remember: false, render: false });
+  else updateToolOptions();
+}
+
+function setTool(tool, { temporary = false, remember = !temporary, render = true } = {}) {
   if (!toolSupportsMode(tool) || (tool === 'knife' && inspectorController.subdivisionSession)) {
     if (tool === 'knife' && inspectorController.subdivisionSession) toast('細分編輯期間不能使用刀具');
     return;
@@ -90,13 +107,20 @@ function setTool(tool, { temporary = false } = {}) {
     state.paintGradientStop = 'start';
     state.paintGradientStart = state.paintColor;
   }
+  if (state.tool === 'paintSelection' && tool !== 'paintSelection') finishPaintSelection?.();
   state.tool = tool;
+  const spaceKey = TOOL_TRANSFORM_SPACE[tool];
+  state.transformSpace = spaceKey ? configRegistry.get(spaceKey) : 'self';
+  if (remember && state.toolsByMode[state.mode] !== tool) {
+    state.toolsByMode = { ...state.toolsByMode, [state.mode]: tool };
+    saveProjectTools?.();
+  }
   if (['line', 'rectangle', 'ellipse'].includes(tool)) state.paintShapeTool = tool;
   sceneCanvas.classList.toggle('is-knife', tool === 'knife');
   $$('.tool').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
   $('#paintShapeButton').classList.toggle('active', ['line', 'rectangle', 'ellipse'].includes(tool));
   updateToolOptions();
-  renderScene();
+  if (render) renderScene();
 }
 
 function beginTemporaryEyedropper() {
@@ -123,6 +147,12 @@ function endTemporaryEyedropper() {
 }
 
 function updateToolOptions() {
+  const rules = formatRules(state.project);
+  for (const button of $('#shapeCreateMenu')?.querySelectorAll?.('[data-create-shape]') || []) {
+    button.disabled = shapeRegistry.get(button.dataset.createShape)?.supportsFormat(rules) === false;
+    if (button.disabled) { button.title = '当前模型格式暂不支持此 Shape'; button.dataset.formatUnsupported = 'true'; }
+    else if (button.dataset.formatUnsupported) { button.removeAttribute('title'); delete button.dataset.formatUnsupported; }
+  }
   const lane = $('#toolOptionsLane');
   const labels = {
     move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇',
@@ -161,12 +191,10 @@ function updateToolOptions() {
   $('#paintSelectionModeControl').hidden = state.tool !== 'paintSelection';
   $('#paintSelectionBrushControl').hidden = state.tool !== 'paintSelection' || state.paintSelectionMode !== 'brush';
   $('#paintSelectionSymmetryControl').hidden = state.tool !== 'paintSelection';
-  const selectionTransform = state.tool === 'paintSelection' && state.paintSelectionMode === 'transform';
-  $('#paintSelectionTransformControl').hidden = !selectionTransform;
-  $('#paintSelectionFreeRotateControl').hidden = !selectionTransform || state.paintSelectionTransformMode !== 'rotate';
-  for (const id of ['#paintSelectionCopy', '#paintSelectionRotateLeft', '#paintSelectionRotateRight']) $(id).hidden = !selectionTransform;
-  $('#paintSelectionTransformMode').value = state.paintSelectionTransformMode;
-  $('#paintSelectionFreeRotate').checked = state.paintSelectionFreeRotate;
+  $('#paintSelectionSamplingControl').hidden = state.tool !== 'paintSelection';
+  $('#paintSelectionSampling').value = state.paintSelectionSampling;
+  for (const id of ['#paintSelectionCopy', '#paintSelectionRotateLeft', '#paintSelectionRotateRight',
+    '#paintSelectionFlipX', '#paintSelectionFlipY']) $(id).hidden = state.tool !== 'paintSelection';
   $('#paintSelectionCopy').textContent = `複製像素：${state.paintSelectionCopy ? '開' : '關'}`;
   $('#paintSelectionClear').hidden = state.tool !== 'paintSelection';
   $('#paintSelectionMode').value = state.paintSelectionMode;
@@ -249,10 +277,10 @@ function setRenderModeMenu(open) {
   $('#renderModeButton').setAttribute('aria-expanded', String(open));
 }
 
-function activateDock(name) {
+function activateDock(name, { expand = true } = {}) {
   $$('.dock-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.dock === name));
   $$('[data-dock-view]').forEach(view => view.classList.toggle('active', view.dataset.dockView === name));
-  getDockManager()?.expand('bottom');
+  if (expand) getDockManager()?.expand('bottom');
 }
 
 return {
@@ -261,6 +289,7 @@ return {
   setMode,
   updateToolVisibility,
   setTool,
+  restoreModeTool,
   beginTemporaryEyedropper,
   endTemporaryEyedropper,
   updateToolOptions,

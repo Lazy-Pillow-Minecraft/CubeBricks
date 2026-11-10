@@ -1,6 +1,7 @@
 import { Shape, addModifier, addOperator, bakeModifier, setPivotPreservingGeometry, setNodeName, setNodeUnnamed, translateNode } from '../model.js';
 import { actualTransformValue, applyTransform, displayedTransformVector, restoreTransform, supportsAppliedTransform } from '../common/core/applied-transform.js';
 import { formatRules, constrainNode, captureFormatGeometry, restoreFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
+import { proceduralShapeSupported } from '../common/core/procedural-format.js';
 import { modifierRegistry } from '../common/config/modifiers.js';
 import { operatorRegistry } from '../common/config/operators.js';
 import { shapeRegistry } from '../shapes/builtins.js';
@@ -63,7 +64,7 @@ function subdivisionOwner(item) {
 }
 
 function subdivisionPatch(owner, cube, index) {
-  const base = owner.toBaseCubes?.()[index];
+  const base = (owner.toFormatBaseCubes?.(state.project) || owner.toBaseCubes?.())[index];
   if (!base) return null;
   const patch = {};
   for (const field of ['position', 'size', 'pivot', 'rotation']) {
@@ -200,7 +201,7 @@ function elementCopyModifierMarkup(modifier) {
 
 function modifierPanelMarkup(owner) {
   const modifiers = owner.modifiers || [];
-  const available = modifierRegistry.listFor(owner.type).filter(definition =>
+  const available = modifierRegistry.listFor(owner.type, formatRules(state.project)).filter(definition =>
     definition.allowMultiple !== false || !modifiers.some(modifier => modifier.type === definition.id));
   const cards = modifiers.map((modifier, index) => {
     const definition = modifierRegistry.get(modifier.type);
@@ -408,7 +409,7 @@ function renderInspector() {
     { id: 'basic', label: '基礎' },
     ...(appearanceCapable ? [{ id: 'appearance', label: '外觀' }] : []),
     ...(isUvCapable(item) ? [{ id: 'uv', label: 'UV' }] : []),
-    ...(modifierRegistry.listFor(item.type).length || item.modifiers?.length ? [{ id: 'modifiers', label: '修改器' }] : []),
+    ...(modifierRegistry.listFor(item.type, formatRules(state.project)).length || item.modifiers?.length ? [{ id: 'modifiers', label: '修改器' }] : []),
     ...(operatorRegistry.listFor(item.type).length || item.operators?.length ? [{ id: 'operators', label: '操作器' }] : [])
   ];
   if (!pages.some(page => page.id === state.inspectorPage)) state.inspectorPage = 'basic';
@@ -455,7 +456,9 @@ function renderInspector() {
       : state.inspectorPage === 'modifiers' ? modifierPanelMarkup(item)
         : state.inspectorPage === 'operators' ? operatorPanelMarkup(item)
         : basicPage;
-  inspector.innerHTML = `${tabs}${content}`;
+  const unsupported = typeof item.toCubes === 'function' && !proceduralShapeSupported(item, state.project)
+    ? '<div class="field-section"><p>当前模型格式暂不支持此 Shape</p><p>请切换到 Java 1.21.11+ 或其他支持的模型格式。</p></div>' : '';
+  inspector.innerHTML = `${tabs}${unsupported}${content}`;
   bindInspector();
 }
 
@@ -803,12 +806,18 @@ function bindInspector(root = null) {
       modifier[key] = value;
       sceneRenderer.invalidateMirrorGeometry(); markDirty();
       if (key === 'mode' || key === 'distribution') renderInspector();
+      else syncInspectorValues();
       renderScene();
     };
     input.addEventListener(input.type === 'number' ? 'input' : 'change', apply);
     if (input.type === 'number') {
       input.addEventListener('change', apply);
-      input.addEventListener('blur', () => { snapshotTaken = false; });
+      input.addEventListener('blur', () => {
+        snapshotTaken = false;
+        const modifier = modifierByUid(input.dataset.modifierUid);
+        if (modifier) input.value = String(round(modifier[input.dataset.modifierField]));
+        syncInspectorValues();
+      });
     }
   });
   $$('[data-modifier-vector]', inspector).forEach(input => {
@@ -825,11 +834,18 @@ function bindInspector(root = null) {
       if (!vector || vector[axis] === value) return;
       if (!snapshotTaken) { snapshot(`modifier.${modifier.type}.transform`); snapshotTaken = true; }
       vector[axis] = value;
-      sceneRenderer.invalidateMirrorGeometry(); markDirty(); renderScene();
+      sceneRenderer.invalidateMirrorGeometry(); markDirty(); syncInspectorValues(); renderScene();
     };
     input.addEventListener('input', apply);
     input.addEventListener('change', apply);
-    input.addEventListener('blur', () => { snapshotTaken = false; });
+    input.addEventListener('blur', () => {
+      snapshotTaken = false;
+      const modifier = modifierByUid(input.dataset.modifierUid);
+      const [scope, property, field] = input.dataset.modifierVector.split('.');
+      const vector = scope === 'nodes' ? modifier?.nodes?.find(node => node.uid === property)?.[field] : modifier?.[scope]?.[property];
+      if (vector) input.value = String(round(vector[Number(input.dataset.axis)]));
+      syncInspectorValues();
+    });
   });
   const operatorByUid = uidValue => item.operators?.find(operator => operator.uid === uidValue);
   $$('[data-edit-operator-anchor]', inspector).forEach(button => button.addEventListener('click', () => {

@@ -5,6 +5,7 @@ import { toSimplified } from '../i18n/simplified.js';
 import { performanceMonitor } from '../../utils/performance-monitor.js';
 
 export const AppLanguage = Object.freeze({
+  SYSTEM: 'system',
   TRADITIONAL_CHINESE: 'zh-Hant',
   SIMPLIFIED_CHINESE: 'zh-Hans',
   ENGLISH: 'en'
@@ -18,8 +19,12 @@ export const ConfigKey = Object.freeze({
   BLOCKBENCH_CONTROLS: 'editor.blockbench-controls',
   SNAP: 'editor.snap-subdivisions',
   ALLOW_NEGATIVE_SIZE: 'editor.allow-negative-size',
+  MOVE_SPACE: 'editor.move-space',
+  ROTATE_SPACE: 'editor.rotate-space',
+  PIVOT_SPACE: 'editor.pivot-space',
   PAINT_EXPLODE_GAP: 'paint.explode-gap',
   PAINT_SCREEN_HEIGHT: 'paint.screen-height',
+  PAINT_SELECTION_SAMPLING: 'paint.selection-sampling',
   SHIFT_SNAP_MODE: 'editor.snap-shift-mode',
   SHIFT_SNAP_VALUE: 'editor.snap-shift-value',
   CTRL_SNAP_MODE: 'editor.snap-ctrl-mode',
@@ -45,15 +50,44 @@ export const ConfigKey = Object.freeze({
 });
 
 export const LANGUAGE_OPTIONS = [
+  { value: AppLanguage.SYSTEM, label: '系統語言' },
   { value: AppLanguage.TRADITIONAL_CHINESE, label: '繁體中文' },
   { value: AppLanguage.SIMPLIFIED_CHINESE, label: '简体中文' },
   { value: AppLanguage.ENGLISH, label: 'English' }
 ];
+const builtinLanguageCount = LANGUAGE_OPTIONS.length;
+export const TOOL_TRANSFORM_SPACE = Object.freeze({
+  move: ConfigKey.MOVE_SPACE, rotate: ConfigKey.ROTATE_SPACE, pivot: ConfigKey.PIVOT_SPACE
+});
 const externalLanguages = new Map();
 const uiSourceKeys = new Map(Object.entries(UI_MESSAGES).map(([key, message]) => [message.zhHant, key]));
 let languagePacksInitialized = false;
+let resolvedSystemLanguage;
+
+export function resolveUiLanguage(language = configRegistry.get(ConfigKey.LANGUAGE)) {
+  if (language !== AppLanguage.SYSTEM) return language;
+  return resolvedSystemLanguage ??= systemUiLanguage();
+}
+
+function systemUiLanguage() {
+  const desktop = globalThis.window?.cubeBricksDesktop?.systemLanguages;
+  const preferred = desktop?.length ? desktop : globalThis.navigator?.languages || [];
+  for (const tag of preferred) {
+    let locale;
+    try { locale = new Intl.Locale(tag); } catch { continue; }
+    const pack = [...externalLanguages.keys()].find(code => code.toLowerCase() === locale.baseName.toLowerCase());
+    if (pack) return pack;
+    if (locale.language === 'zh') return locale.maximize().script === 'Hant'
+      ? AppLanguage.TRADITIONAL_CHINESE : AppLanguage.SIMPLIFIED_CHINESE;
+    if (locale.language === 'en') return AppLanguage.ENGLISH;
+    const basePack = [...externalLanguages.keys()].find(code => code.toLowerCase() === locale.language);
+    if (basePack) return basePack;
+  }
+  return AppLanguage.ENGLISH;
+}
 
 export function translateUiKey(key, language = configRegistry.get(ConfigKey.LANGUAGE), values = []) {
+  language = resolveUiLanguage(language);
   const message = UI_MESSAGES[key];
   if (!message) return key;
   const external = externalLanguages.get(language);
@@ -118,13 +152,21 @@ configRegistry.register({
   id: ConfigKey.LANGUAGE,
   type: ConfigType.ENUM,
   scope: ConfigScope.APPLICATION,
-  defaultValue: AppLanguage.TRADITIONAL_CHINESE,
+  defaultValue: AppLanguage.SYSTEM,
   options: LANGUAGE_OPTIONS,
   description: 'CubeBricks user-interface language.'
 });
 
 configRegistry.registerMany([
-  { id: ConfigKey.FONT, type: ConfigType.STRING, scope: ConfigScope.APPLICATION, defaultValue: 'pixel', validate: value => typeof value === 'string' && value.length < 256, description: 'Interface font pack.' },
+  { id: ConfigKey.FONT, type: ConfigType.STRING, scope: ConfigScope.APPLICATION, defaultValue: 'system', validate: value => typeof value === 'string' && value.length < 256, description: 'Interface font pack.' },
+  ...Object.values(TOOL_TRANSFORM_SPACE).map(id => ({
+    id, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'self',
+    options: [{ value: 'global', label: '全局' }, { value: 'parent', label: '父級' }, { value: 'self', label: '自身' }],
+    description: 'Coordinate system for this transform tool.'
+  })),
+  { id: ConfigKey.PAINT_SELECTION_SAMPLING, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'nearest',
+    options: [{ value: 'nearest', label: '最近鄰' }, { value: 'smooth', label: '平滑' }],
+    description: 'Sampling for non-right-angle pixel selection rotations.' },
   { id: ConfigKey.HISTORY_LIMIT, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 200,
     validate: value => Number.isInteger(value) && value >= 0 && value <= 10000,
     description: 'Default maximum number of persisted undo operations per project.' },
@@ -166,7 +208,7 @@ configRegistry.registerMany([
   { id: ConfigKey.SHOW_GEOMETRY_ONLY, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Hide helper objects such as locators without changing their individual visibility.' },
   { id: ConfigKey.MODIFIER_RESULT_GHOST, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Display generated modifier results at 75% opacity and disable their selection.' },
   { id: ConfigKey.SHOW_GRID, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true, description: 'Show the viewport floor grid.' },
-  { id: ConfigKey.BACKGROUND_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'current',
+  { id: ConfigKey.BACKGROUND_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'grid',
     options: [{ value: 'black', label: '純黑' }, { value: 'current', label: '目前背景' }, { value: 'grid', label: '棋盤格' }],
     description: 'Viewport background fill; independent of the floor reference grid.' },
   { id: ConfigKey.SHOW_WIREFRAME, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: false, description: 'Show model wireframe bounds.' },
@@ -186,7 +228,7 @@ export function replaceLanguagePacks(packs) {
   const current = configRegistry.get(ConfigKey.LANGUAGE);
   applyLanguage(AppLanguage.TRADITIONAL_CHINESE);
   externalLanguages.clear();
-  LANGUAGE_OPTIONS.splice(3);
+  LANGUAGE_OPTIONS.splice(builtinLanguageCount);
   for (const pack of packs) {
     if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/i.test(pack.code) || LANGUAGE_OPTIONS.some(option => option.value === pack.code)) continue;
     const messages = Object.fromEntries(Object.entries(pack.translations).map(([source, translated]) =>
@@ -202,6 +244,7 @@ export function replaceLanguagePacks(packs) {
     });
     LANGUAGE_OPTIONS.push({ value: pack.code, label: pack.label });
   }
+  resolvedSystemLanguage = undefined;
   configRegistry.setEnumOptions(ConfigKey.LANGUAGE, LANGUAGE_OPTIONS);
   const saved = !languagePacksInitialized ? configRegistry.persistedValues[ConfigKey.LANGUAGE] : null;
   const selected = !languagePacksInitialized && LANGUAGE_OPTIONS.some(option => option.value === saved)
@@ -219,6 +262,7 @@ export function replaceLanguagePacks(packs) {
 }
 
 export function translateUiText(source, language = configRegistry.get(ConfigKey.LANGUAGE)) {
+  language = resolveUiLanguage(language);
   const text = String(source ?? '');
   // Existing DOM labels are still authored in Traditional Chinese. Resolve
   // them to the stable ID first; new code and language packs use that ID.
@@ -307,8 +351,9 @@ function translateSubtree(root) {
 
 export function applyLanguage(language = configRegistry.get(ConfigKey.LANGUAGE)) {
   if (typeof document === 'undefined') return;
-  activeLanguage = language;
-  document.documentElement.lang = language;
+  activeLanguage = resolveUiLanguage(language);
+  void globalThis.window?.cubeBricksDesktop?.setUiLanguage?.(activeLanguage).catch(() => {});
+  document.documentElement.lang = activeLanguage;
   document.documentElement.dir = 'ltr';
   translateSubtree(document);
   if (!languageObserver && typeof MutationObserver !== 'undefined') {

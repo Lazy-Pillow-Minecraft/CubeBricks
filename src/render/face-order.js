@@ -17,9 +17,13 @@ export function facesRemainDepthSorted(faces, eye, forward) {
   return true;
 }
 
-export function sortFacesByDepth(faces, eye, forward) {
-  return faces
-    .map((face, index) => ({ face, index, depth: faceCameraDepth(face, eye, forward) }))
-    .sort((left, right) => right.depth - left.depth || left.index - right.index)
-    .map(entry => entry.face);
+export function sortFacesByDepth(faces, eye, forward, scratch = null) {
+  const entries = scratch ? scratch.entries ||= [] : [];
+  entries.length = faces.length;
+  for (let index = 0; index < faces.length; index++) {
+    const entry = entries[index] ||= {};
+    entry.face = faces[index]; entry.index = index; entry.depth = faceCameraDepth(faces[index], eye, forward);
+  }
+  entries.sort((left, right) => right.depth - left.depth || left.index - right.index);
+  return entries.map(entry => entry.face);
 }

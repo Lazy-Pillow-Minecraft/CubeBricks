@@ -71,7 +71,6 @@
         <span class="project-state" id="projectState">未保存</span>
       </div>
       <nav class="main-menu" aria-label="主選單">
-        <button data-action="new">新建</button>
         <button data-action="open">打開</button>
         <button data-action="save">保存</button>
         <button data-action="undo">撤銷</button>
@@ -152,11 +151,12 @@
           <div class="paint-mode-picker" id="paintSelectionModeControl" hidden><span>選區</span><button type="button" id="paintSelectionModeButton" aria-expanded="false">拉框</button><div class="paint-tool-menu" id="paintSelectionModeMenu" hidden><button type="button" data-paint-selection-mode="rectangle">拉框</button><button type="button" data-paint-selection-mode="brush">塗抹</button><button type="button" data-paint-selection-mode="lasso">自由圈選</button></div><select id="paintSelectionMode" hidden><option value="rectangle">拉框</option><option value="brush">塗抹</option><option value="lasso">自由圈選</option></select></div>
           <label id="paintSelectionBrushControl" hidden><span>尺寸</span><input id="paintSelectionBrushSize" type="number" min="1" max="128" value="18" /></label>
           <label id="paintSelectionSymmetryControl" hidden title="選區跟隨繪畫對稱"><input id="paintSelectionSymmetry" type="checkbox" /><span>對稱</span></label>
-          <label id="paintSelectionTransformControl" hidden><span>操作</span><select id="paintSelectionTransformMode"><option value="move">移動</option><option value="rotate">旋轉</option></select></label>
-          <label id="paintSelectionFreeRotateControl" hidden title="旋轉時解除 90° 吸附"><input id="paintSelectionFreeRotate" type="checkbox" /><span>自由旋轉</span></label>
           <button id="paintSelectionCopy" type="button" hidden title="保留原像素，下次變換時複製選中像素">複製像素：關</button>
           <button id="paintSelectionRotateLeft" type="button" hidden title="選中像素逆時針旋轉 90°">↶ 90°</button>
           <button id="paintSelectionRotateRight" type="button" hidden title="選中像素順時針旋轉 90°">↷ 90°</button>
+          <button id="paintSelectionFlipX" type="button" hidden title="左右鏡像">↔</button>
+          <button id="paintSelectionFlipY" type="button" hidden title="上下鏡像">↕</button>
+          <label id="paintSelectionSamplingControl" hidden><span>旋轉採樣</span><select id="paintSelectionSampling"><option value="nearest">最近鄰</option><option value="smooth">平滑</option></select></label>
           <button id="paintSelectionClear" type="button" hidden>清除選區</button>
           <label id="paintEraseControl" title="目前工具以設定透明度擦除像素" hidden><input id="paintEraseMode" type="checkbox" /><span>擦除</span></label>
           <label title="目前工具的尺寸"><span>尺寸</span><input id="paintBrushSize" type="number" min="1" max="64" step="1" value="1" /></label>
@@ -178,9 +178,9 @@
       </div>
       <div class="toolbar-lane global-options-lane" aria-label="全局選項">
         <div class="mode-tabs" role="tablist">
-          <button class="mode-tab active" data-mode="edit"><span>◇</span> 編輯</button>
+          <button class="mode-tab active" data-mode="edit"><span class="ui-mask-icon" aria-hidden="true"></span> 編輯</button>
           <button class="mode-tab" data-mode="uv" id="uvModeTab" hidden><span>▱</span> UV</button>
-          <button class="mode-tab" data-mode="paint"><span>◒</span> 繪畫</button>
+          <button class="mode-tab" data-mode="paint"><span class="ui-mask-icon" aria-hidden="true"></span> 繪畫</button>
           <button class="mode-tab" data-mode="animate"><span>⌁</span> 動畫</button>
         </div>
       </div>
@@ -194,9 +194,8 @@
           <div class="panel-heading-actions"></div>
         </div>
         <div class="panel-control-strip texture-control-strip" aria-label="貼圖操作">
-          <button data-action="createTexture" title="新建貼圖">＋ 新建</button>
-          <button data-action="addTexture" title="導入貼圖">↥ 導入</button>
-          <button data-action="addTextureGroup" title="新增貼圖組">▰＋ 組</button>
+          <button data-action="createTexture" title="新建貼圖"><span class="ui-mask-icon" aria-hidden="true"></span><span>新建</span></button>
+          <button data-action="addTexture" title="導入貼圖"><span class="ui-mask-icon" aria-hidden="true"></span><span>導入</span></button>
         </div>
         <div class="texture-face-selector" aria-label="UV 面選擇">
           <button type="button" data-texture-face="north" title="選中全部北面">北</button>
@@ -341,6 +340,7 @@
             <button class="axis-z axis-negative" data-view-axis="z" data-axis-sign="-1" title="背視圖 (−Z)" aria-label="背視圖 (−Z)"></button>
           </div>
           <div class="view-hint" id="viewHint"><kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心</div>
+          <div class="scene-fps" id="sceneFps" translate="no">— FPS</div>
           <div class="selection-badge"><span id="selectionType">Cube</span><strong id="selectionName">body</strong></div>
         </div>
         <aside class="dock-zone dock-zone-bottom" data-dock-zone="bottom" aria-label="底部停靠區">
@@ -419,7 +419,7 @@
           </div>
           <div id="textureFrameProgress" class="texture-frame-progress" hidden>
             <div class="texture-frame-track"><input type="range" id="textureFramePosition" min="0" max="1" step="0.001" value="0" aria-label="幀進度"><div id="textureFrameTicks" class="texture-frame-ticks"></div></div>
-            <div class="texture-frame-status"><span id="textureFramePositionLabel"></span><button type="button" id="textureFramePlay" aria-label="播放">▶</button><span id="textureFrameTotalLabel"></span></div>
+            <div class="texture-frame-status"><span id="textureFramePositionLabel"></span><button type="button" id="textureFramePlay" aria-label="播放" aria-pressed="false"><span class="ui-mask-icon" aria-hidden="true"></span></button><span id="textureFrameTotalLabel"></span></div>
           </div>
         </section>
       </aside>
@@ -436,14 +436,6 @@
       <label class="toolbar-check" title="生成物以 75% 可見度的獨立圖層顯示，後方模型與網格可透出；同時禁止選取及頂點捕捉"><input type="checkbox" id="modifierResultGhostToggle" /><span>◈</span> 修改器結果虛化</label>
     </div>
   </div>
-
-  <dialog id="newProjectDialog" class="theme-dialog new-project-dialog">
-    <form method="dialog">
-      <div class="dialog-heading"><div><span class="eyebrow">NEW PROJECT</span><h2>新建項目</h2></div><button value="cancel" class="close-button">×</button></div>
-      <p>選擇模型格式；格式會提供工程初始資料、能力與標準吸附參數。</p>
-      <div class="model-format-list" id="modelFormatList"></div>
-    </form>
-  </dialog>
 
   <dialog id="projectInfoDialog" class="theme-dialog project-info-dialog">
     <form id="projectInfoForm">
@@ -487,7 +479,7 @@
           <section class="settings-page active" data-settings-panel="general">
             <div class="settings-page-heading"><strong>一般</strong><span>介面、視口與編輯行為</span></div>
             <div class="theme-grid">
-              <label class="config-select-label"><span>介面語言<small>application.language</small></span><select id="languageSelect" aria-label="介面語言"><option value="zh-Hant">繁體中文</option><option value="zh-Hans">简体中文</option><option value="en">English</option></select></label>
+              <label class="config-select-label"><span>介面語言<small>application.language</small></span><select id="languageSelect" aria-label="介面語言"><option value="system">系統語言</option><option value="zh-Hant">繁體中文</option><option value="zh-Hans">简体中文</option><option value="en">English</option></select></label>
               <div class="player-reference-texture-setting"><div><strong>資源包</strong><small>字體、語言與 Shape 包共用管理視窗；包內容分開載入</small></div><div class="player-reference-texture-actions"><button type="button" id="openPacksButton">管理資源包</button></div></div>
               <label class="config-toggle-label"><span>獨立 UV 編輯模式<small>editor.separate-uv-mode</small></span><input type="checkbox" data-config-key="editor.separate-uv-mode" /></label>
               <label class="config-toggle-label"><span>Blockbench 風格操作<small>左鍵拖動旋轉、右鍵拖動平移；Shift + 左鍵框選</small></span><input type="checkbox" data-config-key="editor.blockbench-controls" /></label>

@@ -1,13 +1,19 @@
 import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './common/config/model-formats.js';
 import { modifierRegistry } from './common/config/modifiers.js';
 import { operatorRegistry } from './common/config/operators.js';
-import { constrainCube, formatRules } from './common/core/format-constraints.js';
+import { constrainCube, formatRules, projectSizeBounds, bedrockLimitBox } from './common/core/format-constraints.js';
+import { foldJavaCubeRotation } from './utils/math/cube-quarter-turn.js';
+import { bindFormatContext, invokeFormatHook } from './common/core/format-hooks.js';
+import { constrainProceduralCubes, constrainElementCube, proceduralShapeSupported, proceduralCubeWorld } from './common/core/procedural-format.js';
 import { normalizeJavaBlockVersion, blockbenchJavaVersion } from './common/core/java-block-version.js';
 import { shapeRegistry } from './shapes/builtins.js';
 import { DODECAHEDRON_UNIT_FACES, TRUNCATED_ICOSAHEDRON_UNIT_FACES, regularPolyhedronCubes } from './utils/shape/polyhedron-geometry.js';
 import { bezierCubes } from './utils/shape/bezier-geometry.js';
 import { shapePackUtils } from './utils/index.js';
 import { loadAppliedTransform, translateAppliedPositionBaseline } from './common/core/applied-transform.js';
+import { CubeOverlapIndex } from './model/cube-overlap-index.js';
+import { materializeFormatCubeRotations } from './model/format-materialization.js';
+import { materializeJavaProceduralDocument } from './model/formats/procedural-format-export.js';
 
 const uid = (prefix = 'obj') => `${prefix}_${crypto.randomUUID()}`;
 // Blockbench's standard marker palette (pastel viewport colours).
@@ -209,6 +215,7 @@ export function getModifier(owner, type) {
 export function addModifier(owner, type, data = {}, project = null) {
   if (!owner) return null;
   const definition = modifierRegistry.get(type);
+  if (project && definition?.supportsFormat(formatRules(project)) === false) return null;
   if (definition?.allowMultiple === false && getModifier(owner, type)) return null;
   const modifier = modifierRegistry.create(type, owner.type, data);
   if (!modifier) return null;
@@ -231,6 +238,7 @@ export function addModifier(owner, type, data = {}, project = null) {
   }
   owner.modifiers ||= [];
   owner.modifiers.push(modifier);
+  if (project) invokeFormatHook('modifier', type, modifier, { phase: 'parameters', project, owner, rules: formatRules(project) });
   return modifier;
 }
 
@@ -335,7 +343,8 @@ export class Shape {
     this.operators = normalizeOperatorList(data.operators, this.type, this.pivot);
   }
 
-  toBaseCubes() {
+  toBaseCubes(project = null) {
+    if (!proceduralShapeSupported(this, project)) return [];
     const definition = shapeRegistry.get(this.shapeType);
     if (!definition) return [];
     try {
@@ -358,7 +367,12 @@ export class Shape {
   }
 
 
-  toCubes() { return applySubdivisionEdits(this.toBaseCubes(), this); }
+  toFormatBaseCubes(project = null) { return constrainProceduralCubes(this, this.toBaseCubes(project), project); }
+
+  toCubes(project = null) {
+    const cubes = applySubdivisionEdits(this.toFormatBaseCubes(project), this);
+    return Object.keys(this.subdivisionEdits || {}).length ? constrainProceduralCubes(this, cubes, project) : cubes;
+  }
 }
 
 export function pointInRegularPolygon(point, radius, sides) {
@@ -685,7 +699,12 @@ export class BezierElement {
 
 
 
-  toCubes() { return applySubdivisionEdits(this.toBaseCubes(), this); }
+  toFormatBaseCubes(project = null) { return constrainProceduralCubes(this, this.toBaseCubes(), project); }
+
+  toCubes(project = null) {
+    const cubes = applySubdivisionEdits(this.toFormatBaseCubes(project), this);
+    return Object.keys(this.subdivisionEdits || {}).length ? constrainProceduralCubes(this, cubes, project) : cubes;
+  }
 }
 
 export class Locator {
@@ -1003,6 +1022,20 @@ export class CubeBricksProject {
     });
     this.normalizeHierarchy();
     this.meta = { createdWith: 'CubeBricks', modifiedAt: new Date().toISOString(), ...(data.meta || {}) };
+    for (const node of [...this.elements, ...this.groups]) bindFormatContext(node, { project: this });
+    const rules = formatRules(this);
+    if (rules.javaBlock || rules.moddedEntity || rules.bedrockBlock) {
+      for (const owner of this.elements) {
+        if (typeof owner.toCubes === 'function') invokeFormatHook('shape', owner.shapeType || owner.type, owner,
+          { phase: 'parameters', owner, rules, project: this });
+      }
+      this.updateFormatDomain();
+      const evaluation = new Map();
+      for (const owner of [...this.elements, ...this.groups]) {
+        for (const modifier of owner.modifiers || []) invokeFormatHook('modifier', modifier.type, modifier,
+          { phase: 'parameters', owner, rules, project: this, evaluation });
+      }
+    }
   }
 
   normalizeHierarchy() {
@@ -1021,6 +1054,113 @@ export class CubeBricksProject {
   }
 
   get hierarchyRevision() { return this._hierarchyRevision; }
+
+  getFormatSourcePoints(owner, modifier, evaluation = new Map()) {
+    const key = `format-source:${owner.uid}:${modifier.uid}`;
+    if (evaluation.has(key)) return evaluation.get(key);
+    const points = [], boxes = [], rules = formatRules(this);
+    const cutoff = owner.modifiers?.findIndex(entry => entry.uid === modifier.uid) ?? -1;
+    const prefix = { ...owner, modifiers: (owner.modifiers || []).slice(0, Math.max(0, cutoff)) };
+    for (const sourceUid of symmetrySourceUids(this, owner)) {
+      const element = this.getNode(sourceUid);
+      if (!element || ['node', 'locator'].includes(element.type)) continue;
+      const owners = modifierEvaluationOwners(this, element, owner);
+      const variants = evaluateModifierStack(this, owners.map(entry => entry.uid === owner.uid ? prefix : entry), null, evaluation);
+      for (const source of sourceCubeEntries(this, element)) {
+        if (rules.javaBlock) {
+          for (const variant of [{ affine: affineIdentity() }, ...variants.filter(variant => !affineIsIdentity(variant.affine))]) {
+            const cube = bakedCubeFromWorld(source, variant.affine, []);
+            if (rules.singleAxisRotation) foldJavaCubeRotation(cube, rules);
+            boxes.push({ position: cube.position, size: cube.size, pivot: cube.pivot, rotation: cube.rotation });
+            for (let mask = 0; mask < 8; mask++) points.push(cube.position.map((value, axis) => value + ((mask >> axis) & 1) * cube.size[axis]));
+          }
+          continue;
+        }
+        const corners = sourceWorldVertices(source);
+        points.push(...corners);
+        for (const variant of variants) if (!affineIsIdentity(variant.affine)) points.push(...corners.map(point => affinePoint(variant.affine, point)));
+      }
+    }
+    if (rules.javaBlock) Object.defineProperty(points, 'formatBoxes', { value: boxes });
+    evaluation.set(key, points);
+    return points;
+  }
+
+  transformFormatSourcePoints(points, matrix) {
+    if (!points.formatBoxes) return points.map(point => matrixVector(matrix, point));
+    const result = [], rules = formatRules(this);
+    for (const box of points.formatBoxes) {
+      const source = { cube: { ...box, uvMode: 'face' }, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: [0, 0, 0], chain: [] };
+      const cube = bakedCubeFromWorld(source, { matrix, translation: [0, 0, 0] }, []);
+      if (rules.singleAxisRotation) foldJavaCubeRotation(cube, rules);
+      for (let mask = 0; mask < 8; mask++) result.push(cube.position.map((value, axis) => value + ((mask >> axis) & 1) * cube.size[axis]));
+    }
+    return result;
+  }
+
+  isFormatSourceTransformValid(points, matrix) {
+    const rules = formatRules(this);
+    if (!rules.singleAxisRotation || !points.formatBoxes) return true;
+    return points.formatBoxes.every(box => {
+      const source = { cube: { ...box, uvMode: 'face' }, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: [0, 0, 0], chain: [] };
+      const cube = bakedCubeFromWorld(source, { matrix, translation: [0, 0, 0] }, []);
+      return foldJavaCubeRotation(cube, { ...rules, strict: true });
+    });
+  }
+
+  getFormatDomain(evaluation = new Map()) {
+    if (formatRules(this).javaBlock) return { min: [-16, -16, -16], max: [32, 32, 32] };
+    if (!evaluation.has('format-domain')) {
+      const center = this.formatData.bedrockConstraintCenter;
+      evaluation.set('format-domain', center ? { min: center.map(value => value - 15), max: center.map(value => value + 15) }
+        : bedrockLimitBox(projectSizeBounds(this, { includeModifiers: false })));
+    }
+    return evaluation.get('format-domain');
+  }
+
+  updateFormatDomain() {
+    if (!formatRules(this).bedrockBlock) return;
+    const bounds = projectSizeBounds(this, { includeModifiers: false }), center = this.formatData.bedrockConstraintCenter;
+    if (Array.isArray(center) && center.length === 3 && center.every(Number.isFinite)
+      && center.every((value, axis) => value >= [-7, 1, -7][axis] && value <= [7, 15, 7][axis])
+      && (!bounds || center.every((value, axis) => bounds.min[axis] >= value - 15 - 1e-7 && bounds.max[axis] <= value + 15 + 1e-7))) return;
+    const box = bedrockLimitBox(bounds);
+    this.formatData.bedrockConstraintCenter = box.min.map(value => value + 15);
+  }
+
+  getSymmetryFormatMatrices(owner, modifier) {
+    const frame = symmetryWorldFrame(this, owner, modifier);
+    return symmetryInstanceDefinitions(owner, modifier, frame.matrix).map(entry => entry.matrix);
+  }
+
+  getProceduralFormatBox(element, cube) {
+    const world = proceduralCubeWorld(element, cube, this), rules = formatRules(this);
+    if (rules.javaBlock && rules.singleAxisRotation) foldJavaCubeRotation(world, rules);
+    return world;
+  }
+
+  getModifierFormatBounds({ raw = false } = {}) {
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    const sources = new Map();
+    for (const instance of buildModifierRenderInstances(this)) for (const sourceUid of instance.sourceUids) {
+      let entries = sources.get(sourceUid);
+      if (!entries) { entries = sourceCubeEntries(this, this.getNode(sourceUid)); sources.set(sourceUid, entries); }
+      for (const source of entries) {
+        const indices = instance.cubeIndices[sourceUid];
+        if (indices && !indices.includes(source.index)) continue;
+        let points;
+        if (raw) {
+          const cube = bakedCubeFromWorld(source, { matrix: instance.matrix, translation: instance.translation }, []);
+          if (formatRules(this).singleAxisRotation) foldJavaCubeRotation(cube, formatRules(this));
+          points = Array.from({ length: 8 }, (_, mask) => cube.position.map((value, axis) => value + ((mask >> axis) & 1) * cube.size[axis]));
+        } else points = sourceWorldVertices(source).map(point => instance.matrix.map((row, axis) => row.reduce((sum, value, col) => sum + value * point[col], instance.translation[axis])));
+        for (const transformed of points) {
+          for (let axis = 0; axis < 3; axis++) { min[axis] = Math.min(min[axis], transformed[axis]); max[axis] = Math.max(max[axis], transformed[axis]); }
+        }
+      }
+    }
+    return min[0] === Infinity ? null : { min, max };
+  }
 
   ensureNodeIndex() {
     if (this._nodeIndex
@@ -1078,6 +1218,7 @@ export class CubeBricksProject {
   }
 
   addElement(element, parentUid = null) {
+    bindFormatContext(element, { project: this });
     this.elements.push(element);
     const parent = parentUid && this.getNode(parentUid);
     (parent ? parent.children : this.outliner).push(element.uid);
@@ -1086,6 +1227,7 @@ export class CubeBricksProject {
   }
 
   addGroup(group, parentUid = null) {
+    bindFormatContext(group, { project: this });
     if (group.unnamed) group.name = allocateGroupName(this);
     this.groups.push(group);
     const parent = parentUid && this.getNode(parentUid);
@@ -1186,7 +1328,8 @@ function setGroupRotationPreservingGeometry(project, group, nextRotation) {
 export function bakeProceduralShape(project, shapeUid, generatedCubes = null) {
   const owner = project.getNode(shapeUid);
   if (!owner || owner.type === 'cube' || typeof owner.toCubes !== 'function') return null;
-  const generated = generatedCubes || owner.toCubes();
+  if (!proceduralShapeSupported(owner, project)) return null;
+  const generated = generatedCubes || owner.toCubes(project);
   if (!generated.length) return null;
   const parent = project.getParentGroup(owner.uid);
   const siblings = parent ? parent.children : project.outliner;
@@ -1206,7 +1349,6 @@ export function bakeProceduralShape(project, shapeUid, generatedCubes = null) {
     locked: owner.locked === true || source.locked === true,
     exported: owner.exported !== false && source.exported !== false
   }));
-  cubes.forEach(cube => constrainCube(cube, formatRules(project)));
   const group = new Group({
     uid: uid('group'), name: owner.name, unnamed: false,
     pivot: [...(owner.pivot || offset)], rotation: [...(owner.rotation || [0, 0, 0])],
@@ -1251,6 +1393,8 @@ export function bakeProceduralShape(project, shapeUid, generatedCubes = null) {
       setGroupRotationPreservingGeometry(project, layer, nextRotation);
     });
   }
+  const rules = formatRules(project);
+  if (rules.moddedEntity || rules.javaBlock) nestedGroups.push(...materializeFormatCubeRotations(project, cubes, data => new Group(data), rules));
   return { group, cubes, nestedGroups };
 }
 
@@ -1452,7 +1596,7 @@ function matrixEuler(matrix) {
   const cosine = Math.cos(y);
   const x = Math.abs(cosine) > 1e-7 ? Math.atan2(matrix[2][1], matrix[2][2]) : 0;
   const z = Math.abs(cosine) > 1e-7 ? Math.atan2(matrix[1][0], matrix[0][0]) : Math.atan2(-matrix[0][1], matrix[1][1]);
-  return [x, y, z].map(value => Math.round(value * 180 / Math.PI * 10000) / 10000);
+  return [x, y, z].map(value => Math.round(value * 180 / Math.PI * 1e8) / 1e8);
 }
 function transformAround(point, center, matrix) {
   const offset = point.map((value, axis) => value - center[axis]);
@@ -1631,7 +1775,7 @@ function rebaseCopyNode(project, oldOwner, newOwner, node, parentChain, bakedAft
 
 function sourceCubeEntries(project, element) {
   if (element.type === 'locator' || element.type === 'node') return [];
-  const cubes = typeof element.toCubes === 'function' ? element.toCubes() : element.type === 'cube' ? [element] : [];
+  const cubes = typeof element.toCubes === 'function' ? element.toCubes(project) : element.type === 'cube' ? [constrainElementCube(project, element)] : [];
   const chain = project.getGroupChain(element.uid);
   const chainFrames = [...chain].reverse().map(group => ({ pivot: group.pivot, matrix: rotationMatrix(group.rotation || [0, 0, 0]) }));
   const groupInflate = chain.reduce((sum, group) => sum + (Number(group.inflate) || 0), 0);
@@ -1684,13 +1828,13 @@ function cubeVertexKey(source, affine = null) {
 }
 
 function originalCubeKeys(project, sourcesByUid = null, excludedUids = null) {
-  const keys = new Set();
+  const keys = new CubeOverlapIndex(sourceWorldVertices);
   for (const element of project.elements) {
     if (excludedUids?.has(element.uid)) continue;
     if (element.visible === false || project.getGroupChain(element.uid).some(group => group.visible === false)) continue;
     const sources = sourceCubeEntries(project, element);
     sourcesByUid?.set(element.uid, sources);
-    for (const source of sources) keys.add(cubeVertexKey(source));
+    for (const source of sources) keys.add(keys.key(source));
   }
   return keys;
 }
@@ -1708,11 +1852,15 @@ function modifierEvaluationOwners(project, element, terminalOwner = null, includ
   return owners.slice(0, index + (includeTerminal ? 1 : 0));
 }
 
-function evaluateModifierStack(project, owners, initialVariants = null) {
+function evaluateModifierStack(project, owners, initialVariants = null, evaluation = new Map()) {
   let variants = initialVariants || [{ affine: affineIdentity(), modifierUids: [], names: [] }];
+  const rules = formatRules(project);
   for (const owner of owners) {
-    for (const modifier of owner.modifiers || []) {
-      if (!modifier?.enabled) continue;
+    for (const original of owner.modifiers || []) {
+      if (!original?.enabled) continue;
+      if (modifierRegistry.get(original.type)?.supportsFormat(rules) === false) continue;
+      const modifier = modifierRegistry.get(original.type)?.hasFormatHook ? cloneData(original) : original;
+      invokeFormatHook('modifier', modifier.type, modifier, { phase: 'parameters', rules, owner, project, evaluation });
       if (modifier.type === 'element_copy') {
         const definitions = [{ affine: affineIdentity(), name: null, nodeUid: null },
           ...(modifier.nodes || []).map((node, index) => ({ affine: copyNodeAffine(project, owner, node), name: `copy_${index + 1}`, nodeUid: node.uid }))];
@@ -1753,13 +1901,17 @@ export function buildModifierRenderInstances(project) {
   const byTransform = new Map();
   const sourceUidsByInstance = new WeakMap();
   const sourcesByUid = new Map();
+  const variantsByOwners = new Map();
   const deduplicate = [...project.elements, ...project.groups].some(owner =>
     owner.modifiers?.some(modifier => modifier?.enabled && modifier.type === 'symmetry' && modifier.ignoreDuplicateCubes));
   const occupied = deduplicate ? originalCubeKeys(project, sourcesByUid) : null;
   for (const element of project.elements) {
     const owners = modifierEvaluationOwners(project, element);
     if (element.visible === false || owners.some(owner => owner.visible === false)) continue;
-    const variants = evaluateModifierStack(project, owners);
+    const activeOwners = owners.filter(owner => owner.modifiers?.some(modifier => modifier?.enabled));
+    const ownersKey = JSON.stringify(activeOwners.map(owner => owner.uid));
+    let variants = variantsByOwners.get(ownersKey);
+    if (!variants) { variants = evaluateModifierStack(project, activeOwners); variantsByOwners.set(ownersKey, variants); }
     for (const variant of variants) {
       if (affineIsIdentity(variant.affine)) continue;
       const key = affineKey(variant.affine);
@@ -1789,7 +1941,7 @@ export function buildModifierRenderInstances(project) {
       const ignoreDuplicates = variantIgnoresDuplicates(owners, variant);
       const include = sources.filter(source => {
         if (!occupied) return true;
-        const vertexKey = cubeVertexKey(source, variant.affine);
+        const vertexKey = occupied.key(source, variant.affine);
         if (ignoreDuplicates && occupied.has(vertexKey)) return false;
         occupied.add(vertexKey);
         return true;
@@ -1867,6 +2019,30 @@ function bakeNestedEnvelopeDescendants(project, owner) {
 }
 
 export function bakeModifier(project, owner, modifierUid) {
+  if (!project || !owner) return null;
+  for (const sourceUid of symmetrySourceUids(project, owner)) {
+    const element = project.getNode(sourceUid);
+    if (typeof element?.toCubes === 'function' && !proceduralShapeSupported(element, project)) return null;
+  }
+  const modifier = owner?.modifiers?.find(entry => entry.uid === modifierUid);
+  if (modifierRegistry.get(modifier?.type)?.supportsFormat(formatRules(project)) === false) return null;
+  if (modifier) invokeFormatHook('modifier', modifier.type, modifier,
+    { phase: 'parameters', owner, project, rules: formatRules(project) });
+  const existing = new Set(project.elements.map(node => node.uid));
+  const result = bakeModifierResult(project, owner, modifierUid);
+  const rules = formatRules(project);
+  if (result && (rules.moddedEntity || rules.javaBlock)) {
+    const affected = new Set([...(result.elementUids || []), ...(result.copiedElementUids || [])]);
+    const groups = materializeFormatCubeRotations(project, project.elements.filter(node => node.type === 'cube'
+      && (!existing.has(node.uid) || affected.has(node.uid))), data => new Group(data), rules);
+    const root = groups.find(group => group.children.includes(result.rootUid));
+    if (root) result.rootUid = root.uid;
+    result.groupUids.push(...groups.map(group => group.uid));
+  }
+  return result;
+}
+
+function bakeModifierResult(project, owner, modifierUid) {
   let modifier = owner?.modifiers?.find(entry => entry.uid === modifierUid);
   if (!project || !owner || !modifier?.enabled) return null;
   if (modifier.type === 'element_copy') {
@@ -2003,7 +2179,7 @@ export function bakeModifier(project, owner, modifierUid) {
       ? symmetryWorldFrame(project, owner, entry) : null);
     const generated = [];
     for (const variant of selectedVariants) {
-      const vertexKey = occupied ? cubeVertexKey(source, variant.affine) : null;
+      const vertexKey = occupied ? occupied.key(source, variant.affine) : null;
       if (occupied && modifier.ignoreDuplicateCubes && !affineIsIdentity(variant.affine)
         && occupied.has(vertexKey)) continue;
       if (occupied) occupied.add(vertexKey);
@@ -2192,7 +2368,7 @@ export function bakeModifier(project, owner, modifierUid) {
       for (const inner of innerVariants) {
         const combined = affineCompose(affine, inner.affine);
         for (const source of sources) {
-          const vertexKey = occupied ? cubeVertexKey(source, combined) : null;
+          const vertexKey = occupied ? occupied.key(source, combined) : null;
           if (occupied && (modifier.ignoreDuplicateCubes
             || variantIgnoresDuplicates(modifierEvaluationOwners(project, element, owner, false), inner))
             && !affineIsIdentity(combined) && occupied.has(vertexKey)) continue;
@@ -2245,6 +2421,7 @@ function bakeSymmetryForExport(sourceProject) {
     if (!result) break;
     if (!result.groupUids.length) continue;
     const root = project.getNode(result.rootUid);
+    if (root?.type !== 'group' || root.rotation.some(value => Math.abs(value) > 1e-6)) continue;
     if (result.mergedRoot || hasSymmetryAncestor || modifier.wrapParent !== false ||
       root.modifiers.some(entry => entry?.enabled && entry.type === 'symmetry')) continue;
     // A zero-rotation baking container is useful in the editor, but an
@@ -2287,6 +2464,14 @@ function bakeSymmetryForExport(sourceProject) {
 }
 
 export function exportBlockbench(project, textureAssets = []) {
+  for (const element of project.elements) if (typeof element.toCubes === 'function' && !proceduralShapeSupported(element, project)) {
+    throw new Error('当前模型格式暂不支持此 Shape');
+  }
+  const exportRules = formatRules(project);
+  if (exportRules.moddedEntity) {
+    project = new CubeBricksProject(structuredClone({ ...project, referenceImages: {} }));
+    materializeFormatCubeRotations(project, project.elements.filter(node => node.type === 'cube'), data => new Group(data));
+  }
   project = bakeSymmetryForExport(project);
   const elements = [];
   const exportedElementIds = new Set();
@@ -2296,12 +2481,13 @@ export function exportBlockbench(project, textureAssets = []) {
     elements.push(element);
   };
   const proceduralGroup = element => {
-    const generated = element.toCubes().map(cube => constrainCube(cube, formatRules(project)));
+    if (!proceduralShapeSupported(element, project)) throw new Error('当前模型格式暂不支持此 Shape');
+    const generated = element.toCubes(project);
     const ancestors = project.getGroupChain(element.uid);
     const offset = element.origin || [0, 0, 0];
     const originalPivot = element.pivot || offset;
     const nestedEnvelope = element.variant === 'envelope' && element.parameters?.nestedBake && generated.length > 0;
-    if (nestedEnvelope) {
+    if (nestedEnvelope || formatRules(project).moddedEntity) {
       // Export the same nested hierarchy as manual baking. Its group rotations
       // carry the fitted cube orientations while the cube geometry is rebased.
       const scratch = new CubeBricksProject({ formatId: project.formatId, formatData: project.formatData,
@@ -2416,7 +2602,7 @@ export function exportBlockbench(project, textureAssets = []) {
     uv_height: texture.uvHeight || project.textureSize[1],
     use_as_default: texture.useAsDefault === true
   }));
-  return {
+  const document = {
     meta: {
       format_version: '4.10',
       model_format: project.modelType || 'free',
@@ -2439,4 +2625,5 @@ export function exportBlockbench(project, textureAssets = []) {
     }),
     textures
   };
+  return exportRules.javaBlock ? materializeJavaProceduralDocument(document, exportRules) : document;
 }

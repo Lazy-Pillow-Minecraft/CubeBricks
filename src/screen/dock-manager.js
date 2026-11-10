@@ -274,9 +274,9 @@ export class DockManager {
     for (const [id] of groups) {
       const members = this.stackMembers(id);
       const available = members.filter(panel => panel.modes.includes(this.mode));
-      const active = available.find(panel => panel.state.stackActive) || available[0];
+      // A fallback for this mode must not overwrite the saved tab.
+      const active = this.activeStackMember(members);
       for (const panel of members) {
-        panel.state.stackActive = panel === active;
         panel.element.classList.toggle('is-stack-inactive', panel !== active);
         panel.element.classList.add('is-stacked');
         let tabs = panel.handle?.querySelector('.dock-stack-tabs');
@@ -323,11 +323,16 @@ export class DockManager {
     }
   }
 
+  activeStackMember(members) {
+    const available = members.filter(panel => panel.modes.includes(this.mode));
+    return available.find(panel => panel.state.stackActive) || available[0];
+  }
+
   setStackActive(id, panelId) {
     const members = this.stackMembers(id);
     const next = members.find(panel => panel.id === panelId && panel.modes.includes(this.mode));
     if (!next) return;
-    const current = members.find(panel => panel.state.stackActive);
+    const current = this.activeStackMember(members);
     if (current) this.copyStackGeometry(current, members);
     for (const panel of members) panel.state.stackActive = panel === next;
     this.syncStacks();
@@ -340,13 +345,13 @@ export class DockManager {
     const id = panel.state.stackId;
     if (!id) return;
     const members = this.stackMembers(id);
-    if (panel.state.stackActive) this.copyStackGeometry(panel, members);
+    if (this.activeStackMember(members) === panel) this.copyStackGeometry(panel, members);
     panel.state.stackId = null;
     panel.state.stackOrder = 0;
     panel.state.stackActive = false;
     const remaining = members.filter(member => member !== panel);
     remaining.forEach((member, index) => { member.state.stackOrder = index; });
-    if (remaining.length) remaining[0].state.stackActive = true;
+    if (remaining.length && !remaining.some(member => member.state.stackActive)) remaining[0].state.stackActive = true;
     this.syncStacks();
   }
 

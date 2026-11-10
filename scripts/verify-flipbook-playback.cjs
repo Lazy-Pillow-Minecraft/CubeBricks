@@ -9,13 +9,14 @@ app.whenReady().then(async()=>{
   let report;try{
     const contents=BrowserWindow.getAllWindows()[0].webContents;
     if(contents.isLoading())await new Promise(resolve=>contents.once('did-finish-load',resolve));
-    report=await contents.executeJavaScript(`(async()=>{
+    report=await contents.executeJavaScript(`(async()=>{try{
       const $=s=>document.querySelector(s),wait=ms=>new Promise(r=>setTimeout(r,ms)),check=(v,m)=>{if(!v)throw Error(m);};
       const until=async(f,m)=>{for(let i=0;i<150;i++){if(await f())return;await wait(40);}throw Error(m);};
       await until(()=>!$('#startupCover'),'startup');$('[data-home-format="bedrock_entity"]').click();$('[data-action="addCube"]').click();
       $('[data-action="createTexture"]').click();$('#textureCreateType').value='solid';$('#textureCreateWidth').value='4';$('#textureCreateHeight').value='4';$('#textureCreateForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
       const {state}=await import('./editor/state.js'),core=await import('./common/core/texture-features.js'),frames=await import('./common/core/frame-links.js');
       await until(()=>state.textureAssets.length===1,'texture');$('.mode-tab[data-mode="paint"]').click();
+      $('[data-panel="outliner"] [data-stack-panel="layers"]')?.click();
       const asset=()=>state.textureAssets[0],make=color=>{const c=document.createElement('canvas');c.width=c.height=4;c.getContext('2d').fillStyle=color;c.getContext('2d').fillRect(0,0,4,4);return c;};
       const red=make('#ff0000'),blue=make('#0000ff'),green=make('#00ff00');
       asset().layers=[{uid:'red',name:'Red',visible:false,source:red.toDataURL(),opacity:100}, {uid:'group',type:'group',name:'Group',opacity:100},
@@ -50,7 +51,11 @@ app.whenReady().then(async()=>{
       bar.value='1.5';bar.dispatchEvent(new Event('input',{bubbles:true}));await wait(70);
       const mixed=color();check(mixed[0]>=126&&mixed[0]<=129&&mixed[2]>=126&&mixed[2]<=129&&mixed[3]===255,'fractional progress blends final frame images');
       const fps=$('[data-frame-fps]');fps.value='5';fps.dispatchEvent(new Event('change',{bubbles:true}));
-      bar.value='0';bar.dispatchEvent(new Event('input',{bubbles:true}));$('#textureFramePlay').click();await wait(170);$('#textureFramePlay').click();
+      const playIcon=()=>getComputedStyle($('#textureFramePlay')).getPropertyValue('--ui-icon');
+      check(playIcon().includes('play.svg'),'paused control displays play SVG');
+      bar.value='0';bar.dispatchEvent(new Event('input',{bubbles:true}));$('#textureFramePlay').click();
+      check(playIcon().includes('pause.svg'),'running control displays pause SVG');
+      await wait(170);$('#textureFramePlay').click();
       check(frames.textureFramePosition(asset())>.2&&frames.textureFramePosition(asset())<1.5,'playback uses elapsed time and configured FPS');
       check(!$('[data-toggle-frame-progress]'),'no timeline visibility switch');
       check($('#textureFrameTicks').children.length===3,'each frame has a timeline tick');
@@ -58,14 +63,15 @@ app.whenReady().then(async()=>{
       $('#textureFramePlay').click();await select(ids[0]);window.dispatchEvent(new Event('blur'));document.dispatchEvent(new Event('visibilitychange'));
       check($('#textureFramePlay').getAttribute('aria-pressed')==='true','selection, blur and visibility events do not pause playback');
       const held=frames.textureFramePosition(asset());await wait(80);check(frames.textureFramePosition(asset())!==held,'playback continues after other actions');$('#textureFramePlay').click();
-      await select(ids[0]);$('#closeLayerEditor').click();await wait(60);
-      const checkTimelinePlacement=()=>{
+      await select(ids[0]);$('#closeLayerEditor').click();
+      const checkTimelinePlacement=async()=>{
+        await until(()=>$('#textureFeatureControls').closest('.texture-layers-panel'),'layer list returns to its original dock');
         const panel=$('.texture-layers-panel'),list=panel.querySelector('.texture-layer-panel-scroll'),progress=$('#textureFrameProgress');
         check(list?.parentElement===panel&&progress.parentElement===panel,'layer list returns to its original dock');
         check(Boolean(list.compareDocumentPosition(progress)&Node.DOCUMENT_POSITION_FOLLOWING),'timeline stays below layer list after closing the editor');
       };
-      checkTimelinePlacement();
-      for(let i=0;i<3;i++){$('[data-open-layer-editor]').click();await wait(20);$('#closeLayerEditor').click();await wait(20);checkTimelinePlacement();}
+      await checkTimelinePlacement();
+      for(let i=0;i<3;i++){$('[data-open-layer-editor]').click();await wait(20);$('#closeLayerEditor').click();await checkTimelinePlacement();}
       check(!document.querySelector('[data-layer-visible]'),'main window hides global and frame-local visibility buttons');
       check($('[data-layer-row="red"]').classList.contains('frame-member'),'main window shows current frame membership');
       const before=structuredClone(asset().animation.frames[0]);$('[data-open-layer-editor]').click();await wait(40);
@@ -115,7 +121,7 @@ app.whenReady().then(async()=>{
         check(actual===(i%2?'255,0,0,255':'0,0,255,255'),'plain textures keep their own pixels after repeated switching');
       }
       return {ok:true,checks:['root links','per-frame visibility','global visibility preserved','paint target restriction and memory','timeline scrub','FPS playback','frame crossfade','main/child visibility UI','membership edges','independent frame copy','unlit composite picking','transparent ray traversal','Ctrl Alt picking',...extra]};
-    })()`);
+    }catch(error){return {ok:false,error:error.stack};}})()`);
     if(errors.length)throw Error(errors.join('\n'));
     const capture=await contents.capturePage();fs.mkdirSync(path.resolve('build/performance'),{recursive:true});fs.writeFileSync(path.resolve('build/performance/flipbook-playback.png'),capture.toPNG());
   }catch(error){report={ok:false,error:error.stack,errors};}

@@ -10,6 +10,7 @@ import { decodeNativeJson } from '../model/formats/native-json.js';
 import { importModdedJava } from '../model/formats/modded-java.js';
 import { loadRaster } from '../common/core/texture-features.js';
 import { splitTextureAnimation } from '../texture/animation-import.js';
+import { textureSnapshot } from './texture-snapshot.js';
 
 export function createProjectFileController({
   state, fileInput, projectTabsController, journalController,
@@ -98,28 +99,12 @@ async function serializeBbmodel(textureAssets, project = state.project) {
 }
 
 function serializeCbmodel(textureAssets = [], project = state.project, textureGroups = state.textureGroups,
-  { snapshotOwned = false } = {}) {
+  { snapshotOwned = false, compact = false } = {}) {
   const data = typeof project.serialize === 'function' ? JSON.parse(project.serialize())
     : snapshotOwned ? project : structuredClone(project);
   data.textureGroups = snapshotOwned ? textureGroups || [] : structuredClone(textureGroups || []);
-  data.textures = textureAssets.map((texture, index) => ({
-    uuid: texture.uuid || texture._uid || `texture_${index + 1}`,
-    id: texture.id || String(index),
-    name: texture.name || `texture_${index + 1}.png`,
-    source: texture.source,
-    mode: texture.mode || 'default',
-    layers: texture.layers ? snapshotOwned ? texture.layers : structuredClone(texture.layers) : null,
-    active_layer_uid: texture.activeLayerUid || null,
-    animation: texture.animation ? Object.fromEntries(Object.entries(texture.animation).filter(([key]) => !key.startsWith('_'))) : null,
-    uv_width: texture.uvWidth || data.textureSize[0],
-    uv_height: texture.uvHeight || data.textureSize[1],
-    use_as_default: texture.useAsDefault === true,
-    group_id: texture.groupId || null,
-    kind: texture.kind || 'IMAGE',
-    template_uv_independent: texture.templateUvIndependent ?? null,
-    external_file: texture.externalFile || null, namespace: texture.namespace || ''
-  }));
-  return JSON.stringify(data, null, 2);
+  data.textures = textureAssets.map((texture, index) => textureSnapshot(texture, index, data.textureSize, snapshotOwned));
+  return JSON.stringify(data, null, compact ? 0 : 2);
 }
 
 function loadProjectContent(content, filePath = '', resolvedTextures = [], journalId = null, options = {}) {

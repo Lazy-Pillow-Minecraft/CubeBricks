@@ -2,7 +2,7 @@
 export const UI_MESSAGES = Object.freeze({
   "ui.0": {
     "zhHant": "留空跟隨全域；0 只留目前狀態",
-    "zhHans": "留空跟随全域；0 只留当前状态",
+    "zhHans": "留空时沿用全局设置，填 0 只保留当前状态",
     "en": "Leave empty to follow the global setting; 0 keeps only the current state"
   },
   "ui.1-21-11-unrestricted": {
@@ -27,12 +27,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.2-mb": {
     "zhHant": "色卡檔案不能超過 2 MB",
-    "zhHans": "色卡档案不能超过 2 MB",
+    "zhHans": "色卡文件不能超过 2 MB",
     "en": "Color-map files cannot exceed 2 MB"
   },
   "ui.256": {
     "zhHant": "匯入後不能超過 256 行色卡",
-    "zhHans": "汇入后不能超过 256 行色卡",
+    "zhHans": "导入后最多可保留 256 张色卡",
     "en": "The imported palette cannot exceed 256 rows"
   },
   "ui.2d-bezier": {
@@ -57,7 +57,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.3d-color-space-curve-left-click-to-select-and-drag-nodes-or-handles-middle-drag-to-orbit-wheel-to-zo": {
     "zhHant": "三維色彩空間曲線；左鍵選擇和拖動節點、手柄，中鍵旋轉視角，滾輪縮放",
-    "zhHans": "三维色彩空间曲线；左键选择和拖动节点、手柄，中键旋转视角，滚轮缩放",
+    "zhHans": "左键选择并拖动节点或手柄，中键旋转视角，滚轮缩放",
     "en": "3D color-space curve; left-click to select and drag nodes or handles, middle-drag to orbit, wheel to zoom"
   },
   "ui.3d-enveloped-b-zier": {
@@ -67,7 +67,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.3d-painting": {
     "zhHant": "三維繪畫",
-    "zhHans": "三维绘画",
+    "zhHans": "三维绘制",
     "en": "3D painting"
   },
   "ui.8": {
@@ -92,7 +92,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.aa-edge": {
     "zhHant": "AA 邊緣",
-    "zhHans": "AA 边缘",
+    "zhHans": "边缘抗锯齿",
     "en": "AA edge"
   },
   "ui.absolute-value": {
@@ -102,7 +102,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.accent": {
     "zhHant": "強調色",
-    "zhHans": "强调色",
+    "zhHans": "主题色",
     "en": "Accent"
   },
   "ui.action": {
@@ -152,7 +152,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.add-frame-element": {
     "zhHant": "新增幀元素",
-    "zhHans": "新增幀元素",
+    "zhHans": "新增帧",
     "en": "Add frame element"
   },
   "ui.add-group": {
@@ -167,7 +167,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.add-locator": {
     "zhHant": "新增 Locator",
-    "zhHans": "新增 Locator",
+    "zhHans": "新增 定位器",
     "en": "Add locator"
   },
   "ui.add-modifier": {
@@ -187,7 +187,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.add-palette-row": {
     "zhHant": "新增色卡行",
-    "zhHans": "新增色卡行",
+    "zhHans": "新建色卡",
     "en": "Add palette row"
   },
   "ui.add-reference-image": {
@@ -195,19 +195,24 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "加入参考图",
     "en": "Add reference image"
   },
+  "ui.add-resource-pack-dialog": {
+    "zhHant": "加入資源包",
+    "zhHans": "添加资源包",
+    "en": "Add Resource Pack"
+  },
   "ui.add-row": {
     "zhHant": "＋ 新增一行",
-    "zhHans": "＋ 新增一行",
+    "zhHans": "＋ 新建色卡",
     "en": "+ Add row"
   },
   "ui.add-row-2": {
     "zhHant": "新增一行",
-    "zhHans": "新增一行",
+    "zhHans": "新建色卡",
     "en": "Add row"
   },
   "ui.add-shape": {
     "zhHant": "新增 Shape",
-    "zhHans": "新增 Shape",
+    "zhHans": "新增 形状",
     "en": "Add shape"
   },
   "ui.add-shape-2": {
@@ -227,7 +232,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.added-label-shape": {
     "zhHant": "已新增${label} Shape",
-    "zhHans": "已新增${label} Shape",
+    "zhHans": "已新增${label} 形状",
     "en": "Added ${label} Shape"
   },
   "ui.added-state-paintcolor-to-row-name": {
@@ -247,7 +252,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.all-faces-were-culled-the-cube-was-deleted": {
     "zhHant": "全部面已剔除，Cube 已刪除",
-    "zhHans": "全部面已剔除，Cube 已删除",
+    "zhHans": "全部面已剔除，立方体 已删除",
     "en": "All faces were culled; the cube was deleted"
   },
   "ui.all-options-apply-immediately-and-are-saved-on-this-computer-through-the-configuration-registry": {
@@ -257,7 +262,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.allow-cube-dimensions-to-cross-zero-into-negative-values": {
     "zhHant": "允許 Cube 尺寸越過零變成負值",
-    "zhHans": "允许 Cube 尺寸越过零变成负值",
+    "zhHans": "允许 立方体 尺寸越过零变成负值",
     "en": "Allow Cube dimensions to cross zero into negative values."
   },
   "ui.allow-negative-size": {
@@ -267,7 +272,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.alpha-lock": {
     "zhHant": "鎖透明",
-    "zhHans": "锁透明",
+    "zhHans": "锁定透明度",
     "en": "Alpha lock"
   },
   "ui.amber": {
@@ -277,7 +282,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.an-animation-frame-index-is-outside-the-texture": {
     "zhHant": "動畫幀索引超出貼圖範圍",
-    "zhHans": "动画幀索引超出贴图范围",
+    "zhHans": "动画帧索引超出贴图范围",
     "en": "An animation frame index is outside the texture"
   },
   "ui.angle": {
@@ -312,7 +317,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.animation-dimensions-and-timing-must-be-positive-integers": {
     "zhHant": "動畫尺寸與時間必須是正整數",
-    "zhHans": "动画尺寸与时间必须是正整数",
+    "zhHans": "动画尺寸和帧时长必须为正整数",
     "en": "Animation dimensions and timing must be positive integers"
   },
   "ui.animation-editing": {
@@ -332,7 +337,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.animation-frame-dimensions-do-not-divide-the-texture-evenly": {
     "zhHant": "動畫單幀尺寸無法整齊切分貼圖",
-    "zhHans": "动画单幀尺寸无法整齐切分贴图",
+    "zhHans": "贴图宽高必须是单帧宽高的整数倍",
     "en": "Animation frame dimensions do not divide the texture evenly"
   },
   "ui.antialiased-round-brush-edge": {
@@ -347,32 +352,32 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.appearance-applied": {
     "zhHant": "外觀已套用",
-    "zhHans": "外观已套用",
+    "zhHans": "外观已应用",
     "en": "Appearance applied"
   },
   "ui.application-history-limit-0-10000": {
     "zhHant": "application.history-limit · 0–10000 筆",
-    "zhHans": "application.history-limit · 0–10000 笔",
+    "zhHans": "0～10000 条，设为 0 时只保留当前状态",
     "en": "application.history-limit · 0–10000 entries"
   },
   "ui.applied-color": {
     "zhHant": "已套用 ${color}",
-    "zhHans": "已套用 ${color}",
+    "zhHans": "已应用 ${color}",
     "en": "Applied ${color}"
   },
   "ui.applied-the-texture-to-the-cubes-length-cube-uv-face-labels-hit-facename-hit-facename": {
     "zhHant": "已將貼圖套用到 ${cubes.length} 個 Cube 的${UV_FACE_LABELS[hit.faceName] || hit.faceName}",
-    "zhHans": "已将贴图套用到 ${cubes.length} 个 Cube 的${UV_FACE_LABELS[hit.faceName] || hit.faceName}",
+    "zhHans": "已将贴图应用到 ${cubes.length} 个 立方体 的${UV_FACE_LABELS[hit.faceName] || hit.faceName}",
     "en": "Applied the texture to the  ${cubes.length} 個 Cube 的${UV_FACE_LABELS[hit.faceName] || hit.faceName}"
   },
   "ui.applied-the-texture-to-the-uv-face-labels-hit-facename-hit-facename": {
     "zhHant": "已將貼圖套用到${UV_FACE_LABELS[hit.faceName] || hit.faceName}",
-    "zhHans": "已将贴图套用到${UV_FACE_LABELS[hit.faceName] || hit.faceName}",
+    "zhHans": "已将贴图应用到${UV_FACE_LABELS[hit.faceName] || hit.faceName}",
     "en": "Applied the texture to the ${UV_FACE_LABELS[hit.faceName] || hit.faceName}"
   },
   "ui.apply": {
     "zhHant": "套用",
-    "zhHans": "套用",
+    "zhHans": "应用",
     "en": "Apply"
   },
   "ui.apply-paint-symmetry-to-selection": {
@@ -427,7 +432,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.axes": {
     "zhHant": "座標軸",
-    "zhHans": "座标轴",
+    "zhHans": "坐标轴",
     "en": "Axes"
   },
   "ui.axis-views-always-use-orthographic-projection": {
@@ -442,7 +447,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.back-view-z": {
     "zhHant": "背視圖 (−Z)",
-    "zhHans": "背视图 (−Z)",
+    "zhHans": "后视图（−Z）",
     "en": "Back view (−Z)"
   },
   "ui.background": {
@@ -452,7 +457,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.background-current": {
     "zhHant": "背景：目前背景",
-    "zhHans": "背景：当前背景",
+    "zhHans": "背景：主题背景",
     "en": "Background: current"
   },
   "ui.bake": {
@@ -467,23 +472,28 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.bake-shape-to-cube-group": {
     "zhHant": "烘焙 Shape 為 Cube 組",
-    "zhHans": "烘焙 Shape 为 Cube 组",
+    "zhHans": "烘焙 形状 为 立方体 组",
     "en": "Bake shape to cube group"
   },
   "ui.bake-to-cube-group": {
     "zhHant": "烘焙為 Cube 組",
-    "zhHans": "烘焙为 Cube 组",
+    "zhHans": "烘焙为 立方体 组",
     "en": "Bake to cube group"
   },
   "ui.baked-result-cubes-length-cube": {
     "zhHant": "已烘焙為 ${result.cubes.length} 個 Cube",
-    "zhHans": "已烘焙为 ${result.cubes.length} 个 Cube",
+    "zhHans": "已烘焙为 ${result.cubes.length} 个 立方体",
     "en": "Baked 為 ${result.cubes.length} 個 Cube"
   },
   "ui.baking-export-textures": {
     "zhHant": "正在烘焙导出贴图",
     "zhHans": "正在烘焙导出贴图",
     "en": "Baking export textures"
+  },
+  "ui.baking-textures-eyebrow": {
+    "zhHant": "BAKING TEXTURES",
+    "zhHans": "烘焙贴图",
+    "en": "BAKING TEXTURES"
   },
   "ui.base-image": {
     "zhHant": "底圖",
@@ -502,12 +512,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.bedrock-block": {
     "zhHant": "Bedrock 版方塊",
-    "zhHans": "Bedrock 版方块",
+    "zhHans": "基岩版方块",
     "en": "Bedrock Block"
   },
   "ui.bedrock-entity": {
     "zhHant": "Bedrock 版實體",
-    "zhHans": "Bedrock 版实体",
+    "zhHans": "基岩版实体",
     "en": "Bedrock Entity"
   },
   "ui.bezier-handles": {
@@ -527,13 +537,18 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.blend-mode": {
     "zhHant": "疊加模式",
-    "zhHans": "叠加模式",
+    "zhHans": "混合模式",
     "en": "Blend mode"
   },
   "ui.blockbench": {
     "zhHant": "Blockbench 風格操作",
     "zhHans": "Blockbench 风格操作",
     "en": "Blockbench-style controls"
+  },
+  "ui.blockbench-model-filter": {
+    "zhHant": "Blockbench 模型",
+    "zhHans": "Blockbench 模型",
+    "en": "Blockbench Model"
   },
   "ui.bottom-dock": {
     "zhHant": "底部停靠區",
@@ -597,7 +612,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.brush-opacity": {
     "zhHant": "筆刷透明度",
-    "zhHans": "笔刷透明度",
+    "zhHans": "笔刷不透明度",
     "en": "Brush opacity"
   },
   "ui.brush-shape": {
@@ -612,7 +627,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.brush-stroke": {
     "zhHant": "畫筆繪製",
-    "zhHans": "画笔绘制",
+    "zhHans": "画笔笔画",
     "en": "Brush stroke"
   },
   "ui.bucket-fill": {
@@ -627,7 +642,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.built-in-player-texture": {
     "zhHant": "內置玩家紋理",
-    "zhHans": "内置玩家纹理",
+    "zhHans": "内置玩家贴图",
     "en": "Built-in player texture"
   },
   "ui.by-angle": {
@@ -677,7 +692,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.capture-model": {
     "zhHant": "截屏模型",
-    "zhHans": "截屏模型",
+    "zhHans": "模型截图",
     "en": "Capture model"
   },
   "ui.capturing-model-visible-on-screen": {
@@ -687,12 +702,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.cbcmap": {
     "zhHant": "只導出目前選中的色卡為 .cbcmap；檔案不包含名稱",
-    "zhHans": "只导出当前选中的色卡为 .cbcmap；档案不包含名称",
+    "zhHans": "将选中的色卡导出为 .cbcmap，不包含色卡名称",
     "en": "Export only the selected palette as .cbcmap; the file does not include its name"
   },
   "ui.cbcmap-2": {
     "zhHant": "追加匯入 .cbcmap 色卡",
-    "zhHans": "追加汇入 .cbcmap 色卡",
+    "zhHans": "导入 .cbcmap 色卡",
     "en": "Append a .cbcmap palette"
   },
   "ui.cbmodel": {
@@ -707,12 +722,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.change-flipbook-playback-settings": {
     "zhHant": "更改手翻書播放設置",
-    "zhHans": "更改手翻書播放设置",
+    "zhHans": "修改手翻书动画的播放设置",
     "en": "Change flipbook playback settings"
   },
   "ui.change-frame-local-layer-visibility": {
     "zhHant": "更改幀內圖層顯隱",
-    "zhHans": "更改幀内图层显隐",
+    "zhHans": "更改帧内图层显隐",
     "en": "Change frame-local layer visibility"
   },
   "ui.change-location": {
@@ -742,12 +757,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.choose-a-model-format-formats-provide-initial-project-data-capabilities-and-standard-snapping": {
     "zhHant": "選擇模型格式；格式會提供工程初始資料、能力與標準吸附參數。",
-    "zhHans": "选择模型格式；格式会提供工程初始资料、能力与标准吸附参数。",
+    "zhHans": "选择模型格式。不同格式的初始项目、可用功能和默认吸附精度各不相同。",
     "en": "Choose a model format. Formats provide initial project data, capabilities, and standard snapping."
   },
   "ui.choose-an-endpoint-on-the-same-cube": {
     "zhHant": "選擇同一 Cube 上的終點",
-    "zhHans": "选择同一 Cube 上的终点",
+    "zhHans": "选择同一 立方体 上的终点",
     "en": "Choose an endpoint on the same cube"
   },
   "ui.choose-color": {
@@ -777,8 +792,13 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.choose-two-points-on-the-same-cube-in-the-3d-view-for-a-volume-gradient": {
     "zhHant": "體漸變需要在三維視圖的同一個 Cube 上選取兩點",
-    "zhHans": "体渐变需要在三维视图的同一个 Cube 上选取两点",
+    "zhHans": "体渐变需要在三维视图的同一个 立方体 上选取两点",
     "en": "Choose two points on the same cube in the 3D view for a volume gradient"
+  },
+  "ui.choose-workspace-folder-dialog": {
+    "zhHant": "選擇項目工作目錄",
+    "zhHans": "选择项目工作目录",
+    "en": "Choose Project Working Folder"
   },
   "ui.circle": {
     "zhHant": "圓形",
@@ -792,7 +812,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.cleanedfacecount": {
     "zhHant": "已清理 ${cleanedFaceCount} 個無效面；沒有可建立模板的面",
-    "zhHans": "已清理 ${cleanedFaceCount} 个无效面；没有可建立模板的面",
+    "zhHans": "已清理 ${cleanedFaceCount} 个无效面；没有可创建模板的面",
     "en": "已清理 ${cleanedFaceCount} 個無效面；沒有可建立模板的面"
   },
   "ui.clear-selection": {
@@ -802,7 +822,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.click-image-to-select-or-drag-wheel-to-zoom-right-click-empty-space-to-exit": {
     "zhHant": "點圖選取／拖動 · 滾輪縮放 · 右鍵空白退出",
-    "zhHans": "点图选取／拖动 · 滚轮缩放 · 右键空白退出",
+    "zhHans": "点击图片选中，拖动调整位置，滚轮缩放，右键点击空白处退出",
     "en": "Click image to select or drag · Wheel to zoom · Right-click empty space to exit"
   },
   "ui.close": {
@@ -812,13 +832,18 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.close-2": {
     "zhHant": "關閉 2 冪時使用",
-    "zhHans": "关闭 2 幂时使用",
+    "zhHans": "关闭 2 的幂次方尺寸后生效",
     "en": "Close 2 冪時使用"
   },
   "ui.close-application": {
     "zhHant": "關閉軟體",
-    "zhHans": "关闭软体",
+    "zhHans": "关闭软件",
     "en": "Close application"
+  },
+  "ui.close-application-eyebrow": {
+    "zhHant": "CLOSE CUBEBRICKS",
+    "zhHans": "退出 CubeBricks",
+    "en": "CLOSE CUBEBRICKS"
   },
   "ui.close-failed-error-message": {
     "zhHant": "關閉失敗：${error.message}",
@@ -832,7 +857,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.coincident-painting": {
     "zhHant": "疊加繪製",
-    "zhHans": "叠加绘制",
+    "zhHans": "重合面绘制",
     "en": "Coincident painting"
   },
   "ui.collapse-dock": {
@@ -872,18 +897,23 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.color-picker": {
     "zhHant": "選色器",
-    "zhHans": "选色器",
+    "zhHans": "颜色选择器",
     "en": "Color picker"
   },
   "ui.color-space": {
     "zhHant": "色空",
-    "zhHans": "色空",
+    "zhHans": "色彩空间",
     "en": "Color space"
   },
   "ui.color-space-2": {
     "zhHant": "色彩空間",
     "zhHans": "色彩空间",
     "en": "Color space"
+  },
+  "ui.color-space-curve-eyebrow": {
+    "zhHant": "COLOR SPACE CURVE",
+    "zhHans": "色彩曲线",
+    "en": "COLOR SPACE CURVE"
   },
   "ui.color-space-gradient": {
     "zhHant": "色彩空間漸變",
@@ -902,12 +932,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.compact-mode": {
     "zhHant": "縮略模式",
-    "zhHans": "缩略模式",
+    "zhHans": "紧凑模式",
     "en": "Compact mode"
   },
   "ui.compact-mode-color-picking-only": {
     "zhHant": "縮略模式：只保留選色",
-    "zhHans": "缩略模式：只保留选色",
+    "zhHans": "紧凑模式下仅可选色",
     "en": "Compact mode: color picking only"
   },
   "ui.completely-enable-or-disable-preview-rendering": {
@@ -927,17 +957,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.connect-frame-and-layer": {
     "zhHant": "連接幀與圖層",
-    "zhHans": "连接幀与图层",
+    "zhHans": "连接帧与图层",
     "en": "Connect frame and layer"
   },
   "ui.contained-cube-edge": {
     "zhHant": "按內含 Cube 邊長",
-    "zhHans": "按内含 Cube 边长",
+    "zhHans": "按内部立方体边长",
     "en": "Contained-cube edge"
   },
   "ui.contiguous-color": {
     "zhHant": "連續顏色",
-    "zhHans": "连续颜色",
+    "zhHans": "相连的同色像素",
     "en": "Contiguous color"
   },
   "ui.continue-a-project-or-create-a-model-from-the-left": {
@@ -952,7 +982,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.convert-the-procedural-shape-to-cubes-before-editing-per-face-uvs": {
     "zhHant": "程序化 Shape 請先轉換為 Cube 才能編輯逐面 UV",
-    "zhHans": "程序化 Shape 请先转换为 Cube 才能编辑逐面 UV",
+    "zhHans": "程序化 形状 请先转换为 立方体 才能编辑逐面 UV",
     "en": "Convert the procedural shape to cubes before editing per-face UVs"
   },
   "ui.copied-payload-roots-length": {
@@ -987,7 +1017,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.copy-elements-to-clipboard": {
     "zhHant": "複製元素到剪貼簿",
-    "zhHans": "复制元素到剪贴簿",
+    "zhHans": "复制元素到剪贴板",
     "en": "Copy elements to clipboard"
   },
   "ui.copy-pixels-off": {
@@ -1007,7 +1037,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.copy-to-clipboard": {
     "zhHant": "複製到剪切板",
-    "zhHans": "复制到剪切板",
+    "zhHans": "复制到剪贴板",
     "en": "Copy to clipboard"
   },
   "ui.copynodeindex-1": {
@@ -1022,12 +1052,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.could-not-create-a-node-on-the-current-view-plane": {
     "zhHant": "無法在目前視覺平面建立節點",
-    "zhHans": "无法在当前视觉平面建立节点",
+    "zhHans": "无法在当前视图平面上创建节点",
     "en": "Could not create a node on the current view plane"
   },
   "ui.could-not-create-the-color-space-preview-grid": {
     "zhHant": "色彩空間預覽網格無法建立",
-    "zhHans": "色彩空间预览网格无法建立",
+    "zhHans": "无法创建色彩空间预览网格",
     "en": "Could not create the color-space preview grid"
   },
   "ui.could-not-generate-png": {
@@ -1037,27 +1067,27 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.could-not-load-font": {
     "zhHant": "字體載入失敗",
-    "zhHans": "字体载入失败",
+    "zhHans": "字体加载失败",
     "en": "Could not load font"
   },
   "ui.could-not-load-resource-packs": {
     "zhHant": "資源包載入失敗",
-    "zhHans": "资源包载入失败",
+    "zhHans": "资源包加载失败",
     "en": "Could not load resource packs"
   },
   "ui.could-not-load-shape-pack": {
     "zhHant": "Shape 包載入失敗",
-    "zhHans": "Shape 包载入失败",
+    "zhHans": "形状包加载失败",
     "en": "Could not load shape pack"
   },
   "ui.could-not-load-the-built-in-player-texture": {
     "zhHant": "無法讀取內置玩家紋理",
-    "zhHans": "无法读取内置玩家纹理",
+    "zhHans": "无法读取内置玩家贴图",
     "en": "Could not load the built-in player texture"
   },
   "ui.could-not-load-the-custom-player-texture-restored-the-built-in-texture": {
     "zhHant": "無法讀取自定義玩家紋理，已回退內置紋理",
-    "zhHans": "无法读取自定义玩家纹理，已回退内置纹理",
+    "zhHans": "无法读取自定义玩家贴图，已回退内置贴图",
     "en": "Could not load the custom player texture; restored the built-in texture"
   },
   "ui.could-not-load-the-project-list": {
@@ -1092,47 +1122,47 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.could-not-read-this-player-texture": {
     "zhHant": "無法讀取這張玩家紋理",
-    "zhHans": "无法读取这张玩家纹理",
+    "zhHans": "无法读取这张玩家贴图",
     "en": "Could not read this player texture"
   },
   "ui.could-not-scan-shape-packs": {
     "zhHant": "Shape 包掃描失敗",
-    "zhHans": "Shape 包扫描失败",
+    "zhHans": "形状包扫描失败",
     "en": "Could not scan shape packs"
   },
   "ui.create": {
     "zhHant": "建立",
-    "zhHans": "建立",
+    "zhHans": "创建",
     "en": "Create"
   },
   "ui.create-bezier-curve": {
     "zhHant": "建立貝塞爾曲線",
-    "zhHans": "建立贝塞尔曲线",
+    "zhHans": "创建贝塞尔曲线",
     "en": "Create Bezier curve"
   },
   "ui.create-cube": {
     "zhHant": "建立 Cube",
-    "zhHans": "建立 Cube",
+    "zhHans": "新建立方体",
     "en": "Create cube"
   },
   "ui.create-group": {
     "zhHant": "建立組",
-    "zhHans": "建立组",
+    "zhHans": "新建组",
     "en": "Create group"
   },
   "ui.create-locator": {
     "zhHant": "建立 Locator",
-    "zhHans": "建立 Locator",
+    "zhHans": "新建定位器",
     "en": "Create locator"
   },
   "ui.create-on-first-paint-stroke": {
     "zhHant": "等待首次繪製時建立",
-    "zhHans": "等待首次绘制时建立",
+    "zhHans": "首次绘制时创建",
     "en": "Create on first paint stroke"
   },
   "ui.create-or-edit-a-2d-image": {
     "zhHant": "建立或編輯二維圖像",
-    "zhHans": "建立或编辑二维图像",
+    "zhHans": "创建或编辑二维图像",
     "en": "Create or edit a 2D image"
   },
   "ui.create-or-import-a-texture-first": {
@@ -1152,42 +1182,42 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.create-parent-group-on-export": {
     "zhHant": "導出時建立父組",
-    "zhHans": "导出时建立父组",
+    "zhHans": "导出时创建父组",
     "en": "Create parent group on export"
   },
   "ui.create-project": {
     "zhHant": "建立項目",
-    "zhHans": "建立项目",
+    "zhHans": "创建项目",
     "en": "Create project"
   },
   "ui.create-shape": {
     "zhHant": "建立 Shape",
-    "zhHans": "建立 Shape",
+    "zhHans": "新建形状",
     "en": "Create shape"
   },
   "ui.create-texture": {
     "zhHant": "建立貼圖",
-    "zhHans": "建立贴图",
+    "zhHans": "新建贴图",
     "en": "Create texture"
   },
   "ui.created-and-connected-a-new-node": {
     "zhHant": "已建立並連接新節點",
-    "zhHans": "已建立并连接新节点",
+    "zhHans": "已创建并连接新节点",
     "en": "Created and connected a new node"
   },
   "ui.created-cache-relationcount-0": {
     "zhHant": "已建立 ${cache.relationCount || 0} 組關聯",
-    "zhHans": "已建立 ${cache.relationCount || 0} 组关联",
+    "zhHans": "已创建 ${cache.relationCount || 0} 组关联",
     "en": "Created ${cache.relationCount || 0} 組關聯"
   },
   "ui.created-format-name": {
     "zhHant": "已建立 ${format.name}",
-    "zhHans": "已建立 ${format.name}",
+    "zhHans": "已创建 ${format.name}",
     "en": "Created ${format.name}"
   },
   "ui.created-side-side-cleanedfacecount": {
     "zhHant": "已建立 ${side} × ${side} 紋理模板${cleanedFaceCount ?",
-    "zhHans": "已建立 ${side} × ${side} 纹理模板${cleanedFaceCount ?",
+    "zhHans": "已创建 ${side} × ${side} 贴图模板${cleanedFaceCount ?",
     "en": "Created ${side} × ${side} 紋理模板${cleanedFaceCount ?"
   },
   "ui.cube": {
@@ -1197,32 +1227,37 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.cube-added": {
     "zhHant": "已新增 Cube",
-    "zhHans": "已新增 Cube",
+    "zhHans": "已新增 立方体",
     "en": "Cube added"
   },
   "ui.cube-appearance-animation": {
     "zhHant": "Cube 出現動畫",
-    "zhHans": "Cube 出现动画",
+    "zhHans": "立方体 出现动画",
     "en": "Cube appearance animation"
   },
   "ui.cube-column-thickness": {
     "zhHant": "Cube 柱粗細",
-    "zhHans": "Cube 柱粗细",
+    "zhHans": "立方体 柱粗细",
     "en": "Cube column thickness"
   },
   "ui.cube-disappearance-animation": {
     "zhHant": "Cube 消失動畫",
-    "zhHans": "Cube 消失动画",
+    "zhHans": "立方体 消失动画",
     "en": "Cube disappearance animation"
   },
   "ui.cube-edge": {
     "zhHant": "Cube 邊長",
-    "zhHans": "Cube 边长",
+    "zhHans": "立方体 边长",
     "en": "Cube edge"
+  },
+  "ui.cube-label": {
+    "zhHant": "Cube",
+    "zhHans": "立方体",
+    "en": "Cube"
   },
   "ui.cube-size": {
     "zhHant": "Cube 尺寸",
-    "zhHans": "Cube 尺寸",
+    "zhHans": "立方体 尺寸",
     "en": "Cube size"
   },
   "ui.cubebricks": {
@@ -1235,6 +1270,16 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "只能导回 CubeBricks 导出且未经修改的 Java 文件",
     "en": "Only unchanged Java files exported by CubeBricks can be reimported"
   },
+  "ui.cubebricks-model-filter": {
+    "zhHant": "CubeBricks 模型",
+    "zhHans": "CubeBricks 模型",
+    "en": "CubeBricks Model"
+  },
+  "ui.cubebricks-palette-filter": {
+    "zhHant": "CubeBricks 色卡",
+    "zhHans": "CubeBricks 色卡",
+    "en": "CubeBricks Palette"
+  },
   "ui.cubebricks-settings": {
     "zhHant": "CubeBricks 設定",
     "zhHans": "CubeBricks 设置",
@@ -1242,12 +1287,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.cubes-cannot-rotate-rotate-their-parent-group": {
     "zhHant": "Cube 不能旋轉；請旋轉其所屬的組",
-    "zhHans": "Cube 不能旋转；请旋转其所属的组",
+    "zhHans": "立方体 不能旋转；请旋转其所属的组",
     "en": "Cubes cannot rotate; rotate their parent group"
   },
   "ui.cubes-in-modded-entities-cannot-rotate-put-the-cube-in-a-group-and-rotate-the-group": {
     "zhHant": "模組版實體的 Cube 不能旋轉；請把它放入組後旋轉組",
-    "zhHans": "模组版实体的 Cube 不能旋转；请把它放入组后旋转组",
+    "zhHans": "模组版实体的 立方体 不能旋转；请把它放入组后旋转组",
     "en": "Cubes in modded entities cannot rotate; put the cube in a group and rotate the group"
   },
   "ui.cull": {
@@ -1282,7 +1327,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.current-background": {
     "zhHant": "目前背景",
-    "zhHans": "当前背景",
+    "zhHans": "主题背景",
     "en": "Current background"
   },
   "ui.current-changes-have-not-been-saved-to-the-working-journal": {
@@ -1352,7 +1397,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.current-tool-opacity": {
     "zhHant": "目前工具的透明度",
-    "zhHans": "当前工具的透明度",
+    "zhHans": "当前工具的不透明度",
     "en": "Current tool opacity"
   },
   "ui.current-tool-options": {
@@ -1392,7 +1437,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.custom-player-texture": {
     "zhHant": "自定義玩家紋理",
-    "zhHans": "自定义玩家纹理",
+    "zhHans": "自定义玩家贴图",
     "en": "Custom player texture"
   },
   "ui.cut": {
@@ -1432,17 +1477,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.cut-cube": {
     "zhHant": "切割 Cube",
-    "zhHans": "切割 Cube",
+    "zhHans": "切割 立方体",
     "en": "Cut cube"
   },
   "ui.cut-elements": {
     "zhHant": "剪下元素",
-    "zhHans": "剪下元素",
+    "zhHans": "剪切元素",
     "en": "Cut elements"
   },
   "ui.cut-frame-element": {
     "zhHant": "剪切幀元素",
-    "zhHans": "剪切幀元素",
+    "zhHans": "剪切帧",
     "en": "Cut frame element"
   },
   "ui.cut-point-cleared": {
@@ -1470,9 +1515,19 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "已${cutLabel || '完成切割'} ${cube.name}（${'XYZ'[axis]} 轴）",
     "en": "已${cutLabel || '完成切割'} ${cube.name}（${'XYZ'[axis]} 軸）"
   },
+  "ui.cutout-mipped-render-mode": {
+    "zhHant": "Cutout Mipped",
+    "zhHans": "镂空（Mipmap）",
+    "en": "Cutout Mipped"
+  },
+  "ui.cutout-render-mode": {
+    "zhHant": "Cutout",
+    "zhHans": "镂空",
+    "en": "Cutout"
+  },
   "ui.cycle-background-black-current-checkerboard": {
     "zhHant": "切換背景（純黑／目前／棋盤格）",
-    "zhHans": "切换背景（纯黑／当前／棋盘格）",
+    "zhHans": "切换背景（纯黑／主题背景／棋盘格）",
     "en": "Cycle background (black/current/checkerboard)"
   },
   "ui.cycle-snap-precision": {
@@ -1507,7 +1562,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.default-locked-object-alpha": {
     "zhHant": "鎖定物體默認虛化 Alpha",
-    "zhHans": "锁定物体默认虚化 Alpha",
+    "zhHans": "锁定对象的默认不透明度",
     "en": "Default locked-object alpha"
   },
   "ui.default-multiplier": {
@@ -1517,12 +1572,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.default-operation-history-limit": {
     "zhHant": "預設操作歷史上限",
-    "zhHans": "预设操作历史上限",
+    "zhHans": "默认历史记录上限",
     "en": "Default operation history limit"
   },
   "ui.default-radius": {
     "zhHant": "預設半徑",
-    "zhHans": "预设半径",
+    "zhHans": "默认半径",
     "en": "Default radius"
   },
   "ui.delete": {
@@ -1557,7 +1612,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.delete-frame-element": {
     "zhHant": "刪除幀元素",
-    "zhHans": "删除幀元素",
+    "zhHans": "删除帧",
     "en": "Delete frame element"
   },
   "ui.delete-group-and-contents": {
@@ -1647,7 +1702,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.details": {
     "zhHant": "詳",
-    "zhHans": "详",
+    "zhHans": "详细",
     "en": "Details"
   },
   "ui.diamond": {
@@ -1657,7 +1712,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.dimension-snapping": {
     "zhHant": "尺寸擬合",
-    "zhHans": "尺寸拟合",
+    "zhHans": "尺寸吸附",
     "en": "Dimension snapping"
   },
   "ui.direct-children": {
@@ -1682,7 +1737,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.disconnect-frame-and-layer": {
     "zhHant": "斷開幀與圖層",
-    "zhHans": "断开幀与图层",
+    "zhHans": "断开帧与图层",
     "en": "Disconnect frame and layer"
   },
   "ui.display-color": {
@@ -1792,7 +1847,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.drop-the-texture-onto-a-cube-face": {
     "zhHant": "請把貼圖拖到 Cube 面上",
-    "zhHans": "请把贴图拖到 Cube 面上",
+    "zhHans": "请把贴图拖到 立方体 面上",
     "en": "Drop the texture onto a cube face"
   },
   "ui.duplicate": {
@@ -1807,7 +1862,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.duplicate-frame-element": {
     "zhHant": "原地複製幀元素",
-    "zhHans": "原地复制幀元素",
+    "zhHans": "原地复制帧",
     "en": "Duplicate frame element"
   },
   "ui.duplicate-texture-in-place": {
@@ -1877,7 +1932,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.edit-curve-roll": {
     "zhHant": "修改曲線滾動角",
-    "zhHans": "修改曲线滚动角",
+    "zhHans": "修改曲线滚转角",
     "en": "Edit curve roll"
   },
   "ui.edit-curve-segments": {
@@ -1962,22 +2017,22 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.edit-shape-inner-radius": {
     "zhHant": "修改 Shape 內半徑",
-    "zhHans": "修改 Shape 内半径",
+    "zhHans": "修改 形状 内半径",
     "en": "Edit shape inner radius"
   },
   "ui.edit-shape-inner-radius-mode": {
     "zhHant": "修改 Shape 內半徑模式",
-    "zhHans": "修改 Shape 内半径模式",
+    "zhHans": "修改 形状 内半径模式",
     "en": "Edit shape inner-radius mode"
   },
   "ui.edit-shape-snap-mode": {
     "zhHant": "修改 Shape 吸附模式",
-    "zhHans": "修改 Shape 吸附模式",
+    "zhHans": "修改 形状 吸附模式",
     "en": "Edit shape snap mode"
   },
   "ui.edit-shape-subdivisions": {
     "zhHant": "編輯 Shape 細分",
-    "zhHans": "编辑 Shape 细分",
+    "zhHans": "编辑 形状 细分",
     "en": "Edit shape subdivisions"
   },
   "ui.edit-texture-group": {
@@ -2002,7 +2057,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.edit-uv-coordinates": {
     "zhHant": "修改 UV 座標",
-    "zhHans": "修改 UV 座标",
+    "zhHans": "修改 UV 坐标",
     "en": "Edit UV coordinates"
   },
   "ui.element": {
@@ -2057,7 +2112,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.enable-pointer-hover-fading": {
     "zhHant": "開啟鼠標虛化",
-    "zhHans": "开启鼠标虚化",
+    "zhHans": "鼠标悬停时虚化",
     "en": "Enable pointer hover fading"
   },
   "ui.enable-preview": {
@@ -2102,7 +2157,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.erase-pixels-using-this-tool-s-opacity": {
     "zhHant": "目前工具以設定透明度擦除像素",
-    "zhHans": "当前工具以设置透明度擦除像素",
+    "zhHans": "按当前工具的不透明度擦除像素",
     "en": "Erase pixels using this tool’s opacity"
   },
   "ui.eraser": {
@@ -2170,9 +2225,19 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "导出失败：${error.message}",
     "en": "Export failed: ${error.message}"
   },
+  "ui.export-model-dialog": {
+    "zhHant": "導出模型",
+    "zhHans": "导出模型",
+    "en": "Export Model"
+  },
+  "ui.export-palette-dialog": {
+    "zhHant": "導出色卡",
+    "zhHans": "导出色卡",
+    "en": "Export Palette"
+  },
   "ui.exported-bbmodel-procedural-objects-were-converted-to-cube-groups": {
     "zhHant": "已導出 .bbmodel（程序化物件已轉為 Cube 組）",
-    "zhHans": "已导出 .bbmodel（程序化对象已转为 Cube 组）",
+    "zhHans": "已导出 .bbmodel（程序化对象已转为 立方体 组）",
     "en": "Exported .bbmodel; procedural objects were converted to cube groups"
   },
   "ui.exported-cbmodel": {
@@ -2192,7 +2257,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.extend-the-stroke-into-adjacent-face-textures-when-it-reaches-a-cube-edge": {
     "zhHant": "筆跡碰到 Cube 邊緣時，向相鄰面的貼圖延伸指定像素",
-    "zhHans": "笔迹碰到 Cube 边缘时，向相邻面的贴图延伸指定像素",
+    "zhHans": "笔迹碰到 立方体 边缘时，向相邻面的贴图延伸指定像素",
     "en": "Extend the stroke into adjacent face textures when it reaches a cube edge"
   },
   "ui.extension": {
@@ -2217,7 +2282,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.face-colors": {
     "zhHant": "面區分",
-    "zhHans": "面区分",
+    "zhHans": "区分各面",
     "en": "Face colors"
   },
   "ui.face-gradient": {
@@ -2267,7 +2332,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.failed-error-message-15": {
     "zhHant": "匯入色卡失敗：${error.message}",
-    "zhHans": "汇入色卡失败：${error.message}",
+    "zhHans": "导入色卡失败：${error.message}",
     "en": "匯入色卡 failed: ${error.message}"
   },
   "ui.failed-error-message-16": {
@@ -2287,12 +2352,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.failed-error-message-19": {
     "zhHant": "歷史裁剪失敗：${error.message}",
-    "zhHans": "历史裁剪失败：${error.message}",
+    "zhHans": "历史清理失败：${error.message}",
     "en": "歷史裁剪 failed: ${error.message}"
   },
   "ui.failed-error-message-2": {
     "zhHant": "色卡載入失敗：${error.message}",
-    "zhHans": "色卡载入失败：${error.message}",
+    "zhHans": "色卡加载失败：${error.message}",
     "en": "色卡載入 failed: ${error.message}"
   },
   "ui.failed-error-message-20": {
@@ -2307,7 +2372,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.failed-error-message-4": {
     "zhHant": "分頁恢復失敗：${error.message}",
-    "zhHans": "分页恢复失败：${error.message}",
+    "zhHans": "标签页恢复失败：${error.message}",
     "en": "分頁恢復 failed: ${error.message}"
   },
   "ui.failed-error-message-5": {
@@ -2342,17 +2407,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.failures-length-shape": {
     "zhHant": "${failures.length} 個 Shape 包項目未載入，詳見主控台",
-    "zhHans": "${failures.length} 个 Shape 包项目未载入，详见主控台",
+    "zhHans": "${failures.length} 个 形状包项目未加载，详见控制台",
     "en": "${failures.length} 個 Shape 包項目未載入，詳見主控台"
   },
   "ui.file-name": {
     "zhHant": "不支援拖入 ${file.name}",
-    "zhHans": "不支援拖入 ${file.name}",
+    "zhHans": "不支持拖入 ${file.name}",
     "en": "Unsupported drop: ${file.name}"
   },
   "ui.file-name-2": {
     "zhHant": "無法取得 ${file.name} 的本機路徑",
-    "zhHans": "无法取得 ${file.name} 的本机路径",
+    "zhHans": "无法获取 ${file.name} 的本地路径",
     "en": "Could not find the local path for ${file.name}"
   },
   "ui.fill": {
@@ -2392,17 +2457,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.first-alpha": {
     "zhHant": "第一色 α",
-    "zhHans": "第一色 α",
+    "zhHans": "起始色 α",
     "en": "First alpha"
   },
   "ui.first-color": {
     "zhHant": "第一色",
-    "zhHans": "第一色",
+    "zhHans": "起始色",
     "en": "First color"
   },
   "ui.fit-gizmo-to-geometry-bounds": {
     "zhHant": "手柄貼合物體幾何範圍",
-    "zhHans": "手柄贴合物体几何范围",
+    "zhHans": "手柄贴合对象几何范围",
     "en": "Fit gizmo to geometry bounds"
   },
   "ui.five-pointed-star": {
@@ -2414,6 +2479,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "固定",
     "zhHans": "固定",
     "en": "Fixed"
+  },
+  "ui.flipbook-animation": {
+    "zhHant": "手翻書",
+    "zhHans": "手翻书动画",
+    "en": "Flipbook"
   },
   "ui.focus": {
     "zhHant": "聚焦",
@@ -2442,8 +2512,13 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.follow-global-setting": {
     "zhHant": "跟隨全域設定",
-    "zhHans": "跟随全域设置",
+    "zhHans": "跟随全局设置",
     "en": "Follow global setting"
+  },
+  "ui.font-pack-filter": {
+    "zhHant": "字體或字體 ZIP",
+    "zhHans": "字体文件或 ZIP 字体包",
+    "en": "Font or Font ZIP"
   },
   "ui.font-packs": {
     "zhHant": "字體包",
@@ -2462,17 +2537,22 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.frame": {
     "zhHant": "＋ 幀",
-    "zhHans": "＋ 幀",
+    "zhHans": "＋ 帧",
     "en": "+ Frame"
   },
   "ui.frame-and-layer-connections": {
     "zhHant": "幀與圖層連線",
-    "zhHans": "幀与图层连线",
+    "zhHans": "帧与图层连线",
     "en": "Frame and layer connections"
+  },
+  "ui.frame-label": {
+    "zhHant": "幀",
+    "zhHans": "帧",
+    "en": "Frame"
   },
   "ui.frame-position": {
     "zhHant": "幀進度",
-    "zhHans": "幀进度",
+    "zhHans": "帧进度",
     "en": "Frame position"
   },
   "ui.free-alignment-around-pivot": {
@@ -2552,12 +2632,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.general-view": {
     "zhHant": "一般視圖",
-    "zhHans": "一般视图",
+    "zhHans": "普通视图",
     "en": "General view"
   },
   "ui.general-view-reference": {
     "zhHant": "一般視圖參考圖",
-    "zhHans": "一般视图参考图",
+    "zhHans": "普通视图参考图",
     "en": "General-view reference"
   },
   "ui.generate-texture-template": {
@@ -2567,13 +2647,18 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.generated-cubes": {
     "zhHant": "生成 Cube",
-    "zhHans": "生成 Cube",
+    "zhHans": "生成 立方体",
     "en": "Generated cubes"
   },
   "ui.generating-texture": {
     "zhHant": "正在建立貼圖",
-    "zhHans": "正在建立贴图",
+    "zhHans": "正在创建贴图",
     "en": "Generating texture"
+  },
+  "ui.generating-texture-eyebrow": {
+    "zhHant": "GENERATING TEXTURE",
+    "zhHans": "生成贴图",
+    "en": "GENERATING TEXTURE"
   },
   "ui.generic-model": {
     "zhHant": "通用模型",
@@ -2622,7 +2707,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.gradient-endpoint-same-face-or-object": {
     "zhHant": "漸變終點須在相同面或物體上",
-    "zhHans": "渐变终点须在相同面或物体上",
+    "zhHans": "请在同一个面或同一对象上选择渐变终点",
     "en": "The gradient endpoint must be on the same face or object"
   },
   "ui.gradient-fill": {
@@ -2632,7 +2717,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.gradient-first-color-opacity": {
     "zhHant": "漸變第一色透明度",
-    "zhHans": "渐变第一色透明度",
+    "zhHans": "渐变起始色的不透明度",
     "en": "Gradient first-color opacity"
   },
   "ui.gradient-j": {
@@ -2647,12 +2732,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.gradient-second-color-opacity-transparent-by-default": {
     "zhHant": "漸變第二色透明度；預設完全透明",
-    "zhHans": "渐变第二色透明度；预设完全透明",
+    "zhHans": "渐变结束色的不透明度，默认为完全透明",
     "en": "Gradient second-color opacity; transparent by default"
   },
   "ui.gradient-segment-mode": {
     "zhHant": "漸變分段類別",
-    "zhHans": "渐变分段类别",
+    "zhHans": "渐变分段方式",
     "en": "Gradient segment mode"
   },
   "ui.grid": {
@@ -2692,7 +2777,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.group-selection": {
     "zhHant": "將選中項建立為組",
-    "zhHans": "将选中项建立为组",
+    "zhHans": "将选中项编为一组",
     "en": "Group selection"
   },
   "ui.group-transform": {
@@ -2777,12 +2862,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.i-1": {
     "zhHant": "幀 ${i+1}",
-    "zhHans": "幀 ${i+1}",
+    "zhHans": "帧 ${i+1}",
     "en": "幀 ${i+1}"
   },
   "ui.ignore-transparent": {
     "zhHant": "忽視全透明",
-    "zhHans": "忽视全透明",
+    "zhHans": "忽略全透明像素",
     "en": "Ignore transparent"
   },
   "ui.image": {
@@ -2792,7 +2877,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.image-editing-is-not-implemented-yet": {
     "zhHant": "圖像編輯尚未實現",
-    "zhHans": "图像编辑尚未实现",
+    "zhHans": "图像编辑即将推出",
     "en": "Image editing is not implemented yet"
   },
   "ui.import": {
@@ -2805,10 +2890,20 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "导入新贴图",
     "en": "Import new texture"
   },
+  "ui.import-plain": {
+    "zhHant": "導入",
+    "zhHans": "导入",
+    "en": "Import"
+  },
   "ui.import-player-texture": {
     "zhHant": "導入玩家紋理",
-    "zhHans": "导入玩家纹理",
+    "zhHans": "导入玩家贴图",
     "en": "Import player texture"
+  },
+  "ui.import-png-eyebrow": {
+    "zhHant": "IMPORT PNG",
+    "zhHans": "导入图片",
+    "en": "IMPORT PNG"
   },
   "ui.import-png-image": {
     "zhHant": "導入 PNG 圖片",
@@ -2832,12 +2927,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.imported-key-general-key-touppercase-records-length": {
     "zhHant": "已導入${key === 'general' ? '一般視圖' : key.toUpperCase() + ' 軸視圖'}參考圖 · ${records.length} 張",
-    "zhHans": "已导入${key === 'general' ? '一般视图' : key.toUpperCase() + ' 轴视图'}参考图 · ${records.length} 张",
+    "zhHans": "已导入${key === 'general' ? '普通视图' : key.toUpperCase() + ' 轴视图'}参考图 · ${records.length} 张",
     "en": "Imported ${key === 'general' ? '一般視圖' : key.toUpperCase() + ' 軸視圖'}參考圖 · ${records.length} 張"
   },
   "ui.imported-records-length": {
     "zhHant": "已導入 ${records.length} 張參考圖，部分檔案無法讀取",
-    "zhHans": "已导入 ${records.length} 张参考图，部分档案无法读取",
+    "zhHans": "已导入 ${records.length} 张参考图，部分文件无法读取",
     "en": "Imported ${records.length} 張參考圖，部分檔案無法讀取"
   },
   "ui.include-in-future-format-conversion": {
@@ -2852,7 +2947,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.incoming-length": {
     "zhHant": "已匯入 ${incoming.length} 行色卡",
-    "zhHans": "已汇入 ${incoming.length} 行色卡",
+    "zhHans": "已导入 ${incoming.length} 行色卡",
     "en": "已匯入 ${incoming.length} 行色卡"
   },
   "ui.index-1": {
@@ -2867,7 +2962,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.index-1-3": {
     "zhHant": "幀圖像 ${index+1}",
-    "zhHans": "幀图像 ${index+1}",
+    "zhHans": "帧图像 ${index+1}",
     "en": "幀圖像 ${index+1}"
   },
   "ui.inflate": {
@@ -2977,7 +3072,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.java-cube": {
     "zhHant": "Java 模组实体的 Cube 不能旋转，请使用组旋转",
-    "zhHans": "Java 模组实体的 Cube 不能旋转，请使用组旋转",
+    "zhHans": "Java 模组实体的 立方体 不能旋转，请使用组旋转",
     "en": "Cubes in Java modded entities cannot rotate. Rotate their group instead."
   },
   "ui.java-from-to": {
@@ -3007,7 +3102,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.keep-operation-history": {
     "zhHant": "保留操作歷史",
-    "zhHans": "保留操作历史",
+    "zhHans": "保留历史记录",
     "en": "Keep operation history"
   },
   "ui.keep-original-pixels-and-duplicate-the-selection-on-the-next-transform": {
@@ -3032,7 +3127,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.language-font-and-shape-packs-are-stored-separately-but-share-add-reorder-and-remove-controls-shape": {
     "zhHant": "語言、字體與 Shape 包分開存放，共用加入、排序和移除操作。Shape 包包含可執行的 JavaScript，請只安裝可信來源。",
-    "zhHans": "语言、字体与 Shape 包分开存放，共用加入、排序和移除操作。Shape 包包含可执行的 JavaScript，请只安装可信来源。",
+    "zhHans": "语言、字体与 形状包分开存放，共用加入、排序和移除操作。形状包包含可执行的 JavaScript，请只安装可信来源。",
     "en": "Language, font and shape packs are stored separately but share add, reorder and remove controls. Shape packs execute JavaScript; install only trusted sources."
   },
   "ui.language-packs": {
@@ -3042,7 +3137,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.large-projects-show-extraction-verification-and-loading-progress": {
     "zhHant": "大型項目會顯示解壓、校驗和載入進度",
-    "zhHans": "大型项目会显示解压、校验和载入进度",
+    "zhHans": "大型项目会显示解压、校验和加载进度",
     "en": "Large projects show extraction, verification, and loading progress"
   },
   "ui.layer": {
@@ -3050,15 +3145,45 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "图层",
     "en": "Layer"
   },
+  "ui.layer-alpha-binary": {
+    "zhHant": "二值化透明度",
+    "zhHans": "二值化透明度",
+    "en": "Binarize Alpha"
+  },
+  "ui.layer-copied": {
+    "zhHant": "已复制图层",
+    "zhHans": "已复制图层",
+    "en": "Layer copied"
+  },
+  "ui.layer-copy": {
+    "zhHant": "复制图层",
+    "zhHans": "复制图层",
+    "en": "Copy Layer"
+  },
+  "ui.layer-duplicate": {
+    "zhHant": "就地复制图层",
+    "zhHans": "就地复制图层",
+    "en": "Duplicate Layer"
+  },
   "ui.layer-editor": {
     "zhHant": "圖層編輯",
     "zhHans": "图层编辑",
     "en": "Layer editor"
   },
+  "ui.layer-list": {
+    "zhHant": "图层列表",
+    "zhHans": "图层列表",
+    "en": "Layers"
+  },
   "ui.layer-name": {
     "zhHant": "圖層名稱",
     "zhHans": "图层名称",
     "en": "Layer name"
+  },
+  "ui.layer-paste": {
+    "zhHant": "粘贴图层",
+    "zhHans": "粘贴图层",
+    "en": "Paste Layer"
   },
   "ui.layers-and-texture-modes": {
     "zhHant": "圖層與貼圖模式",
@@ -3067,7 +3192,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.leave-pixels-between-uv-faces": {
     "zhHant": "UV 面之間保留像素",
-    "zhHans": "UV 面之间保留像素",
+    "zhHans": "在 UV 岛之间预留像素间隔",
     "en": "Leave pixels between UV faces"
   },
   "ui.left-click-for-next-snap-right-click-for-previous": {
@@ -3087,7 +3212,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.limit-a-face-gradient-to-one-face-or-span-a-volume-gradient-across-one-cube": {
     "zhHant": "面漸變限制在同一個面；體漸變可跨同一 Cube 的多個面",
-    "zhHans": "面渐变限制在同一个面；体渐变可跨同一 Cube 的多个面",
+    "zhHans": "面渐变限制在同一个面；体渐变可跨同一 立方体 的多个面",
     "en": "Limit a face gradient to one face, or span a volume gradient across one cube"
   },
   "ui.limit-same-color-fill-to-the-current-face-uv-area": {
@@ -3097,12 +3222,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.limit-to-face": {
     "zhHant": "單面局限",
-    "zhHans": "单面局限",
+    "zhHans": "仅限单面",
     "en": "Limit to face"
   },
   "ui.limited-range": {
     "zhHant": "限制範圍",
-    "zhHans": "限制范围",
+    "zhHans": "限定角度范围",
     "en": "Limited range"
   },
   "ui.line": {
@@ -3122,42 +3247,42 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.loading-project": {
     "zhHant": "正在載入項目…",
-    "zhHans": "正在载入项目…",
+    "zhHans": "正在加载项目…",
     "en": "Loading project…"
   },
   "ui.local": {
     "zhHant": "自身",
-    "zhHans": "自身",
+    "zhHans": "局部",
     "en": "Local"
   },
   "ui.local-pack-management-is-available-in-the-desktop-app": {
     "zhHant": "本機包管理只在桌面版提供",
-    "zhHans": "本机包管理只在桌面版提供",
+    "zhHans": "仅桌面版支持管理本地资源包",
     "en": "Local pack management is available in the desktop app."
   },
   "ui.local-projects-are-available-in-the-desktop-app": {
     "zhHant": "本機工作項目只在桌面版顯示。",
-    "zhHans": "本机工作项目只在桌面版显示。",
+    "zhHans": "仅桌面版显示本地项目。",
     "en": "Local projects are available in the desktop app."
   },
   "ui.local-rotation-mode": {
     "zhHant": "自身旋轉模式",
-    "zhHans": "自身旋转模式",
+    "zhHans": "局部轴旋转",
     "en": "Local rotation mode"
   },
   "ui.local-space": {
     "zhHant": "自身坐標系",
-    "zhHans": "自身坐标系",
+    "zhHans": "局部坐标系",
     "en": "Local space"
   },
   "ui.locator-added": {
     "zhHant": "已新增 Locator",
-    "zhHans": "已新增 Locator",
+    "zhHans": "已新增 定位器",
     "en": "Locator added"
   },
   "ui.locator-transform": {
     "zhHant": "Locator 變換",
-    "zhHans": "Locator 变换",
+    "zhHans": "定位器 变换",
     "en": "Locator transform"
   },
   "ui.lock-alpha": {
@@ -3187,12 +3312,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.main-menu": {
     "zhHant": "主選單",
-    "zhHans": "主选单",
+    "zhHans": "主菜单",
     "en": "Main menu"
   },
   "ui.manage-fonts-languages-and-shapes-in-one-window-each-pack-type-loads-separately": {
     "zhHant": "字體、語言與 Shape 包共用管理視窗；包內容分開載入",
-    "zhHans": "字体、语言与 Shape 包共用管理视窗；包内容分开载入",
+    "zhHans": "在同一个窗口管理字体包、语言包和形状包，各类资源包独立加载",
     "en": "Manage fonts, languages and shapes in one window; each pack type loads separately."
   },
   "ui.manage-resource-packs": {
@@ -3247,7 +3372,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-11": {
     "zhHant": "色卡檔案格式或數量無效",
-    "zhHans": "色卡档案格式或数量无效",
+    "zhHans": "色卡文件格式或数量无效",
     "en": "Invalid color-map format or number of palettes"
   },
   "ui.message-12": {
@@ -3257,7 +3382,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-13": {
     "zhHant": "取來源亮度與透明度作蒙版；來源隱藏時仍生效。",
-    "zhHans": "取来源亮度与透明度作蒙版；来源隐藏时仍生效。",
+    "zhHans": "根据源图层的亮度和透明度生成蒙版。隐藏源图层后，蒙版仍然生效。",
     "en": "Use source brightness and alpha as the mask; it remains active when the source is hidden."
   },
   "ui.message-14": {
@@ -3267,27 +3392,27 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-15": {
     "zhHant": "指定基礎色與灰度",
-    "zhHans": "指定基础色与灰度",
+    "zhHans": "指定基准颜色和灰度",
     "en": "Set base color and gray level"
   },
   "ui.message-16": {
     "zhHant": "指定基礎位置與灰度",
-    "zhHans": "指定基础位置与灰度",
+    "zhHans": "指定基准位置和灰度",
     "en": "Set base position and gray level"
   },
   "ui.message-17": {
     "zhHant": "基礎灰度 %",
-    "zhHans": "基础灰度 %",
+    "zhHans": "基准灰度 (%)",
     "en": "Base gray level %"
   },
   "ui.message-18": {
     "zhHant": "基礎色",
-    "zhHans": "基础色",
+    "zhHans": "基准颜色",
     "en": "Base color"
   },
   "ui.message-19": {
     "zhHant": "基礎色卡位置 %",
-    "zhHans": "基础色卡位置 %",
+    "zhHans": "基准色卡位置 (%)",
     "en": "Base palette position %"
   },
   "ui.message-2": {
@@ -3297,7 +3422,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-20": {
     "zhHant": "視窗控制",
-    "zhHans": "视窗控制",
+    "zhHans": "窗口控制",
     "en": "Window controls"
   },
   "ui.message-21": {
@@ -3317,12 +3442,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-24": {
     "zhHant": "匯入",
-    "zhHans": "汇入",
+    "zhHans": "导入",
     "en": "Import"
   },
   "ui.message-25": {
     "zhHant": "匯入檔案沒有色卡",
-    "zhHans": "汇入档案没有色卡",
+    "zhHans": "导入的文件不含色卡",
     "en": "The imported file contains no palettes"
   },
   "ui.message-26": {
@@ -3357,7 +3482,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-31": {
     "zhHant": "圖形繪製（目前：直線）",
-    "zhHans": "图形绘制（当前：直线）",
+    "zhHans": "图形绘制（当前为直线）",
     "en": "Shape drawing (current: line)"
   },
   "ui.message-32": {
@@ -3372,7 +3497,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-34": {
     "zhHant": "請先建立有顏色的色卡",
-    "zhHans": "请先建立有颜色的色卡",
+    "zhHans": "请先创建一张包含颜色的色卡",
     "en": "Create a palette with colors first"
   },
   "ui.message-35": {
@@ -3382,7 +3507,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-36": {
     "zhHant": "還原視窗",
-    "zhHans": "还原视窗",
+    "zhHans": "还原窗口",
     "en": "Restore window"
   },
   "ui.message-37": {
@@ -3437,7 +3562,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-46": {
     "zhHant": "性能記錄已複製到剪貼板",
-    "zhHans": "性能记录已复制到剪贴板",
+    "zhHans": "已将性能记录复制到剪贴板",
     "en": "Performance report copied to the clipboard"
   },
   "ui.message-47": {
@@ -3452,7 +3577,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-49": {
     "zhHant": "項目首頁載入失敗",
-    "zhHans": "项目首页载入失败",
+    "zhHans": "项目首页加载失败",
     "en": "Could not load the project home page"
   },
   "ui.message-5": {
@@ -3487,7 +3612,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-55": {
     "zhHant": "导出模组实体模型层，原样文件可导回",
-    "zhHans": "导出模组实体模型层，原样文件可导回",
+    "zhHans": "导出模组实体的 Java 模型类，未修改的文件可重新导入",
     "en": "Export a modded entity model layer; unchanged files can be reimported"
   },
   "ui.message-56": {
@@ -3557,7 +3682,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.message-9": {
     "zhHant": "色卡名稱或顏色資料無效",
-    "zhHans": "色卡名称或颜色资料无效",
+    "zhHans": "色卡名称或颜色数据无效",
     "en": "Invalid palette name or color data"
   },
   "ui.middle-mouse": {
@@ -3567,22 +3692,22 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.minecraft-bedrock-block-geometry": {
     "zhHant": "Minecraft Bedrock 方塊幾何",
-    "zhHans": "Minecraft Bedrock 方块几何",
+    "zhHans": "Minecraft 基岩版方块模型",
     "en": "Minecraft Bedrock block geometry"
   },
   "ui.minecraft-bedrock-entity-geometry": {
     "zhHant": "Minecraft Bedrock 實體幾何",
-    "zhHans": "Minecraft Bedrock 实体几何",
+    "zhHans": "Minecraft 基岩版实体模型",
     "en": "Minecraft Bedrock entity geometry"
   },
   "ui.minecraft-java-block-and-item-model": {
     "zhHant": "Minecraft Java 方塊與物品模型",
-    "zhHans": "Minecraft Java 方块与物品模型",
+    "zhHans": "Minecraft Java 版方块和物品模型",
     "en": "Minecraft Java block and item model"
   },
   "ui.minecraft-java-modded-entity-model": {
     "zhHant": "Minecraft Java 模組實體模型",
-    "zhHans": "Minecraft Java 模组实体模型",
+    "zhHans": "Minecraft Java 版模组实体模型",
     "en": "Minecraft Java modded entity model"
   },
   "ui.minecraft-player-skin-model": {
@@ -3627,7 +3752,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.modded-entity": {
     "zhHant": "模組版實體",
-    "zhHans": "模组版实体",
+    "zhHans": "模组实体",
     "en": "Modded Entity"
   },
   "ui.mode": {
@@ -3642,13 +3767,18 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.model-capture-copied-to-clipboard": {
     "zhHant": "模型截圖已複製到剪切板",
-    "zhHans": "模型截图已复制到剪切板",
+    "zhHans": "模型截图已复制到剪贴板",
     "en": "Model capture copied to clipboard"
   },
   "ui.model-capture-downloaded": {
     "zhHant": "已下載模型截圖",
     "zhHans": "已下载模型截图",
     "en": "Model capture downloaded"
+  },
+  "ui.model-capture-eyebrow": {
+    "zhHant": "MODEL CAPTURE",
+    "zhHans": "截图",
+    "en": "MODEL CAPTURE"
   },
   "ui.model-capture-saved": {
     "zhHant": "模型截圖已保存",
@@ -3667,12 +3797,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.modelcapturemode-offscreen-output-width-output-height-png": {
     "zhHant": "${modelCaptureMode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${output.width} × ${output.height} PNG · 透明背景",
-    "zhHans": "${modelCaptureMode === 'offscreen' ? '离屏渲染 · 自动框住可见模型' : '屏幕截图 · 仅当前视窗范围'} · ${output.width} × ${output.height} PNG · 透明背景",
+    "zhHans": "${modelCaptureMode === 'offscreen' ? '离屏渲染 · 自动框住可见模型' : '屏幕截图 · 仅当前窗口范围'} · ${output.width} × ${output.height} PNG · 透明背景",
     "en": "${modelCaptureMode === 'offscreen' ? '離屏渲染 · 自動框住可見模型' : '屏幕截圖 · 僅當前視窗範圍'} · ${output.width} × ${output.height} PNG · 透明背景"
   },
   "ui.modifier-result-read-only": {
     "zhHant": "修改器結果 · 唯讀",
-    "zhHans": "修改器结果 · 唯读",
+    "zhHans": "修改器结果 · 只读",
     "en": "Modifier result · read-only"
   },
   "ui.modifier-results-can-only-be-target-snap-points": {
@@ -3840,6 +3970,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "新建贴图",
     "en": "New Texture"
   },
+  "ui.new-texture-eyebrow": {
+    "zhHant": "NEW TEXTURE",
+    "zhHans": "贴图",
+    "en": "NEW TEXTURE"
+  },
   "ui.new-with-icon": {
     "zhHant": "＋ 新建",
     "zhHans": "＋ 新建",
@@ -3847,17 +3982,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.no-face-selected": {
     "zhHant": "未選擇面",
-    "zhHans": "未选择面",
+    "zhHans": "未选中任何面",
     "en": "No face selected"
   },
   "ui.no-frame-elements": {
     "zhHant": "尚無幀元素",
-    "zhHans": "尚无幀元素",
+    "zhHans": "暂无帧",
     "en": "No frame elements"
   },
   "ui.no-layer-selected": {
     "zhHant": "未選擇圖層",
-    "zhHans": "未选择图层",
+    "zhHans": "未选中图层",
     "en": "No layer selected"
   },
   "ui.no-model-capture-has-been-generated": {
@@ -3907,7 +4042,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.non-zero-edges-receive-at-least-1-px": {
     "zhHant": "非零邊長至少分配 1px",
-    "zhHans": "非零边长至少分配 1px",
+    "zhHans": "非零边长至少分配 1 px",
     "en": "Non-zero edges receive at least 1 px"
   },
   "ui.normalize-uv": {
@@ -3962,7 +4097,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.number": {
     "zhHant": "幀 ${number}",
-    "zhHans": "幀 ${number}",
+    "zhHans": "帧 ${number}",
     "en": "幀 ${number}"
   },
   "ui.object-deleted": {
@@ -3982,22 +4117,22 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.only-cubes-in-the-current-shape-can-be-selected-during-subdivision-edit": {
     "zhHant": "細分編輯期間只能選擇目前 Shape 內的 Cube",
-    "zhHans": "细分编辑期间只能选择当前 Shape 内的 Cube",
+    "zhHans": "细分编辑期间只能选择当前 形状 内的 立方体",
     "en": "Only cubes in the current shape can be selected during Subdivision Edit"
   },
   "ui.only-new-never-saved-projects-are-listed-checked-projects-will-be-saved-and-retained-unchecked-proje": {
     "zhHant": "以下僅列出從未保存的新建項目。勾選即可保存並保留；取消勾選會刪除該項目的本機工作記錄。保存過的項目會自動保存並永久保留，不會在此列出。",
-    "zhHans": "以下仅列出从未保存的新建项目。勾选即可保存并保留；取消勾选会删除该项目的本机工作记录。保存过的项目会自动保存并永久保留，不会在此列出。",
+    "zhHans": "以下仅列出从未保存的新建项目。勾选即可保存并保留；取消勾选会删除该项目的本地工作记录。保存过的项目会自动保存并永久保留，不会在此列出。",
     "en": "Only new, never-saved projects are listed. Checked projects will be saved and retained; unchecked projects lose their local working records. Previously saved projects are saved automatically, retained permanently, and omitted from this list."
   },
   "ui.opacity": {
     "zhHant": "透明度",
-    "zhHans": "透明度",
+    "zhHans": "不透明度",
     "en": "Opacity"
   },
   "ui.opacity-2": {
     "zhHant": "透明度 %",
-    "zhHans": "透明度 %",
+    "zhHans": "不透明度 (%)",
     "en": "Opacity %"
   },
   "ui.open": {
@@ -4015,9 +4150,14 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "在绘画模式打开",
     "en": "Open in Paint mode"
   },
+  "ui.open-model-dialog": {
+    "zhHant": "打開模型",
+    "zhHans": "打开模型",
+    "en": "Open Model"
+  },
   "ui.open-or-create-a-project-before-importing-images": {
     "zhHant": "請先打開或建立項目，再導入圖片",
-    "zhHans": "请先打开或建立项目，再导入图片",
+    "zhHans": "请先打开或创建项目，再导入图片",
     "en": "Open or create a project before importing images"
   },
   "ui.open-project-home": {
@@ -4025,19 +4165,49 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "打开项目首页",
     "en": "Open project home"
   },
+  "ui.open-separate-copy": {
+    "zhHant": "另開一份",
+    "zhHans": "另开一份",
+    "en": "Open a Separate Copy"
+  },
   "ui.opened-project-name": {
     "zhHant": "已打開 ${project.name}",
     "zhHans": "已打开 ${project.name}",
     "en": "Opened ${project.name}"
+  },
+  "ui.opening-comparing-history": {
+    "zhHant": "正在比對工作記錄",
+    "zhHans": "正在比较工作记录",
+    "en": "Comparing working history"
+  },
+  "ui.opening-extracting-project": {
+    "zhHant": "正在解壓項目",
+    "zhHans": "正在解压项目",
+    "en": "Extracting project"
+  },
+  "ui.opening-loading-content": {
+    "zhHant": "正在載入模型與貼圖",
+    "zhHans": "正在加载模型和贴图",
+    "en": "Loading model and textures"
   },
   "ui.opening-project": {
     "zhHant": "正在打開項目",
     "zhHans": "正在打开项目",
     "en": "Opening project"
   },
+  "ui.opening-project-eyebrow": {
+    "zhHant": "OPENING PROJECT",
+    "zhHans": "加载项目",
+    "en": "OPENING PROJECT"
+  },
+  "ui.opening-reading-file": {
+    "zhHant": "正在讀取項目檔案",
+    "zhHans": "正在读取项目文件",
+    "en": "Reading project file"
+  },
   "ui.operation-history-limit": {
     "zhHant": "操作歷史上限",
-    "zhHans": "操作历史上限",
+    "zhHans": "历史记录上限",
     "en": "Operation history limit"
   },
   "ui.operator": {
@@ -4107,7 +4277,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.paint-color": {
     "zhHant": "繪畫顏色",
-    "zhHans": "绘画颜色",
+    "zhHans": "绘制颜色",
     "en": "Paint color"
   },
   "ui.paint-color-state-paintcolor": {
@@ -4117,7 +4287,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.paint-directly-on-shapes-in-paint-mode-subdivision-edit-is-disabled": {
     "zhHant": "繪畫模式可直接在 Shape 上繪畫，不使用細分編輯",
-    "zhHans": "绘画模式可直接在 Shape 上绘画，不使用细分编辑",
+    "zhHans": "绘画模式可直接在 形状 上绘画，不使用细分编辑",
     "en": "Paint directly on shapes in Paint mode; Subdivision Edit is disabled"
   },
   "ui.paint-explode-gap-model-units-0-means-touching": {
@@ -4167,7 +4337,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.paletterows-length-1": {
     "zhHant": "匯入色卡 ${paletteRows.length + 1}",
-    "zhHans": "汇入色卡 ${paletteRows.length + 1}",
+    "zhHans": "导入色卡 ${paletteRows.length + 1}",
     "en": "匯入色卡 ${paletteRows.length + 1}"
   },
   "ui.paletterows-length-palettecompact": {
@@ -4197,32 +4367,32 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.paste": {
     "zhHant": "貼上",
-    "zhHans": "贴上",
+    "zhHans": "粘贴",
     "en": "Paste"
   },
   "ui.paste-ctrl-v": {
     "zhHant": "貼上 Ctrl+V",
-    "zhHans": "贴上 Ctrl+V",
+    "zhHans": "粘贴 Ctrl+V",
     "en": "Paste Ctrl+V"
   },
   "ui.paste-elements": {
     "zhHant": "貼上元素",
-    "zhHans": "贴上元素",
+    "zhHans": "粘贴元素",
     "en": "Paste elements"
   },
   "ui.paste-frame-element": {
     "zhHant": "貼上幀元素",
-    "zhHans": "贴上幀元素",
+    "zhHans": "粘贴帧",
     "en": "Paste frame element"
   },
   "ui.paste-texture": {
     "zhHant": "貼上貼圖",
-    "zhHans": "贴上贴图",
+    "zhHans": "粘贴贴图",
     "en": "Paste texture"
   },
   "ui.pasted-elements": {
     "zhHant": "已貼上元素",
-    "zhHans": "已贴上元素",
+    "zhHans": "已粘贴元素",
     "en": "Pasted elements"
   },
   "ui.pause": {
@@ -4232,7 +4402,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.pending-length": {
     "zhHant": "找到 ${pending.length} 個未保存的工作項目。要全部恢復到分頁嗎？",
-    "zhHans": "找到 ${pending.length} 个未保存的工作项目。要全部恢复到分页吗？",
+    "zhHans": "找到 ${pending.length} 个未保存的工作项目。要全部恢复到标签页吗？",
     "en": "找到 ${pending.length} 個未保存的工作項目。要全部恢復到分頁嗎？"
   },
   "ui.per-face-uv": {
@@ -4277,17 +4447,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.player-reference-texture": {
     "zhHant": "玩家參考紋理",
-    "zhHans": "玩家参考纹理",
+    "zhHans": "玩家参考贴图",
     "en": "Player reference texture"
   },
   "ui.player-reference-texture-file-name": {
     "zhHant": "玩家參考紋理：${file.name || '已導入'}",
-    "zhHans": "玩家参考纹理：${file.name || '已导入'}",
+    "zhHans": "玩家参考贴图：${file.name || '已导入'}",
     "en": "Player reference texture: ${file.name || '已導入'}"
   },
   "ui.player-textures-must-be-square-images-of-at-least-64-64-pixels": {
     "zhHant": "玩家紋理必須是至少 64×64 的正方形圖片",
-    "zhHans": "玩家纹理必须是至少 64×64 的正方形图片",
+    "zhHans": "玩家贴图必须是至少 64 × 64 的正方形图片",
     "en": "Player textures must be square images of at least 64×64 pixels"
   },
   "ui.png-image": {
@@ -4307,22 +4477,22 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.point-to-a-textured-face-before-using-single-face-mode": {
     "zhHant": "單面局限時請先指向一個貼圖面",
-    "zhHans": "单面局限时请先指向一个贴图面",
+    "zhHans": "仅限单面时请先指向一个贴图面",
     "en": "Point to a textured face before using single-face mode"
   },
   "ui.pointer-fade-radius": {
     "zhHant": "鼠標虛化半徑",
-    "zhHans": "鼠标虚化半径",
+    "zhHans": "悬停虚化半径",
     "en": "Pointer fade radius"
   },
   "ui.pointer-hover-alpha": {
     "zhHant": "鼠標虛化 Alpha",
-    "zhHans": "鼠标虚化 Alpha",
+    "zhHans": "悬停时的不透明度",
     "en": "Pointer hover alpha"
   },
   "ui.polygon-editing-is-not-implemented-yet": {
     "zhHant": "多面體編輯尚未實現",
-    "zhHans": "多面体编辑尚未实现",
+    "zhHans": "多边形编辑即将推出",
     "en": "Polygon editing is not implemented yet"
   },
   "ui.polygonal-prism": {
@@ -4410,6 +4580,36 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "项目描述",
     "en": "Project description"
   },
+  "ui.project-history-conflict-active": {
+    "zhHant": "現有工作副本仍在目前視窗使用；可以切換回它，或另外打開文件。",
+    "zhHans": "已有工作副本正在此窗口中使用。可以切回工作副本，也可以打开文件另存一份。",
+    "en": "The working copy is open in this window. Switch back to it or open the file separately."
+  },
+  "ui.project-history-conflict-inactive": {
+    "zhHant": "可以用文件取代舊工作副本，或保留兩份並另外打開。原始文件不會因此被改寫。",
+    "zhHans": "可以用此文件覆盖旧工作副本，也可以另开一份。原始文件不会被修改。",
+    "en": "Replace the old working copy or open a separate copy. The original file is preserved."
+  },
+  "ui.project-history-conflict-message": {
+    "zhHant": "這個文件與已有的展開工作記錄不屬於同一條歷史。",
+    "zhHans": "此文件与已有工作副本的历史记录不同。",
+    "en": "This file and the working copy have different histories."
+  },
+  "ui.project-history-conflict-title": {
+    "zhHant": "同一項目的工作記錄不同",
+    "zhHans": "项目工作记录冲突",
+    "en": "Conflicting Project History"
+  },
+  "ui.project-history-preview-mismatch": {
+    "zhHant": "最近操作快取與工作記錄不一致；已停止後續寫入",
+    "zhHans": "最近操作缓存与工作记录不一致；已停止后续写入",
+    "en": "The recent operation cache does not match working history; further writes have been stopped"
+  },
+  "ui.project-history-preview-write-blocked": {
+    "zhHant": "工作記錄寫入失敗，已停止後續切換",
+    "zhHans": "工作记录写入失败，已停止后续切换",
+    "en": "Working history could not be written; further navigation has been stopped"
+  },
   "ui.project-history-tree": {
     "zhHant": "項目歷史分支圖",
     "zhHans": "项目历史分支图",
@@ -4419,6 +4619,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "項目首頁",
     "zhHans": "项目首页",
     "en": "Project home"
+  },
+  "ui.project-info-eyebrow": {
+    "zhHant": "PROJECT INFO",
+    "zhHans": "项目",
+    "en": "PROJECT INFO"
   },
   "ui.project-information": {
     "zhHant": "項目信息",
@@ -4442,7 +4647,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.project-tabs": {
     "zhHant": "項目分頁",
-    "zhHans": "项目分页",
+    "zhHans": "项目标签页",
     "en": "Project tabs"
   },
   "ui.projects-and-each-pack-type-are-stored-separately-install-only-trusted-shape-js-packs": {
@@ -4452,7 +4657,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.projects-stores-working-journals-shapepacks-holds-external-shapes-install-trusted-js-packs-only": {
     "zhHant": "projects/ 保存新項目的展開記錄；shapepacks/ 放外部 Shape 包（僅安裝可信的 JS 包）",
-    "zhHans": "projects/ 保存新项目的展开记录；shapepacks/ 放外部 Shape 包（仅安装可信的 JS 包）",
+    "zhHans": "projects/ 保存新项目的展开记录；shapepacks/ 放外部 形状包（仅安装可信的 JS 包）",
     "en": "projects/ stores working journals; shapepacks/ holds external shapes (install trusted JS packs only)."
   },
   "ui.pure-black": {
@@ -4477,12 +4682,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.reading-existing-textures": {
     "zhHant": "正在讀取已有紋理…",
-    "zhHans": "正在读取已有纹理…",
+    "zhHans": "正在读取现有贴图…",
     "en": "Reading existing textures…"
   },
   "ui.reading-project-file": {
     "zhHant": "正在讀取項目檔案…",
-    "zhHans": "正在读取项目档案…",
+    "zhHans": "正在读取项目文件…",
     "en": "Reading project file…"
   },
   "ui.recover": {
@@ -4497,7 +4702,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.recovered-projects-open-in-tabs-existing-work-is-not-overwritten": {
     "zhHant": "恢復後會以分頁打開；現有工作項目不會被覆蓋。",
-    "zhHans": "恢复后会以分页打开；现有工作项目不会被覆盖。",
+    "zhHans": "恢复的项目会在新标签页中打开，现有项目会保留。",
     "en": "Recovered projects open in tabs; existing work is not overwritten."
   },
   "ui.rectangle": {
@@ -4532,7 +4737,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.refresh": {
     "zhHant": "重新整理",
-    "zhHans": "重新整理",
+    "zhHans": "刷新",
     "en": "Refresh"
   },
   "ui.regular-dodecahedron": {
@@ -4567,7 +4772,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.removed-size-cube": {
     "zhHant": "全部面已剔除，已刪除 ${removed.size} 個 Cube",
-    "zhHans": "全部面已剔除，已删除 ${removed.size} 个 Cube",
+    "zhHans": "全部面已剔除，已删除 ${removed.size} 个 立方体",
     "en": "全部面已剔除，已刪除 ${removed.size} 個 Cube"
   },
   "ui.rename-palette": {
@@ -4587,7 +4792,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.reorder-frame-elements": {
     "zhHant": "調整幀元素順序",
-    "zhHans": "调整幀元素顺序",
+    "zhHans": "调整帧顺序",
     "en": "Reorder frame elements"
   },
   "ui.reorder-reference-images": {
@@ -4602,8 +4807,13 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.repack-uvs-only-for-the-current-selection": {
     "zhHant": "只重排目前選取範圍的 UV",
-    "zhHans": "只重排当前选取范围的 UV",
+    "zhHans": "只重排当前选区的 UV",
     "en": "Repack UVs only for the current selection"
+  },
+  "ui.replace-working-copy": {
+    "zhHant": "以文件覆蓋工作副本",
+    "zhHans": "用文件覆盖工作副本",
+    "en": "Replace Working Copy"
   },
   "ui.reset": {
     "zhHant": "重置",
@@ -4612,7 +4822,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.reset-element-rotation": {
     "zhHant": "重設元素旋轉",
-    "zhHans": "重设元素旋转",
+    "zhHans": "重置元素旋转",
     "en": "Reset element rotation"
   },
   "ui.reset-position-and-size": {
@@ -4622,7 +4832,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.reset-reference-image": {
     "zhHant": "重設參考圖",
-    "zhHans": "重设参考图",
+    "zhHans": "重置参考图",
     "en": "Reset reference image"
   },
   "ui.resource-pack-added": {
@@ -4632,7 +4842,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.resource-pack-reloaded": {
     "zhHant": "資源包已重新載入",
-    "zhHans": "资源包已重新载入",
+    "zhHans": "资源包已重新加载",
     "en": "Resource pack reloaded"
   },
   "ui.resource-pack-removed": {
@@ -4645,14 +4855,19 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "资源包",
     "en": "Resource packs"
   },
+  "ui.resource-packs-eyebrow": {
+    "zhHant": "RESOURCE PACKS",
+    "zhHans": "扩展管理",
+    "en": "RESOURCE PACKS"
+  },
   "ui.restore-built-in-texture": {
     "zhHant": "恢復內置紋理",
-    "zhHans": "恢复内置纹理",
+    "zhHans": "恢复内置贴图",
     "en": "Restore built-in texture"
   },
   "ui.restore-defaults": {
     "zhHant": "恢復預設",
-    "zhHans": "恢复预设",
+    "zhHans": "恢复默认",
     "en": "Restore defaults"
   },
   "ui.restore-face": {
@@ -4687,12 +4902,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.restored-the-built-in-player-texture": {
     "zhHant": "已恢復內置玩家紋理",
-    "zhHans": "已恢复内置玩家纹理",
+    "zhHans": "已恢复内置玩家贴图",
     "en": "Restored the built-in player texture"
   },
   "ui.result-historywarning": {
     "zhHant": "歷史裁剪未完成：${result.historyWarning}",
-    "zhHans": "历史裁剪未完成：${result.historyWarning}",
+    "zhHans": "历史清理未完成：${result.historyWarning}",
     "en": "History compaction incomplete: ${result.historyWarning}"
   },
   "ui.return-to-scene-origin": {
@@ -4722,12 +4937,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.roll-angle": {
     "zhHant": "滾動角",
-    "zhHans": "滚动角",
+    "zhHans": "滚转角",
     "en": "Roll angle"
   },
   "ui.roll-angle-formatsigned-drag-curvenodecontext-node-roll": {
     "zhHant": "滾動角 ${formatSigned(drag.curveNodeContext.node.roll)}°",
-    "zhHans": "滚动角 ${formatSigned(drag.curveNodeContext.node.roll)}°",
+    "zhHans": "滚转角 ${formatSigned(drag.curveNodeContext.node.roll)}°",
     "en": "Roll angle ${formatSigned(drag.curveNodeContext.node.roll)}°"
   },
   "ui.rotate": {
@@ -4790,10 +5005,20 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "另存为 PNG",
     "en": "Save as PNG"
   },
+  "ui.save-cubebricks-model-dialog": {
+    "zhHant": "保存 CubeBricks 模型",
+    "zhHans": "保存 CubeBricks 模型",
+    "en": "Save CubeBricks Model"
+  },
   "ui.save-failed-error-message": {
     "zhHant": "保存失敗：${error.message}",
     "zhHans": "保存失败：${error.message}",
     "en": "Save failed: ${error.message}"
+  },
+  "ui.save-model-capture-dialog": {
+    "zhHant": "另存模型截圖",
+    "zhHans": "模型截图另存为",
+    "en": "Save Model Screenshot"
   },
   "ui.scale": {
     "zhHant": "縮放",
@@ -4827,7 +5052,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.scale-snap-currently-supports-cubes-only": {
     "zhHant": "縮放捕捉目前只適用於 Cube",
-    "zhHans": "缩放捕捉当前只适用于 Cube",
+    "zhHans": "缩放捕捉当前只适用于 立方体",
     "en": "Scale snap currently supports cubes only"
   },
   "ui.scale-uv": {
@@ -4877,12 +5102,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.second-alpha": {
     "zhHant": "第二色 α",
-    "zhHans": "第二色 α",
+    "zhHans": "结束色 α",
     "en": "Second alpha"
   },
   "ui.second-color": {
     "zhHant": "第二色",
-    "zhHans": "第二色",
+    "zhHans": "结束色",
     "en": "Second color"
   },
   "ui.segmentation": {
@@ -4892,32 +5117,32 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.select-a-cube-face-in-uv-preview-first": {
     "zhHant": "請先在 UV 預覽中選擇 Cube 的面",
-    "zhHans": "请先在 UV 预览中选择 Cube 的面",
+    "zhHans": "请先在 UV 预览中选择 立方体 的面",
     "en": "Select a cube face in UV preview first"
   },
   "ui.select-a-cube-or-shape": {
     "zhHant": "選擇 Cube 或 Shape",
-    "zhHans": "选择 Cube 或 Shape",
+    "zhHans": "选择 立方体 或 形状",
     "en": "Select a Cube or Shape"
   },
   "ui.select-a-cube-shape-locator-or-group-to-edit": {
     "zhHant": "選擇一個 Cube、Shape、Locator 或組來編輯。",
-    "zhHans": "选择一个 Cube、Shape、Locator 或组来编辑。",
+    "zhHans": "请选择要编辑的立方体、形状、定位器或组。",
     "en": "Select a cube, shape, locator, or group to edit."
   },
   "ui.select-a-cube-shape-node-bezier-element-locator-or-group-to-edit": {
     "zhHant": "選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。",
-    "zhHans": "选择一个 Cube、Shape、节点、贝塞尔、Locator 或组来编辑。",
+    "zhHans": "请选择要编辑的立方体、形状、节点、贝塞尔曲线、定位器或组。",
     "en": "Select a cube, shape, node, Bezier element, locator, or group to edit."
   },
   "ui.select-a-cube-shape-or-bezier-element": {
     "zhHant": "選擇 Cube、Shape 或貝塞爾",
-    "zhHans": "选择 Cube、Shape 或贝塞尔",
+    "zhHans": "选择 立方体、形状 或贝塞尔",
     "en": "Select a Cube, Shape, or Bezier element"
   },
   "ui.select-a-cube-shape-or-group-to-edit": {
     "zhHant": "選擇一個 Cube、Shape 或組來編輯。",
-    "zhHans": "选择一个 Cube、Shape 或组来编辑。",
+    "zhHans": "请选择要编辑的立方体、形状或组。",
     "en": "Select a cube, shape, or group to edit."
   },
   "ui.select-a-cut-point": {
@@ -4972,32 +5197,32 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.select-frame-paint-layer": {
     "zhHant": "選擇幀內繪畫圖層",
-    "zhHans": "选择幀内绘画图层",
+    "zhHans": "选择帧内绘画图层",
     "en": "Select frame paint layer"
   },
   "ui.select-source-vertex": {
     "zhHant": "先選來源頂點",
-    "zhHans": "先选来源顶点",
+    "zhHans": "选择源顶点",
     "en": "Select source vertex"
   },
   "ui.select-target-vertex": {
     "zhHant": "再選目標頂點",
-    "zhHans": "再选目标顶点",
+    "zhHans": "选择目标顶点",
     "en": "Select target vertex"
   },
   "ui.select-the-first-color-and-edit-it-in-the-right-side-picker": {
     "zhHant": "選中第一色並在右側選色器調整",
-    "zhHans": "选中第一色并在右侧选色器调整",
+    "zhHans": "选择起始色，再在右侧颜色选择器中调整",
     "en": "Select the first color and edit it in the right-side picker"
   },
   "ui.select-the-second-color-and-edit-it-in-the-right-side-picker": {
     "zhHant": "選中第二色並在右側選色器調整",
-    "zhHans": "选中第二色并在右侧选色器调整",
+    "zhHans": "选择结束色，再在右侧颜色选择器中调整",
     "en": "Select the second color and edit it in the right-side picker"
   },
   "ui.select-the-tabs-to-keep-for-next-time-unselected-local-working-records-are-deleted-saved-model-files": {
     "zhHant": "勾選下次要恢復的分頁。取消勾選會刪除該項目的本機工作記錄，不會刪除已保存的模型檔。",
-    "zhHans": "勾选下次要恢复的分页。取消勾选会删除该项目的本机工作记录，不会删除已保存的模型档。",
+    "zhHans": "勾选下次要恢复的标签页。取消勾选会删除该项目的本地工作记录，不会删除已保存的模型档。",
     "en": "Select the tabs to keep for next time. Unselected local working records are deleted; saved model files are not."
   },
   "ui.selected-elements-only": {
@@ -5055,10 +5280,55 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "选区",
     "en": "Selection"
   },
+  "ui.selection-copy-pixels": {
+    "zhHant": "複製像素",
+    "zhHans": "复制像素",
+    "en": "Copy Pixels"
+  },
+  "ui.selection-cut-pixels": {
+    "zhHant": "剪下像素",
+    "zhHans": "剪切像素",
+    "en": "Cut Pixels"
+  },
+  "ui.selection-delete-pixels": {
+    "zhHant": "刪除像素",
+    "zhHans": "删除像素",
+    "en": "Delete Pixels"
+  },
+  "ui.selection-duplicate-pixels": {
+    "zhHant": "原地複製像素",
+    "zhHans": "原地复制像素",
+    "en": "Duplicate Pixels in Place"
+  },
+  "ui.selection-move-to-new-layer": {
+    "zhHant": "移到新建圖層",
+    "zhHans": "移到新建图层",
+    "en": "Move to New Layer"
+  },
   "ui.selection-outline": {
     "zhHant": "選中邊框",
     "zhHans": "选中边框",
     "en": "Selection outline"
+  },
+  "ui.selection-paste-pixels": {
+    "zhHant": "貼上像素",
+    "zhHans": "粘贴像素",
+    "en": "Paste Pixels"
+  },
+  "ui.selection-rotation-sampling": {
+    "zhHant": "旋轉採樣",
+    "zhHans": "旋转采样",
+    "en": "Rotation Sampling"
+  },
+  "ui.selection-sampling-nearest": {
+    "zhHant": "最近鄰",
+    "zhHans": "最近邻",
+    "en": "Nearest Neighbor"
+  },
+  "ui.selection-sampling-smooth": {
+    "zhHant": "平滑",
+    "zhHans": "平滑",
+    "en": "Smooth"
   },
   "ui.separate": {
     "zhHant": "分別執行",
@@ -5067,7 +5337,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.separate-groups-in-paint-mode-only-model-data-and-pivots-stay-unchanged": {
     "zhHant": "只在繪畫視圖按組展開；不更改模型、樞軸或工程資料",
-    "zhHans": "只在绘画视图按组展开；不更改模型、枢轴或工程资料",
+    "zhHans": "只在绘画视图按组展开；不更改模型、枢轴或工程数据",
     "en": "Separate groups in Paint mode only; model data and pivots stay unchanged."
   },
   "ui.separate-uv-editing-mode": {
@@ -5082,7 +5352,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.sets-cube-rotation-limits": {
     "zhHant": "決定 Cube 旋轉限制",
-    "zhHans": "决定 Cube 旋转限制",
+    "zhHans": "决定 立方体 旋转限制",
     "en": "Sets cube rotation limits"
   },
   "ui.settings": {
@@ -5094,6 +5364,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "設定分類",
     "zhHans": "设置分类",
     "en": "Settings categories"
+  },
+  "ui.settings-eyebrow": {
+    "zhHant": "SETTINGS",
+    "zhHans": "应用设置",
+    "en": "SETTINGS"
   },
   "ui.shading": {
     "zhHant": "面陰影",
@@ -5112,7 +5387,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.shape-definition-id-has-invalid-fields": {
     "zhHant": "Shape ${definition.id} 的 fields 不合法",
-    "zhHans": "Shape ${definition.id} 的 fields 不合法",
+    "zhHans": "形状 ${definition.id} 的 fields 不合法",
     "en": "Shape ${definition.id} has invalid fields"
   },
   "ui.shape-definitions-require-id-label-and-generate": {
@@ -5122,8 +5397,18 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.shape-failed-error-message": {
     "zhHant": "Shape 包掃描失敗：${error.message}",
-    "zhHans": "Shape 包扫描失败：${error.message}",
+    "zhHans": "形状包扫描失败：${error.message}",
     "en": "Shape 包掃描 failed: ${error.message}"
+  },
+  "ui.shape-format-switch-required": {
+    "zhHant": "请切换到 Java 1.21.11+ 或其他支持的模型格式。",
+    "zhHans": "请切换到 Java 1.21.11+ 或其他支持的模型格式。",
+    "en": "Switch to Java 1.21.11+ or another supported model format."
+  },
+  "ui.shape-format-unsupported": {
+    "zhHant": "当前模型格式暂不支持此 Shape",
+    "zhHans": "当前模型格式暂不支持此形状",
+    "en": "This Shape is not available in the current model format"
   },
   "ui.shape-id-already-exists-definition-id": {
     "zhHant": "Shape ID 已存在：${definition.id}",
@@ -5132,12 +5417,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.shape-not-installed-item-shapetype": {
     "zhHant": "未安裝的 Shape：${item.shapeType}",
-    "zhHans": "未安装的 Shape：${item.shapeType}",
+    "zhHans": "未安装的 形状：${item.shapeType}",
     "en": "Shape not installed: ${item.shapeType}"
+  },
+  "ui.shape-pack-zip-filter": {
+    "zhHant": "Shape ZIP",
+    "zhHans": "形状包 ZIP",
+    "en": "Shape ZIP"
   },
   "ui.shape-packs": {
     "zhHant": "Shape 包",
-    "zhHans": "Shape 包",
+    "zhHans": "形状包",
     "en": "Shape packs"
   },
   "ui.shape-parameters": {
@@ -5147,12 +5437,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.shape-subdivision-cube": {
     "zhHant": "Shape 細分 Cube",
-    "zhHans": "Shape 细分 Cube",
+    "zhHans": "形状 细分 立方体",
     "en": "Shape subdivision cube"
   },
   "ui.shapenames-shapetool": {
     "zhHant": "圖形繪製（目前：${shapeNames[shapeTool]}）",
-    "zhHans": "图形绘制（当前：${shapeNames[shapeTool]}）",
+    "zhHans": "图形绘制（当前为${shapeNames[shapeTool]}）",
     "en": "Shape drawing (current: ${shapeNames[shapeTool]})"
   },
   "ui.shift": {
@@ -5192,7 +5482,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.show-detailed-information": {
     "zhHant": "顯示詳細資訊",
-    "zhHans": "显示详细资讯",
+    "zhHans": "显示详细信息",
     "en": "Show detailed information"
   },
   "ui.show-generated-objects-at-75-visibility": {
@@ -5232,7 +5522,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.show-only-cubes-and-shapes-temporarily-hide-helpers-such-as-locators": {
     "zhHant": "只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件",
-    "zhHans": "只显示 Cube 和 Shape；暂时隐藏 Locator 等辅助对象",
+    "zhHans": "只显示 立方体 和 形状；暂时隐藏 定位器 等辅助对象",
     "en": "Show only cubes and shapes; temporarily hide helpers such as locators"
   },
   "ui.show-or-hide-reference-grid": {
@@ -5302,12 +5592,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.skip": {
     "zhHant": "略過",
-    "zhHans": "略过",
+    "zhHans": "跳过",
     "en": "Skip"
   },
   "ui.skip-pixels-that-were-fully-transparent-before-the-stroke": {
     "zhHant": "繪畫時略過原本完全透明的像素",
-    "zhHans": "绘画时略过原本完全透明的像素",
+    "zhHans": "绘画时跳过原本完全透明的像素",
     "en": "Skip pixels that were fully transparent before the stroke"
   },
   "ui.slate": {
@@ -5317,7 +5607,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.slowly-rotate-the-model-in-this-preview-only": {
     "zhHant": "僅在此預覽中讓模型慢速轉動",
-    "zhHans": "仅在此预览中让模型慢速转动",
+    "zhHans": "仅在预览中缓慢旋转模型",
     "en": "Slowly rotate the model in this preview only"
   },
   "ui.snap": {
@@ -5362,7 +5652,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.snap-step-is-16-precision-16-1px-32-0-5px": {
     "zhHant": "吸附步長為 16 ÷ 精度；16 = 1px，32 = 0.5px",
-    "zhHans": "吸附步长为 16 ÷ 精度；16 = 1px，32 = 0.5px",
+    "zhHans": "吸附步长 = 16 ÷ 精度。例如精度为 16 时，步长为 1 px。",
     "en": "Snap step is 16 ÷ precision; 16 = 1px, 32 = 0.5px"
   },
   "ui.snapped-to-target-vertex": {
@@ -5382,7 +5672,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.solid-mipped": {
     "zhHant": "實心 Mipped",
-    "zhHans": "实心 Mipped",
+    "zhHans": "实心（Mipmap）",
     "en": "Solid Mipped"
   },
   "ui.solid-template": {
@@ -5442,7 +5732,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.state-project-getnode-state-selectedgenerated-uid-name-read-only": {
     "zhHant": "${state.project.getNode(state.selectedGenerated.uid)?.name || '生成物'} · 唯讀",
-    "zhHans": "${state.project.getNode(state.selectedGenerated.uid)?.name || '生成物'} · 唯读",
+    "zhHans": "${state.project.getNode(state.selectedGenerated.uid)?.name || '生成物'} · 只读",
     "en": "${state.project.getNode(state.selectedGenerated.uid)?.name || '生成物'} · Read-only"
   },
   "ui.state-selectedcurvenodeindex-1": {
@@ -5457,7 +5747,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.subdivision-cubes-belong-to-the-shape-and-cannot-be-deleted-individually": {
     "zhHant": "細分 Cube 由 Shape 管理，不能單獨刪除",
-    "zhHans": "细分 Cube 由 Shape 管理，不能单独删除",
+    "zhHans": "细分 立方体 由 形状 管理，不能单独删除",
     "en": "Subdivision cubes belong to the shape and cannot be deleted individually"
   },
   "ui.subtract": {
@@ -5469,6 +5759,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "切換",
     "zhHans": "切换",
     "en": "Switch"
+  },
+  "ui.switch-to-working-copy": {
+    "zhHant": "切換到工作副本",
+    "zhHans": "切换到工作副本",
+    "en": "Switch to Working Copy"
   },
   "ui.symmetric-handles": {
     "zhHant": "手柄對稱",
@@ -5510,6 +5805,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "系统命名",
     "en": "System-generated name"
   },
+  "ui.system-language": {
+    "zhHant": "系統語言",
+    "zhHans": "系统语言",
+    "en": "System Language"
+  },
   "ui.template-size-side-side-is-too-large-lower-the-snap-resolution-or-spacing": {
     "zhHant": "模板尺寸 ${side} × ${side} 過大，請降低吸附分辨率或間隔",
     "zhHans": "模板尺寸 ${side} × ${side} 过大，请降低吸附分辨率或间隔",
@@ -5540,6 +5840,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "贴图高度",
     "en": "Texture height"
   },
+  "ui.texture-layers-eyebrow": {
+    "zhHant": "TEXTURE LAYERS",
+    "zhHans": "贴图图层",
+    "en": "TEXTURE LAYERS"
+  },
   "ui.texture-list": {
     "zhHant": "貼圖列表",
     "zhHans": "贴图列表",
@@ -5547,7 +5852,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.texture-load-failed": {
     "zhHant": "貼圖載入失敗",
-    "zhHans": "贴图载入失败",
+    "zhHans": "贴图加载失败",
     "en": "Texture load failed"
   },
   "ui.texture-mode": {
@@ -5562,7 +5867,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.texture-template": {
     "zhHant": "紋理模板",
-    "zhHans": "纹理模板",
+    "zhHans": "贴图模板",
     "en": "Texture template"
   },
   "ui.texture-template-do-not-share-uv": {
@@ -5572,7 +5877,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.texture-template-do-not-share-uv-description": {
     "zhHant": "勾選後每個面獨立排布；取消可複用相同來源的 UV",
-    "zhHans": "勾选后每个面独立排布；取消可复用相同来源的 UV",
+    "zhHans": "勾选后单独排列每个面。取消勾选后可复用相同来源的 UV。",
     "en": "Check to place every face separately; uncheck to reuse matching source UVs"
   },
   "ui.texture-width": {
@@ -5597,12 +5902,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.the-cut-must-be-inside-the-cube": {
     "zhHant": "切割位置必須位於 Cube 內部",
-    "zhHans": "切割位置必须位于 Cube 内部",
+    "zhHans": "切割位置必须位于 立方体 内部",
     "en": "The cut must be inside the cube"
   },
   "ui.the-element-clipboard-is-empty": {
     "zhHant": "元素剪貼簿是空的",
-    "zhHans": "元素剪贴簿是空的",
+    "zhHans": "剪贴板中没有元素",
     "en": "The element clipboard is empty"
   },
   "ui.the-eraser-cannot-change-the-texture-while-alpha-lock-is-enabled": {
@@ -5617,7 +5922,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.the-knife-currently-cuts-cubes-only": {
     "zhHant": "刀具目前只能切割 Cube",
-    "zhHans": "刀具当前只能切割 Cube",
+    "zhHans": "刀具当前只能切割 立方体",
     "en": "The knife currently cuts cubes only"
   },
   "ui.the-knife-is-unavailable-during-subdivision-edit": {
@@ -5632,22 +5937,22 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.the-second-gradient-point-must-be-on-the-same-face": {
     "zhHant": "面漸變的第二點必須在同一個面",
-    "zhHans": "面渐变的第二点必须在同一个面",
+    "zhHans": "请在同一个面上选择渐变终点",
     "en": "The second gradient point must be on the same face"
   },
   "ui.the-second-gradient-point-must-be-on-the-same-uv-face": {
     "zhHant": "面漸變的第二點必須在同一個 UV 面",
-    "zhHans": "面渐变的第二点必须在同一个 UV 面",
+    "zhHans": "请在同一个 UV 面上选择渐变终点",
     "en": "The second gradient point must be on the same UV face"
   },
   "ui.the-second-point-must-be-on-the-same-cube-face": {
     "zhHant": "第二點必須位於同一個 Cube 面上",
-    "zhHans": "第二点必须位于同一个 Cube 面上",
+    "zhHans": "第二点必须位于同一个 立方体 面上",
     "en": "The second point must be on the same cube face"
   },
   "ui.the-second-volume-gradient-point-must-be-on-the-same-cube": {
     "zhHant": "體漸變的第二點必須在同一個 Cube",
-    "zhHans": "体渐变的第二点必须在同一个 Cube",
+    "zhHans": "请在同一个立方体上选择体渐变终点",
     "en": "The second volume-gradient point must be on the same cube"
   },
   "ui.the-selected-vertices-cannot-define-a-rotation": {
@@ -5657,17 +5962,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.the-six-box-uv-faces-have-fixed-relative-positions-and-cannot-be-edited-individually": {
     "zhHant": "箱型 UV 的六面相對位置固定，不能單獨修改面座標",
-    "zhHans": "箱型 UV 的六面相对位置固定，不能单独修改面座标",
+    "zhHans": "箱型 UV 的六面相对位置固定，不能单独修改面坐标",
     "en": "The six box-UV faces have fixed relative positions and cannot be edited individually"
   },
   "ui.the-target-vertex-must-be-outside-the-current-selection": {
     "zhHant": "目標頂點必須位於目前選取範圍之外",
-    "zhHans": "目标顶点必须位于当前选取范围之外",
+    "zhHans": "目标顶点必须位于当前选区之外",
     "en": "The target vertex must be outside the current selection"
   },
   "ui.the-texture-animation-contains-too-many-frames": {
     "zhHant": "貼圖動畫包含過多幀",
-    "zhHans": "贴图动画包含过多幀",
+    "zhHans": "贴图动画包含过多帧",
     "en": "The texture animation contains too many frames"
   },
   "ui.the-texture-animation-contains-too-many-images": {
@@ -5687,12 +5992,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.there-are-no-cubes-available-for-a-template": {
     "zhHant": "目前沒有可建立模板的 Cube",
-    "zhHans": "当前没有可建立模板的 Cube",
+    "zhHans": "当前没有可创建模板的 立方体",
     "en": "There are no cubes available for a template"
   },
   "ui.there-are-no-faces-available-for-a-texture-template": {
     "zhHant": "目前沒有可建立模板的面",
-    "zhHans": "当前没有可建立模板的面",
+    "zhHans": "当前没有可创建模板的面",
     "en": "There are no faces available for a texture template"
   },
   "ui.there-is-no-model-to-capture": {
@@ -5712,7 +6017,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.these-settings-belong-to-the-project-in-this-tab-and-are-saved-with-it": {
     "zhHant": "這些設定屬於目前分頁中的工程，會跟隨工程保存。",
-    "zhHans": "这些设置属于当前分页中的工程，会跟随工程保存。",
+    "zhHans": "这些设置会随当前标签页中的项目一起保存。",
     "en": "These settings belong to the project in this tab and are saved with it."
   },
   "ui.this-cannot-be-undone-if-the-current-state-is-deleted-a-retained-parent-or-nearby-history-state-will": {
@@ -5727,7 +6032,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.this-face-has-no-assigned-texture-and-cannot-be-painted": {
     "zhHant": "這個面尚未分配貼圖，無法繪製",
-    "zhHans": "这个面尚未分配贴图，无法绘制",
+    "zhHans": "此面未分配贴图，无法绘制",
     "en": "This face has no assigned texture and cannot be painted"
   },
   "ui.this-face-has-no-usable-texture": {
@@ -5737,7 +6042,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.this-file-is-not-a-usable-png-player-texture": {
     "zhHant": "這個檔案不是可用的 PNG 玩家紋理",
-    "zhHans": "这个档案不是可用的 PNG 玩家纹理",
+    "zhHans": "此文件不是有效的 PNG 玩家贴图",
     "en": "This file is not a usable PNG player texture"
   },
   "ui.this-format-is-not-implemented-yet": {
@@ -5747,7 +6052,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.this-frame-has-no-editable-layer": {
     "zhHant": "當前幀沒有可編輯圖層",
-    "zhHans": "当前幀没有可编辑图层",
+    "zhHans": "当前帧没有可编辑的图层",
     "en": "This frame has no editable layer"
   },
   "ui.this-is-a-texture-index-open-its-corresponding-model-file-instead": {
@@ -5772,7 +6077,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.this-object-cannot-use-rotation-snap": {
     "zhHant": "這個物件不能旋轉捕捉",
-    "zhHans": "这个对象不能旋转捕捉",
+    "zhHans": "此对象不支持旋转捕捉",
     "en": "This object cannot use rotation snap"
   },
   "ui.this-object-has-no-modifiers": {
@@ -5782,12 +6087,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.this-shape-has-no-cubes-to-bake": {
     "zhHant": "這個 Shape 沒有可烘焙的 Cube",
-    "zhHans": "这个 Shape 没有可烘焙的 Cube",
+    "zhHans": "这个 形状 没有可烘焙的 立方体",
     "en": "This shape has no cubes to bake"
   },
   "ui.this-shape-has-no-editable-cubes": {
     "zhHant": "這個 Shape 目前沒有可編輯的 Cube",
-    "zhHans": "这个 Shape 当前没有可编辑的 Cube",
+    "zhHans": "这个 形状 当前没有可编辑的 立方体",
     "en": "This shape has no editable cubes"
   },
   "ui.this-snap-point-cannot-define-a-valid-cut-plane": {
@@ -5837,7 +6142,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.toggle-texture-flipbook-attribute": {
     "zhHant": "切換貼圖手翻書屬性",
-    "zhHans": "切换贴图手翻書属性",
+    "zhHans": "切换手翻书动画",
     "en": "Toggle texture flipbook attribute"
   },
   "ui.toggle-viewport-shading-globally-without-overriding-per-object-shading": {
@@ -5907,7 +6212,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.translucent-mipped": {
     "zhHant": "半透明 Mipped",
-    "zhHans": "半透明 Mipped",
+    "zhHans": "半透明（Mipmap）",
     "en": "Translucent Mipped"
   },
   "ui.transparent-model-capture-preview": {
@@ -5987,7 +6292,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.unwrap-six-faces-continuously-per-cube": {
     "zhHant": "按 Cube 建立連續六面展開",
-    "zhHans": "按 Cube 建立连续六面展开",
+    "zhHans": "将每个立方体的六个面连成一张 UV 展开图",
     "en": "Unwrap six faces continuously per cube"
   },
   "ui.up": {
@@ -5997,7 +6302,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.use-a-64-64-minecraft-skin-or-a-proportional-high-resolution-version": {
     "zhHant": "建議使用 64×64 或等比例高清 Minecraft 皮膚。",
-    "zhHans": "建议使用 64×64 或等比例高清 Minecraft 皮肤。",
+    "zhHans": "建议使用 64 × 64 或等比例高清 Minecraft 皮肤。",
     "en": "Use a 64×64 Minecraft skin or a proportional high-resolution version."
   },
   "ui.use-a-continuous-gradient-for-this-row": {
@@ -6032,7 +6337,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.use-power-of-two-size": {
     "zhHant": "使用 2 冪尺寸",
-    "zhHans": "使用 2 幂尺寸",
+    "zhHans": "使用 2 的幂次方尺寸",
     "en": "Use power-of-two size"
   },
   "ui.use-separate-modes-for-modelling-and-uv-editing": {
@@ -6052,12 +6357,12 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.uv": {
     "zhHant": "依新 UV 重排各圖層像素，保留組與混合設定",
-    "zhHans": "依新 UV 重排各图层像素，保留组与混合设置",
+    "zhHans": "按新 UV 重新排列各图层像素，保留图层组和混合设置",
     "en": "Rearrange each layer for the new UVs while preserving groups and blend settings"
   },
   "ui.uv-dimensions-are-rounded-using-the-project-base-snap-nonzero-edges-get-at-least-1-px-and-are-packed": {
     "zhHant": "UV 尺寸會按照項目基礎吸附分辨率四捨五入；非零邊長至少分配 1px，並由大到小自左上角打包。",
-    "zhHans": "UV 尺寸会按照项目基础吸附分辨率四舍五入；非零边长至少分配 1px，并由大到小自左上角打包。",
+    "zhHans": "UV 尺寸会按照项目基础吸附分辨率四舍五入；非零边长至少分配 1 px，并由大到小自左上角打包。",
     "en": "UV dimensions are rounded using the project base snap; nonzero edges get at least 1 px and are packed largest-first from the top-left."
   },
   "ui.uv-edit": {
@@ -6162,17 +6467,17 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.viewport-cube-birth-ms-ms-0-disables": {
     "zhHant": "viewport.cube-birth-ms · ms；0 關閉",
-    "zhHans": "viewport.cube-birth-ms · ms；0 关闭",
+    "zhHans": "单位为毫秒，设为 0 时关闭",
     "en": "viewport.cube-birth-ms · ms; 0 disables"
   },
   "ui.viewport-cube-death-ms-ms-0-disables": {
     "zhHant": "viewport.cube-death-ms · ms；0 關閉",
-    "zhHans": "viewport.cube-death-ms · ms；0 关闭",
+    "zhHans": "单位为毫秒，设为 0 时关闭",
     "en": "viewport.cube-death-ms · ms; 0 disables"
   },
   "ui.viewport-display-and-locked-object-fading": {
     "zhHant": "視口顯示與鎖定物體虛化",
-    "zhHans": "视口显示与锁定物体虚化",
+    "zhHans": "视口显示和锁定对象虚化",
     "en": "Viewport display and locked-object fading"
   },
   "ui.viewport-projection": {
@@ -6217,7 +6522,7 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.when-disabled-the-minimum-cube-size-is-0": {
     "zhHant": "關閉時 Cube 最小尺寸為 0",
-    "zhHans": "关闭时 Cube 最小尺寸为 0",
+    "zhHans": "关闭时 立方体 最小尺寸为 0",
     "en": "When disabled, the minimum cube size is 0"
   },
   "ui.width": {
@@ -6237,22 +6542,27 @@ export const UI_MESSAGES = Object.freeze({
   },
   "ui.without-history-only-the-current-complete-model-is-saved-undo-records-in-the-working-directory-are-u": {
     "zhHant": "不保留歷史時只保存目前完整模型；工作目錄中的撤回記錄不受影響。",
-    "zhHans": "不保留历史时只保存当前完整模型；工作目录中的撤回记录不受影响。",
+    "zhHans": "不保留历史时只保存当前完整模型；工作目录中的撤销记录不受影响。",
     "en": "Without history, only the current complete model is saved; undo records in the working directory are unchanged."
   },
   "ui.workspace-changed-new-projects-use-projects-and-shape-packs-load-from-shapepacks": {
     "zhHant": "工作空間已切換；新項目使用 projects/，Shape 包從 shapepacks/ 載入",
-    "zhHans": "工作空间已切换；新项目使用 projects/，Shape 包从 shapepacks/ 载入",
+    "zhHans": "工作目录已切换。新项目保存在 projects/，形状包从 shapepacks/ 加载。",
     "en": "Workspace changed. New projects use projects/ and shape packs load from shapepacks/."
+  },
+  "ui.workspace-eyebrow": {
+    "zhHant": "WORKSPACE",
+    "zhHans": "工作区",
+    "en": "WORKSPACE"
   },
   "ui.workspace-folder": {
     "zhHant": "工作空間目錄",
-    "zhHans": "工作空间目录",
+    "zhHans": "工作目录",
     "en": "Workspace folder"
   },
   "ui.workspace-projects": {
     "zhHant": "工作項目",
-    "zhHans": "工作项目",
+    "zhHans": "本地项目",
     "en": "Workspace projects"
   },
   "ui.x-axis-reference": {

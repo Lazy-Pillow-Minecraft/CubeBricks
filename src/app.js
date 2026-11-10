@@ -57,6 +57,7 @@ import { createTransformTargets } from './editor/transform-targets.js';
 import { createTransformInteraction } from './editor/transform-interaction.js';
 import { createEventBinder } from './screen/events-controller.js';
 import { createSceneController } from './screen/scene-controller.js';
+import { bindSceneFps } from './screen/scene-fps.js';
 import { createPlayerReferenceController } from './screen/player-reference-controller.js';
 import { createTransformContext } from './editor/transform-context.js';
 import { createTextureFaceDropController } from './texture/face-drop-controller.js';
@@ -131,7 +132,6 @@ const { paintSymmetryFaceKey, paintSymmetryRelatedHits, scheduleAllPaintSymmetry
 });
 const projectState = $('#projectState');
 const projectTabsNode = $('#projectTabs');
-const newProjectDialog = $('#newProjectDialog');
 const projectInfoDialog = $('#projectInfoDialog');
 const themeDialog = $('#themeDialog');
 const languageSelect = $('#languageSelect');
@@ -162,14 +162,21 @@ const { captureModel, captureProjectCover, saveModelCapture, copyModelCapture, c
   currentProjection, toast
 });
 let projectCoverController = null;
+const setSceneFpsActive = bindSceneFps($('#sceneFps'));
+window.addEventListener('cubebricks:project-home', () => setSceneFpsActive(false));
 const projectTabsController = createProjectTabsController({
   state, $, escapeHtml, escapeAttribute, projectTabsNode, projectState, projectInfoDialog,
   textureUid, restoreProjectTextureView, renderAll,
   getSubdivisionSession: () => inspectorController.subdivisionSession, exitSubdivisionEdit, referenceImages,
   cancelCameraFocus, sceneRenderer, startProjectJournal, flushProjectJournal, toast,
   compactProjectHistorySnapshot, markDirty, scheduleProjectJournal,
-  onProjectActivated: tab => projectCoverController?.schedule(tab),
-  onProjectClosing: tab => projectCoverController?.flush(tab)
+  restoreProjectTool: () => toolModeController.restoreModeTool(),
+  onProjectActivated: tab => {
+    setSceneFpsActive(true);
+    projectCoverController?.schedule(tab);
+  },
+  onProjectClosing: tab => projectCoverController?.flush(tab),
+  onProjectDisposed: (tab, retained) => textureAssetController?.releaseTextureAssets(tab.session.textureAssets, retained)
 });
 projectCoverController = createProjectCoverController({ projectTabsController, captureProjectCover,
   isInteracting: () => Boolean(state.dragging || sceneCanvas.classList.contains('is-orbiting')) });
@@ -189,7 +196,14 @@ const journalController = createProjectJournalController({
   restoreProjectTextureView,
   serializableTextureAssets, serializeCbmodel, referenceImages,
   getTexturePaintDrag: () => texturePaintPointerController.texturePaintDrag, getTextureUvDrag: () => uvEditorController.textureUvDrag,
-  scheduleProjectCover: tab => projectCoverController?.schedule(tab)
+  scheduleProjectCover: tab => projectCoverController?.schedule(tab),
+  finishActivePaintGesture: () => {
+    if (paintSelectionController.finishActive()) return true;
+    const textureDrag = texturePaintPointerController.texturePaintDrag;
+    if (textureDrag) endTexturePaintPointer({ pointerId: textureDrag.pointerId });
+    const sceneDrag = state.dragging;
+    if (sceneDrag?.type === 'texture-paint-3d') endPointerDrag({ currentTarget: sceneCanvas, pointerId: sceneDrag.pointerId });
+  }
 });
 const { getKnifePreviewLabel, updateKnifeHover, refreshKnifeFromModifierEvent,
   cancelKnifeSelection, useKnifePoint, buildEditorOverlayLines } = createKnifeController({
@@ -365,7 +379,7 @@ const sceneController = createSceneController({
   uvPreviewController, LOCATOR_ICON_SHAPES, getSelectionExpansion,
   getTransformPivot, updateTransformGizmo, refreshUvPreview,
   currentProjection, buildEditorOverlayLines, updateMirrorGuideOverlay,
-  updateAxisWidget, updateReferenceImageLayer
+  updateAxisWidget, updateReferenceImageLayer, updatePaintSelection: () => paintSelectionController.drawSceneGesture()
 });
 function renderScene(...args) { return sceneController.renderScene(...args); }
 function updateFaceSelectionOverlay(...args) { return sceneController.updateFaceSelectionOverlay(...args); }
@@ -486,7 +500,7 @@ const paintStrokeController = createPaintStrokeController({
   paintCanvasForAsset, syncRendererTextureAsset,
   scheduleSceneRender,
   updateTexturePreviewFrame, noteJournalOperation, markDirty, toast,
-  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache, animationRasterCache
+  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache, animationRasterCache, livePaintTextureSources
 });
 function paintPointFromEvent(...args) { return paintStrokeController.paintPointFromEvent(...args); }
 function paintPointInside(...args) { return paintStrokeController.paintPointInside(...args); }
@@ -518,7 +532,8 @@ const texturePaintPointerController = createTexturePaintPointerController({
   activeTextureAsset, paintPointFromEvent, paintPointInside,
   textureUvHit, allTextureUvEntriesForAsset, applyTextureBucket, finishTextureBucketStroke,
   setPaintColor, updateToolOptions, clamp, replayTexturePaintPoints,
-  drawPaintShape, drawPaintSegment, finishTexturePaintDrag
+  drawPaintShape, drawPaintSegment, finishTexturePaintDrag, paintCanvasForAsset,
+  capturePaintStyle: paintStrokeController.capturePaintStyle
 });
 function useTexturePaintGradient(...args) { return texturePaintPointerController.useTexturePaintGradient(...args); }
 function startTexturePaintPointer(...args) { return texturePaintPointerController.startTexturePaintPointer(...args); }
@@ -551,7 +566,8 @@ const scenePaintController = createScenePaintController({
   paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
   loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
-  activateProjectTexture, sampleReferenceImage: referenceImages.sampleReferenceImage
+  activateProjectTexture, sampleReferenceImage: referenceImages.sampleReferenceImage,
+  capturePaintStyle: paintStrokeController.capturePaintStyle, scheduleSceneRender
 });
 function persistGeneratedPaintCube(...args) { return scenePaintController.persistGeneratedPaintCube(...args); }
 function barycentricPoint(...args) { return scenePaintController.barycentricPoint(...args); }
@@ -569,12 +585,16 @@ function moveScenePaintDrag(...args) { return scenePaintController.moveScenePain
 function startScenePaintPointer(...args) { return scenePaintController.startScenePaintPointer(...args); }
 
 const paintSelectionController = createPaintSelectionController({
-  state, $, sceneCanvas, sceneRenderer, textureCanvas, textureCtx, clientToTextureUv,
+  state, $, sceneCanvas, sceneRenderer, textureCanvas, clientToTextureUv,
   textureAssetForReference, facePaintUvPoint: scenePaintController.facePaintUvPoint,
   paintSymmetryRelatedHits, getTextureAtlasEntries: () => textureAtlasController.textureAtlasEntries,
   getTextureAtlasCanvas: () => textureAtlasController.textureAtlasCanvas,
   scheduleSceneRender, updateToolOptions, pushTexturePaintHistory,
-  commitPaintedTextureAsset
+  commitPaintedTextureAsset, paintCanvasForAsset, discardPaintedTextureSync, toast,
+  previewFloatingTexture: (...args) => textureAtlasController.previewFloatingTexture(...args),
+  clearFloatingTextures: () => textureAtlasController.clearFloatingTextures(),
+  moveSelectionToLayer: (...args) => textureAssetController.moveSelectionToLayer(...args),
+  showContextMenu
 });
 
 const texturePointerController = createTexturePointerController({
@@ -643,7 +663,6 @@ const textureAssetController = createTextureAssetController({
 });
 function textureUid(...args) { return textureAssetController.textureUid(...args); }
 function renderTextureList(...args) { return textureAssetController.renderTextureList(...args); }
-function addTextureGroup(...args) { return textureAssetController.addTextureGroup(...args); }
 function updateLayerCompositePreview(...args) { return textureAssetController.updateLayerCompositePreview(...args); }
 function renderTextureTileControls(...args) { return textureAssetController.renderTextureTileControls(...args); }
 function refreshDerivedTileEntries(...args) { return textureAssetController.refreshDerivedTileEntries(...args); }
@@ -669,6 +688,10 @@ function removeTexture(...args) { return textureAssetController.removeTexture(..
 function removeActiveLayer(...args) { return textureAssetController.removeActiveLayer(...args); }
 function removeTextureLayer(...args) { return textureAssetController.removeTextureLayer(...args); }
 function mergeTextureLayerDown(...args) { return textureAssetController.mergeTextureLayerDown(...args); }
+function copyTextureLayer(...args) { return textureAssetController.copyTextureLayer(...args); }
+function pasteTextureLayer(...args) { return textureAssetController.pasteTextureLayer(...args); }
+function binarizeTextureLayerAlpha(...args) { return textureAssetController.binarizeTextureLayerAlpha(...args); }
+function canPasteTextureLayer(...args) { return textureAssetController.canPasteTextureLayer(...args); }
 
 const toolModeController = createToolModeController({
   state, $, $$, inspectorController, exitSubdivisionEdit, renderOutliner,
@@ -678,7 +701,9 @@ const toolModeController = createToolModeController({
   paintToolErasing, paintSetting, getKnifePreviewLabel,
   updateTransformSpaceButtons, updateRotationModeButtons,
   updateScaleHandleModeButtons, updateMultiTransformModeButtons,
-  getDockManager: () => dockManager
+  getDockManager: () => dockManager,
+  finishPaintSelection: paintSelectionController.finishActive,
+  saveProjectTools: projectTabsController.saveProjectTools
 });
 function toolSupportsMode(...args) { return toolModeController.toolSupportsMode(...args); }
 function applyModePanelVisibility(...args) { return toolModeController.applyModePanelVisibility(...args); }
@@ -708,22 +733,18 @@ function saveProject(...args) { return projectFileController.saveProject(...args
 function exportProject(...args) { return projectFileController.exportProject(...args); }
 
 const modelFormatPicker = createModelFormatPicker({
-  $, newProjectDialog, escapeHtml, escapeAttribute, formatNumber,
+  $, escapeHtml, escapeAttribute,
   addProjectTab, markDirty, toast, configRegistry,
   openWorkspaceProject: (...args) => projectFileController.openWorkspaceProject(...args),
   deleteWorkspaceProject: (...args) => projectTabsController.deleteWorkspaceProject(...args), showContextMenu
 });
-function modelFormatIconMarkup(...args) { return modelFormatPicker.modelFormatIconMarkup(...args); }
-function renderModelFormatPicker(...args) { return modelFormatPicker.renderModelFormatPicker(...args); }
-function openNewProjectDialog(...args) { return modelFormatPicker.openNewProjectDialog(...args); }
-function newProject(...args) { return modelFormatPicker.newProject(...args); }
 
 const settingsController = createSettingsController({
   state, $, $$, sceneRenderer, hexToRgb, renderScene, toast,
   configRegistry, languageSelect, modelFormatRegistry, getDockManager: () => dockManager,
   setMode, updateToolVisibility, applyModePanelVisibility,
   toolSupportsMode, setTool, updateSnapButton, updatePlayerReferenceTexture,
-  clearSelection, updateProjectionControls, animateLockedHoverStrength
+  clearSelection, updateProjectionControls, animateLockedHoverStrength, updateToolOptions
 });
 function setThemeVar(...args) { return settingsController.setThemeVar(...args); }
 function saveTheme(...args) { return settingsController.saveTheme(...args); }
@@ -752,12 +773,13 @@ const contextMenuController = createContextMenuController({
   refreshSelectionUi, snapshot, discardSubdivisionEdits, markDirty, renderAll,
   isProceduralShape, exitSubdivisionEdit, enterSubdivisionEdit,
   renderTextureList, remapNumericFaceTextureReferences, activateProjectTexture,
-  renderTexture, rebuildTextureAtlas, noteJournalOperation, addTextureGroup,
+  renderTexture, rebuildTextureAtlas, noteJournalOperation,
   setMode, deleteSelectedPaletteColor, insertPaletteGradientNode,
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown,
+  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer,
   saveTexture: textureFileController.saveTexture
 });
 function closeContextMenu(...args) { return contextMenuController.closeContextMenu(...args); }
@@ -795,7 +817,7 @@ const eventBinder = createEventBinder({
   moveAxisWidgetDrag, endAxisWidgetDrag, restore, cancelCameraFocus,
   deleteSelectedPaletteColor, refreshKnifeFromModifierEvent,
   activateDock, addBezierElement, addCube, addGroup, addLocator, addShape,
-  addTextureGroup, animateLockedHoverStrength, applyPreset,
+  animateLockedHoverStrength, applyPreset,
   beginTemporaryEyedropper, bindContextMenus, bindTextureFaceDropSurface,
   cameraController, clamp, clearOutlinerDropState,
   clearPaintGradientSelection, clearSelection, clearTextureFaceDropTarget,
@@ -805,10 +827,10 @@ const eventBinder = createEventBinder({
   exportProject, focusSelected, focusSceneOrigin, focusSelectedTextureUvs, getUvPreviewProject,
   importPlayerReferenceTexture, importTexture, inspectorBatchNodes,
   invalidateSelectionRenderGeometry, isBezierElement, isEffectivelyLocked,
-  loadProjectContent, loadProjectFile, markDirty, moveSelectedNodes, newProject,
+  loadProjectContent, loadProjectFile, markDirty, moveSelectedNodes,
   nodeAutoUvEnabled, nodeUvNormalizedEnabled, noteJournalOperation,
   onPointerDown, onPointerMove, onScenePointerMove, onTexturePointerMove,
-  openNewProjectDialog, openPreciseRotationInput, openProject,
+  openPreciseRotationInput, openProject,
   openTextureCreateDialog, pasteElements, pasteTexture, playTimeline,
   rebuildTextureAtlas, redo, refreshSelectionUi, refreshUvPreview,
   remapNumericFaceTextureReferences, removeOutlinerDragGhost,
@@ -829,7 +851,8 @@ const eventBinder = createEventBinder({
   updateSelectionLabels, updateTextureCreateDialog,
   updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
   updateTransformGizmo, movePivotToRotationVertex,
-  uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView
+  uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView,
+  handlePixelShortcut: paintSelectionController.handleShortcut
 });
 function bindEvents(...args) { return eventBinder.bindEvents(...args); }
 
@@ -950,7 +973,6 @@ window.cubeBricksDesktop?.onPromptRequest?.(async request => {
   await window.cubeBricksDesktop.respondPrompt({ id: request.id, ...result });
 });
 modelFormatRegistry.subscribe(() => {
-  renderModelFormatPicker();
   if (document.body.classList.contains('project-home-active')) void modelFormatPicker.renderProjectHome();
   updateSelectionLabels();
 });
@@ -982,7 +1004,6 @@ if (window.cubeBricksDesktop?.onCloseRequested) {
 renderTexture();
 renderPalette();
 void palette.loadPersistedPalettes();
-renderModelFormatPicker();
 modelFormatPicker.bindProjectHome();
 bindEvents();
 window.cubeBricksDesktop?.onExternalProjectOpen?.(filePath => { void openProject(filePath); });

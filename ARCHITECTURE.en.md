@@ -2,6 +2,10 @@
 
 [简体中文](ARCHITECTURE.md) · [README](README.md) · [User guide](docs/USER_GUIDE.en.md) · [Add-on packs](docs/ADDON_PACKS.en.md)
 
+The [pre-animation structure and performance audit (2026-11-05, Chinese)](docs/PRE_ANIMATION_AUDIT_2026-11-05.md) records measured bottlenecks, resource lifetime issues, and the recommended work before adding animation.
+
+The [first optimization results (2026-11-06)](docs/OPTIMIZATION_2026-11-06.en.md) cover indexed sorting, group previews, modifier reuse, recent undo, resource cleanup, and their validation boundaries.
+
 `src/app.js` is the editor's assembly entry point. It creates controllers, injects dependencies, initializes services, and starts the app; new feature implementations should not be added there. State, tool definitions, tabs and documents, journals, docking, camera and reference images, inspectors, viewport gizmos, UV editing and preview, texture assets and atlases, palettes, 2D/3D painting, paint symmetry, knife, model capture, template generation, hierarchy rendering, drag handling, events, and element commands each live in modules with specific responsibilities.
 
 ## Directory ownership
@@ -22,6 +26,8 @@
 | `scripts/` | Checks, tests, preview server, and build helpers. |
 
 ## Conventions for new code
+
+`common/core/format-hooks.js` supplies the empty default format interface shared by Shape and modifier definitions, plus bound object context, without importing registries or model code. `procedural-format.js` adapts Shape parameters and generated Cubes; `modifier-format.js` constrains modifiers using preceding results. Preview evaluates derived data and preserves live face identities when consuming quarter turns. `model/format-materialization.js` represents modded entity orientations with group rotations, while `model/formats/procedural-format-export.js` materializes Java group poses as legal Cube data. Subdivision edits compare against the adapted base, avoiding accidental storage of format compensation as user edits. See [optional format adaptation](SHAPE_PACKS.en.md#optional-format-adaptation).
 
 1. Choose `common`, `screen`, `utils`, or the relevant domain directory before adding a module. Avoid vague `misc.js` files. Keep shared calculations and DOM helpers in separate directories; DOM helpers must not read editor project state.
 2. The dependency direction is `utils/common/model → feature modules and screen → app.js`. Feature modules must not import `app.js` in reverse. Inject explicit callbacks at the entry point when a UI controller needs editor operations.

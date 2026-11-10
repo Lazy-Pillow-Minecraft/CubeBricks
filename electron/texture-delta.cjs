@@ -61,9 +61,10 @@ function decodePng(source) {
   const rgba = Buffer.alloc(width * height * 4);
   let previous = Buffer.alloc(stride);
   for (let y = 0; y < height; y++) {
-    const row = Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+    const row = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
     const filter = raw[y * (stride + 1)];
-    for (let x = 0; x < stride; x++) {
+    if (filter > 4) throw new Error('PNG 濾鏡不支援');
+    for (let x = 0; filter && x < stride; x++) {
       const left = x >= channels ? row[x - channels] : 0;
       const up = previous[x];
       const upperLeft = x >= channels ? previous[x - channels] : 0;
@@ -75,13 +76,13 @@ function decodePng(source) {
         const p = left + up - upperLeft;
         const a = Math.abs(p - left), b = Math.abs(p - up), c = Math.abs(p - upperLeft);
         predictor = a <= b && a <= c ? left : b <= c ? up : upperLeft;
-      } else if (filter !== 0) throw new Error('PNG 濾鏡不支援');
+      }
       row[x] = row[x] + predictor & 255;
     }
-    for (let x = 0; x < width; x++) {
+    if (colorType === 6) row.copy(rgba, y * stride);
+    else for (let x = 0; x < width; x++) {
       const sourceOffset = x * channels, targetOffset = (y * width + x) * 4;
-      if (colorType === 6) row.copy(rgba, targetOffset, sourceOffset, sourceOffset + 4);
-      else if (colorType === 2) {
+      if (colorType === 2) {
         row.copy(rgba, targetOffset, sourceOffset, sourceOffset + 3);
         rgba[targetOffset + 3] = transparency && row[sourceOffset] === transparency.readUInt16BE(0)
           && row[sourceOffset + 1] === transparency.readUInt16BE(2)
@@ -116,8 +117,27 @@ function tileBytes(image, x, y, width, height) {
   for (let row = 0; row < height; row++) image.rgba.copy(output, row * width * 4, ((y + row) * image.width + x) * 4, ((y + row) * image.width + x + width) * 4);
   return output;
 }
+// Digesting and calculating a delta in the same commit both need these
+// pixels. Cache immutable decoded data so one stroke does not inflate the
+// same before/after PNGs twice.
+const decoded = new Map();
+let decodedBytes = 0;
+const decodedLimit = 32 * 1024 * 1024;
 function tryDecodePng(source) {
-  try { return decodePng(source); }
+  const cached = decoded.get(source);
+  if (cached) { decoded.delete(source); decoded.set(source, cached); return cached.image; }
+  try {
+    const image = decodePng(source);
+    const bytes = (image?.rgba.length || 0) + (source?.length || 0);
+    if (image && bytes <= decodedLimit) {
+      decoded.set(source, { image, bytes }); decodedBytes += bytes;
+      while (decoded.size > 64 || decodedBytes > decodedLimit) {
+        const [old, entry] = decoded.entries().next().value;
+        decoded.delete(old); decodedBytes -= entry.bytes;
+      }
+    }
+    return image;
+  }
   catch { return null; }
 }
 const fingerprintCache = new Map();
@@ -154,11 +174,23 @@ function createTextureDelta(before, after) {
     return { kind: 'replace', before, after };
   }
   const tiles = [];
+  const stride = oldImage.width * 4;
+  const changedRows = new Uint8Array(oldImage.height);
+  for (let y = 0; y < oldImage.height; y++) {
+    const start = y * stride;
+    changedRows[y] = oldImage.rgba.compare(newImage.rgba, start, start + stride, start, start + stride) !== 0;
+  }
   for (let y = 0; y < oldImage.height; y += 32) for (let x = 0; x < oldImage.width; x += 32) {
     const width = Math.min(32, oldImage.width - x), height = Math.min(32, oldImage.height - y);
+    let different = false;
+    for (let row = y; row < y + height; row++) {
+      if (!changedRows[row]) continue;
+      const start = row * stride + x * 4, end = start + width * 4;
+      if (oldImage.rgba.compare(newImage.rgba, start, end, start, end) !== 0) { different = true; break; }
+    }
+    if (!different) continue;
     const original = tileBytes(oldImage, x, y, width, height);
     const result = tileBytes(newImage, x, y, width, height);
-    if (original.equals(result)) continue;
     tiles.push({ x, y, width, height,
       before: zlib.deflateSync(original).toString('base64'),
       after: zlib.deflateSync(result).toString('base64') });

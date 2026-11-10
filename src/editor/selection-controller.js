@@ -158,6 +158,20 @@ function syncInspectorValues() {
     if (value === null || value === undefined) input.dataset.mixed = 'true';
     else delete input.dataset.mixed;
   });
+  $$('[data-modifier-field], [data-modifier-vector]', inspector).forEach(input => {
+    if (document.activeElement === input) return;
+    const modifier = item.modifiers?.find(entry => entry.uid === input.dataset.modifierUid);
+    if (!modifier) return;
+    let value;
+    if (input.dataset.modifierVector) {
+      const [scope, property, field] = input.dataset.modifierVector.split('.');
+      const vector = scope === 'nodes' ? modifier.nodes?.find(node => node.uid === property)?.[field] : modifier[scope]?.[property];
+      value = vector?.[Number(input.dataset.axis)];
+    } else value = modifier[input.dataset.modifierField];
+    if (value === undefined) return;
+    if (input.type === 'checkbox') input.checked = Boolean(value);
+    else input.value = typeof value === 'number' ? String(round(value)) : value;
+  });
 }
 
 function getSelectionExpansion() {

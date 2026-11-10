@@ -63,16 +63,13 @@ const entries = [...locations].sort(([a], [b]) => a.localeCompare(b, 'zh-Hant'))
   const en = old?.en && old.en !== zhHant ? old.en : translateEnglishUiText(zhHant, 'en', translateUiText);
   return {
     key: old?.key || assignKey(en), zhHant,
-    zhHans: toSimplified(old?.zhHans || zhHant),
+    zhHans: old?.zhHans ?? toSimplified(zhHant),
     en, dynamic: zhHant.includes('${'), englishMissing: en === zhHant,
     locations: [...used].sort()
   };
 });
 for (const old of previous.entries) {
-  if (!old.locations?.length && !locations.has(old.zhHant)) entries.push({
-    ...old,
-    zhHans: toSimplified(old.zhHans || old.zhHant)
-  });
+  if (!old.locations?.length && !locations.has(old.zhHant)) entries.push(old);
 }
 entries.sort((a, b) => a.key.localeCompare(b.key));
 await fs.writeFile(catalogPath,

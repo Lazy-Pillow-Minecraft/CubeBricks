@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs/promises');
 const path = require('path');
 const { ProjectJournal } = require('../electron/project-journal.cjs');
-const { encodePng, createTextureDelta, applyTextureDelta } = require('../electron/texture-delta.cjs');
+const { decodePng, encodePng, createTextureDelta, applyTextureDelta } = require('../electron/texture-delta.cjs');
 const { packZip, unpackZip } = require('../electron/zip-store.cjs');
 const { packArchive, unpackArchive, unpackArchiveWithProgress, isArchiveV2 } = require('../electron/archive-codec.cjs');
 const zlib = require('node:zlib');
@@ -461,8 +461,12 @@ test('reencoded PNG after undo does not create a false edit or destroy redo', ()
   const journal = await new ProjectJournal(root).initialize(model([], [texture]));
   await journal.commit(model([], [{ ...texture, source: image(80) }]), 'core.paint.stroke');
   const undone = await journal.navigate('undo');
-  assert.notEqual(JSON.parse(undone.content).textures[0].source, texture.source);
-  assert.equal((await journal.commit(undone.content, 'core.element.property')).changed, false);
+  // Cached checkout can preserve the original encoding. Explicitly re-encode
+  // as a canvas save would, rather than requiring checkout to change bytes.
+  const reencoded = JSON.parse(undone.content);
+  reencoded.textures[0].source = encodePng(decodePng(reencoded.textures[0].source));
+  assert.notEqual(reencoded.textures[0].source, texture.source);
+  assert.equal((await journal.commit(JSON.stringify(reencoded), 'core.element.property')).changed, false);
   assert.equal((await journal.navigate('redo')).sequence, 2);
 }));
 

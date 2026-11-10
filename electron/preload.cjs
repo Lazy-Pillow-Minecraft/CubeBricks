@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+const languageArgument = '--cubebricks-system-languages=';
+const systemLanguages = process.argv.find(argument => argument.startsWith(languageArgument))
+  ?.slice(languageArgument.length).split(',').filter(Boolean) || [];
+
 contextBridge.exposeInMainWorld('cubeBricksDesktop', {
+  systemLanguages,
+  setUiLanguage: language => ipcRenderer.invoke('app:ui-language', language),
   openProject: (filePath = null) => ipcRenderer.invoke('project:open', filePath ? { filePath } : {}),
   getPathForFile: file => webUtils.getPathForFile(file),
   readTextureAnimationMetadata: payload => ipcRenderer.invoke('texture:animation-metadata',payload),

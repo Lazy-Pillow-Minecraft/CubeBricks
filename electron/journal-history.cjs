@@ -38,16 +38,24 @@ async function removeHistoryNodes(journal, records, removed, helpers) {
   const keep=new Map(remaining.map(record=>[record.sequence,record]));
   const roots=remaining.filter(record=>!keep.has(record.parent));
   const liveSnapshots=new Set(remaining.flatMap(record=>Object.values(record.pointers||{}).map(pointer=>`${pointer.folder}/${pointer.local}.json`)));
-  const snapshots=[...liveSnapshots];
-  for(let index=0;index<snapshots.length;index+=64)await Promise.all(snapshots.slice(index,index+64).map(snapshot=>fs.access(journal.file(snapshot))));
+  // Only removed manifests can release a reference. Do not stat every live
+  // Cube or recursively scan the entire project after each capped commit.
+  // Checkout still validates the exact snapshots it restores.
+  const obsoleteSnapshots=new Set(records.filter(record=>removed.has(record.sequence))
+    .flatMap(record=>[...Object.values(record.pointers||{}),...(record.writtenSnapshots||[])])
+    .map(pointer=>`${pointer.folder}/${pointer.local}.json`).filter(file=>!liveSnapshots.has(file)));
   // Materialize every new root before severing its old parent. This is a
   // read-only reconstruction; it never changes the visible/current model.
   for(const root of roots)await writeHistoryTextureRoot(journal,root,helpers);
   const saved=await readJson(journal.file('saved_state'));
   if(saved&&removed.has(saved.sequence)){
     let ancestor=journal.activeManifest,isAncestor=false;
+    const visited=new Set();
     while(ancestor){
+      if(visited.has(ancestor.sequence))throw Error('歷史父節點形成循環');
+      visited.add(ancestor.sequence);
       if(ancestor.sequence===saved.sequence){isAncestor=true;break;}
+      if(ancestor.parent!==null&&(!Number.isInteger(ancestor.parent)||ancestor.parent<1||ancestor.parent>=ancestor.sequence))throw Error('歷史父節點無效');
       ancestor=ancestor.parent===null?null:await journal.manifest(ancestor.parent);
     }
     await writeJson(journal.file('saved_state'),{...saved,prunedAncestor:isAncestor});
@@ -77,16 +85,10 @@ async function removeHistoryNodes(journal, records, removed, helpers) {
     for(const root of rewrittenRoots)await writeJson(journal.file(`transactions/${root.sequence}.json`),root);
     for(const id of removed)await fs.rm(journal.file(`transactions/${id}.json`),{force:true});
     const rootIds=new Set(roots.map(root=>root.sequence));
-    const changes=await fs.readdir(journal.file('texture_changes')).catch(error=>{if(error.code==='ENOENT')return[];throw error;});
-    for(const name of changes)if(/^\d+$/.test(name)&&(!keep.has(Number(name))||rootIds.has(Number(name))))await fs.rm(journal.file(`texture_changes/${name}`),{recursive:true,force:true});
-    const sweep=async relative=>{
-      for(const entry of await fs.readdir(journal.file(relative),{withFileTypes:true})){
-        const child=`${relative}/${entry.name}`;
-        if(entry.isDirectory())await sweep(child);
-        else if(entry.isFile()&&/^\d+\.json$/.test(entry.name)&&!liveSnapshots.has(child))await fs.rm(journal.file(child),{force:true});
-      }
-    };
-    await sweep('elements');await sweepHistoryTextureRoots(journal,rootIds);
+    for(const sequence of new Set([...removed,...rootIds]))await fs.rm(journal.file(`texture_changes/${sequence}`),{recursive:true,force:true});
+    const snapshots=[...obsoleteSnapshots];
+    for(let index=0;index<snapshots.length;index+=32)await Promise.all(snapshots.slice(index,index+32).map(file=>fs.rm(journal.file(file),{force:true})));
+    await sweepHistoryTextureRoots(journal,rootIds);
   }catch(error){cleanupWarning=error.message;}
   return {sequence:journal.state.activeHead,removed:[...removed],content,cleanupWarning,
     changedUids:changed?journal.lastCheckoutChangedUids:[],textureChanged:changed&&journal.lastCheckoutTextureChanged,

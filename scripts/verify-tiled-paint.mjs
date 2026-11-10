@@ -147,7 +147,7 @@ export async function verifyTiledBrush(){
   const {state,stroke}=makeStroke('square',5),source=makeCanvas(8,8),asset={_uid:'brush-scene',source:'unused',mode:'tiled',uvWidth:8,uvHeight:8};
   const cube={uid:'brush-cube',type:'cube',size:[16,8,1],faces:{north:{texture:asset._uid,tiling:{offsetX:0,offsetY:0,width:16,height:8}}}};
   const hit=x=>({uid:cube.uid,cubeUid:cube.uid,cube,faceName:'north',point:[x,4,0],facePoints:[[0,0,0],[16,0,0],[0,8,0],[16,8,0]]});
-  Object.assign(state,{project:{getNode:()=>cube},paintBrushOverlay:false,paintBrushDepth:0});let current=hit(7);
+  Object.assign(state,{project:{getNode:()=>cube},textureAssets:[asset],paintBrushOverlay:false,paintBrushDepth:0});let current=hit(7);
   const controller=createScenePaintController({state,clamp,sceneCanvas:{getBoundingClientRect:()=>({left:0,top:0}),setPointerCapture(){}},sceneRenderer:{pickDetailed:()=>current},
     textureAssetForReference:()=>asset,isFaceTiled:()=>true,loadTextureAssetImage:async()=>source,paintHitAlphaCache:new Map(),animationRasterCache:new Map(),
     paintSymmetryRelatedHits:paintHit=>[paintHit],paintSymmetryFaceKey:paintHit=>paintHit.uid+'::north',

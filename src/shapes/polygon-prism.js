@@ -1,7 +1,9 @@
+import { constrainBuiltinShape } from '../common/core/procedural-format.js';
 export default {
   id: 'polygon_prism', label: '多邊形柱體', icon: 'polygon-prism',
   defaults: { radius: 4, height: 8, sides: 8, cubeSize: 1,
     innerRadiusEnabled: false, innerRadiusMode: 'radius', innerRadius: 2, snapMode: 'edge' },
+  constrainFormat: constrainBuiltinShape,
   generate(shape, { Cube }) {
     const radius = Math.max(.001, Number(shape.parameters.radius) || 0);
     const height = Math.max(0, Number(shape.parameters.height) || 0);

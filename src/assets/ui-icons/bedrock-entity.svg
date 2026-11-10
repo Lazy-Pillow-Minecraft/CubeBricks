@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="100%" height="100%" viewBox="0 0 200 200" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:affinity="https://www.affinity.studio/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.5;">
+    <g transform="matrix(1.048089,0,0,1.048089,-11.636967,0.29743)">
+        <path d="M156.302,28.696C165.494,28.696 172.947,36.148 172.947,45.341L172.947,144.915C172.947,154.108 165.494,161.56 156.302,161.56L56.728,161.56C47.535,161.56 40.083,154.108 40.083,144.915L40.083,45.341C40.083,36.148 47.535,28.696 56.728,28.696L156.302,28.696Z" style="fill-opacity:0;stroke:black;stroke-width:18.67px;"/>
+    </g>
+    <path d="M37.789,87.971L63.912,87.971L63.912,112.029L87.971,112.029L87.971,63.912L112.029,63.912L112.029,87.971L136.088,87.971L136.088,112.029L160.147,112.029L165.574,34.594L35.823,34.594L37.789,87.971Z"/>
+</svg>

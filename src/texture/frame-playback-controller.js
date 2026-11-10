@@ -6,7 +6,10 @@ export function createFramePlayback({$,state,activeTextureAsset,getAllTextureAss
   function render(){
     const asset=activeTextureAsset(),frames=asset?.animation?.frames||[],count=frames.length;
     bar.hidden=!asset?.animation?.enabled||!count;
-    const running=playing.has(asset);play.textContent=running?'Ⅱ':'▶';play.setAttribute('aria-label',running?'暫停':'播放');play.setAttribute('aria-pressed',String(running));
+    const running=playing.has(asset),pressed=String(running);
+    if(play.getAttribute('aria-pressed')!==pressed){
+      play.setAttribute('aria-label',running?'暫停':'播放');play.setAttribute('aria-pressed',pressed);
+    }
     slider.max=String(count);slider.value=String(textureFramePosition(asset));label.textContent=String(Math.min(count,Math.floor(textureFramePosition(asset))+1));total.textContent=String(count);
     if(tickFrames!==frames){tickFrames=frames;ticks.replaceChildren();frames.forEach((frame,index)=>{
       const button=document.createElement('button');button.type='button';button.className='texture-frame-tick';button.style.left=`${index/count*100}%`;button.dataset.frameIndex=String(index);
@@ -51,5 +54,8 @@ export function createFramePlayback({$,state,activeTextureAsset,getAllTextureAss
   const end=event=>{if(!drag||drag.id!==event.pointerId)return;suppressClick=true;drag=null;if(ticks.hasPointerCapture(event.pointerId))ticks.releasePointerCapture(event.pointerId);};
   ticks.addEventListener('pointerup',end);ticks.addEventListener('pointercancel',end);
   ticks.addEventListener('click',event=>{if(suppressClick&&event.detail!==0){suppressClick=false;return;}suppressClick=false;const button=event.target.closest('[data-frame-index]');if(button)seek(Number(button.dataset.frameIndex));});
-  return {render,isPlaying:asset=>playing.has(asset)};
+  return {render,isPlaying:asset=>playing.has(asset),release(asset){
+    playing.delete(asset);
+    if(!playing.size&&request!==null){cancelAnimationFrame(request);request=null;}
+  }};
 }

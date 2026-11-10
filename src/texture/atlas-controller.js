@@ -2,8 +2,9 @@ import { activeLayer, compositeLayers, flipbookFrame, imageCanvas, layerRasterCa
 import { isCubeFaceCulled } from '../common/core/geometry-utils.js';
 import { performanceMonitor } from '../utils/performance-monitor.js';
 import { boundPaintLayer } from '../paint/canvas-layer-binding.js';
-import { snapshotEditableTexture } from './source-snapshot.js';
+import { paintHistoryRegion, snapshotEditableTexture } from './source-snapshot.js';
 import { createLayerThumbnailUpdates } from './layer-thumbnail-controller.js';
+import { layerRasterRegions } from '../common/utils/layer-raster-regions.js';
 
 export function createTextureAtlasController({
   state, $, textureCanvas, textureCtx, sceneRenderer, uvPreviewRenderer,
@@ -30,6 +31,49 @@ let textureAtlasRebuildFrame = null;
 const failedImageRetries = new WeakMap();
 const decodedCanvasCache = new WeakMap();
 const layerThumbnails=createLayerThumbnailUpdates({activeTextureAsset});
+const floatingTextures = new Map();
+
+function displayTextureFrame(asset, source) {
+  const floating = floatingTextures.get(asset);
+  if (!floating) return source;
+  floating.base = source;
+  if (asset.animation?.enabled) floating.display = flipbookFrame(asset, floating.composite, null, floating.rasters);
+  return floating.display;
+}
+
+function previewFloatingTexture(asset, canvas) {
+  let floating = floatingTextures.get(asset);
+  if (!floating) {
+    const entry = textureAtlasLayoutByUid.get(asset._uid);
+    let base = null;
+    if (entry) {
+      base = document.createElement('canvas');
+      base.width = entry.width; base.height = entry.height;
+      base.getContext('2d').drawImage(textureAtlasCanvas,
+        entry.x, entry.y, entry.width, entry.height, 0, 0, base.width, base.height);
+    }
+    floating = { base };
+    floatingTextures.set(asset, floating);
+  }
+  const layer = boundPaintLayer(asset, canvas);
+  floating.rasters = layer ? new Map(layerRasterCache) : undefined;
+  floating.composite = layer ? compositeLayers(asset, canvas, null, null, null, layer.uid, floating.rasters) : canvas;
+  floating.display = flipbookFrame(asset, floating.composite, null, floating.rasters);
+  uploadDisplayedTexture(asset, floating.display);
+}
+
+function clearFloatingTextures() {
+  const previous = [...floatingTextures];
+  floatingTextures.clear();
+  for (const [asset, { base }] of previous) {
+    if (!state.textureAssets.includes(asset)) continue;
+    if (base) uploadDisplayedTexture(asset, base);
+    else {
+      updateLayerCompositePreview(asset, null);
+      rebuildTextureAtlas();
+    }
+  }
+}
 
 function resetAtlas({ preserveGpu = false } = {}) {
   textureAtlasRevision++;
@@ -137,10 +181,9 @@ async function rebuildTextureAtlasNow() {
       original = imageCanvas(image);
       if (typeof image.getContext !== 'function') decodedCanvasCache.set(image, original);
     }
-    animationRasterCache.set(asset._uid, { canvas: original, source: asset.source });
     if(asset.animation?.enabled&&asset.layers?.length)await prepareLayers(asset);
     const frame = flipbookFrame(asset, original);
-    return { asset, index, image: frame, width: frame.width, height: frame.height,
+    return { asset, index, original, image: frame, width: frame.width, height: frame.height,
       uvWidth: Number(asset.uvWidth) || Number(state.project.textureSize?.[0]) || frame.width,
       uvHeight: Number(asset.uvHeight) || Number(state.project.textureSize?.[1]) || frame.height };
   }))).filter(Boolean);
@@ -151,6 +194,12 @@ async function rebuildTextureAtlasNow() {
     // Ensure the current project's atlas still gets its own final pass.
     rebuildTextureAtlas();
     return false;
+  }
+  for (const { asset, original } of records)
+    animationRasterCache.set(asset._uid, { canvas: original, source: asset.source });
+  for (const record of records) {
+    record.image = displayTextureFrame(record.asset, record.image);
+    if (floatingTextures.has(record.asset)) updateLayerCompositePreview(record.asset, record.image, null, true);
   }
   const loadedAssets = new Set(records.map(record => record.asset));
   let retryDelay = 0;
@@ -246,6 +295,9 @@ async function rebuildTextureAtlasNow() {
 }
 
 function syncRendererTextureAsset(asset, source, composited = false, dirty = null, changedLayerUid = null) {
+  const editableSource = !composited ? source : null;
+  const layerUid = editableSource && (boundPaintLayer(asset, source) || activeLayer(asset))?.uid;
+  const previous = asset && livePaintTextureSources.get(asset._uid);
   const profile = performanceMonitor.enabled;
   const start = profile ? performance.now() : 0;
   if (asset?.layers?.length) {
@@ -266,6 +318,7 @@ function syncRendererTextureAsset(asset, source, composited = false, dirty = nul
         layerContext.clearRect(region.x, region.y, region.width, region.height);
         layerContext.drawImage(source, region.x, region.y, region.width, region.height,
           region.x, region.y, region.width, region.height);
+        layerRasterRegions.invalidate(layerCanvas, region);
         const patch = compositeLayers(asset, null, null, region);
         const compositeContext = cached.source.getContext('2d');
         compositeContext.clearRect(region.x, region.y, region.width, region.height);
@@ -283,9 +336,16 @@ function syncRendererTextureAsset(asset, source, composited = false, dirty = nul
   if (asset && source) animationRasterCache.set(asset._uid, {
     canvas: typeof source.getContext === 'function' ? source : imageCanvas(source), source: asset.source
   });
-  if (asset?._uid && source) livePaintTextureSources.set(asset._uid, { source, savedSource: asset.source });
+  if (asset?._uid && source) livePaintTextureSources.set(asset._uid, { source, savedSource: asset.source,
+    editableSource, layerUid: layerUid || undefined,
+    patchOnly: Boolean(editableSource && dirty && previous?.savedSource === asset.source
+      && (previous.editableSource !== editableSource || previous.patchOnly)) });
   source=flipbookFrame(asset,source,dirty);
-  updateLayerCompositePreview(asset,source,dirty);
+  uploadDisplayedTexture(asset, displayTextureFrame(asset, source), floatingTextures.has(asset) ? null : dirty, start, compositeEnd);
+}
+
+function uploadDisplayedTexture(asset, source, dirty = null, start = 0, compositeEnd = 0) {
+  updateLayerCompositePreview(asset, source, dirty, floatingTextures.has(asset));
   const atlasEntry = asset && textureAtlasLayoutByUid.get(asset._uid);
   let atlasPatch = null;
   if (atlasEntry && source?.width === atlasEntry.width && source?.height === atlasEntry.height) {
@@ -321,9 +381,9 @@ function syncRendererTextureAsset(asset, source, composited = false, dirty = nul
     uvPreviewController.uvPreviewTextureDirty = false;
   }
   scheduleSceneRender();
-  const uploadEnd = profile ? performance.now() : 0;
+  const uploadEnd = start ? performance.now() : 0;
   if (asset && source) refreshDerivedTileEntries(asset, source);
-  if (profile) {
+  if (start) {
     const end = performance.now();
     performanceMonitor.record('paint.layerComposite', compositeEnd - start);
     performanceMonitor.record('paint.atlasUpload', uploadEnd - compositeEnd);
@@ -333,6 +393,27 @@ function syncRendererTextureAsset(asset, source, composited = false, dirty = nul
 
 function syncRendererTexture(source, composited = false) {
   syncRendererTextureAsset(activeTextureAsset(), source, composited);
+}
+
+function restoreHistoryTextures(uids) {
+  if (!uids.length) return true;
+  const assets = uids.map(uid => state.textureAssets.find(asset => asset._uid === uid));
+  if (assets.some(asset => !asset || !textureAtlasLayoutByUid.has(asset._uid))) return false;
+  textureAtlasRevision++;
+  for (const asset of assets) {
+    const uid = asset._uid, source = asset.source;
+    const region = !asset.animation?.enabled && asset.mode !== 'tiled'
+      ? paintHistoryRegion(livePaintTextureSources.get(uid)?.savedSource, source) : null;
+    livePaintTextureSources.delete(uid); animationRasterCache.delete(uid);
+    void loadTextureAssetImage(asset).then(async image => {
+      if (asset.animation?.enabled && asset.layers?.length) await prepareLayers(asset);
+      // A newer undo, redo, or live stroke owns this slot now.
+      if (!state.textureAssets.includes(asset) || asset.source !== source || livePaintTextureSources.has(uid)) return;
+      if (image) syncRendererTextureAsset(asset, imageCanvas(image), true, region);
+      else rebuildTextureAtlas();
+    }).catch(() => { if (state.textureAssets.includes(asset)) rebuildTextureAtlas(); });
+  }
+  return true;
 }
 
 function renderTexture() {
@@ -364,6 +445,9 @@ return {
   textureAtlasReferences,
   rebuildTextureAtlas,
   rebuildTextureAtlasNow,
+  restoreHistoryTextures,
+  previewFloatingTexture,
+  clearFloatingTextures,
   syncRendererTextureAsset,
   syncRendererTexture,
   renderTexture,

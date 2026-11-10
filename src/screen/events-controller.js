@@ -1,4 +1,4 @@
-import { ConfigKey, configRegistry } from '../common/config/app-config.js';
+import { ConfigKey, configRegistry, TOOL_TRANSFORM_SPACE } from '../common/config/app-config.js';
 import { createListDragAutoScroll } from './list-drag-scroll.js';
 import { verticalDropTarget } from './vertical-drop.js';
 import { Cube, Group, Shape } from '../model.js';
@@ -23,7 +23,7 @@ export function createEventBinder({
   moveAxisWidgetDrag, endAxisWidgetDrag, restore, cancelCameraFocus,
   deleteSelectedPaletteColor, refreshKnifeFromModifierEvent,
   activateDock, addBezierElement, addCube, addGroup, addLocator, addShape,
-  addTextureGroup, animateLockedHoverStrength, applyPreset,
+  animateLockedHoverStrength, applyPreset,
   beginTemporaryEyedropper, bindContextMenus, bindTextureFaceDropSurface,
   cameraController, clamp, clearOutlinerDropState,
   clearPaintGradientSelection, clearSelection, clearTextureFaceDropTarget,
@@ -33,10 +33,10 @@ export function createEventBinder({
   exportProject, focusSelected, focusSceneOrigin, focusSelectedTextureUvs, getUvPreviewProject,
   importPlayerReferenceTexture, importTexture, inspectorBatchNodes,
   invalidateSelectionRenderGeometry, isBezierElement, isEffectivelyLocked,
-  loadProjectContent, loadProjectFile, markDirty, moveSelectedNodes, newProject,
+  loadProjectContent, loadProjectFile, markDirty, moveSelectedNodes,
   nodeAutoUvEnabled, nodeUvNormalizedEnabled, noteJournalOperation,
   onPointerDown, onPointerMove, onScenePointerMove, onTexturePointerMove,
-  openNewProjectDialog, openPreciseRotationInput, openProject,
+  openPreciseRotationInput, openProject,
   openTextureCreateDialog, pasteElements, pasteTexture, playTimeline,
   rebuildTextureAtlas, redo, refreshSelectionUi, refreshUvPreview,
   remapNumericFaceTextureReferences, removeOutlinerDragGhost,
@@ -57,7 +57,7 @@ export function createEventBinder({
   updateSelectionLabels, updateTextureCreateDialog,
   updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
   updateTransformGizmo, movePivotToRotationVertex,
-  uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView
+  uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView, handlePixelShortcut
 }) {
 let recentRotationPress = null;
 let pendingRotationPress = null;
@@ -291,7 +291,11 @@ function bindEvents() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Tab') document.body.classList.add('keyboard-navigation');
   }, true);
-  document.addEventListener('pointerdown', () => {
+  let pointerX = null, pointerY = null;
+  const rememberPointer = event => { pointerX = event.clientX; pointerY = event.clientY; };
+  document.addEventListener('pointermove', rememberPointer, { capture: true, passive: true });
+  document.addEventListener('pointerdown', event => {
+    rememberPointer(event);
     document.body.classList.remove('keyboard-navigation');
   }, true);
   bindContextMenus();
@@ -404,19 +408,23 @@ function bindEvents() {
   $('[data-action="addCube"]').addEventListener('click', addCube);
   const shapeCreateButton = $('[data-action="toggleShapeCreate"]');
   const shapeCreateMenu = $('#shapeCreateMenu');
+  document.body.append(shapeCreateMenu);
   const closeShapeCreateMenu = () => {
     shapeCreateMenu.hidden = true;
     shapeCreateButton.setAttribute('aria-expanded', 'false');
+  };
+  const openShapeCreateMenu = (x, y, alignRight = false) => {
+    shapeCreateMenu.hidden = false;
+    const { width, height } = shapeCreateMenu.getBoundingClientRect();
+    shapeCreateMenu.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, x - (alignRight ? width : 0)))}px`;
+    shapeCreateMenu.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, y))}px`;
+    shapeCreateButton.setAttribute('aria-expanded', 'true');
   };
   shapeCreateButton.addEventListener('click', event => {
     event.stopPropagation();
     if (!shapeCreateMenu.hidden) return closeShapeCreateMenu();
     const rect = shapeCreateButton.getBoundingClientRect();
-    shapeCreateMenu.hidden = false;
-    const menuRect = shapeCreateMenu.getBoundingClientRect();
-    shapeCreateMenu.style.left = `${Math.max(8, Math.min(window.innerWidth - menuRect.width - 8, rect.right - menuRect.width))}px`;
-    shapeCreateMenu.style.top = `${Math.max(8, Math.min(window.innerHeight - menuRect.height - 8, rect.bottom + 5))}px`;
-    shapeCreateButton.setAttribute('aria-expanded', 'true');
+    openShapeCreateMenu(rect.right, rect.bottom + 5, true);
   });
   shapeCreateMenu.addEventListener('click', event => {
     event.stopPropagation();
@@ -433,11 +441,6 @@ function bindEvents() {
   $('[data-action="addLocator"]').addEventListener('click', addLocator);
   $('[data-action="addGroup"]').addEventListener('click', addGroup);
   $('.outliner-create-actions [data-action="deleteSelected"]').addEventListener('click', deleteSelected);
-  $('[data-action="new"]').addEventListener('click', openNewProjectDialog);
-  $('#modelFormatList').addEventListener('click', event => {
-    const card = event.target.closest('[data-model-format]');
-    if (card) newProject(card.dataset.modelFormat);
-  });
   $('[data-action="open"]').addEventListener('click', openProject);
   $('[data-action="save"]').addEventListener('click', () => saveProject(false));
   $('[data-action="export"]').addEventListener('click', exportProject);
@@ -596,7 +599,10 @@ function bindEvents() {
     setDockHotspotFocus(panel.dataset.panel);
   }));
   const texturePreview = $('#texturePreview');
-  texturePreview.addEventListener('pointerdown', () => texturePreview.focus({ preventScroll: true }), true);
+  texturePreview.addEventListener('pointerdown', () => {
+    texturePreview.focus({ preventScroll: true });
+    setDockHotspotFocus('texture');
+  }, true);
   texturePreview.addEventListener('pointerdown', startTexturePointer);
   texturePreview.addEventListener('pointermove', onTexturePointerMove);
   texturePreview.addEventListener('pointerup', endTexturePointer);
@@ -710,9 +716,8 @@ function bindEvents() {
   });
   $('#geometryOnlyToggle').addEventListener('change', event => configRegistry.set(ConfigKey.SHOW_GEOMETRY_ONLY, event.target.checked, { source: 'toolbar' }));
   $$('[data-transform-space]').forEach(button => button.addEventListener('click', () => {
-    state.transformSpace = button.dataset.transformSpace;
-    updateToolOptions();
-    renderScene();
+    const id = TOOL_TRANSFORM_SPACE[state.tool];
+    if (id) configRegistry.set(id, button.dataset.transformSpace, { source: 'toolbar' });
   }));
   $$('[data-rotation-mode]').forEach(button => button.addEventListener('click', () => {
     state.rotationMode = button.dataset.rotationMode;
@@ -1053,7 +1058,6 @@ function bindEvents() {
     importTexture(textureInput.files[0]);
     textureInput.value = '';
   });
-  $('[data-action="addTextureGroup"]').addEventListener('click', addTextureGroup);
   bindTextureFaceDropSurface(viewport, sceneCanvas, sceneRenderer, () => state.project, '#sceneTextureDropFaceOverlay');
   bindTextureFaceDropSurface(uvPreviewViewport, uvPreviewCanvas, uvPreviewRenderer,
     () => uvPreviewIsActive() ? getUvPreviewProject().project : null, '#uvTextureDropFaceOverlay');
@@ -1352,8 +1356,9 @@ function bindEvents() {
   window.addEventListener('resize', renderScene);
   document.addEventListener('visibilitychange', refreshUvPreview);
   window.addEventListener('keydown', event => {
-    if (state.projectHomeActive) return;
+    if (state.projectHomeActive || event.defaultPrevented || event.isComposing) return;
     const key = event.key.toLowerCase();
+    const commandKey = event.ctrlKey || event.metaKey;
     if (!event.repeat && event.ctrlKey && event.shiftKey && key === 'f12') {
       event.preventDefault();
       toast('開始記錄 8 秒，請持續操作主視圖');
@@ -1372,29 +1377,42 @@ function bindEvents() {
       event.preventDefault();
       return;
     }
-    if ((event.ctrlKey || event.metaKey) && key === 'z') {
+    if (commandKey && key === 'z') {
       if (event.target instanceof Element
         && (event.target.closest('input, textarea, [contenteditable]') || event.target.isContentEditable)) return;
       event.preventDefault();
       event.shiftKey ? redo() : undo();
       return;
     }
-    if ((event.ctrlKey || event.metaKey) && key === 's') {
+    if (commandKey && key === 's') {
       event.preventDefault();
-      event.shiftKey ? exportProject() : saveProject();
+      if (!event.repeat) event.shiftKey ? exportProject() : saveProject();
       return;
     }
-    if (event.target.matches('input,select,textarea') || event.target.isContentEditable) return;
+    if (event.target instanceof Element
+      && (event.target.closest('input, select, textarea, [contenteditable]') || event.target.isContentEditable)) return;
     if (state.mode === 'display') return;
-    if ((event.ctrlKey || event.metaKey) && key === 'a'
+    if (commandKey && key === 'a'
       && event.target instanceof Element
       && (viewport.contains(event.target) || outliner.contains(event.target))) {
       event.preventDefault();
       selectAllElements();
       return;
     }
-    const textureListFocused = document.activeElement?.closest?.('#textureList');
-    if (textureListFocused && (event.ctrlKey || event.metaKey)) {
+    const focus = document.activeElement;
+    const textureListFocused = focus?.closest('#textureList');
+    const texturePanelFocused = focus?.closest('[data-panel="texture"]')
+      || focus === document.body && uvEditorController.focusedDockHotspot === 'texture';
+    if (texturePanelFocused && commandKey && !event.shiftKey && !event.altKey) {
+      const pixelCommand = { x: 'cut', c: 'copy', v: 'paste', d: 'duplicate' }[key];
+      if (pixelCommand && handlePixelShortcut(pixelCommand, {
+        repeat: event.repeat, allowUnselectedPaste: !textureListFocused
+      })) {
+        event.preventDefault();
+        return;
+      }
+    }
+    if (textureListFocused && commandKey) {
       if (key === 'c') { event.preventDefault(); copyTexture(); return; }
       if (key === 'x') { event.preventDefault(); cutTexture(); return; }
       if (key === 'v') { event.preventDefault(); pasteTexture(); return; }
@@ -1413,18 +1431,21 @@ function bindEvents() {
       if (inspectorController.subdivisionSession) exitSubdivisionEdit();
       clearPaintGradientSelection();
     }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelected(); }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'x') { event.preventDefault(); cutSelected(); }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteElements(); }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); pasteElements({ inPlace: true }); }
+    if (commandKey && key === 'c') { event.preventDefault(); copySelected(); return; }
+    if (commandKey && key === 'x') { event.preventDefault(); cutSelected(); return; }
+    if (commandKey && key === 'v') { event.preventDefault(); pasteElements(); return; }
+    if (commandKey && key === 'd') { event.preventDefault(); pasteElements({ inPlace: true }); return; }
     if (event.key === 'Delete') {
+      if (handlePixelShortcut('delete', { repeat: event.repeat })) {
+        event.preventDefault();
+        return;
+      }
       const palette = $('#paletteRows');
       if (document.activeElement === palette || palette.contains(document.activeElement)) {
         event.preventDefault();
         if (!event.repeat) deleteSelectedPaletteColor();
         return;
       }
-      const focus = document.activeElement;
       if (focus?.closest?.('#textureFeatureControls, #layerEditorDialog')) {
         event.preventDefault();
         if (!event.repeat) removeActiveLayer().catch(error => toast(error.message));
@@ -1435,7 +1456,31 @@ function bindEvents() {
         if (!event.repeat) removeTexture();
         return;
       }
-      deleteSelected();
+      if (state.mode !== 'paint') deleteSelected();
+      return;
+    }
+    const plainKey = !commandKey && !event.shiftKey && !event.altKey;
+    if (plainKey && !document.querySelector('dialog[open]')) {
+      if (key === 'arrowleft' || key === 'arrowright') {
+        const tools = $$('.tool-lane .tool').filter(button => !button.disabled && button.getClientRects().length)
+          .map(button => button.dataset.tool || state.paintShapeTool);
+        if (tools.length) {
+          const index = tools.indexOf(state.tool), step = key === 'arrowleft' ? -1 : 1;
+          const next = tools[index < 0 ? (step > 0 ? 0 : tools.length - 1) : (index + step + tools.length) % tools.length];
+          event.preventDefault();
+          if (next !== state.tool) { closeShapeCreateMenu(); setTool(next); }
+        }
+        return;
+      }
+      if (state.mode === 'edit' && (key === 'c' || key === 's')) {
+        event.preventDefault();
+        if (!event.repeat) {
+          if (key === 'c') { closeShapeCreateMenu(); addCube(); }
+          else if (shapeCreateMenu.hidden) openShapeCreateMenu(pointerX ?? window.innerWidth / 2, pointerY ?? window.innerHeight / 2);
+          else closeShapeCreateMenu();
+        }
+        return;
+      }
     }
     if (event.key.toLowerCase() === 'f') { cancelCameraFocus(); state.zoom = 1.12; state.panX = 0; state.panY = 0; renderScene(); }
     if (event.key.toLowerCase() === 'r') {

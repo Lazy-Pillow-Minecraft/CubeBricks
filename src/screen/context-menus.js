@@ -14,12 +14,13 @@ export function createContextMenuController({
   refreshSelectionUi, snapshot, discardSubdivisionEdits, markDirty, renderAll,
   isProceduralShape, exitSubdivisionEdit, enterSubdivisionEdit,
   renderTextureList, remapNumericFaceTextureReferences, activateProjectTexture,
-  renderTexture, rebuildTextureAtlas, noteJournalOperation, addTextureGroup,
+  renderTexture, rebuildTextureAtlas, noteJournalOperation,
   setMode, deleteSelectedPaletteColor, insertPaletteGradientNode,
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
-  copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown, saveTexture
+  copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown, saveTexture,
+  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer
 }) {
 let contextMenuSource = null;
 const contextMenuHome = $('#contextMenu').parentNode;
@@ -398,7 +399,6 @@ function bindContextMenus() {
         { icon: '✂', label: '剪切貼圖', action: () => cutTexture(asset) },
         { icon: '▤', label: '貼上貼圖', action: () => pasteTexture() },
         { icon: '⧉', label: '原地複製貼圖', action: () => pasteTexture({ inPlace: true }) },
-        { icon: '▰', label: '移到新貼圖組', action: addTextureGroup },
         { separator: true },
         { icon: '×', label: '刪除貼圖', danger: true, action: () => removeTexture(asset) }
       ] });
@@ -424,13 +424,24 @@ function bindContextMenus() {
   ] }));
   $('#textureFeatureControls').addEventListener('contextmenu', event => {
     const rowNode = event.target.closest('[data-layer-row]');
-    if (!rowNode) return;
+    const groupNode = event.target.closest('[data-layer-group-line],[data-layer-group-end]');
+    const layerUid = rowNode?.dataset.layerRow || groupNode?.dataset.layerGroupLine || groupNode?.dataset.layerGroupEnd;
     const asset = state.textureAssets.find(entry => entry._uid === state.activeTextureUid);
-    const layer = asset?.layers?.find(entry => entry.uid === rowNode.dataset.layerRow);
+    if (!asset) return;
+    if (!layerUid) return showContextMenu(event, { title: '图层列表', source: $('#textureFeatureControls'), items: [
+      { icon: '▤', label: '粘贴图层', disabled: !canPasteTextureLayer(), action: () => pasteTextureLayer().catch(error => toast(error.message)) }
+    ] });
+    const layer = asset.layers?.find(entry => entry.uid === layerUid);
     if (!layer) return;
     const siblings = asset.layers.filter(entry => (entry.parentUid || null) === (layer.parentUid || null));
     const canMerge = siblings.indexOf(layer) > 0;
-    showContextMenu(event, { title: layer.name, source: rowNode, items: [
+    showContextMenu(event, { title: layer.name, source: rowNode || groupNode, items: [
+      { icon: '▣', label: '复制图层', action: () => copyTextureLayer(layer.uid).catch(error => toast(error.message)) },
+      { icon: '▤', label: '粘贴图层', disabled: !canPasteTextureLayer(), action: () => pasteTextureLayer({ uid: layer.uid }).catch(error => toast(error.message)) },
+      { icon: '⧉', label: '就地复制图层', action: () => pasteTextureLayer({ uid: layer.uid, inPlace: true }).catch(error => toast(error.message)) },
+      { separator: true },
+      { icon: '◐', label: '二值化透明度', action: () => binarizeTextureLayerAlpha(layer.uid).catch(error => toast(error.message)) },
+      { separator: true },
       ...(canMerge ? [{ icon: '▣', label: '向下合併圖層', action: () => mergeTextureLayerDown(layer.uid).catch(error => toast(error.message)) }] : []),
       { icon: '×', label: '刪除圖層', danger: true, action: () => removeTextureLayer(layer.uid).catch(error => toast(error.message)) }
     ] });

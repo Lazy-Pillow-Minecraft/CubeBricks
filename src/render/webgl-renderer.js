@@ -2,10 +2,12 @@ import { POST_VERTEX_SHADER, SSAA_RESOLVE_FRAGMENT_SHADER, COPY_FRAGMENT_SHADER,
   LOCKED_COMPOSITE_FRAGMENT_SHADER, VERTEX_SHADER, FRAGMENT_SHADER, LOG_DEPTH_FRAGMENT_SHADER } from './shaders.js';
 import { indexFaces, buildFaceBvh, refitFaceBvh, queryFaceBvh } from './face-bvh.js';
 import { facesRemainDepthSorted, sortFacesByDepth } from './face-order.js';
+import { OrderedFaceMesh } from './ordered-face-mesh.js';
 export { buildFaceBvh, refitFaceBvh, queryFaceBvh } from './face-bvh.js';
 import { buildModifierRenderInstances } from '../model.js';
 import { tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
-import { constrainCube, formatRules, projectSizeBounds, bedrockLimitBox, javaBlockSizeIsValid } from '../common/core/format-constraints.js';
+import { formatRules, projectSizeBounds, bedrockLimitBox, javaBlockSizeIsValid } from '../common/core/format-constraints.js';
+import { constrainElementCube } from '../common/core/procedural-format.js';
 import { buildPaintExplodeOffsets, applyPaintExplodeOffsets } from './paint-explode.js';
 import { SELECTION_STRIPE_SIZE, SELECTION_STRIPE_PIXELS, selectionStripePhase } from '../utils/selection-stripes.js';
 import { performanceMonitor } from '../utils/performance-monitor.js';
@@ -166,6 +168,7 @@ export class WebGLSceneRenderer {
     this.layerHoverEnabledLocation = this.gl.getUniformLocation(this.layerProgram, 'uHoverEnabled');
     this.dynamicBuffer = this.gl.createBuffer();
     this.orderedFaceBuffer = this.gl.createBuffer();
+    this.orderedFaceMesh = new OrderedFaceMesh(this.gl, this.orderedFaceBuffer, this.gl.getExtension('OES_element_index_uint'));
     this.orderedFaceCache = null;
     this.gridBuffer = this.gl.createBuffer();
     this.gridBufferCache = null;
@@ -593,6 +596,8 @@ export class WebGLSceneRenderer {
     this.staticCache = null;
     this.selectedCache = null;
     this.orderedFaceCache = null;
+    this.orderedFaceMesh?.reset();
+    if (this.faceSortScratch) this.faceSortScratch.entries.length = 0;
     this.faceSelectionCache = null;
     this.excludedRangeCache?.clear();
     this.selectedExclusionCache = null;
@@ -1288,21 +1293,27 @@ export class WebGLSceneRenderer {
       // both lists on every camera frame doubled the translucent-model cost.
       const staticFaces = orderStillSorted ? null : this.staticCache.faces
         .filter(face => !dynamicUids.has(face.uid) && !lockedUids.has(face.uid) && !isBornFace(face));
+      const sortScratch = this.faceSortScratch ||= { entries: [] };
       const drawFaces = orderStillSorted ? previousOrder.faces : selectionPreview
-        ? sortFacesByDepth(staticFaces, eye, forward)
+        ? sortFacesByDepth(staticFaces, eye, forward, sortScratch)
         : sortFacesByDepth(
           [...staticFaces, ...this.selectedCache.faces]
             .filter(face => !lockedUids.has(face.uid) && !isBornFace(face)),
-          eye, forward
+          eye, forward, sortScratch
         );
       // Face order changes only when the camera crosses a depth ordering
-      // boundary. Keep the flattened vertices in a dedicated buffer so camera
-      // frames with the same order do not reupload every translucent face.
-      if (!previousOrder || previousOrder.faces.length !== drawFaces.length
+      // boundary. Reorder indices without reuploading translucent vertices.
+      if (!orderSourcesMatch || !previousOrder || previousOrder.faces.length !== drawFaces.length
         || !orderStillSorted && drawFaces.some((face, index) => face !== previousOrder.faces[index])) {
-        const vertices = drawFaces.flatMap(face => face.vertices);
-        if (vertices.length) this.uploadBuffer(this.orderedFaceBuffer, vertices, gl.DYNAMIC_DRAW);
-        this.orderedFaceCache = { faces: drawFaces, count: vertices.length / 12,
+        const indices = this.orderedFaceMesh?.update(drawFaces, Boolean(orderSourcesMatch && previousOrder.indices));
+        let count;
+        if (indices) count = this.orderedFaceMesh.indices.length;
+        else {
+          const vertices = drawFaces.flatMap(face => face.vertices);
+          if (vertices.length) this.uploadBuffer(this.orderedFaceBuffer, vertices, gl.DYNAMIC_DRAW);
+          count = vertices.length / 12;
+        }
+        this.orderedFaceCache = { faces: drawFaces, count, indices,
           staticFaces: this.staticCache.faces, selectedFaces: this.selectedCache.faces,
           dynamicKey: this.currentDynamicElementKey, lockedKey: this.currentLockedKey,
           selectionPreview, birthFree: !this.cubeBirthStartByUid.size,
@@ -1320,7 +1331,7 @@ export class WebGLSceneRenderer {
       const faceVertexCount = this.orderedFaceCache.count;
       const drawFacePass = options => {
         if (faceVertexCount) this.drawBuffer(this.orderedFaceBuffer, faceVertexCount,
-          gl.TRIANGLES, viewProjection, options);
+          gl.TRIANGLES, viewProjection, { ...options, indices: this.orderedFaceCache.indices });
         if (!selectionPreview) {
           this.drawMirrorInstances(dynamicUids, lockedUids, gl.TRIANGLES, viewProjection, options);
           return;
@@ -2557,7 +2568,7 @@ export class WebGLSceneRenderer {
   drawBuffer(buffer, vertexCount, primitive, matrix, {
     depthWrite = true, cull = true, renderMode = 1, alphaMode = 0, blend = false, first = 0, opacity = 1,
     modelTransform = null, depthTest = true, texture = null, flipWinding = false, colorOverride = null,
-    ranges = null
+    ranges = null, indices = null
   } = {}) {
     if (!vertexCount) return;
     const { gl } = this;
@@ -2655,7 +2666,10 @@ export class WebGLSceneRenderer {
       gl.blendEquation(gl.FUNC_ADD);
       gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     } else gl.disable(gl.BLEND);
-    if (ranges?.length) {
+    if (indices) {
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices.buffer);
+      gl.drawElements(primitive, vertexCount, indices.type, 0);
+    } else if (ranges?.length) {
       if (ranges.length > 1 && this.multiDraw?.multiDrawArraysWEBGL) {
         this.rangeDrawArrays ||= new WeakMap();
         let arrays = this.rangeDrawArrays.get(ranges);
@@ -2785,7 +2799,6 @@ function collectLockedState(project) {
 
 function buildElementGeometry(project, elements, selection, selectionOutline = [1, 1, 1], faceDistinct = false, textureLayout = null) {
   const selectedUids = normalizeSelectedNodeUids(selection);
-  const renderFormatRules = formatRules(project);
   const triangles = [];
   const faces = [];
   const edges = [];
@@ -2831,8 +2844,8 @@ function buildElementGeometry(project, elements, selection, selectionOutline = [
     const cubes = subdivisionOwner
       ? [{ cube: element, offset: subdivisionOwner.origin || [0, 0, 0], ownerRotation: subdivisionOwner.rotation || [0, 0, 0], ownerOrigin: subdivisionOwner.pivot || subdivisionOwner.origin || [0, 0, 0], groupChain, textureSize: project.textureSize, shade: element.shade !== false && subdivisionOwner.shade !== false }]
       : typeof element.toCubes === 'function'
-      ? element.toCubes().map((cube, cubeIndex) => ({ cube: renderFormatRules.moddedEntity ? constrainCube(cube, renderFormatRules) : cube, cubeIndex, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.pivot || element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
-      : [{ cube: element, offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
+      ? element.toCubes(project).map((cube, cubeIndex) => ({ cube, cubeIndex, offset: element.origin, ownerRotation: element.rotation, ownerOrigin: element.pivot || element.origin, groupChain, textureSize: project.textureSize, shade: element.shade }))
+      : [{ cube: constrainElementCube(project, element), offset: [0, 0, 0], ownerRotation: [0, 0, 0], ownerOrigin: element.pivot, groupChain, textureSize: project.textureSize, shade: element.shade }];
 
     if (!element.visible) {
       if (selectedForBounds) boundsPoints.push(...cubes.flatMap(cubeWorldCorners));

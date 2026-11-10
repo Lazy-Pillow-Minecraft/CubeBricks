@@ -18,21 +18,25 @@ for (let index = 0; index < rotations.length; index++) for (const axis of [0, 1,
   if (!visited.has(key)) { visited.add(key); rotations.push(matrix); }
 }
 
-function decompose(rotation, step) {
+function decompose(rotation, step, weights = [1, 1, 1]) {
   const target = rotationMatrix(rotation);
   let best = null;
   for (const quarter of rotations) {
-    const rest = multiply(target, transpose(quarter));
     for (let axis = 0; axis < 3; axis++) {
       const a = (axis + 1) % 3, b = (axis + 2) % 3;
-      let angle = Math.atan2(rest[b][a] - rest[a][b], rest[a][a] + rest[b][b]) * 180 / Math.PI;
+      const sine = weights.reduce((sum, weight, column) => sum + weight
+        * (quarter[a][column] * target[b][column] - quarter[b][column] * target[a][column]), 0);
+      const cosine = weights.reduce((sum, weight, column) => sum + weight
+        * (quarter[a][column] * target[a][column] + quarter[b][column] * target[b][column]), 0);
+      let angle = Math.atan2(sine, cosine) * 180 / Math.PI;
       if (step) angle = Math.round(angle / step) * step;
       if (Math.abs(angle) > 45 + 1e-7) continue;
       const residual = [0, 0, 0]; residual[axis] = clean(angle);
       const actual = multiply(rotationMatrix(residual), quarter);
       const score = actual.reduce((sum, row, i) => sum + row.reduce((total, value, j) => total + value * target[i][j], 0), 0);
-      if (!best || score > best.score + 1e-9 || Math.abs(score - best.score) < 1e-9 && Math.abs(angle) < Math.abs(best.angle) - 1e-7)
-        best = { quarter, rotation: residual, angle, score };
+      const fitScore = actual.reduce((sum, row, i) => sum + row.reduce((total, value, j) => total + weights[j] * value * target[i][j], 0), 0);
+      if (!best || fitScore > best.fitScore + 1e-9 || Math.abs(fitScore - best.fitScore) < 1e-9 && Math.abs(angle) < Math.abs(best.angle) - 1e-7)
+        best = { quarter, rotation: residual, angle, score, fitScore };
     }
   }
   return best;
@@ -85,16 +89,17 @@ function rebaseAttachedFrames(cube, quarter, pivot) {
 
 // R = residual * quarter: only the proper, integer orthogonal part is baked
 // into geometry. Face corner correspondence preserves UV rotation and mirrors.
-export function foldJavaCubeRotation(cube, { rotationStep = null, strict = false } = {}) {
+export function foldJavaCubeRotation(cube, { rotationStep = null, strict = false, onQuarterTurn = null, rotationWeights = null } = {}) {
   const rotation = (cube.rotation || [0, 0, 0]).map(value => Number(value) || 0);
   if (rotation.filter(value => Math.abs(value) > 1e-7).length <= 1 && rotation.every(value => Math.abs(value) <= 45 + 1e-7)) {
     if (strict && rotationStep && rotation.some(value => Math.abs(value / rotationStep - Math.round(value / rotationStep)) > 1e-6)) return false;
     cube.rotation = rotation.map(value => clean(rotationStep ? Math.round(value / rotationStep) * rotationStep : value));
     return true;
   }
-  const result = decompose(rotation, rotationStep);
+  const result = decompose(rotation, rotationStep, strict ? undefined : rotationWeights || undefined);
   if (!result || strict && result.score < 3 - 1e-8) return false;
   const { quarter } = result;
+  onQuarterTurn?.(quarter);
   const axes = quarter.map(row => row.findIndex(value => value !== 0));
   const cornerMap = CORNERS.map(bits => CORNERS.findIndex(candidate => equal(candidate,
     axes.map((source, axis) => quarter[axis][source] < 0 ? 1 - bits[source] : bits[source]))));

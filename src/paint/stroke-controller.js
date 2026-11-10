@@ -1,9 +1,12 @@
 import { createBlockbenchFaceUvSlots, getBlockbenchBoxUv, isCubeFaceCulled } from '../common/core/geometry-utils.js';
-import { activeLayer, compositeLayers } from '../common/core/texture-features.js';
+import { activeLayer, compositeLayers, layerRasterCache } from '../common/core/texture-features.js';
 import { requireOperation } from '../common/core/operation-registry.js';
 import { PAINT_TOOLS, PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
 import { paintSelectionAllows } from './selection-controller.js';
-import { bindPaintCanvas, boundPaintLayer, releasePaintCanvas } from './canvas-layer-binding.js';
+import { bindPaintCanvas, boundPaintLayer, releasePaintCanvas, rememberEditablePaintSource } from './canvas-layer-binding.js';
+import { historyImageFingerprint, noteCanvasHistoryImage } from '../project/history-fingerprint.js';
+import { rememberDecodedRaster } from '../utils/image/raster-cache.js';
+import { rememberPaintHistoryRegion } from '../texture/source-snapshot.js';
 
 export function createPaintStrokeController({
   state, $, $$, textureCanvas, textureCtx, uvEditorController,
@@ -13,7 +16,7 @@ export function createPaintStrokeController({
   textureAssetForReference, getTextureAtlasEntries, paintCanvasForAsset, syncRendererTextureAsset,
   scheduleSceneRender,
   updateTexturePreviewFrame, noteJournalOperation, markDirty, toast,
-  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache, animationRasterCache
+  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache, animationRasterCache, livePaintTextureSources
 }) {
 const paintBrushOffsetCache = new Map();
 const PAINT_FACE_LAYOUTS = Object.freeze({
@@ -23,6 +26,12 @@ const PAINT_FACE_LAYOUTS = Object.freeze({
 let texturePaintSyncQueued = false;
 let texturePaintSyncFrame = null;
 const texturePaintSyncTargets = new Map();
+
+function capturePaintStyle(tool) {
+  return { color: state.paintColor, size: paintSetting(tool).size, opacity: paintToolOpacity(tool),
+    erase: paintToolErasing(tool), alphaLock: state.alphaLock, ignoreTransparent: state.paintIgnoreTransparent,
+    shape: state.paintBrushShape, aa: state.paintBrushAa, depth: state.paintBrushDepth, filled: state.paintShapeFilled };
+}
 let cachedPaintColor = null;
 let cachedPaintColorBytes = null;
 
@@ -221,23 +230,25 @@ function compositeHolisticPaintPixel(surface, x, y, coverage, tool, opacity) {
   const pixel = localY * tile.width + localX;
   const offset = pixel * 4;
   const source = tile.original;
-  if (state.paintIgnoreTransparent && !paintCompositeVisibleAtStart(surface, x, y)) return true;
-  if (paintToolErasing(tool) && state.alphaLock) return true;
+  const style = surface.rootDrag?.paintStyle;
+  const erase = style?.erase ?? paintToolErasing(tool), alphaLock = style?.alphaLock ?? state.alphaLock;
+  if ((style?.ignoreTransparent ?? state.paintIgnoreTransparent) && !paintCompositeVisibleAtStart(surface, x, y)) return true;
+  if (erase && alphaLock) return true;
   const coverageByte = Math.round(clamp(coverage, 0, 1) * 255);
   if (coverageByte <= tile.coverage[pixel]) return true;
   tile.coverage[pixel] = coverageByte;
   const blend = opacity * coverageByte / 255;
   const output = tile.image.data;
   const sourceAlpha = source[offset + 3] / 255;
-  if (paintToolErasing(tool)) {
+  if (erase) {
     output[offset] = source[offset]; output[offset + 1] = source[offset + 1]; output[offset + 2] = source[offset + 2];
     output[offset + 3] = Math.round(source[offset + 3] * (1 - blend));
-  } else if (state.alphaLock) {
-    const color = paintColorBytes();
+  } else if (alphaLock) {
+    const color = paintColorBytes(style?.color);
     for (let channel = 0; channel < 3; channel++) output[offset + channel] = Math.round(source[offset + channel] * (1 - blend) + color[channel] * blend);
     output[offset + 3] = source[offset + 3];
   } else {
-    const color = paintColorBytes();
+    const color = paintColorBytes(style?.color);
     const outputAlpha = blend + sourceAlpha * (1 - blend);
     for (let channel = 0; channel < 3; channel++) output[offset + channel] = outputAlpha <= 0 ? 0 : Math.round(
       (color[channel] * blend + source[offset + channel] * sourceAlpha * (1 - blend)) / outputAlpha);
@@ -302,7 +313,7 @@ function touchScenePaintSurface(surface) {
 }
 
 function paintBrushDepthStamp(drag, centerX, centerY, offsets, opacity) {
-  const depth = clamp(Math.round(Number(state.paintBrushDepth)) || 0, 0, 32);
+  const depth = clamp(Math.round(Number(drag.rootDrag?.paintStyle?.depth ?? state.paintBrushDepth)) || 0, 0, 32);
   if (!depth || drag.tool !== 'brush' || !drag.paintFace?.cube || !drag.depthEdges?.length) return;
   for (const edge of drag.depthEdges) {
     const surface = edge.surface;
@@ -368,7 +379,10 @@ function syncPaintedTextureNow(renderInFrame = false) {
   const targets = [...texturePaintSyncTargets.values()];
   texturePaintSyncTargets.clear();
   if (!targets.length) return;
-  targets.forEach(target => syncRendererTextureAsset(target.asset, target.canvas, false, target.dirty));
+  targets.forEach(target => {
+    if (!state.textureAssets || state.textureAssets.includes(target.asset))
+      syncRendererTextureAsset(target.asset, target.canvas, false, target.dirty);
+  });
   // renderScene refreshes the UV preview after the main viewport. Rendering
   // the preview here blocks the first visible model update of a live stroke.
   if (renderInFrame) renderScene();
@@ -415,9 +429,11 @@ function queuePaintedTextureSync(asset, canvas) {
 
 function drawPaintSegment(drag, from, to, sync = true) {
   const { canvas, context, asset, tool } = drag;
-  const size = clamp(Math.round(paintSetting(tool).size) || 1, 1, 64);
-  const opacity = paintToolOpacity(tool);
-  const offsets = paintBrushOffsets(size, tool === 'brush' ? state.paintBrushShape : 'square', tool === 'brush' && state.paintBrushAa);
+  const style = drag.rootDrag?.paintStyle;
+  const size = clamp(Math.round(style?.size ?? paintSetting(tool).size) || 1, 1, 64);
+  const opacity = style?.opacity ?? paintToolOpacity(tool);
+  const offsets = paintBrushOffsets(size, tool === 'brush' ? (style?.shape ?? state.paintBrushShape) : 'square',
+    tool === 'brush' && (style?.aa ?? state.paintBrushAa));
   const dx = to[0] - from[0], dy = to[1] - from[1];
   const steps = Math.max(1, Math.max(Math.abs(dx), Math.abs(dy)));
   touchScenePaintSurface(drag);
@@ -453,7 +469,7 @@ function drawScreenPaintPixel(surface, x, y, coverage) {
   const clip = surface.tiledFaceBounds || surface.clip;
   if (clip && (x < clip.minU || y < clip.minV || x >= clip.maxU || y >= clip.maxV)) return;
   touchScenePaintSurface(surface);
-  drawPaintPixel(surface, x, y, coverage, surface.tool, paintToolOpacity(surface.tool));
+  drawPaintPixel(surface, x, y, coverage, surface.tool, surface.rootDrag?.paintStyle?.opacity ?? paintToolOpacity(surface.tool));
 }
 
 function flushScreenPaintSurface(surface) {
@@ -568,9 +584,9 @@ function fillPaintRects(result, asset, rectangles, stroke = null) {
   queuePaintedTextureSync(asset, result.canvas);
 }
 
-function paintColorBytes() {
-  if (state.paintColor !== cachedPaintColor) {
-    cachedPaintColor = state.paintColor;
+function paintColorBytes(color = state.paintColor) {
+  if (color !== cachedPaintColor) {
+    cachedPaintColor = color;
     const value = cachedPaintColor.slice(1);
     cachedPaintColorBytes = [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16));
   }
@@ -738,7 +754,18 @@ async function paintBucketElement(cube, stroke = null) {
   return painted > 0;
 }
 
-async function applyTextureBucket(asset, point, hitEntry = null, stroke = null) {
+async function applyTextureBucket(asset, point, hitEntry = null, stroke = null, { wholeLayer = false } = {}) {
+  if (wholeLayer) {
+    const result = await bucketCanvasForAsset(asset, stroke);
+    if (!result) return;
+    recordBucketHistory(asset, result.canvas, stroke);
+    fillPaintRects(result, asset, [{ minU: 0, minV: 0, maxU: result.canvas.width, maxV: result.canvas.height }], stroke);
+    if (!stroke) {
+      syncPaintedTextureNow();
+      commitPaintedTextureAsset(asset, result.canvas);
+    }
+    return;
+  }
   if (state.paintBucketScope === 'element') {
     if (!hitEntry?.cube) return toast('請指向一個元素的貼圖面');
     if (!await paintBucketElement(hitEntry.cube, stroke)) toast('這個元素沒有可繪畫的貼圖');
@@ -768,16 +795,17 @@ async function applyTextureBucket(asset, point, hitEntry = null, stroke = null) 
 
 function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null, operationId = null) {
   const id = requireOperation(operationId || `core.texture.${PAINT_TOOLS.includes(state.tool) ? state.tool : 'paint'}`);
-  noteJournalOperation(id);
+  noteJournalOperation(id, group || Symbol(id));
   // The desktop journal records this stroke alongside every other project
   // edit. Keeping a second paint-only undo stack gives the two histories
   // incompatible ordering when the user switches tools or modes.
   if (window.cubeBricksDesktop?.checkoutProjectJournal) return;
   state.paintHistory.push({
     uid: asset._uid,
-    source: asset.layers?.length ? asset.source : canvas.toDataURL('image/png'),
+    source: asset.source || canvas.toDataURL('image/png'),
     layers: asset.layers ? structuredClone(asset.layers) : null,
     activeLayerUid: asset.activeLayerUid || null,
+    animation: asset.animation ? structuredClone(asset.animation) : null,
     width: canvas.width,
     height: canvas.height,
     group
@@ -786,28 +814,74 @@ function pushTexturePaintHistory(asset, canvas = textureCanvas, group = null, op
   state.paintFuture.length = 0;
 }
 
-function commitPaintedTextureAsset(asset, canvas) {
-  if (!asset || !canvas) return;
+function paintPixelWitness(surface) {
+  let alpha = false, opaque = false, changed = false;
+  for (const tile of surface?.strokeAppliedTiles || []) {
+    const before = tile.original, after = tile.image.data;
+    for (let offset = 0; offset < before.length; offset += 4) {
+      if (before[offset + 3] !== after[offset + 3]) return { alpha: true, opaque, changed: true };
+      if (before[offset] === after[offset] && before[offset + 1] === after[offset + 1] && before[offset + 2] === after[offset + 2]) continue;
+      changed = true;
+      if (after[offset + 3] === 255) opaque = true;
+    }
+  }
+  return { alpha, opaque, changed };
+}
+
+function commitPaintedTextureAsset(asset, canvas, surface = null) {
+  if (!asset || !canvas || state.textureAssets && !state.textureAssets.includes(asset)) { releasePaintCanvas(canvas); return; }
   if(asset.animation?.enabled&&!boundPaintLayer(asset,canvas)&&!activeLayer(asset))return;
   paintHitAlphaCache.delete(asset._uid);
   const layer = boundPaintLayer(asset,canvas)||activeLayer(asset);
-  if (layer) layer.source = canvas.toDataURL('image/png');
-  const composite = layer ? compositeLayers(asset, canvas,null,null,null,layer.uid) : canvas;
-  asset.source = composite.toDataURL('image/png');
+  const previous = layer ? layer.source : asset.source;
+  const witness = surface ? paintPixelWitness(surface) : null;
+  if (witness && !witness.changed) { releasePaintCanvas(canvas); return; }
+  const editedSource = canvas.toDataURL('image/png');
+  const live = livePaintTextureSources?.get(asset._uid);
+  const oldCompositeSource = asset.source;
+  const canReuseComposite = surface && live?.editableSource === canvas
+    && live.savedSource === asset.source && live.layerUid === layer?.uid;
+  if (layer) layer.source = editedSource;
+  const composite = canReuseComposite ? live.source : layer ? compositeLayers(asset, canvas,null,null,null,layer.uid) : canvas;
+  asset.source = layer ? composite.toDataURL('image/png') : editedSource;
+  if (window.cubeBricksDesktop?.checkoutProjectJournal) {
+    noteCanvasHistoryImage(previous, editedSource, witness || {});
+    rememberDecodedRaster(asset.source, composite);
+    if (layer && editedSource !== asset.source) rememberDecodedRaster(editedSource, canvas);
+    // Compute pixel identity while the user is still working; the undo key
+    // must not be what first starts decoding the previous stroke's PNG.
+    for (const source of new Set([asset.source, editedSource]))
+      void Promise.resolve(historyImageFingerprint(source)).catch(() => {});
+  }
   // UV units are independent of the PNG's physical pixel density. Painting
   // must not silently rewrite imported Blockbench uv_width/uv_height.
   asset.uvWidth ||= canvas.width;
   asset.uvHeight ||= canvas.height;
   asset.kind = 'PNG';
-  if (asset._uid === state.activeTextureUid && canvas !== textureCanvas) {
-    textureCanvas.width = canvas.width;
-    textureCanvas.height = canvas.height;
+  const isEditableAsset = asset._uid === state.activeTextureUid && (!layer || activeLayer(asset)?.uid === layer.uid);
+  if (isEditableAsset && canvas !== textureCanvas) {
+    if (textureCanvas.width !== canvas.width) textureCanvas.width = canvas.width;
+    if (textureCanvas.height !== canvas.height) textureCanvas.height = canvas.height;
     textureCtx.imageSmoothingEnabled = false;
     textureCtx.clearRect(0, 0, canvas.width, canvas.height);
     textureCtx.drawImage(canvas, 0, 0);
     updateTexturePreviewFrame(asset.uvWidth, asset.uvHeight);
   }
-  syncRendererTextureAsset(asset, composite, true,null,layer?.uid);
+  if (isEditableAsset) rememberEditablePaintSource(asset, textureCanvas, layer);
+  if (canReuseComposite) {
+    const dirty = surface.strokeAppliedBounds;
+    if (dirty && live.patchOnly) rememberPaintHistoryRegion(oldCompositeSource, asset.source, {
+      x: dirty.minX, y: dirty.minY, width: dirty.maxX - dirty.minX + 1, height: dirty.maxY - dirty.minY + 1
+    });
+    live.savedSource = asset.source;
+    live.patchOnly = true;
+    if (layer) {
+      const raster = layerRasterCache.get(layer.uid);
+      if (raster) raster.savedSource = editedSource;
+    }
+    const animation = animationRasterCache?.get(asset._uid);
+    if (animation) animation.source = asset.source;
+  } else syncRendererTextureAsset(asset, composite, true,null,layer?.uid);
   const item = $$('.texture-item').find(node => node.dataset.textureUid === asset._uid);
   const thumbnail = item?.querySelector('.texture-thumb');
   if (thumbnail) thumbnail.style.backgroundImage = `url("${asset.source}")`;
@@ -826,11 +900,12 @@ function replayTexturePaintPoints(drag) {
 function finishTexturePaintDrag(drag) {
   if (!drag || drag.finished) return;
   drag.finished = true;
-  const surfaces = drag.touchedSurfaces?.size ? [...drag.touchedSurfaces] : [drag];
+  const surfaces = drag.touchedSurfaces?.size ? [...drag.touchedSurfaces] : [];
   // Committing uploads the final composited texture. A queued live patch for
   // the same assets would upload twice and could race behind that final image.
-  discardPaintedTextureSync(surfaces.map(surface => surface.asset));
-  for (const surface of surfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
+  syncPaintedTextureNow();
+  for (const surface of surfaces) commitPaintedTextureAsset(surface.asset, surface.canvas, surface);
+  releasePaintCanvas(drag.canvas);
 }
-return { paintPointFromEvent, paintPointInside, faceUvPixelSlots, paintFaceDepthNeighbors, updateTextureBrushCursor, syncPaintedTextureNow, discardPaintedTextureSync, queuePaintedTextureSync, drawPaintSegment, drawPaintShape, drawScreenPaintPixel, flushScreenPaintSurface, resetScreenPaintPreview, paintUvBounds, allTextureUvEntriesForAsset, applyTextureBucket, finishTextureBucketStroke, pushTexturePaintHistory, commitPaintedTextureAsset, replayTexturePaintPoints, finishTexturePaintDrag };
+return { capturePaintStyle, paintPointFromEvent, paintPointInside, faceUvPixelSlots, paintFaceDepthNeighbors, updateTextureBrushCursor, syncPaintedTextureNow, discardPaintedTextureSync, queuePaintedTextureSync, drawPaintSegment, drawPaintShape, drawScreenPaintPixel, flushScreenPaintSurface, resetScreenPaintPreview, paintUvBounds, allTextureUvEntriesForAsset, applyTextureBucket, finishTextureBucketStroke, pushTexturePaintHistory, commitPaintedTextureAsset, replayTexturePaintPoints, finishTexturePaintDrag };
 }

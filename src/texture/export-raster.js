@@ -35,9 +35,11 @@ export function paintTexturePlane(context, source, plane, x, y) {
   context.restore();
 }
 
-export function paintBoxNet(context, net, sources, density, x, y) {
+export function paintBoxNet(context, net, sources, density, x, y, pixelCache = new Map()) {
   for (const face of net.members) {
-    const source = sources[face.index], pixels = source.getContext('2d').getImageData(0, 0, source.width, source.height);
+    const source = sources[face.index];
+    let pixels = pixelCache.get(source);
+    if (!pixels) { pixels = source.getContext('2d').getImageData(0, 0, source.width, source.height); pixelCache.set(source, pixels); }
     const target = getBlockbenchBoxUv(net.cube, face.name), slots = createBlockbenchFaceUvSlots(face.pixelUv, face.rotation);
     const left = Math.min(target[0], target[2]), top = Math.min(target[1], target[3]);
     const width = Math.round(Math.abs(target[2] - target[0]) * density), height = Math.round(Math.abs(target[3] - target[1]) * density);

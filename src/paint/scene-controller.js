@@ -3,11 +3,12 @@ import { activeLayer, layerRasterCache, prepareLayers } from '../common/core/tex
 import { barycentric2d } from '../screen/color-picker/math.js';
 import { dot3 } from '../utils/math/vector3.js';
 import { PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
-import { paintSelectionAllows } from './selection-controller.js';
+import { paintSelectionAllows, faceRectangleFrame, faceRectangleCoordinates } from './selection-controller.js';
 import { rasterScreenPaint, rasterScreenUvFootprint, screenPaintClientPoint, screenPaintGrid, screenPaintPoint } from './screen-space.js';
 import { tiledFacePaintBounds, tiledFacePaintCoordinates, tiledFacePaintPoint } from './tiled-face.js';
 import { eyedropperCanvas, opaqueTextureColor } from './eyedropper.js';
 import { bindPaintCanvas } from './canvas-layer-binding.js';
+import { beginPaintGesture, isLatestPaintGesture, pendingPaintCommit, trackPaintCommit } from './commit-order.js';
 
 export function sceneBrushHitKey(hit) {
   return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.cubeIndex ?? ''}`
@@ -35,7 +36,8 @@ export function createScenePaintController({
   paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
   loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
-  activateProjectTexture, sampleReferenceImage
+  activateProjectTexture, sampleReferenceImage, capturePaintStyle = () => null,
+  scheduleSceneRender = renderScene
 }) {
 function facePaintTarget(hit) {
   if (!hit?.faceName) return null;
@@ -605,6 +607,7 @@ function scenePaintHit(clientX, clientY, drag = null) {
 }
 
 function ensureScenePaintAssetSurface(drag, asset) {
+  if (drag.project !== state.project || !state.textureAssets.includes(asset)) return Promise.resolve(null);
   if (drag.assetSurfaces.has(asset._uid)) return Promise.resolve(drag.assetSurfaces.get(asset._uid));
   if (drag.assetSurfacePromises.has(asset._uid)) return drag.assetSurfacePromises.get(asset._uid);
   const promise = paintCanvasForAsset(asset).then(result => {
@@ -643,7 +646,7 @@ async function sceneBrushSurfaceForHit(drag, hit) {
     paintFace: { cube: target.cube, faceName: target.faceName, facePoints: hit.facePoints },
     depthEdges: []
   };
-  if (state.paintBrushDepth > 0 && !isFaceTiled(target.cube.faces?.[target.faceName])) {
+  if ((drag.paintStyle?.depth ?? state.paintBrushDepth) > 0 && !isFaceTiled(target.cube.faces?.[target.faceName])) {
     const neighbors = paintFaceDepthNeighbors(hit, target);
     for (const neighbor of neighbors) {
       const asset = adjacentPaintFaceAsset(target.cube, neighbor.faceName);
@@ -718,6 +721,7 @@ async function paintSceneBrushPointerSegment(drag, previous, clientX, clientY) {
     return current;
   }
   const distance = Math.hypot(clientX - previous.x, clientY - previous.y);
+  if (distance === 0) return current;
   const sampleCount = Math.max(1, Math.min(128, Math.ceil(distance / 6)));
   let prior = previous;
   let lastYield = performance.now();
@@ -848,8 +852,9 @@ async function paintScreenSpacePixels(drag, from, to, preview, generation, fromE
             addSource(scenePaintHit(sampleX, sampleY, drag));
           }
         }
+        // Only the initiating screen sample needs to be visible. Its
+        // symmetry partner can face away from the camera or be offscreen.
         hits = sources.flatMap(source => paintSymmetryRelatedHits(source, drag)
-          .filter(paintHit => paintHit === source || screenPaintHitIsVisible(paintHit))
           .map(paintHit => ({ paintHit, sourceHit: source })));
         drag.screenHits.set(index, hits);
       }
@@ -860,7 +865,6 @@ async function paintScreenSpacePixels(drag, from, to, preview, generation, fromE
           if (seen.has(key)) continue;
           seen.add(key);
           hits = [...hits, ...paintSymmetryRelatedHits(endpoint.hit, drag)
-            .filter(paintHit => paintHit === endpoint.hit || screenPaintHitIsVisible(paintHit))
             .map(paintHit => ({ paintHit, sourceHit: endpoint.hit }))];
         }
       }
@@ -898,15 +902,14 @@ async function paintScreenSpacePixels(drag, from, to, preview, generation, fromE
             tiledFaceBounds: tiled ? tiledFacePaintBounds(target.cube, target.faceName) : null };
           drag.screenSurfaces.set(surfaceKey, surface);
         }
-        let footprint = sourceHit === hit ? drag.screenFootprints.get(hit) : null;
-        if (sourceHit === hit && (!footprint || footprint.index !== index || footprint.canvas !== base.canvas)) {
+        let footprint = drag.screenFootprints.get(hit);
+        if (!footprint || footprint.index !== index || footprint.canvas !== base.canvas) {
           footprint = { index, canvas: base.canvas,
             points: screenCellUvFootprint(drag.screenGrid, index, hit, target, base.canvas, point,
-              surface.tiledFaceBounds || surface.clip) };
+              surface.tiledFaceBounds || surface.clip, sourceHit) };
           drag.screenFootprints.set(hit, footprint);
         }
-        const points = sourceHit === hit ? footprint.points : [point];
-        for (const [x, y] of points) drawScreenPaintPixel(surface, x, y, coverage);
+        for (const [x, y] of footprint.points) drawScreenPaintPixel(surface, x, y, coverage);
         if (!preview && drag.tool === 'brush' && performance.now() - lastYield > 8) {
           flushScreenPaintSurface(base);
           await paintFrameOpportunity();
@@ -982,9 +985,11 @@ function screenVisibleFaceKey(grid, x, y, cache, drag = null) {
   return cache.get(index);
 }
 
-function screenCellUvFootprint(grid, index, hit, target, canvas, center, bounds = null) {
-  const points = hit.facePoints;
+function screenCellUvFootprint(grid, index, hit, target, canvas, center, bounds = null, sourceHit = hit) {
+  const points = sourceHit.facePoints;
   if (!points || points.length !== 4) return [center];
+  const frame = sourceHit !== hit ? faceRectangleFrame(sourceHit) : null;
+  const permutation = hit.symmetryPermutation || [0, 1, 2, 3];
   const edgeU = points[1].map((value, axis) => value - points[0][axis]);
   const edgeV = points[2].map((value, axis) => value - points[0][axis]);
   const normal = [edgeU[1] * edgeV[2] - edgeU[2] * edgeV[1],
@@ -1000,7 +1005,12 @@ function screenCellUvFootprint(grid, index, hit, target, canvas, center, bounds 
     if (Math.abs(denominator) < 1e-9) return [center];
     const distance = dot3(normal, points[0].map((value, axis) => value - ray.origin[axis])) / denominator;
     if (distance <= 0) return [center];
-    const world = ray.origin.map((value, axis) => value + ray.direction[axis] * distance);
+    let world = ray.origin.map((value, axis) => value + ray.direction[axis] * distance);
+    if (frame) {
+      const [u, v] = faceRectangleCoordinates(frame, world);
+      const [a, b, c] = permutation.slice(0, 3).map(slot => hit.facePoints[slot]);
+      world = a.map((value, axis) => value + (b[axis] - value) * u + (c[axis] - value) * v);
+    }
     const uv = facePaintUvContinuous({ ...hit, point: world }, target, canvas);
     if (!uv) return [center];
     corners.push(uv);
@@ -1016,7 +1026,7 @@ function startScreenSpacePaint(event) {
   const tool = state.tool;
   const drag = {
     type: 'texture-paint-3d', screenSpace: true, multiSurface: true,
-    pointerId: event.pointerId, tool, ready: true, ended: false, canceled: false, finished: false,
+    pointerId: event.pointerId, tool, paintStyle: capturePaintStyle(tool), ready: true, ended: false, canceled: false, finished: false,
     screenGrid: grid, screenStart: start, screenLast: start, screenEnd: start,
     latestBucketClient: [event.clientX, event.clientY],
     screenGeneration: 0, screenHits: new Map(), screenTargets: new WeakMap(),
@@ -1026,7 +1036,8 @@ function startScreenSpacePaint(event) {
     screenSize: tool === 'brush' ? state.paintBrushSize : state.paintToolSettings[tool]?.size || 1,
     screenBrushShape: state.paintBrushShape, screenBrushAa: state.paintBrushAa,
     screenFilled: state.paintShapeFilled,
-    latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
+    latestClient: [event.clientX, event.clientY], project: state.project, gesture: beginPaintGesture(state.project),
+    queue: pendingPaintCommit(state.project) || Promise.resolve(),
     assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(),
     touchedSurfaces: new Set(), paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
     historyGroup: crypto.randomUUID(), paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
@@ -1142,51 +1153,54 @@ function queueScreenSpaceBucket(drag, clientX, clientY, mirror = true) {
 function finishScenePaintDrag(drag) {
   if (!drag || drag.finished) return;
   drag.finished = true;
+  const work = finishScenePaintWork(drag).catch(error => toast(error.message));
+  return trackPaintCommit(drag.project, work);
+}
+
+async function finishScenePaintWork(drag) {
   if (drag.screenSpace) {
-    drag.queue.then(() => {
-      if (drag.canceled || !drag.touchedSurfaces.size) return;
-      discardPaintedTextureSync([...drag.touchedSurfaces].map(surface => surface.asset));
-      for (const surface of drag.touchedSurfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
+    return drag.queue.then(() => {
+      if (drag.canceled || drag.project !== state.project || !drag.touchedSurfaces.size) return;
+      syncPaintedTextureNow();
+      for (const surface of drag.touchedSurfaces) commitPaintedTextureAsset(surface.asset, surface.canvas, surface);
       const lastSurface = [...drag.touchedSurfaces].at(-1);
-      if (lastSurface && state.activeTextureUid !== lastSurface.asset._uid) {
+      if (lastSurface && isLatestPaintGesture(drag.project, drag.gesture) && state.activeTextureUid !== lastSurface.asset._uid) {
         const index = state.textureAssets.findIndex(asset => asset._uid === lastSurface.asset._uid);
         if (index >= 0) activateProjectTexture(index);
       }
-      renderScene();
+      scheduleSceneRender();
     });
-    return;
   }
   if (drag.bucketDrag) {
-    drag.queue.then(() => finishTextureBucketStroke(drag.history)).catch(error => toast(error.message));
-    return;
+    return drag.queue.then(() => finishTextureBucketStroke(drag.history));
   }
   if (drag.multiSurface) {
     if (drag.lastPointerSample && drag.latestClient
       && (drag.lastPointerSample.x !== drag.latestClient[0] || drag.lastPointerSample.y !== drag.latestClient[1])) {
       queueSceneBrushPointer(drag, drag.latestClient[0], drag.latestClient[1]);
     }
-    drag.queue.then(() => {
-      if (drag.canceled) return;
+    return drag.queue.then(() => {
+      if (drag.canceled || drag.project !== state.project) return;
       if (!drag.touchedSurfaces.size) return;
-      discardPaintedTextureSync([...drag.touchedSurfaces].map(surface => surface.asset));
-      for (const surface of drag.touchedSurfaces) commitPaintedTextureAsset(surface.asset, surface.canvas);
+      syncPaintedTextureNow();
+      for (const surface of drag.touchedSurfaces) commitPaintedTextureAsset(surface.asset, surface.canvas, surface);
       const lastSurface = [...drag.touchedSurfaces].at(-1);
-      if (lastSurface && state.activeTextureUid !== lastSurface.asset._uid) {
+      if (lastSurface && isLatestPaintGesture(drag.project, drag.gesture) && state.activeTextureUid !== lastSurface.asset._uid) {
         const index = state.textureAssets.findIndex(asset => asset._uid === lastSurface.asset._uid);
         if (index >= 0) activateProjectTexture(index);
       }
-      renderScene();
+      scheduleSceneRender();
     });
-    return;
   }
+  if (drag.readyPromise) await drag.readyPromise;
+  if (drag.canceled || drag.project !== state.project) return;
   if (PAINT_SHAPE_TOOLS.includes(drag.tool) && drag.canvas) {
-    finalizeScenePaintShapeSymmetry(drag);
-    return;
+    return finalizeScenePaintShapeSymmetry(drag);
   }
   if (!drag.canvas) return;
   discardPaintedTextureSync([drag.asset]);
   commitPaintedTextureAsset(drag.asset, drag.canvas);
-  if (state.activeTextureUid !== drag.asset._uid) {
+  if (isLatestPaintGesture(drag.project, drag.gesture) && state.activeTextureUid !== drag.asset._uid) {
     const index = state.textureAssets.findIndex(asset => asset._uid === drag.asset._uid);
     if (index >= 0) activateProjectTexture(index);
   }
@@ -1223,7 +1237,7 @@ async function finalizeScenePaintShapeSymmetry(drag) {
         baseImage: result.context.getImageData(0, 0, result.canvas.width, result.canvas.height), surfaces: []
       };
       assets.set(target.asset._uid, group);
-      pushTexturePaintHistory(target.asset, result.canvas);
+      pushTexturePaintHistory(target.asset, result.canvas, drag.historyGroup, `core.texture.${drag.tool}`);
     }
     const start = facePaintUvPoint(startHit, target, group.canvas, false);
     const end = facePaintUvPoint(endHitForTarget, target, group.canvas, false);
@@ -1391,8 +1405,9 @@ function startScenePaintPointer(event, x, y) {
     event.preventDefault();
     sceneCanvas.setPointerCapture(event.pointerId);
     const drag = {
-      type: 'texture-paint-3d', multiSurface: true, pointerId: event.pointerId, tool: state.tool,
-      latestClient: [event.clientX, event.clientY], queue: Promise.resolve(),
+      type: 'texture-paint-3d', multiSurface: true, pointerId: event.pointerId, tool: state.tool, paintStyle: capturePaintStyle(state.tool),
+      latestClient: [event.clientX, event.clientY], project: state.project, gesture: beginPaintGesture(state.project),
+      queue: pendingPaintCommit(state.project) || Promise.resolve(),
       assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(), touchedSurfaces: new Set(),
       paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
       historyGroup: crypto.randomUUID(), last: null, lastFaceKey: null,
@@ -1417,7 +1432,8 @@ function startScenePaintPointer(event, x, y) {
     const drag = {
       type: 'texture-paint-3d', bucketDrag: true, pointerId: event.pointerId, tool: 'fill',
       ready: true, latestClient: [event.clientX, event.clientY],
-      lastBucketClient: [event.clientX, event.clientY], seen: new Set(), queue: Promise.resolve(),
+      lastBucketClient: [event.clientX, event.clientY], seen: new Set(), project: state.project, gesture: beginPaintGesture(state.project),
+      queue: pendingPaintCommit(state.project) || Promise.resolve(),
       history: { group: crypto.randomUUID(), assets: new Set() }
     };
     state.dragging = drag;
@@ -1428,8 +1444,9 @@ function startScenePaintPointer(event, x, y) {
   const drag = {
     type: 'texture-paint-3d', pointerId: event.pointerId, uid: hit.uid,
     cubeUid: hit.cubeUid || hit.uid, faceName: hit.faceName, instanceKey: hit.instanceKey || null,
-    asset: target.asset, cube: target.cube, tool: state.tool,
-    initialHit: hit, latestClient: [event.clientX, event.clientY],
+    asset: target.asset, cube: target.cube, tool: state.tool, paintStyle: capturePaintStyle(state.tool),
+    initialHit: hit, latestClient: [event.clientX, event.clientY], project: state.project, gesture: beginPaintGesture(state.project),
+    historyGroup: crypto.randomUUID(),
     canvas: null, context: null, last: null, ready: false, ended: false, canceled: false, finished: false,
     holisticStroke: true,
     paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
@@ -1445,14 +1462,15 @@ function startScenePaintPointer(event, x, y) {
     maxU: Math.ceil(Math.max(faceUv[0], faceUv[2])), maxV: Math.ceil(Math.max(faceUv[1], faceUv[3]))
   };
   state.dragging = drag;
-  paintCanvasForAsset(target.asset).then(result => {
-    if (!result || drag.canceled) return;
+  drag.readyPromise = Promise.resolve(pendingPaintCommit(drag.project)).then(() =>
+    drag.project === state.project ? paintCanvasForAsset(target.asset) : null).then(result => {
+    if (!result || drag.canceled || drag.project !== state.project) return;
     drag.canvas = result.canvas;
     drag.context = result.context;
     drag.clip = paintUvBounds(target.cube, target.faceName, drag.canvas);
     if (PAINT_SHAPE_TOOLS.includes(drag.tool) && isFaceTiled(face))
       drag.tiledFaceBounds = tiledFacePaintBounds(target.cube, target.faceName);
-    pushTexturePaintHistory(drag.asset, drag.canvas);
+    pushTexturePaintHistory(drag.asset, drag.canvas, drag.historyGroup, `core.texture.${drag.tool}`);
     drag.ready = true;
     const initial = facePaintUvPoint(drag.initialHit, drag, drag.canvas, !drag.tiledFaceBounds);
     if (initial) {
@@ -1463,10 +1481,8 @@ function startScenePaintPointer(event, x, y) {
       } else drawPaintSegment(drag, initial, initial);
       drag.last = initial;
     }
-    if (!drag.ended) {
-      const [clientX, clientY] = drag.latestClient;
-      moveScenePaintDrag({ clientX, clientY }, drag);
-    } else finishScenePaintDrag(drag);
+    const [clientX, clientY] = drag.latestClient;
+    moveScenePaintDrag({ clientX, clientY }, drag);
   });
   return true;
 }

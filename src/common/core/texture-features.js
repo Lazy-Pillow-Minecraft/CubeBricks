@@ -2,8 +2,25 @@ import { applyLayerMaskPixels, blendLayerImageData, LAYER_BLEND_MODES } from './
 import { mapLayerTonePixels } from './layer-tone-map.js';
 import { faceTilingRegion, faceTilingSettings } from './face-tiling.js';
 import { activeTextureFrame, frameLayerUids, framePaintLayer, textureFrameSample } from './frame-links.js';
+import { layerRasterRegions } from '../utils/layer-raster-regions.js';
+import { decodedRasterImage } from '../../utils/image/raster-cache.js';
 
 export const layerRasterCache = new Map();
+const releasedAssets = new WeakSet();
+export function releaseLayerRaster(uid) {
+  const raster = layerRasterCache.get(uid)?.canvas;
+  if (raster) layerRasterRegions.invalidate(raster);
+  layerRasterCache.delete(uid);
+}
+export function releaseTextureRasters(asset, retainedAssets = []) {
+  if (!asset || retainedAssets.includes(asset)) return;
+  releasedAssets.add(asset);
+  const retained = new Set(retainedAssets.flatMap(entry => (entry.layers || []).map(layer => layer.uid)));
+  for (const layer of asset.layers || []) if (!retained.has(layer.uid)) {
+    releaseLayerRaster(layer.uid);
+  }
+  if (!retainedAssets.length) layerRasterRegions.clear();
+}
 
 // Blockbench stores layer pixels in data_url, while native CubeBricks layers
 // use source. Normalize at the project boundary so the editor, preview and
@@ -41,16 +58,13 @@ export function imageCanvas(source, width = source.width || source.naturalWidth,
 }
 
 export function loadRaster(source) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(imageCanvas(image));
-    image.onerror = () => reject(new Error('貼圖載入失敗'));
-    image.src = source;
-  });
+  return decodedRasterImage(source).then(imageCanvas);
 }
 
 export async function prepareLayers(asset) {
+  if (releasedAssets.has(asset)) return;
   for (const layer of asset.layers || []) {
+    if (releasedAssets.has(asset)) return;
     if (layer.type === 'group') continue;
     const cached = layerRasterCache.get(layer.uid);
     if (!cached || cached.savedSource !== layer.source) {
@@ -58,7 +72,7 @@ export async function prepareLayers(asset) {
       const canvas = await loadRaster(source);
       // A newer paint stroke may have replaced this layer while decoding.
       // Never label an older raster with the newer source's cache key.
-      if (layer.source === source) layerRasterCache.set(layer.uid, { canvas, savedSource: source });
+      if (!releasedAssets.has(asset) && layer.source === source) layerRasterCache.set(layer.uid, { canvas, savedSource: source });
     }
   }
 }
@@ -311,13 +325,17 @@ export function compositeLayers(asset, liveCanvas = null, rootUid = null, region
       context.globalCompositeOperation = 'source-over';
       return;
     }
-    if (sourceRegion) { raster = localRaster(raster); sourceRegion = null; }
-    const source = document.createElement('canvas');
-    source.width = canvas.width; source.height = canvas.height;
-    const sourceContext = source.getContext('2d');
-    sourceContext.drawImage(raster, 0, 0);
+    let upper;
+    if (sourceRegion && rasters.get(layer.uid)?.canvas === raster) {
+      upper = layerRasterRegions.read(raster, sourceRegion);
+    } else {
+      if (sourceRegion) { raster = localRaster(raster); sourceRegion = null; }
+      const source = blankCanvas();
+      const sourceContext = source.getContext('2d');
+      drawRaster(sourceContext);
+      upper = sourceContext.getImageData(0, 0, canvas.width, canvas.height);
+    }
     const lower = context.getImageData(0, 0, canvas.width, canvas.height);
-    const upper = sourceContext.getImageData(0, 0, canvas.width, canvas.height);
     blendLayerImageData(lower.data, upper.data, layer.opacity ?? 100, layer.blendMode);
     context.putImageData(lower, 0, 0);
   }
@@ -352,17 +370,19 @@ export function layerEntryRaster(asset, uid) {
 }
 
 const frameRasterCache = new WeakMap();
-export function flipbookFrame(asset, source, region = null) {
+export function flipbookFrame(asset, source, region = null, rasters = layerRasterCache) {
   const {frame,next,mix}=textureFrameSample(asset);
   if (!asset?.animation?.enabled || !frame || !source) return source;
-  let cache=frameRasterCache.get(asset);
+  const useCache = rasters === layerRasterCache;
+  let cache=useCache ? frameRasterCache.get(asset) : null;
   if(!cache||cache.source!==source||cache.savedSource!==asset.source||cache.frames!==asset.animation.frames||cache.layers!==asset.layers){
-    cache={source,savedSource:asset.source,frames:asset.animation.frames,layers:asset.layers,rasters:new Map()};frameRasterCache.set(asset,cache);
+    cache={source,savedSource:asset.source,frames:asset.animation.frames,layers:asset.layers,rasters:new Map()};
+    if (useCache) frameRasterCache.set(asset,cache);
   }
   if(region)for(const uid of cache.rasters.keys())if(uid!==frame.uid&&uid!==next?.uid)cache.rasters.delete(uid);
   const rasterFor=entry=>{
     let canvas=cache.rasters.get(entry.uid);if(canvas&&!region)return canvas;
-    const patch=canvas&&region?region:null,raster=compositeLayers(asset,null,null,patch,frameLayerUids(asset,entry));
+    const patch=canvas&&region?region:null,raster=compositeLayers(asset,null,null,patch,frameLayerUids(asset,entry),null,rasters);
     if(!canvas){canvas=document.createElement('canvas');canvas.width=source.width;canvas.height=source.height;}
     const ctx=canvas.getContext('2d');if(patch)ctx.clearRect(patch.x,patch.y,patch.width,patch.height);else ctx.clearRect(0,0,canvas.width,canvas.height);
     if(raster)ctx.drawImage(raster,patch?.x||0,patch?.y||0);cache.rasters.set(entry.uid,canvas);

@@ -3,7 +3,19 @@ const fs = require('node:fs/promises'), path = require('node:path');
 const { pngBytes, registerTextureFiles, readTextureAssets } = require('../electron/texture-files.cjs');
 const { textureLocation, resourceCandidates, readNativeModel, writeTextureReferences } = require('../electron/native-model-io.cjs');
 const { atomicWrite } = require('../electron/project-journal.cjs');
+const { localizeDialogOptions } = require('../electron/dialog-i18n.cjs');
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+
+test('file dialogs localize app-provided labels while preserving file paths', () => {
+  const options = { title: 'ui.open-model-dialog', defaultPath: '動畫.續集.bbmodel',
+    filters: [{ name: 'ui.blockbench-model-filter', extensions: ['bbmodel'] }] };
+  assert.deepEqual(localizeDialogOptions(options, 'zh-Hans'), {
+    title: '打开模型', defaultPath: options.defaultPath,
+    filters: [{ name: 'Blockbench 模型', extensions: ['bbmodel'] }]
+  });
+  assert.equal(localizeDialogOptions(options, 'zh-Hant').title, '打開模型');
+  assert.equal(localizeDialogOptions(options, 'en').title, 'Open Model');
+});
 
 test('texture paths preserve resource-pack namespaces and resolve resources without scanning projects', () => {
   assert.equal(textureLocation('D:\\pack\\assets\\demo\\textures\\block\\stone.png').resource, 'demo:block/stone');
@@ -19,7 +31,7 @@ test('independent PNG saving, animation companions, native JSON references and c
   const directory = await fs.mkdtemp(path.join(__dirname, '..', '.native-files-test-'));
   try {
     const handlers = new Map(), filePath = path.join(directory, 'art.png'); let canceled = false;
-    registerTextureFiles((id, handler) => handlers.set(id, handler), { showSaveDialog: async () => ({ canceled, filePath }) }, atomicWrite);
+    registerTextureFiles((id, handler) => handlers.set(id, handler), async () => ({ canceled, filePath }), atomicWrite);
     const save = payload => handlers.get('texture:save')({}, payload);
     const result = await save({ source: png, name: 'art.png', namespace: 'demo', metadata: { animation: { frametime: 2 } } });
     assert.equal(result.filePath, filePath); assert.equal(result.resource, 'demo:art');

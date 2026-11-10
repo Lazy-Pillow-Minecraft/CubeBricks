@@ -1,5 +1,6 @@
 import { JavaBlockVersion, normalizeJavaBlockVersion } from './java-block-version.js';
 import { foldJavaCubeRotation } from '../../utils/math/cube-quarter-turn.js';
+import { bindFormatContext, boundFormatContext, invokeFormatHook } from './format-hooks.js';
 export { JavaBlockVersion } from './java-block-version.js';
 
 export function formatRules(project) {
@@ -66,30 +67,46 @@ export function constrainCube(cube, rules) {
   return cube;
 }
 
-export function constrainNode(node, rules) {
+export function constrainNode(node, rules, project = null) {
   if (!node) return node;
-  if (node.type === 'cube') return constrainCube(node, rules);
-  if (Array.isArray(node.rotation) && rules.javaBlock) node.rotation = constrainRotation(node.rotation, rules);
-  if (rules.moddedEntity && node.type !== 'group' && Array.isArray(node.origin)) {
-    node.origin = node.origin.map(value => Math.round(value));
-    if (Array.isArray(node.pivot)) node.pivot = node.pivot.map(value => Math.round(value));
-    for (const key of ['radius', 'height', 'innerRadius', 'thickness', 'cubeSize', 'segmentLength']) {
-      if (Number.isFinite(node.parameters?.[key])) node.parameters[key] = Math.round(node.parameters[key]);
+  const bound = boundFormatContext(node);
+  project ||= bound?.project;
+  bindFormatContext(node, { project, rules });
+  if (node.type === 'cube') {
+    constrainCube(node, rules);
+  } else {
+    if (node.type !== 'group' && Array.isArray(node.rotation) && rules.javaBlock) node.rotation = constrainRotation(node.rotation, rules);
+    if (rules.moddedEntity && node.type !== 'group' && Array.isArray(node.origin)) {
+      node.origin = node.origin.map(value => Math.round(value));
+      if (Array.isArray(node.pivot)) node.pivot = node.pivot.map(value => Math.round(value));
+      for (const key of ['radius', 'height', 'innerRadius', 'thickness', 'cubeSize', 'segmentLength']) {
+        if (Number.isFinite(node.parameters?.[key])) node.parameters[key] = Math.round(node.parameters[key]);
+      }
     }
+    if ('uvMode' in node) {
+      if (!rules.allowBoxUv) node.uvMode = 'face';
+      if (!rules.allowFaceUv) { node.uvMode = 'box'; node.autoUv = true; }
+    }
+    invokeFormatHook('shape', node.shapeType || node.type, node, { phase: 'parameters', owner: node, project, rules });
   }
-  if ('uvMode' in node) {
-    if (!rules.allowBoxUv) node.uvMode = 'face';
-    if (!rules.allowFaceUv) { node.uvMode = 'box'; node.autoUv = true; }
+  project?.updateFormatDomain?.();
+  const owners = [node];
+  if (node.type === 'group' && project && (rules.javaBlock || rules.bedrockBlock)) {
+    for (const owner of [...project.groups, ...project.elements]) if (owner.modifiers?.length
+      && project.getGroupChain(owner.uid).some(group => group.uid === node.uid)) owners.push(owner);
   }
+  const evaluation = new Map();
+  for (const owner of owners) for (const modifier of owner.modifiers || []) invokeFormatHook('modifier', modifier.type, modifier,
+    { phase: 'parameters', owner, project, rules, evaluation });
   return node;
 }
 
 export function constrainProject(project) {
   const rules = formatRules(project);
-  if (!rules.javaBlock && !rules.moddedEntity) return project;
+  if (!rules.javaBlock && !rules.moddedEntity && !rules.bedrockBlock) return project;
   if (rules.forceCullFaces) project.cullFaces = true;
-  project.uvMode = rules.moddedEntity ? 'box' : 'face';
-  for (const node of [...project.groups, ...project.elements]) constrainNode(node, rules);
+  if (rules.javaBlock || rules.moddedEntity) project.uvMode = rules.moddedEntity ? 'box' : 'face';
+  for (const node of [...project.groups, ...project.elements]) constrainNode(node, rules, project);
   return project;
 }
 
@@ -109,12 +126,12 @@ function rotate(point, pivot, angles = [0, 0, 0]) {
 
 // Use the same cube -> owner -> parent rotation order as the viewport. Bedrock
 // checks the rendered extents, whereas Java checks raw element coordinates.
-export function projectSizeBounds(project) {
+export function projectSizeBounds(project, { includeModifiers = true } = {}) {
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
   let hasBaseCube = false;
   for (const element of project?.elements || []) {
     if (element.type === 'locator' || element.type === 'node') continue;
-    const generated = typeof element.toCubes === 'function' ? element.toCubes() : [element];
+    const generated = typeof element.toCubes === 'function' ? element.toCubes(project) : [element];
     const offset = typeof element.toCubes === 'function' ? element.origin || [0, 0, 0] : [0, 0, 0];
     const groups = project.getGroupChain?.(element.uid) || [];
     const ownerRotated = typeof element.toCubes === 'function'
@@ -154,6 +171,10 @@ export function projectSizeBounds(project) {
         - Math.max(cubeMin[axis], BEDROCK_BASE[axis][0]) >= 1 - 1e-6)) hasBaseCube = true;
     }
   }
+  const generatedBounds = includeModifiers ? project?.getModifierFormatBounds?.() : null;
+  if (generatedBounds) for (let axis = 0; axis < 3; axis++) {
+    min[axis] = Math.min(min[axis], generatedBounds.min[axis]); max[axis] = Math.max(max[axis], generatedBounds.max[axis]);
+  }
   return min[0] === Infinity ? null : { min, max, hasBaseCube };
 }
 
@@ -186,15 +207,22 @@ export function javaBlockSizeViolation(project) {
   let violation = 0;
   for (const element of project?.elements || []) {
     if (element.type === 'locator' || element.type === 'node') continue;
-    const generated = typeof element.toCubes === 'function' ? element.toCubes() : [element];
-    const offset = typeof element.toCubes === 'function' ? element.origin || [0, 0, 0] : [0, 0, 0];
-    for (const cube of generated) for (let axis = 0; axis < 3; axis++) {
-      const from = cube.position?.[axis] + offset[axis];
-      const to = from + cube.size?.[axis];
-      if (!Number.isFinite(from) || !Number.isFinite(to)) return Infinity;
-      violation += Math.max(0, -16 - Math.min(from, to)) + Math.max(0, Math.max(from, to) - 32);
+    const procedural = typeof element.toCubes === 'function';
+    const generated = procedural ? element.toCubes(project) : [element];
+    const worldBoxes = procedural && project.getProceduralFormatBox;
+    const offset = procedural && !worldBoxes ? element.origin || [0, 0, 0] : [0, 0, 0];
+    for (const source of generated) {
+      const cube = worldBoxes ? project.getProceduralFormatBox(element, source) : source;
+      for (let axis = 0; axis < 3; axis++) {
+        const from = cube.position?.[axis] + offset[axis];
+        const to = from + cube.size?.[axis];
+        if (!Number.isFinite(from) || !Number.isFinite(to)) return Infinity;
+        violation += Math.max(0, -16 - Math.min(from, to)) + Math.max(0, Math.max(from, to) - 32);
+      }
     }
   }
+  const modifiers = project?.getModifierFormatBounds?.({ raw: true });
+  if (modifiers) for (let axis = 0; axis < 3; axis++) violation += Math.max(0, -16 - modifiers.min[axis]) + Math.max(0, modifiers.max[axis] - 32);
   return violation;
 }
 
@@ -206,7 +234,14 @@ const GEOMETRY_FIELDS = ['position', 'size', 'pivot', 'origin', 'rotation', 'inf
   'faces', 'uvMode', 'uv', 'autoUv', 'mirrorUv', 'rescale', 'appliedTransform'];
 
 export function captureFormatGeometry(nodes) {
-  return [...new Set(nodes.filter(Boolean))].map(node => [node,
+  const expanded = new Set(nodes.filter(Boolean));
+  for (const node of [...expanded]) {
+    const project = boundFormatContext(node)?.project;
+    if (node.type !== 'group' || !project) continue;
+    for (const owner of [...project.groups, ...project.elements]) if (owner.modifiers?.length
+      && project.getGroupChain(owner.uid).some(group => group.uid === node.uid)) expanded.add(owner);
+  }
+  return [...expanded].map(node => [node,
     Object.fromEntries(GEOMETRY_FIELDS.filter(key => key in node)
       .map(key => [key, structuredClone(node[key])]))]);
 }

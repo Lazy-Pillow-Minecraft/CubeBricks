@@ -7,6 +7,7 @@ const syncFs = require('fs');
 const crypto = require('crypto');
 const { atomicWrite } = require('./project-journal.cjs');
 const { readTextureAssets, registerTextureFiles } = require('./texture-files.cjs');
+const { localizeDialogOptions } = require('./dialog-i18n.cjs');
 const { readNativeModel, writeTextureReferences } = require('./native-model-io.cjs');
 const { WorkerProjectJournal: ProjectJournal, onHistoryProgress } = require('./journal-service.cjs');
 const { isArchiveV2, unpackArchiveWithProgress } = require('./archive-codec.cjs');
@@ -32,6 +33,13 @@ onHistoryProgress(({ directory, ...progress }) => {
 const pendingExternalProjects = [];
 let externalOpenReceiver = null;
 const pendingUiPrompts = new Map();
+const dialogLanguages = new WeakMap();
+handleIpc('app:ui-language', (event, language) => {
+  if (['zh-Hans', 'zh-Hant', 'en'].includes(language)) dialogLanguages.set(event.sender, language);
+  else dialogLanguages.delete(event.sender);
+});
+const openFileDialog = (event, options) => dialog.showOpenDialog(localizeDialogOptions(options, dialogLanguages.get(event.sender)));
+const saveFileDialog = (event, options) => dialog.showSaveDialog(localizeDialogOptions(options, dialogLanguages.get(event.sender)));
 function requestUiChoice(sender, options) {
   if (!sender || sender.isDestroyed()) return Promise.resolve({ index: options.cancelIndex ?? options.buttons.length - 1 });
   return new Promise(resolve => {
@@ -363,6 +371,7 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      additionalArguments: [`--cubebricks-system-languages=${app.getPreferredSystemLanguages().join(',')}`],
       spellcheck: false
     }
   });
@@ -474,8 +483,8 @@ handleIpc('project:open', async (event, options = {}) => {
   const suppliedPath = typeof options?.filePath === 'string' ? options.filePath : null;
   if (suppliedPath && (!path.isAbsolute(suppliedPath) || !/\.(?:cbmodel|bbmodel|json|java)$/i.test(suppliedPath)))
     throw new Error('不支援的項目文件路徑');
-  const picked = suppliedPath ? { canceled: false, filePaths: [suppliedPath] } : await dialog.showOpenDialog({
-    title: '打開模型',
+  const picked = suppliedPath ? { canceled: false, filePaths: [suppliedPath] } : await openFileDialog(event, {
+    title: 'ui.open-model-dialog',
     properties: ['openFile'],
     filters: [
       { name: 'CubeBricks / Blockbench', extensions: ['cbmodel', 'bbmodel'] },
@@ -805,21 +814,21 @@ handleIpc('project:workspace-root', async () => (await ensureWorkspaceLayout()).
 handleIpc('shape-packs:list', async () => orderedShapePacks((await ensureWorkspaceLayout()).root));
 handleIpc('packs:list', async () => listResourcePacks((await ensureWorkspaceLayout()).root));
 handleIpc('packs:font-data', async (_event, id) => readFontPack((await ensureWorkspaceLayout()).root, id));
-handleIpc('packs:install', async (_event, kind) => {
+handleIpc('packs:install', async (event, kind) => {
   const filters = {
-    shape: [{ name: 'Shape ZIP', extensions: ['zip'] }],
-    language: [{ name: 'Language pack', extensions: ['json', 'zip'] }],
-    font: [{ name: 'Font or font ZIP', extensions: ['ttf', 'otf', 'woff', 'woff2', 'zip'] }]
+    shape: [{ name: 'ui.shape-pack-zip-filter', extensions: ['zip'] }],
+    language: [{ name: 'ui.language-packs', extensions: ['json', 'zip'] }],
+    font: [{ name: 'ui.font-pack-filter', extensions: ['ttf', 'otf', 'woff', 'woff2', 'zip'] }]
   };
   if (!filters[kind]) throw new Error('未知包類型');
-  const picked = await dialog.showOpenDialog({ title: '加入資源包', properties: ['openFile'], filters: filters[kind] });
+  const picked = await openFileDialog(event, { title: 'ui.add-resource-pack-dialog', properties: ['openFile'], filters: filters[kind] });
   if (picked.canceled || !picked.filePaths[0]) return null;
   return installPack((await ensureWorkspaceLayout()).root, kind, picked.filePaths[0]);
 });
 handleIpc('packs:remove', async (_event, id) => removePack((await ensureWorkspaceLayout()).root, id));
 handleIpc('packs:order', async (_event, order) => savePackOrder((await ensureWorkspaceLayout()).root, order));
-handleIpc('project:choose-workspace-root', async () => {
-  const picked = await dialog.showOpenDialog({ title: '選擇項目工作目錄', properties: ['openDirectory', 'createDirectory'] });
+handleIpc('project:choose-workspace-root', async event => {
+  const picked = await openFileDialog(event, { title: 'ui.choose-workspace-folder-dialog', properties: ['openDirectory', 'createDirectory'] });
   if (picked.canceled || !picked.filePaths[0]) return null;
   const directory = picked.filePaths[0];
   await fs.mkdir(directory, { recursive: true });
@@ -836,15 +845,15 @@ handleIpc('project:set-workspace-root', async (_event, directory) => {
 });
 
 handleIpc('texture:animation-metadata',(_event,payload)=>require('./texture-animation-metadata.cjs').readTextureAnimationMetadata(payload));
-registerTextureFiles(handleIpc, dialog, atomicWrite);
+registerTextureFiles(handleIpc, saveFileDialog, atomicWrite);
 
-handleIpc('project:save', async (_event, payload) => {
+handleIpc('project:save', async (event, payload) => {
   let filePath = payload.filePath;
   if (!filePath) {
-    const picked = await dialog.showSaveDialog({
-      title: '保存 CubeBricks 模型',
+    const picked = await saveFileDialog(event, {
+      title: 'ui.save-cubebricks-model-dialog',
       defaultPath: `${payload.name || 'untitled'}.cbmodel`,
-      filters: [{ name: 'CubeBricks Model', extensions: ['cbmodel'] }]
+      filters: [{ name: 'ui.cubebricks-model-filter', extensions: ['cbmodel'] }]
     });
     if (picked.canceled || !picked.filePath) return null;
     filePath = picked.filePath;
@@ -861,14 +870,14 @@ handleIpc('project:save', async (_event, payload) => {
   return { filePath };
 });
 
-handleIpc('project:export', async (_event, payload) => {
+handleIpc('project:export', async (event, payload) => {
   const preferred = ['cbmodel', 'bbmodel', 'json', 'java'].includes(payload.extension) ? payload.extension : 'bbmodel';
-  const picked = payload.filePath ? { canceled: false, filePath: payload.filePath } : await dialog.showSaveDialog({
-    title: '導出模型',
+  const picked = payload.filePath ? { canceled: false, filePath: payload.filePath } : await saveFileDialog(event, {
+    title: 'ui.export-model-dialog',
     defaultPath: `${payload.name || 'untitled'}.${preferred}`,
     filters: ['json', 'java'].includes(preferred) ? [{ name: preferred.toUpperCase(), extensions: [preferred] }] : [
-      ...(preferred === 'cbmodel' ? [{ name: 'CubeBricks Model', extensions: ['cbmodel'] }, { name: 'Blockbench Model', extensions: ['bbmodel'] }]
-        : [{ name: 'Blockbench Model', extensions: ['bbmodel'] }, { name: 'CubeBricks Model', extensions: ['cbmodel'] }])
+      ...(preferred === 'cbmodel' ? [{ name: 'ui.cubebricks-model-filter', extensions: ['cbmodel'] }, { name: 'ui.blockbench-model-filter', extensions: ['bbmodel'] }]
+        : [{ name: 'ui.blockbench-model-filter', extensions: ['bbmodel'] }, { name: 'ui.cubebricks-model-filter', extensions: ['cbmodel'] }])
     ]
   });
   if (picked.canceled || !picked.filePath) return null;
@@ -928,7 +937,7 @@ handleIpc('palette:save', (_event, content) => {
   colorMapSaveQueue = colorMapSaveQueue.catch(() => {}).then(() => atomicWrite(colorMapSettingsPath(), data));
   return colorMapSaveQueue;
 });
-handleIpc('palette:export', async (_event, payload) => {
+handleIpc('palette:export', async (event, payload) => {
   const data = String(payload?.content || '');
   if (Buffer.byteLength(data, 'utf8') > 2 * 1024 * 1024) throw new Error('色卡檔案不能超過 2 MB');
   const value = JSON.parse(data);
@@ -938,9 +947,9 @@ handleIpc('palette:export', async (_event, payload) => {
     throw new Error('單張色卡檔案格式無效');
   const filename = path.basename(String(payload?.filename || 'color-map.cbcmap'))
     .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
-  const picked = await dialog.showSaveDialog({
-    title: '導出色卡', defaultPath: filename,
-    filters: [{ name: 'CubeBricks 色卡', extensions: ['cbcmap'] }]
+  const picked = await saveFileDialog(event, {
+    title: 'ui.export-palette-dialog', defaultPath: filename,
+    filters: [{ name: 'ui.cubebricks-palette-filter', extensions: ['cbcmap'] }]
   });
   if (picked.canceled || !picked.filePath) return null;
   const filePath = path.extname(picked.filePath).toLowerCase() === '.cbcmap'
@@ -957,12 +966,12 @@ function capturePngBuffer(dataUrl) {
   return buffer;
 }
 
-handleIpc('image:save-capture', async (_event, payload) => {
+handleIpc('image:save-capture', async (event, payload) => {
   const image = capturePngBuffer(payload?.dataUrl);
   const safeName = path.basename(String(payload?.name || 'model-capture.png')).replace(/[<>:"/\\|?*]/g, '_');
-  const picked = await dialog.showSaveDialog({
-    title: '另存模型截圖', defaultPath: safeName,
-    filters: [{ name: 'PNG 圖片', extensions: ['png'] }]
+  const picked = await saveFileDialog(event, {
+    title: 'ui.save-model-capture-dialog', defaultPath: safeName,
+    filters: [{ name: 'ui.png-image', extensions: ['png'] }]
   });
   if (picked.canceled || !picked.filePath) return null;
   const filePath = path.extname(picked.filePath).toLowerCase() === '.png'

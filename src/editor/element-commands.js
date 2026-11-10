@@ -1,5 +1,6 @@
 import { Cube, Shape, Locator, NodeElement, BezierElement, Group, allocateGroupName, refreshAutomaticNodeName } from '../model.js';
 import { shapeRegistry } from '../shapes/builtins.js';
+import { formatRules } from '../common/core/format-constraints.js';
 
 export function createElementCommands({
   state, selectedNodeUids, topLevelSelectedUids, snapshot, markDirty,
@@ -72,6 +73,7 @@ function addShape(shapeType = 'polygon_prism') {
   if (state.mode === 'paint') return;
   const definition = shapeRegistry.get(shapeType);
   if (!definition || ['bezier2d', 'bezier3d'].includes(shapeType)) return;
+  if (!definition.supportsFormat(formatRules(state.project))) return toast('当前模型格式暂不支持此 Shape');
   snapshot('core.shape.create');
   const type = shapeType;
   const shape = new Shape({ type, shapeType: type, origin: [0, 2, 0], pivot: [0, 2, 0] });

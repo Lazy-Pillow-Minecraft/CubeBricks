@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { ConfigRegistry, ConfigScope, ConfigType } from '../src/common/core/config-registry.js';
-import { ConfigKey, configRegistry as appConfigRegistry, migrateConfigDefaults, replaceLanguagePacks, translateUiKey, translateUiText } from '../src/common/config/app-config.js';
+import { ConfigKey, configRegistry as appConfigRegistry, migrateConfigDefaults, replaceLanguagePacks, resolveUiLanguage, translateUiKey, translateUiText } from '../src/common/config/app-config.js';
 import { UI_MESSAGES } from '../src/common/i18n/messages.js';
 import { modifierRegistry } from '../src/common/config/modifiers.js';
 
@@ -44,6 +44,17 @@ assert.deepEqual(appConfigRegistry.getDefinition(ConfigKey.PLAYER_REFERENCE_TEXT
   { name: '內置玩家紋理', source: '' });
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.SEPARATE_UV_MODE).defaultValue, false);
 assert.equal(appConfigRegistry.getDefinition(ConfigKey.BLOCKBENCH_CONTROLS).defaultValue, false);
+assert.equal(appConfigRegistry.get(ConfigKey.LANGUAGE), 'system');
+assert.equal(appConfigRegistry.get(ConfigKey.FONT), 'system');
+assert.equal(appConfigRegistry.get(ConfigKey.BACKGROUND_MODE), 'grid');
+assert.equal(appConfigRegistry.get(ConfigKey.PAINT_SELECTION_SAMPLING), 'nearest');
+for (const id of [ConfigKey.MOVE_SPACE, ConfigKey.ROTATE_SPACE, ConfigKey.PIVOT_SPACE]) {
+  assert.equal(appConfigRegistry.get(id), 'self');
+}
+appConfigRegistry.set(ConfigKey.MOVE_SPACE, 'parent');
+assert.equal(appConfigRegistry.get(ConfigKey.ROTATE_SPACE), 'self');
+assert.equal(appConfigRegistry.get(ConfigKey.PIVOT_SPACE), 'self');
+appConfigRegistry.reset(ConfigKey.MOVE_SPACE);
 assert.equal(modifierRegistry.supports('symmetry', 'group'), true);
 assert.equal(modifierRegistry.supports('symmetry', 'cube'), true);
 assert.equal(modifierRegistry.supports('symmetry', 'node'), false);
@@ -81,6 +92,17 @@ assert.equal(translateUiText('正在準備 12 個面…', 'fr'), 'Préparation d
 replaceLanguagePacks([{ code: 'fr', label: 'Français', translations: { '物件屬性': 'Anciennes propriétés' } }]);
 assert.equal(translateUiKey('ui.object-properties', 'fr'), 'Anciennes propriétés', 'older Chinese-key packs still load');
 replaceLanguagePacks([]);
+globalThis.window = { cubeBricksDesktop: { systemLanguages: ['zh-TW', 'en-US'] } };
+replaceLanguagePacks([]);
+assert.equal(resolveUiLanguage(), 'zh-Hant');
+window.cubeBricksDesktop.systemLanguages = ['zh-CN'];
+replaceLanguagePacks([]);
+assert.equal(resolveUiLanguage(), 'zh-Hans');
+window.cubeBricksDesktop.systemLanguages = ['fr-CA'];
+replaceLanguagePacks([{ code: 'fr', label: 'Français', translations: {} }]);
+assert.equal(resolveUiLanguage(), 'fr');
+delete globalThis.window;
+replaceLanguagePacks([]);
 assert.equal(translateUiText('3 行 · 每行獨立設定', 'en'), '3 rows · configured independently');
 assert.equal(translateUiText('預覽：豎切', 'en'), 'Preview: vertical cut');
 assert.equal(translateUiText('已豎切 head（X 軸）', 'en'), 'Vertically cut head on the X axis');
@@ -94,7 +116,13 @@ assert.equal(translateUiText('Blockbench 風格操作', 'en'), 'Blockbench-style
 assert.equal(translateUiText('背景：棋盤格', 'en'), 'Background: Checkerboard');
 assert.equal(translateUiText('複製像素：開', 'en'), 'Copy pixels: on');
 assert.equal(translateUiText('二維包絡貝塞爾', 'en'), '2D enveloped Bézier');
-assert.equal(translateUiText('僅在此預覽中讓模型慢速轉動', 'zh-Hans'), '仅在此预览中让模型慢速转动');
+assert.equal(translateUiText('僅在此預覽中讓模型慢速轉動', 'zh-Hans'), '仅在预览中缓慢旋转模型');
+assert.equal(translateUiText('切換貼圖手翻書屬性', 'zh-Hans'), '切换手翻书动画');
+assert.equal(translateUiText('貼上幀元素', 'zh-Hans'), '粘贴帧');
+assert.equal(translateUiText('正在載入模型與貼圖', 'zh-Hans'), '正在加载模型和贴图');
+assert.equal(translateUiText('已匯入 3 行色卡', 'zh-Hans'), '已导入 3 行色卡');
+assert.equal(translateUiKey('ui.bedrock-entity', 'zh-Hans'), '基岩版实体');
+assert.equal(translateUiText('Cutout Mipped', 'zh-Hans'), '镂空（Mipmap）');
 
 const translationCatalog = JSON.parse(fs.readFileSync(new URL('../src/common/config/ui-text-catalog.json', import.meta.url), 'utf8'));
 assert.ok(translationCatalog.entries.length > 900, 'UI text extraction includes dynamic modules and settings');
@@ -112,5 +140,9 @@ const traditionalUiGlyphs = new Set([...'體開關閉陰顯圖層編輯繪畫動
 const simplifiedUiSource = translateUiText(uiSource, 'zh-Hans');
 const leftovers = [...new Set([...simplifiedUiSource].filter(character => traditionalUiGlyphs.has(character)))];
 assert.deepEqual(leftovers, [], `Simplified UI still contains Traditional Chinese glyphs: ${leftovers.join(' ')}`);
+const extraTraditionalGlyphs = new Set([...'併壞尋幀採損書條樹異碼積絕舊訂證識譯遷頭額']);
+const untranslated = Object.entries(UI_MESSAGES).filter(([, message]) =>
+  [...message.zhHans].some(character => traditionalUiGlyphs.has(character) || extraTraditionalGlyphs.has(character)));
+assert.deepEqual(untranslated.map(([key]) => key), [], 'Every Simplified Chinese message uses simplified glyphs');
 
 console.log('Config registry tests passed.');

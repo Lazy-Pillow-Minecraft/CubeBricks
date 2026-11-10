@@ -1,6 +1,7 @@
 import { Cube, Group, setPivotPreservingGeometry } from '../model.js';
 import { constrainNode, formatRules, captureFormatGeometry, restoreFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { paintSymmetryRelationCache } from '../paint/symmetry-relations.js';
+import { canPreviewRigidGroup } from './rigid-transform-preview.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { inverseRotateVector, quaternionFromAxisAngle, quaternionFromEuler, quaternionMultiply, eulerFromQuaternion,
   shortestAngleDelta } from '../utils/math/rotation.js';
@@ -150,7 +151,8 @@ function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign
     javaRotationGeometry: state.tool === 'rotate' && formatRules(state.project).singleAxisRotation
       && !modifierAnchorContext && !curveNodeContext ? captureFormatGeometry(targets.map(target => target.node).filter(node => node.type === 'cube')) : null,
     rect, storedAxis, chain, selectionContext, targets, multiTransformMode: state.multiTransformMode,
-    batchPreview: selectionContext.multiple && state.multiTransformMode === 'unified'
+    batchPreview: (selectionContext.multiple ? state.multiTransformMode === 'unified'
+      : !modifierAnchorContext && !curveNodeContext && canPreviewRigidGroup(state.project, item))
       && ['move', 'rotate'].includes(state.tool),
     baseSelectionCenter: selectionContext.center ? [...selectionContext.center] : null,
     baseSelectionPivot: selectionContext.pivot ? [...selectionContext.pivot] : null,
@@ -474,7 +476,7 @@ function applyPendingTransform(drag) {
   if (drag.javaRotationGeometry?.length) restoreFormatGeometry(drag.javaRotationGeometry);
   applyTransformDrag(drag, pending.dx, pending.dy, pending.event);
   const rules = formatRules(state.project);
-  if (rules.javaBlock || rules.moddedEntity) {
+  if (rules.javaBlock || rules.moddedEntity || rules.bedrockBlock) {
     constrainNode(drag.item, rules);
     for (const target of drag.targets || []) constrainNode(target.node, rules);
   }
@@ -537,7 +539,7 @@ function endPointerDrag(event) {
     const captureTarget = event.currentTarget;
     if (captureTarget.hasPointerCapture?.(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
     finishedDrag.ended = true;
-    if (finishedDrag.ready) finishScenePaintDrag(finishedDrag);
+    finishScenePaintDrag(finishedDrag);
     return;
   }
   if (finishedDrag.type === 'transform') {
@@ -752,7 +754,7 @@ function applyTransformDrag(drag, dx, dy, event) {
     else setPivotPreservingGeometry(state.project, item, nextPivot);
     drag.tooltipText = `${drag.modifierAnchorContext ? '對稱軸點' : drag.curveNodeContext || item.type === 'node' ? '節點' : '樞軸'} ${nextPivot.map(formatNumber).join(' / ')}`;
   }
-  if (drag.tool === 'move' && drag.targets.length > 1) {
+  if (drag.tool === 'move' && (drag.targets.length > 1 || drag.batchPreview)) {
     let distances = [];
     let commonWorldDelta;
     if (drag.kind === 'plane') {
@@ -784,6 +786,8 @@ function applyTransformDrag(drag, dx, dy, event) {
       drag.previewCommit = { type: 'move', worldDelta: [...commonWorldDelta] };
       sceneRenderer.setSelectionPreviewTransform(translationMatrix(commonWorldDelta));
       if (drag.baseSelectionCenter) drag.selectionContext.center = drag.baseSelectionCenter
+        .map((value, axis) => value + commonWorldDelta[axis]);
+      if (drag.baseSelectionPivot) drag.selectionContext.pivot = drag.baseSelectionPivot
         .map((value, axis) => value + commonWorldDelta[axis]);
       return;
     }
@@ -1027,7 +1031,7 @@ function applyTransformDrag(drag, dx, dy, event) {
       }
     }
   }
-  if (drag.tool === 'rotate' && drag.targets.length > 1) {
+  if (drag.tool === 'rotate' && (drag.targets.length > 1 || drag.batchPreview)) {
     const angleStep = getAngleSnapStep(event);
     const angle = drag.axis ? axisDelta : (dx - dy) * .4 * rotationDragSensitivity;
     const snappedDelta = snapAngle(angle, angleStep);

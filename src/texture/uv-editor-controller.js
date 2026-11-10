@@ -325,10 +325,10 @@ function setDockHotspotFocus(panelId) {
 
 function clientToTextureUv(clientX, clientY) {
   if (!textureViewLayout) updateTextureStageTransform();
-  const rect = $('#texturePreview').getBoundingClientRect();
+  const preview = $('#texturePreview'), rect = preview.getBoundingClientRect();
   return [
-    (clientX - rect.left - textureViewLayout.left) / textureViewLayout.scale,
-    (clientY - rect.top - textureViewLayout.top) / textureViewLayout.scale
+    (clientX - rect.left - preview.clientLeft - textureViewLayout.left) / textureViewLayout.scale,
+    (clientY - rect.top - preview.clientTop - textureViewLayout.top) / textureViewLayout.scale
   ];
 }
 

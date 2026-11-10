@@ -187,13 +187,14 @@ localDockRegistry.register({ id: 'sample', index: 2, modes: ['edit'], defaultDoc
 assert.throws(() => localDockRegistry.register({ id: 'sample', index: 3, modes: ['edit'], defaultDock: 'left' }), /already registered/);
 assert.throws(() => localDockRegistry.register({ id: 'second', index: 2, modes: ['edit'], defaultDock: 'left' }), /unique integer index/);
 const dockHarness = Object.create(DockManager.prototype);
-const makeDockPanel = (id, dock, width, height) => ({ id, index: width, state: {
+const makeDockPanel = (id, dock, width, height) => ({ id, index: width, modes: ['edit'], state: {
   dock, x: width, y: height, width, height, collapsed: false, stackId: null, stackOrder: 0, stackActive: false
 }, element: { after() {} } });
 const hostDock = makeDockPanel('host', 'right', 292, 340);
 const incomingDock = makeDockPanel('incoming', 'left', 236, 620);
 const secondIncomingDock = makeDockPanel('secondIncoming', 'floating', 300, 240);
 dockHarness.panels = new Map([hostDock, incomingDock, secondIncomingDock].map(panel => [panel.id, panel]));
+dockHarness.mode = 'edit';
 dockHarness.applyPanelState = () => {};
 dockHarness.syncStacks = () => {};
 dockHarness.refreshZones = () => {};

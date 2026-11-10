@@ -1,6 +1,6 @@
 import { modelFormatRegistry } from '../common/config/model-formats.js';
 import { JavaBlockVersion, constrainProject } from '../common/core/format-constraints.js';
-import { normalizeTextureLayers } from '../common/core/texture-features.js';
+import { normalizeTextureLayers, releaseTextureRasters } from '../common/core/texture-features.js';
 import { isolateTextureLayerIds } from '../common/core/texture-layer-identity.js';
 import { ConfigKey, configRegistry } from '../common/config/app-config.js';
 import { showAppChoice } from '../screen/prompt-dialog.js';
@@ -9,7 +9,7 @@ export const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectedGenerated', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
   'target', 'axisView', 'axisViewSign', 'axisViewCameras', 'generalCamera', 'referenceImageSelection', 'referenceImageSources', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
-  'selectedUvFaces', 'textureView', 'paintSelection'
+  'selectedUvFaces', 'textureView', 'paintSelection', 'toolsByMode'
 ]);
 
 export function createProjectTabsController({ state, $, escapeHtml, escapeAttribute, projectTabsNode,
@@ -17,7 +17,7 @@ export function createProjectTabsController({ state, $, escapeHtml, escapeAttrib
   getSubdivisionSession, exitSubdivisionEdit, referenceImages, cancelCameraFocus,
   sceneRenderer, startProjectJournal, flushProjectJournal, toast,
   compactProjectHistorySnapshot, markDirty, scheduleProjectJournal,
-  onProjectActivated, onProjectClosing }) {
+  restoreProjectTool, onProjectActivated, onProjectClosing, onProjectDisposed }) {
 let projectTabs = [];
 let activeProjectTabId = null;
 let editingProjectTabId = null;
@@ -25,6 +25,25 @@ let draggingProjectTabId = null;
 let draggingProjectTabInsertIndex = null;
 let closingProjects = false;
 let homeSession = null;
+
+function toolStorageKey(tab) {
+  return `cubebricks.project-tools.${tab.journalId || tab.session.project.projectUuid}`;
+}
+
+function readProjectTools(tab) {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(toolStorageKey(tab)) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+
+function saveProjectTools() {
+  const tab = projectTabById(activeProjectTabId);
+  if (!tab?.session) return;
+  tab.session.toolsByMode = state.toolsByMode;
+  try { window.localStorage.setItem(toolStorageKey(tab), JSON.stringify(state.toolsByMode)); }
+  catch (error) { console.warn('Project tool preference could not be saved', error); }
+}
 
 function projectTabById(tabId) {
   return projectTabs.find(tab => tab.id === tabId) || null;
@@ -76,7 +95,8 @@ function createProjectSession(project, options = {}) {
     paintSelection: { active: false, masks: new Map() },
     selectedUvFaces: new Set(),
     textureView: { zoom: 1, panX: 0, panY: 0 },
-    timelineFrame: 0
+    timelineFrame: 0,
+    toolsByMode: {}
   };
 }
 
@@ -166,6 +186,7 @@ function activateProjectTab(tabId, { render = true } = {}) {
   state.lockedHoverStrength = 0;
   cancelCameraFocus();
   sceneRenderer.invalidateLockState();
+  restoreProjectTool?.();
   restoreProjectTextureView();
   window.dispatchEvent(new Event('cubebricks:texture-change'));
   updateProjectStateLabel();
@@ -191,6 +212,7 @@ function addProjectTab(project, options = {}) {
     if (activeProjectTabId === home.id) activeProjectTabId = null;
   } else projectTabs.push(tab);
   startProjectJournal(tab, options.journalId ? null : options.imported ? 'core.project.import' : 'core.project.create', options.journalId);
+  tab.session.toolsByMode = readProjectTools(tab);
   // Opening an existing project must not put a full history compaction ahead
   // of the first undo. Commits and saves already enforce the configured cap.
   activateProjectTab(tab.id, { render: options.render !== false });
@@ -232,10 +254,15 @@ async function deleteWorkspaceProject(journalId) {
 }
 
 function disposeProjectTab(tab) {
+  tab.recentModelHistory?.reset(null, null);
   tab.session.referenceImageSources?.clear();
+  const retained = projectTabs.flatMap(entry => entry.session?.textureAssets || []);
   for (const asset of tab.session.textureAssets || []) {
-    if (typeof asset.source === 'string' && asset.source.startsWith('blob:')) URL.revokeObjectURL(asset.source);
+    releaseTextureRasters(asset, retained);
+    if (typeof asset.source === 'string' && asset.source.startsWith('blob:')
+      && !retained.some(entry => entry.source === asset.source)) URL.revokeObjectURL(asset.source);
   }
+  onProjectDisposed?.(tab, retained);
 }
 
 async function discardProjectTabJournal(tab) {
@@ -377,6 +404,7 @@ function persistProjectHistoryLimit(tab,historyLimit,previousHistoryLimit) {
   // Save real pending edits before pruning; the setting itself creates no
   // snapshot, changes no edit revision, and does not clear the redo branch.
   void flushProjectJournal(tab);
+  tab.recentModelHistory?.reset(null, null);
   const save=async()=>{
     await tab.journalReady;
     await window.cubeBricksDesktop.updateProjectJournalSettings({journalId:tab.journalId,historyLimit});
@@ -401,6 +429,7 @@ function initializeProjectTabs() {
   configRegistry.subscribe(ConfigKey.HISTORY_LIMIT, change => {
     if (!window.cubeBricksDesktop?.compactProjectJournal) return;
     for (const tab of projectTabs.filter(item => item.kind !== 'home' && item.session.project.historyLimit === null)) {
+      tab.recentModelHistory?.reset(null, null);
       const compact = async () => {
         await tab.journalReady;
         await window.cubeBricksDesktop.compactProjectJournal({ journalId: tab.journalId, historyLimit: change.value });
@@ -459,6 +488,7 @@ async function confirmProjectClose() {
 function clearEditingProjectTab() { editingProjectTabId = null; }
 
 return {
+  saveProjectTools,
   get tabs() { return projectTabs; },
   get activeId() { return activeProjectTabId; },
   get editingTabId() { return editingProjectTabId; },
