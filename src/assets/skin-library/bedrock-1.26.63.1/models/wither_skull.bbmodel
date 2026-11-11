@@ -1,0 +1,119 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "wither_skull",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "20e866a3-4d46-453a-91a2-9ac80a64b0f1",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -4,
+        0,
+        -4
+      ],
+      "to": [
+        4,
+        8,
+        4
+      ],
+      "origin": [
+        0,
+        4,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        35
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "069cac2f-1d1d-4e2b-bf67-7087cbf633a7",
+      "name": "head",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "20e866a3-4d46-453a-91a2-9ac80a64b0f1"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "3487199a-382b-45a2-9b15-b8708332463f",
+      "id": "0",
+      "name": "wither.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/cb4d8aeabd1f0a258aa2.png",
+      "resource": "textures/entity/wither_boss/wither",
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAADuklEQVR42u1aMY7bMBDUCww3hg27MGC4ce8yzdXBATncG1LlAQGuTXfF/cIPMfIYP0PJChhhbrEr0aIkUzousKBIUeLucJYi7S2KFtntdqXoarWqytPpVCnacc/ToqNgnPP5XCnqy+WyXK/Xlcr14XCoymIoYae1MQDAMyoGAB6Hx5b3QjGmjDcYANpxXKMOACyjYgHY7/f1WHJtMQA6GADsMAyCMXJtMQAaGwIYR0qMjbEEYFGMOSgAMELPCjPAMqqvEAAQohiHAZdyFAbAYQ4HqXtGxQLAgGM8DjFm3ihrgDYGgHhGyb2294PeWr89PZUvr6/VOFKKShuHBKu3UPceAt6XQH/+0B4KAH9WpY73wHHUvf4MAodO8PdWo8nOWrGv2eDFrJ6Zpr48/uVyqRRMQF072KbBq20TreCAZoEGpOl5CygwCIyREv3gOCtCQFQzrjMA3NmjVWg8Ws9bQPAMev2lDbMOxaZMv5dB1DvUoJ2eR0ONtI5HUT2jIbRkXSwWtfEAhNcAC1TMOJzEOzptxfVe36KhF4/aeW8h9JwPWSQHF89QBsGLR1G9BmhaWjPJ95IAIISGVjzy4nMPLfs4LfYmMLQpTr149CiO/vLuNi1SEuzgUtXRAMCho4taz/b1vsyAr+j04GDoo6xWuSefO90H7dY93U/X+dmm57kdzwwCwJdmQAgYof0xY1Zf2Tx9f36uN07oC0ZgA4WNFvfV7OG+yQAghonB3i+04pAodo9WWOCwZfVl53GqTAoAjwF668yzrx2TUhxHf4DBvzX2zoShY9U7O7AzcISdZiZ4IdMLE9pW7a7to21e+qa9js+u7U0L4qwAaGPG5ADgzUZI++xC4F4AHn6CGxuAYm5y7xowewAmv6gNvRGaHQCbzabYbre1cv14PEanyPz4+6do0ocLnGaF8//jPjpFJnkA2Bg4DyAEhNgUmckwwCtjU2SSB4BpD+ozC2JTZCYBgHL4EwtiU2QmtwiCAWiPTZGZFAMQAhwWsSkyyQPQlh0SmiLj5Qi0pcgkAwAb+vPtrfz1/l7+/vioSqlbKTK6H/qKWhkhVopMUgzwUmSsmbZyg7x/i5tSZB4OAFb1ppnXFMYsSz89+22JU3cnMY0BAFZylJqyt9utUq/Oaaysk0iRYUPFGZlJMQ6zCrVyAsEYfgZ7A/488hj6XhIA4NsNEORaHGLjr9drPfNyDScwm/jRBO28H0j6eA1DEdfeOgDHAYTVT4cBnws8LbJkyZIlS5YsWbJkyZIly/jyD/q+TQhdjd+wAAAAAElFTkSuQmCC",
+      "width": 64,
+      "height": 64,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.wither_skull",
+      "texture_width": 64,
+      "texture_height": 64,
+      "visible_bounds_width": 1,
+      "visible_bounds_height": 1
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.wither_skull"
+      ]
+    }
+  }
+}

@@ -1,0 +1,245 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "bee_stinger",
+  "elements": [
+    {
+      "name": "cross_1",
+      "uuid": "6ea2fe2e-3412-4e66-8f73-c5c2cb006a1a",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -1,
+        23.5,
+        0
+      ],
+      "to": [
+        1,
+        24.5,
+        0
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            2,
+            0,
+            4,
+            1
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            0,
+            0,
+            2,
+            1
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            2,
+            0,
+            2,
+            1
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            2,
+            0,
+            0,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            4,
+            0,
+            2,
+            0
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "cross_2",
+      "uuid": "45350636-921c-492d-b32e-878a4c3fac90",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -1,
+        23.5,
+        0
+      ],
+      "to": [
+        1,
+        24.5,
+        0
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            2,
+            0,
+            4,
+            1
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            0,
+            0,
+            2,
+            1
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            2,
+            0,
+            2,
+            1
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            2,
+            0,
+            0,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            4,
+            0,
+            2,
+            0
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "6006c787-aa22-4bec-b5ea-c196a4296825",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "cross_1",
+          "uuid": "f0ec5da3-5c7b-4c86-af8f-9974e2d21c21",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            -45.000002,
+            0,
+            0
+          ],
+          "children": [
+            "6ea2fe2e-3412-4e66-8f73-c5c2cb006a1a"
+          ]
+        },
+        {
+          "name": "cross_2",
+          "uuid": "5b745e65-384d-4a81-bedd-a8fff4ae1529",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            -135.000001,
+            0,
+            0
+          ],
+          "children": [
+            "45350636-921c-492d-b32e-878a4c3fac90"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 16,
+    "height": 16
+  },
+  "textures": [
+    {
+      "uuid": "83644fe3-f32b-4956-bf24-4726539e2e11",
+      "id": "0",
+      "name": "bee_stinger.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/208459e57258c89154ca.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAF0lEQVR42mMw0Db/j4wZRsEoGAUjFQAAP5MGRervuKAAAAAASUVORK5CYII=",
+      "width": 16,
+      "height": 16,
+      "uv_width": 16,
+      "uv_height": 16,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:bee_stinger#main"
+      ]
+    }
+  }
+}

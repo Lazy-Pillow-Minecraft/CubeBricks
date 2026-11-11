@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "bell",
+  "elements": [
+    {
+      "name": "bell_body",
+      "uuid": "5b0cf791-c9fb-4010-938d-b9eeb6da7076",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -8,
+        12,
+        8
+      ],
+      "from": [
+        -11,
+        11,
+        5
+      ],
+      "to": [
+        -5,
+        18,
+        11
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            18,
+            6,
+            24,
+            13
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            6,
+            6,
+            12,
+            13
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            6,
+            6,
+            13
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            12,
+            6,
+            18,
+            13
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            12,
+            6,
+            6,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            18,
+            0,
+            12,
+            6
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "bell_base",
+      "uuid": "e2a10c9f-ce00-48f8-892e-9a9a19902c88",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -12,
+        18,
+        4
+      ],
+      "to": [
+        -4,
+        20,
+        12
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            24,
+            21,
+            32,
+            23
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            8,
+            21,
+            16,
+            23
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            21,
+            8,
+            23
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16,
+            21,
+            24,
+            23
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16,
+            21,
+            8,
+            13
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            24,
+            13,
+            16,
+            21
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "92914e11-965c-483d-a265-b9e407d1069d",
+      "name": "display",
+      "origin": [
+        0,
+        12,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        180
+      ],
+      "children": [
+        {
+          "name": "root",
+          "uuid": "03f05700-005f-482d-bac9-7370b5da0f2f",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "name": "bell_body",
+              "uuid": "8a92c8c4-a109-4274-84af-72efb93fa18f",
+              "origin": [
+                -8,
+                12,
+                8
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "5b0cf791-c9fb-4010-938d-b9eeb6da7076",
+                {
+                  "name": "bell_base",
+                  "uuid": "38b40982-6ebb-4d25-8088-c88b9fe0adaf",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    "e2a10c9f-ce00-48f8-892e-9a9a19902c88"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "textures": [
+    {
+      "uuid": "3dcf468a-2e3f-484c-9bec-bb6923f9ffa9",
+      "id": "0",
+      "name": "bell_body.png",
+      "resource": "minecraft:textures/entity/bell/bell_body.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAKlBMVEUAAADTljLyu0rpsRX/3Vp7Xg2Maw2qhiP5vSP1zCf+/73/9o3/7E/+1jksplGnAAAAAXRSTlMAQObYZgAAAIlJREFUeNrtkUsKwzAMRGXZcj6auf91a2q0qRKcQpd94DebAclIJo6BT8sVAAlMXxdYdmL6prAXYvrLEeslCwclWwJ3P0/PloCAO7N/XACzJTgI8MiWT6pqa6o1MhV062Z908hc6DboGpkKzazV8SKvClXNWuRyxHLJ598kQBK8y/e5B36X8ucZLy/bD41VHKOgAAAAAElFTkSuQmCC",
+      "relative_path": "../textures/5e9f858c01847a815360.png",
+      "width": 32,
+      "height": 32,
+      "uv_width": 32,
+      "uv_height": 32,
+      "mode": "bitmap",
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:bell#main"
+      ]
+    }
+  }
+}

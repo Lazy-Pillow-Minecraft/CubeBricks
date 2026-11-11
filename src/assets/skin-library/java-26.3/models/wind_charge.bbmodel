@@ -1,0 +1,340 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "wind_charge",
+  "elements": [
+    {
+      "name": "wind",
+      "uuid": "22935df2-c733-43da-b155-4efa29e75c1c",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -4,
+        23,
+        -4
+      ],
+      "to": [
+        4,
+        25,
+        4
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            39,
+            28,
+            47,
+            30
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            23,
+            28,
+            31,
+            30
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            15,
+            28,
+            23,
+            30
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            31,
+            28,
+            39,
+            30
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            31,
+            28,
+            23,
+            20
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            39,
+            20,
+            31,
+            28
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "wind",
+      "uuid": "63846219-4b62-492a-8dfa-0535d659c1fe",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -3,
+        22,
+        -3
+      ],
+      "to": [
+        3,
+        26,
+        3
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            18,
+            15,
+            24,
+            19
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            6,
+            15,
+            12,
+            19
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            15,
+            6,
+            19
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            12,
+            15,
+            18,
+            19
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            12,
+            15,
+            6,
+            9
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            18,
+            9,
+            12,
+            15
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "wind_charge",
+      "uuid": "c1f458f9-4809-4af2-9be7-c0450e4c5720",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -2,
+        22,
+        -2
+      ],
+      "to": [
+        2,
+        26,
+        2
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            12,
+            4,
+            16,
+            8
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            4,
+            4,
+            8,
+            8
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            4,
+            4,
+            8
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            8,
+            4,
+            12,
+            8
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            8,
+            4,
+            4,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            12,
+            0,
+            8,
+            4
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "ec8e12f0-9531-4d47-a43f-6ee9e475b4f8",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "bone",
+          "uuid": "2a852dd3-6f96-4f74-bfe7-4f2196b73906",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "name": "wind",
+              "uuid": "7af1c868-42b5-4b4f-adfd-1f7caee7661a",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                45.000105,
+                0
+              ],
+              "children": [
+                "22935df2-c733-43da-b155-4efa29e75c1c",
+                "63846219-4b62-492a-8dfa-0535d659c1fe"
+              ]
+            },
+            {
+              "name": "wind_charge",
+              "uuid": "cd4aee57-74aa-4d1d-b5aa-31552cfd8f3b",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "c1f458f9-4809-4af2-9be7-c0450e4c5720"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "textures": [
+    {
+      "uuid": "ce7b5d3f-b2f1-40f3-a896-4a10ff709bce",
+      "id": "0",
+      "name": "wind_charge.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/4b59f107806baca53736.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAMAAACVQ462AAAAD1BMVEUAAADT2//Hy9S3u8SrsbvgRI4pAAAABXRSTlMAf39/f8aHkIIAAABoSURBVHja7VNBCsAwCEs0/3/zoNvN2bHKYBRzaDBoCFShIjBeM1tluLskaZVRDCDIfZitMlQEhpWZXay3dT1BYxfwxJ2Y10A+EzUySsEn63gIMZ/h3Kt/v/HRNeULmCsk8y4yev9uiw8ivgeuoljGNwAAAABJRU5ErkJggg==",
+      "width": 64,
+      "height": 32,
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:wind_charge#main"
+      ]
+    }
+  }
+}

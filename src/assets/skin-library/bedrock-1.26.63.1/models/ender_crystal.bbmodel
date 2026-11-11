@@ -1,0 +1,331 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "ender_crystal",
+  "resolution": {
+    "width": 128,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "30468bae-05c9-4734-a1c9-5ee92c60ccd4",
+      "type": "cube",
+      "name": "outerglass",
+      "from": [
+        -8,
+        -8,
+        -8
+      ],
+      "to": [
+        8,
+        8,
+        8
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "7ceea2ad-2565-40c4-9a42-3f4429819836",
+      "type": "cube",
+      "name": "innerglass",
+      "from": [
+        -8,
+        -8,
+        -8
+      ],
+      "to": [
+        8,
+        8,
+        8
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "7f2470ee-c5e1-4766-8177-2d9df25819dc",
+      "type": "cube",
+      "name": "crystal",
+      "from": [
+        -8,
+        -8,
+        -8
+      ],
+      "to": [
+        8,
+        8,
+        8
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        64,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "d5d3481f-b595-43e5-b6f5-5a13bf141175",
+      "type": "cube",
+      "name": "base",
+      "from": [
+        -12,
+        -16,
+        -12
+      ],
+      "to": [
+        12,
+        -8,
+        12
+      ],
+      "origin": [
+        0,
+        -12,
+        0
+      ],
+      "rotation": [
+        -180,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        32
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "b507dd7f-52ee-4558-8726-483a522cd5a0",
+      "name": "outerglass",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "30468bae-05c9-4734-a1c9-5ee92c60ccd4",
+        {
+          "uuid": "b23a15d9-f41c-4977-83bd-523e14275d79",
+          "name": "innerglass",
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "7ceea2ad-2565-40c4-9a42-3f4429819836",
+            {
+              "uuid": "d7c42692-319a-4776-9339-e69d225c30cd",
+              "name": "crystal",
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "7f2470ee-c5e1-4766-8177-2d9df25819dc"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "9ccf00b0-1fca-4e16-b930-bb9cfebd2d6a",
+      "name": "base",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "d5d3481f-b595-43e5-b6f5-5a13bf141175"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "bf7554b5-52ba-45db-adb5-6de6d127b884",
+      "id": "0",
+      "name": "endercrystal.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/e6a0abecf29754b03d01.png",
+      "resource": "textures/entity/endercrystal/endercrystal",
+      "uv_width": 128,
+      "uv_height": 64,
+      "use_as_default": true,
+      "source": "data:image/png;base64,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",
+      "width": 128,
+      "height": 64,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.ender_crystal",
+      "texture_width": 128,
+      "texture_height": 64,
+      "visible_bounds_width": 2,
+      "visible_bounds_height": 3,
+      "visible_bounds_offset": [
+        0,
+        1.5,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.ender_crystal"
+      ]
+    }
+  }
+}

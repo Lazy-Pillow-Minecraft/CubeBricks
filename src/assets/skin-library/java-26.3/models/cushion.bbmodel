@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "cushion",
+  "elements": [
+    {
+      "name": "cushion",
+      "uuid": "f1cae275-2c4f-4abf-9192-f192e3d769cd",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -23,
+        20,
+        -7
+      ],
+      "from": [
+        -8,
+        20,
+        -8
+      ],
+      "to": [
+        8,
+        24,
+        8
+      ],
+      "inflate": -0.005,
+      "faces": {
+        "south": {
+          "uv": [
+            48,
+            16,
+            64,
+            20
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            16,
+            16,
+            32,
+            20
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            16,
+            16,
+            20
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32,
+            16,
+            48,
+            20
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32,
+            16,
+            16,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "9c7cb4e7-fd91-463b-947a-45ab7755c1e2",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "cushion",
+          "uuid": "9272deb9-bdfc-48ab-b095-034b81dc9ac0",
+          "origin": [
+            -23,
+            20,
+            -7
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "f1cae275-2c4f-4abf-9192-f192e3d769cd"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "textures": [
+    {
+      "uuid": "4ea930a1-96e7-46ba-bdaf-88b6fb51b88f",
+      "id": "0",
+      "name": "red_cushion.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/b49444737c9f8ab824c7.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAGFBMVEUAAADZQDLOPTDCOS24MimrLi6fKCaRIiqjt2p6AAAAAXRSTlMAQObYZgAAAQVJREFUeNrtz8FxE1EQhOG/174adW8AGCkFUoEUyIXsIAIVCeyME9Bw2duLwFX6zl3TPeL0k2mA71Mdmd8AwCucjpanVYd79NhYA/9yuZNp1PTOaeM0PVQnQwMzSwBRM90AgV4vWBZHCTywXuj77DHIyhW8jrz125/3Lez729/rx2UJ6FFfUu2p7ZFqYP3i5V10d718ba0BpEe1a5hH4XUDVjHCTYVi3SAfjbVBb/CxVFgYSQMBvAasLXFiGctrBR7CN93uct/MST9a16PZfTQnuSDTANpCprXbMQoyOFeiPUCu+gVFkCkqck3rWoAu1crlNUVAhgwyqYRMY5Tw9PT09PQJ/AfSl3J1aKxsQwAAAABJRU5ErkJggg==",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:cushion#main"
+      ]
+    }
+  }
+}

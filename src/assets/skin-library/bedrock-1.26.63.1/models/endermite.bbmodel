@@ -1,0 +1,324 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "endermite",
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "552ed504-670d-41b9-975f-714666f2dc83",
+      "type": "cube",
+      "name": "section_0",
+      "from": [
+        -2,
+        0,
+        -4.4
+      ],
+      "to": [
+        2,
+        3,
+        -2.4000000000000004
+      ],
+      "origin": [
+        0,
+        1.5,
+        -3.4000000000000004
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "c6bccf64-23f6-4354-ac95-ed33564f25cf",
+      "type": "cube",
+      "name": "section_1",
+      "from": [
+        -3,
+        0,
+        -2.4
+      ],
+      "to": [
+        3,
+        4,
+        2.6
+      ],
+      "origin": [
+        0,
+        2,
+        0.10000000000000009
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        5
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "14e3f851-0af8-4238-a90b-0c56dd9a5766",
+      "type": "cube",
+      "name": "section_2",
+      "from": [
+        -1.5,
+        0,
+        2.5
+      ],
+      "to": [
+        1.5,
+        3,
+        3.5
+      ],
+      "origin": [
+        0,
+        1.5,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        14
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "482634cf-95f1-488c-a0e5-0d34ee004ca2",
+      "type": "cube",
+      "name": "section_3",
+      "from": [
+        -0.5,
+        0,
+        3.5
+      ],
+      "to": [
+        0.5,
+        2,
+        4.5
+      ],
+      "origin": [
+        0,
+        1,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "cff4f3f8-b6ff-4ce7-bdbe-dffcb3e721e7",
+      "name": "section_2",
+      "origin": [
+        0,
+        0,
+        2.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "8a560c4d-143b-4b66-bdb4-9b991b55527b",
+          "name": "section_0",
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "552ed504-670d-41b9-975f-714666f2dc83"
+          ]
+        },
+        {
+          "uuid": "868753d5-357c-453a-a62f-a155c193a7be",
+          "name": "section_1",
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "c6bccf64-23f6-4354-ac95-ed33564f25cf"
+          ]
+        },
+        "14e3f851-0af8-4238-a90b-0c56dd9a5766",
+        {
+          "uuid": "fe214e5c-e37d-4265-99e3-661f0bc21182",
+          "name": "section_3",
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "482634cf-95f1-488c-a0e5-0d34ee004ca2"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "5ad34d35-718b-49d4-896f-94bd9541f688",
+      "id": "0",
+      "name": "endermite.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/d73571a6c187c9673c36.png",
+      "resource": "textures/entity/endermite",
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAANHSURBVGje7ZjrUhNBEIXnAawSERIKuSWiISEhNy1AbjGJBBG5G4go+sf3f4S2vw4dA6Wg/JBskq7qms3O7mbP6e4zPRvCla0v7stWqSXr2XNZTm1LciIn02Mv5NnT5zIXz0josnrp2Lz6qhnmYumQiGe6p8Poo7j57+y2+x7U6oVz0ReTWulIIAPgbU/KzHjqGgGrhW/ma9lmmJ/MG5i/JeC2+x4MeL2oXjiTs3jJfDN7KJx/V2xpNjRkNb0rlaUTG9XDVu446DVhLbMX9N5QzTfJoPB26fQa+O7ju+57MNM/l2r+kwF9k/5g4/LLhuy+/m7nmackmFMA0rNA7mtEFpDl+aoUEptSTFZkZeG9Rb9WaBpoflMWZMZcV93eTPPbUr/nTVPeoqgZYIJIJtRUE1S0rBw4p6IlE09mJT4yY45GJLoEMpIEANy8eN4hwQFXCqeykT0yAiAEsJOjCSMhNjItU2PzMhtbYP6Ptd/zRt3iWu8O/p8zIJK179YofTER8xFxc8DUfCV/cmcGIIoI4sbiQec5kTEizwv7SCkA3pZHjT69AeA5580R4GOPp6xH8AxYS+8ZCf6cKGWALndN8ZGo46g//YECUwJ2RMHpyvBZtksXtjr4dawiXMu8ZkDnOVHKAHthHwFtgBT4RvbAgHGMcx7wXMPSSW/APMd2jR77cyJDABHlhX30+l+9WvuJqh1nPsr+yg/rD5wAvwbgtpdQgvw5kSKAqPrY7vx2LL3JAIADlGaI9OY6COAc80ScFpn7nACeEyUC2J21lzt1hE43KeYKMigBQSMfNPImkAiendclE9FjZBWIrBGxzdxRp84pAYQNZ04jb0sbREEA4DXypvbsCyAk0gSYol8RwIg7CdSyNjuhr40ou3qb4mfaag8BkENzQ5r3MwGa2i1plL8C3uqalFYCyA4DH6nG5j4ZYMpdvDASbu7vIcLFjtrvO/sFvGWO6ltW6KaIEQIQPG16jIi+s53ypQFlE6Trv6k8QAFONmj72wGPHvS1+dfe1FQ5JCeyYeBsJX9pX235XD0znho8AvheTwZoN9gbn6z/UyNkgseoTZDt6/ndFr9m6Ps+APEDKELoHzQGqg8Y2tCGNrRBtp/8/g8zddrEyQAAAABJRU5ErkJggg==",
+      "width": 64,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.endermite",
+      "texture_width": 64,
+      "texture_height": 32
+    },
+    "nativeGeometryVersion": "1.8.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.endermite"
+      ]
+    }
+  }
+}

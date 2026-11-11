@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "leash_knot",
+  "elements": [
+    {
+      "name": "knot",
+      "uuid": "1ae25544-981d-44c1-b2c7-30435d3189d6",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -3,
+        24,
+        -3
+      ],
+      "to": [
+        3,
+        32,
+        3
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            18,
+            6,
+            24,
+            14
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            6,
+            6,
+            12,
+            14
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            6,
+            6,
+            14
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            12,
+            6,
+            18,
+            14
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            12,
+            6,
+            6,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            18,
+            0,
+            12,
+            6
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "41b359ac-882d-44d5-ad24-9c24a8c7d02d",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "knot",
+          "uuid": "c38f8a19-d373-422c-9db7-3aaae0de8e24",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "1ae25544-981d-44c1-b2c7-30435d3189d6"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "textures": [
+    {
+      "uuid": "9a607855-9130-47e1-8d65-33fe37bb72c6",
+      "id": "0",
+      "name": "lead_knot.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/97f4927cdd793ff17290.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAJ1BMVEUAAACKbURqUzKkhmJ2XDhwWDZ9Yz2be1mPck1jVTN3XjeafFa2lnQbbdYFAAAAAXRSTlMAQObYZgAAAKVJREFUeNrdjlEOwyAMQ4mTuFvJ/c87UhBaq9L/7UnYHzZWSocA3LuWOxQkveui4E5PXRYAeuqi4Kokut4XGkDXSyQNbYQKSYlQre3JLMBwYIe7Y/C1EKovcixFWm0+C/P7XMp3WiC5baG1zmOEcr7BzJC4p18WxrfoJ0hahJ4XxkCq7ztgbobye0TynCYiz3kIGuUGGfmikEgH60aZOcoT7yz8Ix9ADgV+mAwpfgAAAABJRU5ErkJggg==",
+      "width": 32,
+      "height": 32,
+      "uv_width": 32,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:leash_knot#main"
+      ]
+    }
+  }
+}

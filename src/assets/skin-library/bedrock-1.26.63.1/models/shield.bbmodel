@@ -1,0 +1,168 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "shield",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "116a9466-9950-45e4-82a7-015e7d95b0df",
+      "type": "cube",
+      "name": "shield",
+      "from": [
+        -2,
+        25,
+        0
+      ],
+      "to": [
+        0,
+        31,
+        6
+      ],
+      "origin": [
+        -1,
+        28,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        26,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "78b3a3ba-1b6b-4bcf-a54e-533dab7cc66f",
+      "type": "cube",
+      "name": "shield",
+      "from": [
+        -7,
+        17,
+        -1
+      ],
+      "to": [
+        5,
+        39,
+        0
+      ],
+      "origin": [
+        -1,
+        28,
+        -0.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "5417e15c-ee31-4390-bab0-6966fb5d279c",
+      "name": "shield",
+      "origin": [
+        -1,
+        15.5,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "116a9466-9950-45e4-82a7-015e7d95b0df",
+        "78b3a3ba-1b6b-4bcf-a54e-533dab7cc66f"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "35a2390e-fcc8-4c9b-b7f3-8fc9a66f5670",
+      "id": "0",
+      "name": "shield.png",
+      "resource": "textures/entity/shield",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAQPSURBVHhe7ZjJT1NRFMZPW1tt0ZZaDSAOKDhBYmKU4BQXLkx0YTRxwUp3ujPuHBZGN+LOoLgQ2OhKt8YY/wE1cYgjurB1CmAMKbVFCq2l1XN6z+O+56vFofDIvb/k5bvDYzjfPffc956r8JNLXb3wJ8RiUdGaGp0XL4jWr7S3HxatIjduXBOt6cHVebmngI2F4RANlGM4kSR99fIFqT8QIA34A1C3ZAm1Pw8OQnosTe2xdFG7r14itXLk6DHRKlLqvkpBBmDwn+51iSGAr8kUVIeCtrph72kyAQ0YfX8Hvmez4PX5SMPBACRSaaPPWr12v2MNcAslPvZ/oSCTI2PUlxXHB4ZGqI/gys+fN0f0gIJlMGiE5zlLnIgb05UJr9oFHwbi1MaAZbx1243ASoGrj1kwmzBlwLtntyGbzVEbU/7beM4w4sOLu8YcmoZ7HucROROsYGbgvaVIJZOma7pxnTx1rtDSsp5qQF90AOoXL6BUb2mqpy0RWuCnLbBiaQ3N7zncAX19b+iHPz2+bux9NGP0Wxqq5geMTOFtsXzzIXj86CFEIhEIhorFFoONx+M0hnC71HylTgdTBiC48oi8BXilrfDKW+c5UxC+BwO5efM69HRfpgvbHDBe5eYrhZuPq3JYa0I5+ARg7IKQx8rNVwpTBixr3g3PXr8XvUlwFb21k0WQTbPLDDloOROcimEArrBcBBE5wLdPbtkGxGNy4DL8O+wKnDxWbr5SeNq27Djr91dBqv8RjGYmYGNzAwwNj0Ahn4dsLg/BqrkQT43D8tpqGM8VILKiFRKJYfB6vZAcfP4z8O/gAnqYhImJPHg8blKfz0tzeC1u2AyxaBRaW7fCtu07YdOmNljdtI6KnMfthkwmQ+3fzR88eID+xv/Gdez4iUJjYxP0P7hiVH+s9pj2uHp4KuApgKcBzrftO0nvAni0xe73UgZg5UfwFPD55tAYK87hKdBx/gzd4zTc1jOaix0GzNjt9XLIT4ZOxqgBePxhEeQnQUR+wJGLIGMXpHVM/h1OxPZJ0PpPY/9tiSKIlCqAswGTAbh6a1bWiJ459RvqI8Zel7cN73WrCdz/m+0znbj5Hf53OD2If8GUAZz6GDC/ClvBFyE2bTanPkMG8CtxuHHyddiKtQhaH6G5Pththak+bs8E5iL41PwkiHAmlCqC1jHu293rRAwD8PzHIlizqPg2KINbA1955Tn81jeVIPEe/i7oROibIG+BcqnK1R9rwP/6KDrT0Gdx0VYSUw1QEW2AUGXRBghVFm2AUGXRBghVFm2AUGXRBghVFm2AUGXRBghVFm2AUGXRBghVFm2AUGXRBghVFm2AUGXRBghVFm2AUGXRBghVFm2AUGXRBghVFm2AUGVR3ACAH29IK23wNRHPAAAAAElFTkSuQmCC",
+      "relative_path": "../textures/122b173dbdf509416caf.png",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "mode": "bitmap",
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.shield",
+      "texture_width": 64,
+      "texture_height": 64
+    },
+    "nativeGeometryVersion": "1.16.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.shield"
+      ]
+    }
+  }
+}

@@ -1,0 +1,209 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "tadpole",
+  "resolution": {
+    "width": 16,
+    "height": 16
+  },
+  "elements": [
+    {
+      "uuid": "2128294a-5c9f-484d-96e2-ed336fd10acf",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -1.5,
+        3,
+        -2.5
+      ],
+      "to": [
+        1.5,
+        5,
+        0.5
+      ],
+      "origin": [
+        0,
+        4,
+        -1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "4a73865b-48ce-4b6f-8525-b654f9530e02",
+      "type": "cube",
+      "name": "tail",
+      "from": [
+        0,
+        3,
+        -0.5
+      ],
+      "to": [
+        0,
+        5,
+        6.5
+      ],
+      "origin": [
+        0,
+        4,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "ca70cc9f-055a-4495-94d9-a41447e67029",
+      "name": "root",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "c3de5540-6d52-4ca0-9a00-c7ffdc98157e",
+          "name": "body",
+          "origin": [
+            0,
+            0,
+            1
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "2128294a-5c9f-484d-96e2-ed336fd10acf"
+          ]
+        },
+        {
+          "uuid": "05977345-d282-42e2-b01a-1d863a10474d",
+          "name": "tail",
+          "origin": [
+            0,
+            0,
+            1
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "4a73865b-48ce-4b6f-8525-b654f9530e02"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "0bfeb5fd-1296-4d2b-8204-2a0031f13689",
+      "id": "0",
+      "name": "tadpole.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/c35bb784e0917f7d2596.png",
+      "resource": "textures/entity/tadpole/tadpole",
+      "uv_width": 16,
+      "uv_height": 16,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAALhJREFUOI3tkSEOwkAQRV9J14waRYKq6AEQVQiCrkBxhJ6OE2BwnACDQ9QsBjE1ayoWQbYpIQ2WEJ6ZTObPT/5MxoimrqKZoaq0bYtzjr7vOV7uGRPk40ZEhpqWnXNTuwDMxs3+cEJEhloUxWA6abBblbGpqzgX4nhwOl9foiXdW4QQAgDrZYmq4r1nu6kwM8yMrusASLrvI6uXiygiqOpwMO89IQQO59vk+xJ5EiUjeOb9dP0/P8UDt5NFZhNYePMAAAAASUVORK5CYII=",
+      "width": 16,
+      "height": 16,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.tadpole",
+      "texture_width": 16,
+      "texture_height": 16,
+      "visible_bounds_width": 1,
+      "visible_bounds_height": 0.8,
+      "visible_bounds_offset": [
+        0,
+        0.25,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.tadpole"
+      ]
+    }
+  }
+}

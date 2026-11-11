@@ -1,15 +1,27 @@
 import { CubeBricksProject } from '../model.js';
 import { ConfigKey, resolveUiLanguage } from '../common/config/app-config.js';
 import { createModelProjectData, ModelFormatId, modelFormatRegistry } from '../common/config/model-formats.js';
+import { createNewProjectDialog } from './new-project-dialog.js';
 
 export function createModelFormatPicker({
   $, escapeHtml, escapeAttribute,
-  addProjectTab, markDirty, toast, configRegistry, openWorkspaceProject, deleteWorkspaceProject, showContextMenu
+  addProjectTab, markDirty, toast, configRegistry, openWorkspaceProject, deleteWorkspaceProject,
+  showContextMenu, openSkinPicker
 }) {
   let homeCoverObserver = null;
+  const newProjectDialog = createNewProjectDialog({
+    $, language: () => resolveUiLanguage(configRegistry.get(ConfigKey.LANGUAGE)),
+    createProject: (format, initialData) => {
+      const project = new CubeBricksProject(initialData);
+      addProjectTab(project, { dirty: true, textureAssets: [] });
+      markDirty();
+      toast(`已建立 ${format.name}`);
+    }, toast
+  });
   const MODEL_FORMAT_ICONS = Object.freeze({
     generic: 'reference-grid',
     image: 'image-format',
+    skin: 'skin',
     'java-block': 'java-block',
     'bedrock-entity': 'bedrock-entity',
     'bedrock-block': 'bedrock-block',
@@ -17,7 +29,6 @@ export function createModelFormatPicker({
   });
 
   function modelFormatIconMarkup(icon) {
-    if (icon === 'skin') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5.3" r="2.8" stroke="none"/><path d="M9.2 9h5.6l1.2 5-2 1v6h-1.5l-.5-5-.5 5H10v-6l-2-1 1.2-5Z" stroke="none"/></svg>';
     const asset = Object.hasOwn(MODEL_FORMAT_ICONS, icon) ? MODEL_FORMAT_ICONS[icon] : MODEL_FORMAT_ICONS.generic;
     return `<span class="ui-mask-icon" aria-hidden="true" style="--ui-icon:url('assets/ui-icons/${asset}.svg')"></span>`;
   }
@@ -107,6 +118,8 @@ export function createModelFormatPicker({
     const format = modelFormatRegistry.get(formatId);
     if (!format) return toast('未知模型格式');
     if (format.status === 'placeholder') return toast(format.placeholderReason || '這個格式尚未實現');
+    if (format.id === ModelFormatId.MINECRAFT_SKIN) return void openSkinPicker();
+    if (format.id !== ModelFormatId.MODDED_ENTITY) return void newProjectDialog.open(format);
     const initialData = createModelProjectData(format.id, {
       name: 'untitled',
       language: resolveUiLanguage(configRegistry.get(ConfigKey.LANGUAGE))

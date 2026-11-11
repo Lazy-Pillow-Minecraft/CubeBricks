@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "shulker.v1.8",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "e0ef922f-9321-45af-a4d1-51c32794cf67",
+      "type": "cube",
+      "name": "lid",
+      "from": [
+        -8,
+        4,
+        -8
+      ],
+      "to": [
+        8,
+        16,
+        8
+      ],
+      "origin": [
+        0,
+        10,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "4a7bca2f-3dac-494a-b436-cd4370984c87",
+      "type": "cube",
+      "name": "base",
+      "from": [
+        -8,
+        0,
+        -8
+      ],
+      "to": [
+        8,
+        8,
+        8
+      ],
+      "origin": [
+        0,
+        4,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        28
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "04a1ea11-2cf6-43b3-a641-b15eeea48f75",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -3,
+        6,
+        -3
+      ],
+      "to": [
+        3,
+        12,
+        3
+      ],
+      "origin": [
+        0,
+        9,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        52
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "96fe3461-bb66-4413-b9b0-cd956d18b694",
+      "name": "base",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "da4d1064-0cf9-4ea1-87fa-2c1de380a57c",
+          "name": "lid",
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "e0ef922f-9321-45af-a4d1-51c32794cf67"
+          ]
+        },
+        "4a7bca2f-3dac-494a-b436-cd4370984c87",
+        {
+          "uuid": "802dcf63-08d0-48b8-8393-793190f796d6",
+          "name": "head",
+          "origin": [
+            0,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "04a1ea11-2cf6-43b3-a641-b15eeea48f75"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "80bdd892-9e82-4f32-9e89-639c8f2d4116",
+      "id": "0",
+      "name": "shulker_black.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/a68c27b7fac20507020b.png",
+      "resource": "textures/entity/shulker/shulker_black",
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAT+SURBVHja7VpLktMwEPWaOB/no0yS+QNT3I0VSw7BBTjBLKBYUMWCLQsOQHEANhRLbmDyFD9PW5YsKXGRxEmquuy29dTSa6nVUpwopZJdZDyZ51dXd1pwD7m8vNUymV7k2VhVdPl+mM3y/mBSEZ+92PI2mV88SbIrAejIYDTNh6NZPp+vtOAez5p0CMhAJ149PCQUnz1ZdlsCKAvVAgHwPDt/c/NcCzsq9ZlalroqSMDoOHoC4EXZ2evrey3U5XOpA9MfTo6fAHhREuCS29sXVgJ2tb93AnQwM6aATxgHMHqOngAzBtDTeN40/DUB4w4QwBggO+m6r02BwaQ7BEiP+zp/8jFAdSkGrFY3OslRWwRBrCCdmQKyg7bpcIhTQLVJgFznzTW/iYB9JkKqzWWQqS4Cn0yFpc6giHtMm33vBVRbQXAwnJabHQY4PDM3P4e2GWqFAHZEb2wwpNeCBEd3rtDxjp0t34/n5RT439vhCgHcz9/dvdR7dOiI7NC5x+d76igHHd7EHp868a7yZn3A295Dv79/qNVH3WXf1V6JR3noqB/4SiobeuXwhgeZB3DoK/GescFVD/DSPqeRWV/NfrHsSvsx7Zf2EzIp13IlGiPXbWXoYJd4mQy5ys8teHqC7xk0zfK29tC+ctQ/D7BfyeRsObx5NZcx24GIKw2Wz2wjKDSRopOkfXngIpdj15JcjgCdjgY03pXJYU6FNJ51osFyNygTKV/+UFtGDbyPdIln+2u5vKvzaBzfsTyCJc8EfXhZD/HLNR51uPYSrg5JvByBLE8iXW2R+ETOYdcpju00hx7kHAQJPs/J4UsPAs9AGXqq5IpBsSMY9isjAN6gVyimbpvDHAFN+KUDLz3owvjsh+ClfQZaHQPkHEYhX+IgGTfn4DZ42Cd+FYDnqsFUWsawGHw5AuSStQrsAKMuOiyXmBg8y2+LVwZeFXM6hIBaDOA6Gsog5yznMBuxjPWAmMPw6Cp2BE2qMSR0BJbtRx6wWFyVSmgDYAhDF3NINia0AbBp4qGHOgB47i3kdFhF2OdepfUDBnOz4tu8PEtH+S6y993groJO9Ppjh2TlfWp53ykCNtcs2PMdJeDpKr1v8/zBELDLoQSw0vNm55o83zECxrl7JNg9fzIE1D2fnd4IaCpzJqDLBDQFv84T4Fv+Ok1ASALUqUQo9SZA2eEmQm1mgjHSOQK2kYMk4Oi3wzzn4x+Ypni/F2DZydMV5+/8gzQYX4jGiWsInmVD2m+tgN/28m9s3ENCIj7wEhuNn8wrOFlPqP3S5nDqtd/YgEonhhEEFN8L6KtoRCyBbDj1WAIlieEEjO0VxHigNCqIiMIL4mJHAIa/xPoITLDGyo8W2ADbKODhJcqXa3NqwQvWK9d1vdPZosSnxRpPPOeubfpQn82WTjylJF8SUdyb9hOtpJvOoMBmebHrqETq/OIjFG/qxDvtjaZWvefAb9qXFXoWZD+hJ/mw6ZoK473CSBM+9dabVUaSzY5ZvqKnbvu9Bj0V9SX8TgcFeOCgdR48pIbO90X5Gj7NonSv/b4D3/fY7zvsG/Ulrt+vP4855Pffj1qof//2TsuHx9daqCdd+8nOSxJOhgCz85QzAWcCzgR0iwAz2scK8S45ymjfJgkHT8DXL2/zNuTzpzdWOZopYAp+69ell3GPn6v8j5/vrXK0BDC4mcHvZAiIne/HSsA/K9dRSVpLRfEAAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 64,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.shulker.v1.8",
+      "texture_width": 64,
+      "texture_height": 64,
+      "visible_bounds_width": 3,
+      "visible_bounds_height": 3,
+      "visible_bounds_offset": [
+        0,
+        0.5,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.8.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.shulker.v1.8"
+      ]
+    }
+  }
+}

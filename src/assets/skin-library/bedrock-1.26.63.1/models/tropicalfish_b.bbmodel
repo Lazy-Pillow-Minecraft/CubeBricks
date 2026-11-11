@@ -1,0 +1,432 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "tropicalfish_b",
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "21e630c6-b545-4ad0-8292-9477581190e2",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -1,
+        0,
+        -0.0008
+      ],
+      "to": [
+        1,
+        6,
+        5.9992
+      ],
+      "origin": [
+        0,
+        3,
+        2.9992
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        20
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "9a5c1258-4abf-41a9-9579-7fef2635d412",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        0,
+        -5,
+        -0.0008
+      ],
+      "to": [
+        0,
+        0,
+        5.9992
+      ],
+      "origin": [
+        0,
+        -2.5,
+        2.9992
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        20,
+        21
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "7e92edce-d2b5-48e6-b17e-cb0bf0117d36",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        0,
+        6,
+        -0.0008
+      ],
+      "to": [
+        0,
+        11,
+        5.9992
+      ],
+      "origin": [
+        0,
+        8.5,
+        2.9992
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        20,
+        10
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "fe8c08ed-b4bd-465d-b3f4-903935a74a7d",
+      "type": "cube",
+      "name": "tailfin",
+      "from": [
+        0,
+        0.0008,
+        6
+      ],
+      "to": [
+        0,
+        6.0008,
+        11
+      ],
+      "origin": [
+        0,
+        3.0008,
+        8.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        21,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "39e22f0c-d10c-4d2b-abc5-e9cb131d2d7a",
+      "type": "cube",
+      "name": "leftFin",
+      "from": [
+        -4.05673,
+        0,
+        2.35152
+      ],
+      "to": [
+        -2.05673,
+        2,
+        2.35152
+      ],
+      "origin": [
+        -0.5,
+        0,
+        1
+      ],
+      "rotation": [
+        0,
+        35,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        2,
+        12
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "31d36b42-b2a4-4162-82f5-92610e1a2d02",
+      "type": "cube",
+      "name": "rightFin",
+      "from": [
+        2.05673,
+        0,
+        2.35152
+      ],
+      "to": [
+        4.05673,
+        2,
+        2.35152
+      ],
+      "origin": [
+        0.5,
+        0,
+        1
+      ],
+      "rotation": [
+        0,
+        -35,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        2,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "b250ece7-c403-4cdb-ad67-b5e56805c1a6",
+      "name": "body",
+      "origin": [
+        0.5,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "21e630c6-b545-4ad0-8292-9477581190e2",
+        "9a5c1258-4abf-41a9-9579-7fef2635d412",
+        "7e92edce-d2b5-48e6-b17e-cb0bf0117d36",
+        {
+          "uuid": "7bdd789a-43d6-435a-9b85-3a79d849bab4",
+          "name": "tailfin",
+          "origin": [
+            0,
+            0,
+            6
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "fe8c08ed-b4bd-465d-b3f4-903935a74a7d"
+          ]
+        },
+        {
+          "uuid": "e6139708-2246-4edc-abed-bddc0c94b9a9",
+          "name": "leftFin",
+          "origin": [
+            -0.5,
+            0,
+            1
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "39e22f0c-d10c-4d2b-abc5-e9cb131d2d7a"
+          ]
+        },
+        {
+          "uuid": "4d03fba2-f52d-4233-9af7-c6535e72b67a",
+          "name": "rightFin",
+          "origin": [
+            0.5,
+            0,
+            1
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "31d36b42-b2a4-4162-82f5-92610e1a2d02"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "9c21adbd-e758-49a3-8324-73b768f59216",
+      "id": "0",
+      "name": "tropical_b.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/3e2c40f63b46870dce9c.png",
+      "resource": "textures/entity/fish/tropical_b",
+      "uv_width": 32,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAIGNIUk0AAHolAACAgwAA+f8AAIDpAAB1MAAA6mAAADqYAAAXb5JfxUYAAAEJSURBVHja7JQ9EsQgCIW5f0djZc0RXu8lvM7bZnGJG5PJ/lmsBeMkIu8TECEps0xV54nfAeS/AUgugAWwABbAAwAAAXAqwOqB/+6BX/aBmf2mBGY2tK8C9JnsRUPJ5TAIAKoqVZUXb04zo4v0cX3fzMYApRQCYEqJKSXmnF9K/Q7AZv8QoJRCVZ0DEEtwFWCU8r1XNjxYa2WtlTlntzkAfvhVgNNBBIBebwB04d56v09NzgYQ15F4XI8A7o0W/TZ95U8QgDTHKFBKaeLx1r6Gd8yT+jfr//lgkhgMAEWkibqJyJPwVYDeNgA+7VS1BXZx/97z8VSeAfQwcTRLDDwQ4J5P8H2rCW8DAHGDvY9U9wgcAAAAAElFTkSuQmCC",
+      "width": 32,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.tropicalfish_b",
+      "texture_width": 32,
+      "texture_height": 32,
+      "visible_bounds_width": 0.5,
+      "visible_bounds_height": 0.5
+    },
+    "nativeGeometryVersion": "1.8.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.tropicalfish_b"
+      ]
+    }
+  }
+}

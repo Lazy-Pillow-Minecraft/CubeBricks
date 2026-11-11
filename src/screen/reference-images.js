@@ -341,7 +341,14 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
     }
     if (!referenceImageEditing || ![0, 1].includes(event.button)) return;
     const image = referenceImageAt(event.clientX, event.clientY);
-    if (!image) return;
+    if (!image) {
+      if (event.button === 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        setReferenceImageEditing(false);
+      }
+      return;
+    }
     selectReference(image.dataset.referenceUid);
     if (!currentReferenceImage()) return;
     event.preventDefault();

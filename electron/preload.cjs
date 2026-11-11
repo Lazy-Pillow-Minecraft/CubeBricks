@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('cubeBricksDesktop', {
   systemLanguages,
   setUiLanguage: language => ipcRenderer.invoke('app:ui-language', language),
   openProject: (filePath = null) => ipcRenderer.invoke('project:open', filePath ? { filePath } : {}),
+  readSkinLibraryAsset: relativePath => ipcRenderer.invoke('skin-library:read', relativePath),
   getPathForFile: file => webUtils.getPathForFile(file),
   readTextureAnimationMetadata: payload => ipcRenderer.invoke('texture:animation-metadata', payload),
   saveTexture: payload => ipcRenderer.invoke('texture:save', payload),

@@ -416,7 +416,6 @@ export function createContextMenuController({
       inspectorController.subdivisionSession?.ownerUid === node.uid ? exitSubdivisionEdit() : enterSubdivisionEdit(node);
     });
     $('#viewport').addEventListener('dblclick', event => {
-      if (state.mode === 'paint') return;
       if (event.target !== sceneCanvas) return;
       const rect = sceneCanvas.getBoundingClientRect();
       const selectedHit = sceneRenderer.pickDetailed(state.project,
@@ -425,11 +424,18 @@ export function createContextMenuController({
       if (selectedHit?.generated) return;
       const uidValue = selectedHit?.uid;
       if (!uidValue) {
-        if (!inspectorController.subdivisionSession) return;
-        event.preventDefault();
-        exitSubdivisionEdit();
+        if (inspectorController.subdivisionSession) {
+          event.preventDefault();
+          exitSubdivisionEdit();
+        }
+        else if (referenceImages.referenceImagesForView().length) {
+          event.preventDefault();
+          referenceImages.setReferenceImageEditing(true);
+          referenceImages.setReferenceImageMenu(false);
+        }
         return;
       }
+      if (state.mode === 'paint') return;
       const node = uidValue && state.project.getNode(uidValue);
       if (!isProceduralShape(node)) return;
       event.preventDefault();
@@ -563,6 +569,9 @@ export function createContextMenuController({
       showContextMenu(event, {
         title: row.name, source: rowNode, items: [
           { icon: '✎', label: '編輯色卡名稱', action: () => editPaletteName(row, rowNode) },
+          { icon: '◉', label: row.scope === 'global' ? '改為項目色卡' : '改為全局色卡',
+            disabled: row.scope === 'global' && state.projectHomeActive,
+            action: () => palette.togglePaletteScope(row) },
           ...(palette.compact ? [] : [
             ...(swatch ? [{
               icon: '×', label: '刪除顏色', action: () => {

@@ -61,6 +61,9 @@ export function getBlockbenchBoxUv(cube, faceName) {
   const scale = Number(cube.uvScale) || 1;
   const [x, y, z] = cube.size.map(value => {
     const length = Math.abs(Number(value) || 0) * scale;
+    // Blockbench's integer box UV formats floor the unscaled cube dimensions.
+    // Imported cubes retain that convention independently of their geometry.
+    if (scale === 1 && cube.boxUvFloor === true) return Math.floor(length + 1e-7);
     return scale === 1 ? length : length > 0 ? Math.max(1, Math.round(length)) : 0;
   });
   const rectangles = {

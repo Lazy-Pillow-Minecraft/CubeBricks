@@ -1,0 +1,868 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "player.armor",
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "2d653322-0a83-4206-81f3-7aa067b83f72",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -4,
+        24,
+        -4
+      ],
+      "to": [
+        4,
+        32,
+        4
+      ],
+      "origin": [
+        0,
+        28,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 1,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "04657c39-dbe1-46af-8453-8757aedc043e",
+      "type": "cube",
+      "name": "hat",
+      "from": [
+        -4,
+        24,
+        -4
+      ],
+      "to": [
+        4,
+        32,
+        4
+      ],
+      "origin": [
+        0,
+        28,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0.5,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        32,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "c15316d1-ec38-42d2-821b-5673bf3eccb5",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -4,
+        12,
+        -2
+      ],
+      "to": [
+        4,
+        24,
+        2
+      ],
+      "origin": [
+        0,
+        18,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 1.01,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        16,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "04acb0d6-60d1-41cc-8215-d18b37160756",
+      "type": "cube",
+      "name": "rightArm",
+      "from": [
+        4,
+        12,
+        -2
+      ],
+      "to": [
+        8,
+        24,
+        2
+      ],
+      "origin": [
+        6,
+        18,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 1,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        40,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "745f1d87-bc19-4484-854c-ce93669d538f",
+      "type": "cube",
+      "name": "leftArm",
+      "from": [
+        -8,
+        12,
+        -2
+      ],
+      "to": [
+        -4,
+        24,
+        2
+      ],
+      "origin": [
+        -6,
+        18,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 1,
+      "mirror_uv": true,
+      "box_uv": true,
+      "uv_offset": [
+        40,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "2102bbf5-f0f5-4372-8bc2-7a19e97e5e1e",
+      "type": "cube",
+      "name": "rightLeg",
+      "from": [
+        -0.10000000000000009,
+        0,
+        -2
+      ],
+      "to": [
+        3.9,
+        12,
+        2
+      ],
+      "origin": [
+        1.9,
+        6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 1,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "f11f507f-f1f1-4da0-8804-b234a32215f5",
+      "type": "cube",
+      "name": "leftLeg",
+      "from": [
+        -3.9,
+        0,
+        -2
+      ],
+      "to": [
+        0.10000000000000009,
+        12,
+        2
+      ],
+      "origin": [
+        -1.9,
+        6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 1,
+      "mirror_uv": true,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "helmet",
+      "uuid": "b6dfd2b5-5f08-4f1e-89f9-f1fdbb5db4a1",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "fa7fab04-b7c0-4b3c-8cf5-2c4a8988576f",
+          "name": "waist",
+          "origin": [
+            0,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "uuid": "281fbde6-9290-420a-8d12-cc831f7c90a7",
+              "name": "body",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "uuid": "8845661a-db15-4f0f-88bf-62077117ab4a",
+                  "name": "head",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    "2d653322-0a83-4206-81f3-7aa067b83f72",
+                    {
+                      "uuid": "ca2fa530-896c-479c-8f15-94c1fa35aeee",
+                      "name": "hat",
+                      "origin": [
+                        0,
+                        24,
+                        0
+                      ],
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "children": [
+                        "04657c39-dbe1-46af-8453-8757aedc043e"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "uuid": "c7576cd4-4a6b-4dc9-831c-81e7aa14d6eb",
+                  "name": "rightArm",
+                  "origin": [
+                    5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "uuid": "f3275bba-4ccb-43b9-886a-e122825d20c6",
+                      "name": "rightItem",
+                      "origin": [
+                        6,
+                        15,
+                        1
+                      ],
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "uuid": "794b7cf2-42cb-4127-83b5-afe2c5b10b75",
+                  "name": "leftArm",
+                  "origin": [
+                    -5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                },
+                {
+                  "uuid": "886cb2c3-ba6b-443c-8213-8a8914d16b4e",
+                  "name": "rightLeg",
+                  "origin": [
+                    1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                },
+                {
+                  "uuid": "aa8b714b-fc96-4cf8-8f87-92013cef32ad",
+                  "name": "leftLeg",
+                  "origin": [
+                    -1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chestplate",
+      "uuid": "fda7b091-3f32-49dc-8d0e-727a84d25e14",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "498c5fb7-3001-4269-866b-7ef823b4b356",
+          "name": "waist",
+          "origin": [
+            0,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "uuid": "2f099ce4-c945-4e62-89f7-17c885c8fcba",
+              "name": "body",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "c15316d1-ec38-42d2-821b-5673bf3eccb5",
+                {
+                  "uuid": "37d13035-6ae5-4bc6-8b95-2c5c4475735b",
+                  "name": "head",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "uuid": "b804269a-5326-411b-8f28-fad654a7809a",
+                      "name": "hat",
+                      "origin": [
+                        0,
+                        24,
+                        0
+                      ],
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "uuid": "f062e1cd-41db-4aba-83dc-42f25ffd2ab9",
+                  "name": "rightArm",
+                  "origin": [
+                    5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    "04acb0d6-60d1-41cc-8215-d18b37160756",
+                    {
+                      "uuid": "ba6686e3-198b-42be-8690-f4cd7d39b755",
+                      "name": "rightItem",
+                      "origin": [
+                        6,
+                        15,
+                        1
+                      ],
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "uuid": "5979dd6b-8fa2-42dd-83ab-04739892f79d",
+                  "name": "leftArm",
+                  "origin": [
+                    -5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    "745f1d87-bc19-4484-854c-ce93669d538f"
+                  ]
+                },
+                {
+                  "uuid": "b8d4102e-df04-4b8a-816a-b53382460153",
+                  "name": "rightLeg",
+                  "origin": [
+                    1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                },
+                {
+                  "uuid": "63e3e2af-101e-409f-8b9c-c16deeaaf5e9",
+                  "name": "leftLeg",
+                  "origin": [
+                    -1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boots",
+      "uuid": "a4e1158c-a94c-44e7-88da-7863b1e5aa68",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "ca9fa829-0e8e-4691-8baa-b272560050ea",
+          "name": "waist",
+          "origin": [
+            0,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "uuid": "3a43ddae-109c-42cb-8642-27545fd1d04b",
+              "name": "body",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "uuid": "332dda1f-1363-411d-81c0-0af7af02df94",
+                  "name": "head",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "uuid": "1ae5f31c-a4ed-43c6-88c8-6d75c80ef1fe",
+                      "name": "hat",
+                      "origin": [
+                        0,
+                        24,
+                        0
+                      ],
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "uuid": "b7f322d3-c35c-4bf7-8ead-a146cf5862ac",
+                  "name": "rightArm",
+                  "origin": [
+                    5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "uuid": "97dd7a98-7e42-407c-83ef-65cc08c90a62",
+                      "name": "rightItem",
+                      "origin": [
+                        6,
+                        15,
+                        1
+                      ],
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "uuid": "e7e98e98-878e-45e7-840f-5c28862200fe",
+                  "name": "leftArm",
+                  "origin": [
+                    -5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                },
+                {
+                  "uuid": "c6ccb863-547a-4aea-8c02-d62153c1ffad",
+                  "name": "rightLeg",
+                  "origin": [
+                    1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    "2102bbf5-f0f5-4372-8bc2-7a19e97e5e1e"
+                  ]
+                },
+                {
+                  "uuid": "2c6ecbf6-b34d-4b94-8fa4-333b9b94d279",
+                  "name": "leftLeg",
+                  "origin": [
+                    -1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    "f11f507f-f1f1-4da0-8804-b234a32215f5"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "55e40f5b-14ff-4241-8838-4bf92d5846fa",
+      "id": "0",
+      "name": "iron_1.png",
+      "mode": "bitmap",
+      "resource": "textures/models/armor/iron_1",
+      "relative_path": "../textures/93b246f84d486ea9682c.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAH3SURBVGje5ZnBrYQwDETpvyFuHOiAIwVsHbsy0nw9jYKBi5VPIlnaELOKJ/bYDtN0MdZ1/c7zfEj8lujZ9PYRxmp8Pp9D9n0/JNaGAWBZlu+2bX8yDADh5nHqYXSAIIn5kADI/UOG4IAwMox1AAKUYThARiv2RYbDZIEsFb7WQDf2CohsPdPtJs0xv8vdtckYeiYJPpAxCg3yQwwZyjqCul1wSCvNxW/FuIwUGdJwrWfvCwACJzLtBgBurOXK0lVBxHfd5QkCAWINwfXuOCDT1eavAPU4F8AMoaHSqEBgCn1NFnkSaq9Kn8MMZ/deOKvMk9gH9AKAaooSEmWB1AMATKslAHgJ2wMAlG57iSx2n+pnvUbWw5QApJhUaRvi8akymr2B6/vGY7CU1n9K33sNL73L2nX2Atw8ewka7PqtZkzrMsjnEf80WNUl56Uc4RuQwTKGV2iuT4BItjJAVSQB9jnvKLleFgJsb3lirVvkO/rsFr3zPPs+4RxQRpJsdtg2t8SbIwekpV+WVu6yauuZX6D45Qk9oKXvp1/aLjvLksTusCxJx2OcMd0iKYHt8V/64UUuSFbWXBs+O+GzXO29v7u86/vpl354EYs6SzsL04WvrrTIzDztJ8VUWZWnE/ZCw2OW65pnm+yuZL17UdFKO1kq+u/t/g8M8Xy4fSXSzQAAAABJRU5ErkJggg==",
+      "width": 64,
+      "height": 32,
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "distribution": "Minecraft for Windows",
+      "geometryIds": [
+        "geometry.player.armor.boots",
+        "geometry.player.armor.chestplate",
+        "geometry.player.armor.helmet"
+      ]
+    }
+  }
+}

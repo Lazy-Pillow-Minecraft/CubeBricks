@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "mob_head",
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "301c0dd1-63ce-41f9-bbfd-1be89b4ed582",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -4,
+        24,
+        -4
+      ],
+      "to": [
+        4,
+        32,
+        4
+      ],
+      "origin": [
+        0,
+        28,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "9d48ad4c-541d-480f-b1dd-139a25fcdd49",
+      "name": "head",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "301c0dd1-63ce-41f9-bbfd-1be89b4ed582"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "c7dd8733-f4ac-43e6-b729-f07e41d98f37",
+      "id": "0",
+      "name": "skeleton.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/850d5eb0178465c2661e.png",
+      "resource": "textures/entity/skulls/skeleton",
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAJSSURBVGje5VhBjsIwDOz3+BDSXrkv176A04of9ANojzyhDyk7SINGXjuN2qYNFMlKmtDUnthjJ00z8mvbdoCcv88D+1YwF0nz7j8Y2HXdcP25PlsVAhC9+xEAqMERCLsB4HK5DPf7/dkSjF0AAGNhNEFQj/h4AGAkdh1Cg9HfdQjkckBq7u0AoOt7AHipcCxDVOXilt09tvfGUvNc11tf56sDwFP293Z7cQD5AGMpECwA0dzmAMC1Na15hkP6vn+FgEoEBNfl2p5grhoANL15ho6JJctcqaLUpWBXQGDW1Q+Hw1O42/qsKZLv2rNCZHwVJKmMzZ0/nU5u/GLcm4NgnJ7gZYboAFUFAF/H40tJGqrKc8et6H/wDo3XNcdkcwCsolG6S8W8kp+uhbXHpJp6gB7AtiTnMGws/wDE1HuqYxHFin5AKsu/XwOh8XxOAVBsg8jGUVui8FKD9dkrjIrrR1ckgdnnUmlXwyB1tC6unx50vDaHOzTNRbGsRmoa5G6iz6qRfRo6R79sAOylx5xSFQYoCOjn8Ir3zRL6/VOW53xUdop+jovpTtoDD9OlHfc8wIaCjun5wraLXXnpoUbz+VRe0VMf+2PvUQdvLQ0TbRchpRTTTuEArqulsRJaxAE8gVovnKNfdmEStVM9QG+TdCzHc2waTBHhInVAFF9TAZhDgvabGkJeu+h9wNbndc+tiwNgS+C1SuJUubuqfqn4X/vCwjMqtftV3CmCtSn2dkh31t4y2fe0wOHxG3Nvca2uKYs1hdYSOqapTcnWuzVeg4MeTnd5NL9NS2UAAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.mob_head",
+      "texture_width": 64,
+      "texture_height": 32,
+      "visible_bounds_width": 1,
+      "visible_bounds_height": 1,
+      "visible_bounds_offset": [
+        0,
+        0.5,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.8.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.mob_head"
+      ]
+    }
+  }
+}

@@ -1,0 +1,517 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "humanoid.armor.leggings",
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "ec7d9145-d1dc-41b1-8bd3-59a0306dd410",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -4,
+        12,
+        -2
+      ],
+      "to": [
+        4,
+        24,
+        2
+      ],
+      "origin": [
+        0,
+        18,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0.5,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        16,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "8758a386-96ca-4d08-baf9-ba0641da924d",
+      "type": "cube",
+      "name": "rightLeg",
+      "from": [
+        -0.10000000000000009,
+        0,
+        -2
+      ],
+      "to": [
+        3.9,
+        12,
+        2
+      ],
+      "origin": [
+        1.9,
+        6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0.49,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "2b230f17-125e-448d-ba9c-606e8696d520",
+      "type": "cube",
+      "name": "leftLeg",
+      "from": [
+        -3.9,
+        0,
+        -2
+      ],
+      "to": [
+        0.10000000000000009,
+        12,
+        2
+      ],
+      "origin": [
+        -1.9,
+        6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0.49,
+      "mirror_uv": true,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "f95630d8-f954-4b0f-84c9-68980bc62497",
+      "name": "body",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "ec7d9145-d1dc-41b1-8bd3-59a0306dd410",
+        {
+          "uuid": "aa2b1490-8283-4003-ac53-4722ba307f86",
+          "name": "bodyArmor",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        },
+        {
+          "uuid": "c377f127-d096-4c37-885a-eb89d8d9002f",
+          "name": "belt",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "uuid": "07f7526b-3728-434d-9b1b-ae2869aa5db0",
+      "name": "waist",
+      "origin": [
+        0,
+        12,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": []
+    },
+    {
+      "uuid": "c79bc6aa-723c-466f-88c9-2e215020daeb",
+      "name": "head",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": []
+    },
+    {
+      "uuid": "9cd0f95a-a3f9-4a4f-adc7-37e1491bdf87",
+      "name": "hat",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": []
+    },
+    {
+      "uuid": "73eae614-05d2-435f-8121-b16d2e89789c",
+      "name": "rightArm",
+      "origin": [
+        5,
+        22,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "f0efa02b-7122-4c86-902a-cffbc92b12ee",
+          "name": "rightItem",
+          "origin": [
+            6,
+            15,
+            1
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        },
+        {
+          "uuid": "21b22f5e-a249-475a-9236-7e3ef73f63ad",
+          "name": "rightArmArmor",
+          "origin": [
+            5,
+            22,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "uuid": "d05d6580-90b2-46ec-af39-319d44a1ea1e",
+      "name": "leftArm",
+      "origin": [
+        -5,
+        22,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "9e9ae46f-7191-456d-93ab-92f14eb8bd5a",
+          "name": "leftArmArmor",
+          "origin": [
+            -5,
+            22,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "uuid": "0dfc9ac5-e389-4ccc-aa88-7ef51e65ce1a",
+      "name": "rightLeg",
+      "origin": [
+        1.9,
+        12,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "8758a386-96ca-4d08-baf9-ba0641da924d",
+        {
+          "uuid": "ef0e320c-5768-4f4b-81c2-dd7bcfd3ca6f",
+          "name": "rightLegging",
+          "origin": [
+            1.9,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        },
+        {
+          "uuid": "e48197f2-5b8b-41cb-90a4-239a7c32c434",
+          "name": "rightBoot",
+          "origin": [
+            1.9,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        },
+        {
+          "uuid": "1a572ad4-0337-4766-9eaf-bb4d4936ff29",
+          "name": "rightSock",
+          "origin": [
+            1.9,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "uuid": "fd28a72c-1753-4079-8668-25c0295e1919",
+      "name": "leftLeg",
+      "origin": [
+        -1.9,
+        12,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "2b230f17-125e-448d-ba9c-606e8696d520",
+        {
+          "uuid": "b95c1fc0-c92b-4f55-a54b-bf66cdbca08c",
+          "name": "leftLegging",
+          "origin": [
+            -1.9,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        },
+        {
+          "uuid": "cce88f07-e8f0-47d7-b793-220670d416d3",
+          "name": "leftBoot",
+          "origin": [
+            -1.9,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        },
+        {
+          "uuid": "31e77c87-71c2-403a-9e2f-bd884b87dc83",
+          "name": "leftSock",
+          "origin": [
+            -1.9,
+            12,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "uuid": "7f7004b5-274b-4f12-8eec-d5eb55919951",
+      "name": "helmet",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": []
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "e781d03b-19f5-4e98-8e68-2a4da73d6fdc",
+      "id": "0",
+      "name": "iron_2.png",
+      "mode": "bitmap",
+      "resource": "textures/models/armor/iron_2",
+      "relative_path": "../textures/e7a3b8064b945d042d68.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAD6SURBVGje7VdBCsQgEOv/P+S9P/DoA3zHLlNICUG7eyo4JiCtOBYSZzL2OAzDMAzDMAzDMAzD2B7neX5ilFKu55YCBFprlwjbCRCkQX5bAXhsU/Ooe9Q++8BsLYVAIFNrvQnG+2gO8lhLIQCIMMHwgBgQB3PExjviU2QAnzDEmGUAC5JGAD5hTnFOeRBWQVKVAEjjlEf+oAKlKQElz66PDOAY7EnnAdryRiapHvHUJrWl6ne1DfPaKwKP+v2vu4HG4OrM80Dv/fYXXeeMYvCeJUqMSwYCBQnOEvWRf+OXEGBklOwh3FZHJcV7NX4Jj9F/hxnhpzGLfyMDvsLam+kKCcIlAAAAAElFTkSuQmCC",
+      "width": 64,
+      "height": 32,
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.humanoid.armor.leggings",
+      "texture_width": 64,
+      "texture_height": 32,
+      "visible_bounds_width": 2,
+      "visible_bounds_height": 2,
+      "visible_bounds_offset": [
+        0,
+        1,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.8.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.humanoid.armor.leggings"
+      ]
+    }
+  }
+}

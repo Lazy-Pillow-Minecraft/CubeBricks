@@ -46,6 +46,7 @@ import { createSettingsController } from './screen/settings-controller.js';
 import { createContextMenuController } from './screen/context-menus.js';
 import { createTextureAtlasController } from './texture/atlas-controller.js';
 import { createModelFormatPicker } from './project/format-picker.js';
+import { createSkinPicker } from './project/skin-picker.js';
 import { createProjectCoverController } from './project/cover-controller.js';
 import { bindProjectHistoryProgress } from './project/history-progress.js';
 import { createOutlinerViewController } from './screen/outliner-view.js';
@@ -172,6 +173,8 @@ const projectTabsController = createProjectTabsController({
   restoreProjectTool: () => toolModeController.restoreModeTool(),
   onProjectActivated: tab => {
     setSceneFpsActive(true);
+    palette.activateProjectPalettes();
+    textureAssetController?.syncToneMappedPalettes();
     projectCoverController?.schedule(tab);
   },
   onProjectClosing: tab => projectCoverController?.flush(tab),
@@ -256,7 +259,10 @@ function flushProjectJournal(...args) { return journalController.flushProjectJou
 
 function selected(...args) { return workspaceCoordinator.selected(...args); }
 function toast(...args) { return workspaceCoordinator.toast(...args); }
-function renderAll(...args) { return workspaceCoordinator.renderAll(...args); }
+function renderAll(...args) {
+  palette.activateProjectPalettes();
+  return workspaceCoordinator.renderAll(...args);
+}
 function invalidateAllRenderGeometry(...args) { return workspaceCoordinator.invalidateAllRenderGeometry(...args); }
 function selectionAffectsMirrorPreview(...args) { return workspaceCoordinator.selectionAffectsMirrorPreview(...args); }
 function invalidateSelectionRenderGeometry(...args) { return workspaceCoordinator.invalidateSelectionRenderGeometry(...args); }
@@ -377,12 +383,13 @@ function editSelectedUvFace(...args) { return uvPreviewController.editSelectedUv
 function renderUvPreview(...args) { return uvPreviewController.renderUvPreview(...args); }
 function stopUvPreviewAnimation(...args) { return uvPreviewController.stopUvPreviewAnimation(...args); }
 function refreshUvPreview(...args) { return uvPreviewController.refreshUvPreview(...args); }
+function invalidateUvPreviewGeometry(...args) { return uvPreviewController.invalidateUvPreviewGeometry(...args); }
 
 const sceneController = createSceneController({
   state, $, $$, sceneCanvas, sceneRenderer, inspectorController,
   uvPreviewController, LOCATOR_ICON_SHAPES, getSelectionExpansion,
   getTransformPivot, updateTransformGizmo, refreshUvPreview,
-  currentProjection, buildEditorOverlayLines, updateMirrorGuideOverlay,
+  currentProjection, activeSnapSubdivisions, buildEditorOverlayLines, updateMirrorGuideOverlay,
   updateAxisWidget, updateReferenceImageLayer, updatePaintSelection: () => paintSelectionController.drawSceneGesture()
 });
 function renderScene(...args) { return sceneController.renderScene(...args); }
@@ -458,7 +465,7 @@ const uvEditorController = createUvEditorController({
   textureAtlasReferences, effectiveFaceTextureReference, isFaceTiled, selectedTilingFaces,
   round, renderTextureTileControls, syncTexturePreviewPriority,
   clamp, snapValue, snapshot, markDirty,
-  invalidateSelectionRenderGeometry, scheduleSceneRender
+  invalidateSelectionRenderGeometry, invalidateUvPreviewGeometry, scheduleSceneRender
 });
 function updateTexturePreviewFrame(...args) { return uvEditorController.updateTexturePreviewFrame(...args); }
 function uvFaceKey(...args) { return uvEditorController.uvFaceKey(...args); }
@@ -609,7 +616,7 @@ const texturePointerController = createTexturePointerController({
   renderTextureUvOverlay, updateFaceSelectionOverlay, updateTextureBrushCursor,
   moveTexturePaintPointer, endTexturePaintPointer, applyTextureUvDrag,
   clamp, snapValue, snapTexturePan, updateTextureStageTransform,
-  snapshot, materializeUvFaces, markDirty, invalidateSelectionRenderGeometry,
+  snapshot, materializeUvFaces, markDirty, invalidateSelectionRenderGeometry, invalidateUvPreviewGeometry,
   scheduleSceneRender, renderAll, toast, setTilingCoordinate
 });
 function startTexturePointer(...args) { return texturePointerController.startTexturePointer(...args); }
@@ -725,7 +732,7 @@ const projectFileController = createProjectFileController({
   state, fileInput, projectTabsController, journalController,
   getShapePacksReady: () => shapePacksReady, activateProjectTab, addProjectTab, markDirty,
   discardProjectTabJournal, renderProjectTabs, projectTabById,
-  flushProjectJournal, toast, textureFileController
+  flushProjectJournal, toast, textureFileController, paletteRows
 });
 function openProject(...args) { return projectFileController.openProject(...args); }
 function serializableTextureAssets(...args) { return projectFileController.serializableTextureAssets(...args); }
@@ -736,11 +743,16 @@ function offerProjectRecovery(...args) { return projectFileController.offerProje
 function saveProject(...args) { return projectFileController.saveProject(...args); }
 function exportProject(...args) { return projectFileController.exportProject(...args); }
 
+const skinPicker = createSkinPicker({
+  $, escapeHtml, escapeAttribute, configRegistry, addProjectTab, markDirty, setMode, toast,
+  state, renderScene
+});
 const modelFormatPicker = createModelFormatPicker({
   $, escapeHtml, escapeAttribute,
   addProjectTab, markDirty, toast, configRegistry,
   openWorkspaceProject: (...args) => projectFileController.openWorkspaceProject(...args),
-  deleteWorkspaceProject: (...args) => projectTabsController.deleteWorkspaceProject(...args), showContextMenu
+  deleteWorkspaceProject: (...args) => projectTabsController.deleteWorkspaceProject(...args), showContextMenu,
+  openSkinPicker: () => skinPicker.open()
 });
 
 const settingsController = createSettingsController({

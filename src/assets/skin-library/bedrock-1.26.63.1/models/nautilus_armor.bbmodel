@@ -1,0 +1,246 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "nautilus_armor",
+  "resolution": {
+    "width": 128,
+    "height": 128
+  },
+  "elements": [
+    {
+      "uuid": "863e22bf-3092-40b6-bdf1-54e27997c327",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -7,
+        8,
+        -8
+      ],
+      "to": [
+        7,
+        18,
+        8
+      ],
+      "origin": [
+        0,
+        13,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "e17c190e-f9a1-4819-bbcf-345ca0bd3819",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -7,
+        0,
+        -8
+      ],
+      "to": [
+        7,
+        8,
+        12
+      ],
+      "origin": [
+        0,
+        4,
+        2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        26
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "c4f4b58c-1a17-4186-b1e4-e9a7b067a227",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -7,
+        0,
+        5
+      ],
+      "to": [
+        7,
+        8,
+        5
+      ],
+      "origin": [
+        0,
+        4,
+        5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        48,
+        26
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "b88dafc1-ea6d-4f6c-8503-496ad2e4cb8d",
+      "name": "nautilus",
+      "origin": [
+        0,
+        -5,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "eadc8459-eeb7-4ec7-8865-ece56a249c3b",
+          "name": "head",
+          "origin": [
+            0,
+            8,
+            -1
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "863e22bf-3092-40b6-bdf1-54e27997c327",
+            "e17c190e-f9a1-4819-bbcf-345ca0bd3819",
+            "c4f4b58c-1a17-4186-b1e4-e9a7b067a227"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "7d1066aa-562d-4be0-8745-22591ca25bb3",
+      "id": "0",
+      "name": "nautilus_armor_iron.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/3ed3ba5da0d4202564a5.png",
+      "resource": "textures/entity/nautilus/armor/nautilus_armor_iron",
+      "uv_width": 128,
+      "uv_height": 128,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAEbklEQVR42u2cYYrbMBCF94CFQu/QH4XeoBT6v+09corcIWfIEXKAFi288vYxYzvZJhjl+0Bs4lUso3mekeSRX17eyfl8/jPKID+Lqs637z9uKi+wL9y4p9Pp9fPlcvn3V0Yf/6sE8PnL100FAexcAMPYEoAXHR9FwpAAZNwPHz+9KdVxiYAe36EAZPjj8fhaZPA87nUlgDR+VdwL0OM7ww2dd/r46x7A69Bzk6A73kOAYn2OAVRn/Iaem8gDdLMAF4AfxwNMPghc8gCqT89NJoBqDJCzAK9Lz008C3AxdLMAeu4JZgGVB2AW8OSzAHkEem7CWcCaAJgFTDwIvGYayBgAASAA1gFgd/P4nLJVx/NBT64D5ONgfe7qq1TtdsclrCrfoPM4+ozFVxZyRmcfDoc3xpYRdNz/l8Z0Afjnrv7SufNaKlG6uNzbdI+osXgjgDSGG2TteOUd8ruff+t583gKSMckhGrVMT0WFg+yk5V58/PX77KM/+k3VXFjVcasylp7o1Tn8fOnMDovg8WLhRw3RBVjB5nNU7nmtZSwKtSozbV2XXgZMvxalsIIAmhCgDpnZN349+ruljFyHHDNLMCNIwGstTmuzb+7UdMbdN8RQBMChjEkgPQIKjomY2RsvUUAo0h0S22Oa5IAdK0qChVu7PFdv9P/VR+LN2MACSDDgQzobn9LCJDBff2/CwEZDrLNvLZq3JCCyO8aT2DxwO82JV5W7tVdcHoK3Zk+IHNxqG7evXmuPK8LQ+2nd/CBYlfwABumgS4A7zB1sowjo+UCURouB2HdqD3PW7XtAqgWp3S+pKqDxXceiq6t7/sL8s6vjpNevuNQdK0A3Khb9hewwWRSAWw1vouAHt/xYPRedz8C2DE5AK3Sxnye7/H8WgEQAnbqAXzA5os7Kj7l87oIYBIBaLpZjehzZO9e4NpBICFgxwKo3hlQTesyDKxN/fIYPb5TAWxd2WNpd2IBdEu8ucaPACacBuZScJb0EvTcJOQd3z3Vyzr03EQC6Nx+Z3wEMOkYoAoDnTeg5yahehTtA0LGAE8ggFwJ7DKEmc9PPgvI6WAVDhDApCGgmwVUawMs6U7mAdaeA1RLu/TcZCFgy/uDGQM8ACVsVuvvMpKSLqskUU8F19tD/C0hXqdKEt3aPpa6IzJuVWRIZRN7BrBy/z2LV5nCEoPSxH2XjzaK6HeDrn3eM/QgAWjjRqZd55YyT/92MVT7/3M/X7f/oGtT14SFHhAGuulZpmVXO3M8vSs3c3odP6dvTul292gHERZ6wBhgS8lcPTdYtV/P9+z5b9wLbCmI4A54bHf3v7TzpjKm39WVB8hl3RRN156HAR8rYLl33OmOp1x3z+bXXubQJXAsLeosvSSiuwZPJU+hYNkb5t9rhlhbl79HufVasCwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/D/+ArwsoSseLvqsAAAAAElFTkSuQmCC",
+      "width": 128,
+      "height": 128,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.nautilus_armor",
+      "texture_width": 128,
+      "texture_height": 128,
+      "visible_bounds_width": 4,
+      "visible_bounds_height": 2.5,
+      "visible_bounds_offset": [
+        0,
+        0.75,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.nautilus_armor"
+      ]
+    }
+  }
+}

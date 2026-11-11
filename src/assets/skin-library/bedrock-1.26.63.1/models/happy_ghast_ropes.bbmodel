@@ -1,0 +1,166 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "happy_ghast_ropes",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "708fc380-0bb2-401b-9e83-a8d339079e7f",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -32.6,
+        -0.6,
+        -32.6
+      ],
+      "to": [
+        32.6,
+        64.60000000000001,
+        32.6
+      ],
+      "origin": [
+        0,
+        32,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0.2,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0,
+          "uv": [
+            16,
+            16,
+            32,
+            32
+          ],
+          "rotation": 0
+        },
+        "south": {
+          "texture": 0,
+          "uv": [
+            48,
+            16,
+            64,
+            32
+          ],
+          "rotation": 0
+        },
+        "east": {
+          "texture": 0,
+          "uv": [
+            0,
+            16,
+            16,
+            32
+          ],
+          "rotation": 0
+        },
+        "west": {
+          "texture": 0,
+          "uv": [
+            32,
+            16,
+            48,
+            32
+          ],
+          "rotation": 0
+        },
+        "up": {
+          "texture": 0,
+          "uv": [
+            32,
+            16,
+            16,
+            0
+          ],
+          "rotation": 0
+        },
+        "down": {
+          "texture": 0,
+          "uv": [
+            48,
+            0,
+            32,
+            16
+          ],
+          "rotation": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "6bb8207a-57c3-48b0-8937-a035072b640f",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "708fc380-0bb2-401b-9e83-a8d339079e7f"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "7871d9f6-b415-4091-a523-d0cdd95bf04f",
+      "id": "0",
+      "name": "happy_ghast_ropes.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/40946443ee25e666ce1a.png",
+      "resource": "textures/entity/happy_ghast/happy_ghast_ropes",
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAADIUlEQVR42u3dPY7UMBQA4D0BPRKnoKLhFEhUVNDR08EFOAKX4QhUtNTcImCQRyZkZvPj+MWT75Oi3UBia/Ne7GQ8cR4eOvDp3cvhy8fXw9zt07Zpnznbfnv7ZPjx+dnQ+m+KqrdLeyZACkIKRuu/Karebr1/9Xz48ObFowcsbZO2dcQkAGfrCpY0/UgAejR8fzoMP7/+XX7/ni+m0s+07gh1elanvjst6fe8fi34Kdh5v/QzLbeSYFxuXtdaHCQB0pIu3NJSrpeBS/+Wz/gc/D8BL1qD8f/ngI/LLddF4OBX/mXgUoDTmT4++3OQcwsw3s+RvLP+PyVBbsrzGe064GwXgcUFoOCfuIvQxEsACXD2OwhHQgKgC0ACcKLbweJW0O3fCYOfP/JNiyS4M1ODQ+Xn+CkBLoEvWoLyc/6pwR9H9qBX8lOjdFODQ5cEGAU8fxJYbjM1+GM08MC3cmWgZnUDo+8CzK3LaCAAAJydR8NOzsOhAJPmPpBZa7+jWvvAaa0HVZcOe1cbJl/6XP7W/Y5q7bhBjfGGyLolwNkTQBcQ3wWkMtYEcvNTUVuDeC9JsDWIUftvTr6tzfi9dANbm9It+0fWLQHOngC6gPguIKzuWsHrPQlq3cevKafWV9ZWlVOr+e69G4gMggQ4eQJEtj66gOAg1J7rcNFHw7WD1msS1A7CkvJqf2V9UXm1m+1eu4HIIEiAkydAZOujCwgOwl5PLM0qd69g9ZYEe004Pafc0ATYq7nurRuIDEJk8kmA4ATY+4HVR8vXBcSehaEJsHeQekmCvV84cav8yLp3b6Z76QaizsJWbzq5Wo8EiE2AVhNWXK1HFxDbDIcmQKvgHD0JIpvh0C6gVfN89G4g6ixs/aaz/+qTALEJ0HrCqn/qaz3b5lFn94w8DuEJ0LLyo77GJeo4RJ0Ql3q1ALEtQHgCTL1o6dpr3Naul3MBHnVa13LyyRbHIdeXZwrZs95yPdd/maBiPMvmrde41Vg/6swYZSBaHIfyfUct6y3jYIoaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKjjFzG5mVYQ+7hPAAAAAElFTkSuQmCC",
+      "width": 128,
+      "height": 128,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.happy_ghast_ropes",
+      "texture_width": 64,
+      "texture_height": 64,
+      "visible_bounds_width": 6,
+      "visible_bounds_height": 6,
+      "visible_bounds_offset": [
+        0,
+        2,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.21.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.happy_ghast_ropes"
+      ]
+    }
+  }
+}

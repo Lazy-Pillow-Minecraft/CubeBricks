@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "fireball",
+  "resolution": {
+    "width": 16,
+    "height": 16
+  },
+  "elements": [
+    {
+      "uuid": "913af36f-21e1-41b8-abe8-8bde18986329",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -8,
+        -4,
+        0
+      ],
+      "to": [
+        8,
+        12,
+        0
+      ],
+      "origin": [
+        0,
+        4,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": null
+        },
+        "south": {
+          "texture": 0,
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 0
+        },
+        "east": {
+          "texture": null
+        },
+        "west": {
+          "texture": null
+        },
+        "up": {
+          "texture": null
+        },
+        "down": {
+          "texture": null
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "0b75ce66-557d-4ef3-9a9a-72356edd2c34",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "913af36f-21e1-41b8-abe8-8bde18986329"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "959fcdbf-1a22-4b90-9944-63e715e35198",
+      "id": "0",
+      "name": "fireball.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/16864c5fa2f911e58d79.png",
+      "resource": "textures/items/fireball",
+      "uv_width": 16,
+      "uv_height": 16,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAC5SURBVDjLY2AYtMBcS+M/MiZdo6nm/zAthv+BnoZgNlEGwTSCNFXFOP+facrwPych7P/Uzly4QfJiov/xGgBSCNJ0MJcbrBFkEIgNMgwkh9MAmO0gzSBN79ZIwDWDaJhLQAZhNQRkAMjPIAUwm0GGgDTCDIWFCU4DYH4H2QrTBPMKSDNIDKcBIEFkL8A0glwEC1CCAQmSQI8BmLNBGKf/0V2BrAmZTTAaYYbADEJ3NkHN2AwiWSPdAQCOMscgBY3N/wAAAABJRU5ErkJggg==",
+      "width": 16,
+      "height": 16,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.fireball",
+      "texture_width": 16,
+      "texture_height": 16
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.fireball"
+      ]
+    }
+  }
+}

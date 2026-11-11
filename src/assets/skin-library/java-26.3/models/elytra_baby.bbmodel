@@ -1,0 +1,245 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "elytra_baby",
+  "elements": [
+    {
+      "name": "left_wing",
+      "uuid": "43c55eac-7f49-474a-aa61-228e7a31647b",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -2.5,
+        11.992,
+        0
+      ],
+      "from": [
+        -2.5,
+        1.992,
+        0
+      ],
+      "to": [
+        2.5,
+        11.992,
+        1
+      ],
+      "inflate": 0.5,
+      "faces": {
+        "south": {
+          "uv": [
+            36,
+            2,
+            46,
+            22
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            24,
+            2,
+            34,
+            22
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            22,
+            2,
+            24,
+            22
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            34,
+            2,
+            36,
+            22
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            34,
+            2,
+            24,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            44,
+            0,
+            34,
+            2
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "right_wing",
+      "uuid": "5bd7c4c4-e168-4f99-8db3-21c7cd56a3f9",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        2.5,
+        11.992,
+        0
+      ],
+      "from": [
+        -2.5,
+        1.992,
+        0
+      ],
+      "to": [
+        2.5,
+        11.992,
+        1
+      ],
+      "inflate": 0.5,
+      "faces": {
+        "south": {
+          "uv": [
+            46,
+            2,
+            36,
+            22
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            34,
+            2,
+            24,
+            22
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            36,
+            2,
+            34,
+            22
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            24,
+            2,
+            22,
+            22
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            24,
+            2,
+            34,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            34,
+            0,
+            44,
+            2
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "44a6c65a-9153-44b8-8318-3541662c731b",
+      "origin": [
+        0,
+        11.992,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "left_wing",
+          "uuid": "d0c0a8f4-2c48-4764-8f4f-87145099b1c7",
+          "origin": [
+            -2.5,
+            11.992,
+            0
+          ],
+          "rotation": [
+            -15.000001,
+            0,
+            -15.000001
+          ],
+          "children": [
+            "43c55eac-7f49-474a-aa61-228e7a31647b"
+          ]
+        },
+        {
+          "name": "right_wing",
+          "uuid": "57da505a-61c8-4ac8-8530-e379808d1470",
+          "origin": [
+            2.5,
+            11.992,
+            0
+          ],
+          "rotation": [
+            -15.000001,
+            0,
+            15.000001
+          ],
+          "children": [
+            "5bd7c4c4-e168-4f99-8db3-21c7cd56a3f9"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "textures": [
+    {
+      "uuid": "258f7bf2-3da7-4a55-bde9-3687ae8cd8ca",
+      "id": "0",
+      "name": "elytra.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/6adbbc0f7d39cd233083.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAMAAACVQ462AAAAIVBMVEUAAAB/j593iJptf5JneIpfb4BYZnVPXGpKVmNGUV1CTFgLTatUAAAAAXRSTlMAQObYZgAAAJpJREFUeNrtzzESwjAMRFFJ1kpa3//ATMxQAAVBblLkH+DNrvyIpK6kGym7kZMk5w6wBEq3FzB3AfYBHkLmBsBZmQnpVZOsqow2UJWZWRHSKysrMwCX09m7EBEA4NoEAkAAPs4D+gUg3Ed3AeDjyK25wIcvoXlhCcOPB90L8hxgZt0FpqarLiCqZvYP4PI5QZfRBsQWoXJ3d9EeqAUEMMmFoygAAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 32,
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:elytra_baby#main"
+      ]
+    }
+  }
+}

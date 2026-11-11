@@ -9,7 +9,7 @@ export function createUvEditorController({
   textureAtlasReferences, effectiveFaceTextureReference, isFaceTiled, selectedTilingFaces,
   round, renderTextureTileControls, syncTexturePreviewPriority,
   clamp, snapValue, snapshot, markDirty,
-  invalidateSelectionRenderGeometry, scheduleSceneRender
+  invalidateSelectionRenderGeometry, invalidateUvPreviewGeometry, scheduleSceneRender
 }) {
   let texturePreviewSize = [1, 1];
   let focusedDockHotspot = null;
@@ -454,6 +454,7 @@ export function createUvEditorController({
     if (!state.dirty) markDirty();
     textureUvEntryCache = null;
     invalidateSelectionRenderGeometry();
+    invalidateUvPreviewGeometry();
     renderTextureUvOverlay();
     scheduleSceneRender();
   }

@@ -108,13 +108,16 @@ export function createWorkspaceCoordinator({
     }
     else invalidateAllRenderGeometry();
     const javaBlock = state.project.formatId === 'java_block_item';
+    const skinProject = state.project.formatId === 'minecraft_skin';
+    document.body.dataset.skinProject = String(skinProject);
     const modeButton = document.querySelector('.mode-tab[data-mode="animate"], .mode-tab[data-mode="display"]');
     if (modeButton && modeButton.dataset.mode !== (javaBlock ? 'display' : 'animate')) {
       modeButton.dataset.mode = javaBlock ? 'display' : 'animate';
       modeButton.innerHTML = javaBlock ? '<span>▣</span> 顯示設置' : '<span>⌁</span> 動畫';
     }
     $('#cullFaces').closest('.cull-toggle').hidden = javaBlock;
-    if (javaBlock && state.mode === 'animate') setMode('display');
+    if (skinProject && state.mode !== 'paint') setMode('paint');
+    else if (javaBlock && state.mode === 'animate') setMode('display');
     else if (!javaBlock && state.mode === 'display') setMode('edit');
     $('#minecraftRenderType').value = state.project.renderType;
     $('#cullFaces').checked = javaBlock || state.project.cullFaces;

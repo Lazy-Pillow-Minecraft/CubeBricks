@@ -1,0 +1,1240 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "player_slim.armor",
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "elements": [
+    {
+      "name": "head",
+      "uuid": "4e99bf7b-4736-48c0-8236-cf628165520c",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -4,
+        24,
+        -4
+      ],
+      "to": [
+        4,
+        32,
+        4
+      ],
+      "inflate": 1,
+      "faces": {
+        "south": {
+          "uv": [
+            24,
+            8,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            8,
+            8,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            8,
+            8,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16,
+            8,
+            24,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16,
+            8,
+            8,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            24,
+            0,
+            16,
+            8
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "hat",
+      "uuid": "253275a2-e7cb-42e7-8e7f-333c8fccca2f",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -4,
+        24,
+        -4
+      ],
+      "to": [
+        4,
+        32,
+        4
+      ],
+      "inflate": 1.5,
+      "faces": {
+        "south": {
+          "uv": [
+            56,
+            8,
+            64,
+            16
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            40,
+            8,
+            48,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32,
+            8,
+            40,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48,
+            8,
+            56,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48,
+            8,
+            40,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            56,
+            0,
+            48,
+            8
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "body",
+      "uuid": "1c5fc662-66fc-4b57-8551-ebd23f363390",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -4,
+        12,
+        -2
+      ],
+      "to": [
+        4,
+        24,
+        2
+      ],
+      "inflate": 1,
+      "faces": {
+        "south": {
+          "uv": [
+            32,
+            20,
+            40,
+            32
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            20,
+            20,
+            28,
+            32
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16,
+            20,
+            20,
+            32
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            28,
+            20,
+            32,
+            32
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            28,
+            20,
+            20,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            36,
+            16,
+            28,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "left_arm",
+      "uuid": "2084bde7-72fd-4795-8b87-04d87ae2588a",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -5,
+        22,
+        0
+      ],
+      "from": [
+        -8,
+        12,
+        -2
+      ],
+      "to": [
+        -4,
+        24,
+        2
+      ],
+      "inflate": 1,
+      "faces": {
+        "south": {
+          "uv": [
+            56,
+            20,
+            52,
+            32
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            48,
+            20,
+            44,
+            32
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            52,
+            20,
+            48,
+            32
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            44,
+            20,
+            40,
+            32
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            44,
+            20,
+            48,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48,
+            16,
+            52,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "right_arm",
+      "uuid": "1aa32ab2-f8ca-49d9-8b7f-8fb757e9f48b",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        5,
+        22,
+        0
+      ],
+      "from": [
+        4,
+        12,
+        -2
+      ],
+      "to": [
+        8,
+        24,
+        2
+      ],
+      "inflate": 1,
+      "faces": {
+        "south": {
+          "uv": [
+            52,
+            20,
+            56,
+            32
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            44,
+            20,
+            48,
+            32
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            40,
+            20,
+            44,
+            32
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48,
+            20,
+            52,
+            32
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48,
+            20,
+            44,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            52,
+            16,
+            48,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "left_leg",
+      "uuid": "4b56a3b2-5155-4ab4-8b6e-709bcaf00867",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -1.9,
+        12,
+        0
+      ],
+      "from": [
+        -3.9,
+        0,
+        -2
+      ],
+      "to": [
+        0.1,
+        12,
+        2
+      ],
+      "inflate": 0.9,
+      "faces": {
+        "south": {
+          "uv": [
+            16,
+            20,
+            12,
+            32
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            8,
+            20,
+            4,
+            32
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            12,
+            20,
+            8,
+            32
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            0,
+            32
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            8,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            8,
+            16,
+            12,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "right_leg",
+      "uuid": "8e975825-b0a8-493b-8b95-fbc31c5061d2",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        1.9,
+        12,
+        0
+      ],
+      "from": [
+        -0.1,
+        0,
+        -2
+      ],
+      "to": [
+        3.9,
+        12,
+        2
+      ],
+      "inflate": 0.9,
+      "faces": {
+        "south": {
+          "uv": [
+            12,
+            20,
+            16,
+            32
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            4,
+            20,
+            8,
+            32
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            4,
+            32
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            8,
+            20,
+            12,
+            32
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            8,
+            20,
+            4,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            12,
+            16,
+            8,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "helmet",
+      "uuid": "a70a42ce-2cfe-4715-8b0f-c2721075b375",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "root",
+          "uuid": "7f48dabe-4a83-4796-82a5-5a224b02fc9e",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "name": "body",
+              "uuid": "390d9b31-7658-405b-8676-840c61f1c232",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "jacket",
+                  "uuid": "3c472b75-5ebc-47a2-84af-d5206b3fa4b1",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "head",
+              "uuid": "3ac374f6-750b-4fa0-8c91-930c2073f960",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "4e99bf7b-4736-48c0-8236-cf628165520c",
+                {
+                  "name": "hat",
+                  "uuid": "f9880ae3-03f7-4b34-8dd8-74dd82d04051",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    "253275a2-e7cb-42e7-8e7f-333c8fccca2f"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "left_arm",
+              "uuid": "c0129277-ce5a-4e4c-88e3-b978e51cfa54",
+              "origin": [
+                -5,
+                22,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "left_sleeve",
+                  "uuid": "f474d938-2276-4818-84aa-23e2f05298c7",
+                  "origin": [
+                    -5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "left_leg",
+              "uuid": "b7f2fe22-c4c5-4e50-84b9-9b125a41760d",
+              "origin": [
+                -1.9,
+                12,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "left_pants",
+                  "uuid": "4a8f9586-68c9-429c-8109-4d7f5bac1623",
+                  "origin": [
+                    -1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "right_arm",
+              "uuid": "e5190569-2cba-4df1-8760-9da2ec05a873",
+              "origin": [
+                5,
+                22,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "right_sleeve",
+                  "uuid": "6dc23e74-51e4-4166-8533-24c9bf6eafba",
+                  "origin": [
+                    5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "right_leg",
+              "uuid": "f586f547-7db6-414f-8f28-74bf02ea3e64",
+              "origin": [
+                1.9,
+                12,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "right_pants",
+                  "uuid": "29129ceb-b790-4dbe-8f27-fb3383de9b87",
+                  "origin": [
+                    1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chestplate",
+      "uuid": "9df92596-de8a-4b54-8458-fb91d6a39dd6",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "root",
+          "uuid": "06f993f0-9363-4527-8a9e-88ac111d2632",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "name": "body",
+              "uuid": "d8960c65-2905-4198-81d0-3e834b854fc3",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "1c5fc662-66fc-4b57-8551-ebd23f363390",
+                {
+                  "name": "jacket",
+                  "uuid": "0092c617-2f48-4e7a-8ed9-85826b05f2fc",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "head",
+              "uuid": "93d8d940-db97-400e-822d-060257209bd8",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "hat",
+                  "uuid": "a9ac72c5-a8b6-4271-8460-ddbe3486bbc9",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "left_arm",
+              "uuid": "396665a1-a5c2-4f89-8c5b-2a840c3c83fe",
+              "origin": [
+                -5,
+                22,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "2084bde7-72fd-4795-8b87-04d87ae2588a",
+                {
+                  "name": "left_sleeve",
+                  "uuid": "ccf704fe-6795-4475-81df-970160fb29fa",
+                  "origin": [
+                    -5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "left_leg",
+              "uuid": "049f2a17-a017-4be2-8d25-0e103c93ac12",
+              "origin": [
+                -1.9,
+                12,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "left_pants",
+                  "uuid": "25daf690-f9db-46d7-8fe7-b25e47654c0a",
+                  "origin": [
+                    -1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "right_arm",
+              "uuid": "33ed632f-5526-4662-80d9-5221354740cb",
+              "origin": [
+                5,
+                22,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "1aa32ab2-f8ca-49d9-8b7f-8fb757e9f48b",
+                {
+                  "name": "right_sleeve",
+                  "uuid": "820b5ce7-a773-401e-862e-0be390f47209",
+                  "origin": [
+                    5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "right_leg",
+              "uuid": "53b16f7c-9042-48c6-8ef8-fc761ffe064b",
+              "origin": [
+                1.9,
+                12,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "right_pants",
+                  "uuid": "9f4ab1c1-bac8-467e-81cf-0d85aa3c6dec",
+                  "origin": [
+                    1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boots",
+      "uuid": "2c3e39cf-f0ec-4e84-84fd-062520da02c8",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "root",
+          "uuid": "a09a58d7-03a4-47b2-879a-281c25807b68",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "name": "body",
+              "uuid": "c2dd054a-6e85-46a7-8046-4d6220634afe",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "jacket",
+                  "uuid": "77ba7a0c-eb33-4f94-8828-23f2a618fd35",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "head",
+              "uuid": "46664bac-6c21-4835-8a13-84896e1009ce",
+              "origin": [
+                0,
+                24,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "hat",
+                  "uuid": "eb8ded01-53ed-4356-8748-860fd03b0221",
+                  "origin": [
+                    0,
+                    24,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "left_arm",
+              "uuid": "d3cd2de7-22a4-420d-832a-ba0d379d5395",
+              "origin": [
+                -5,
+                22,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "left_sleeve",
+                  "uuid": "aad9ea62-381c-4bf2-8ec7-bb00255cd1d0",
+                  "origin": [
+                    -5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "left_leg",
+              "uuid": "1b8bbd55-d1f5-4c6b-8e90-7cc49d7ba02a",
+              "origin": [
+                -1.9,
+                12,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "4b56a3b2-5155-4ab4-8b6e-709bcaf00867",
+                {
+                  "name": "left_pants",
+                  "uuid": "53b5ea85-6dab-4f44-8b7e-50763bb25ba1",
+                  "origin": [
+                    -1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "right_arm",
+              "uuid": "aa57a4eb-6c44-457d-8e8f-084da0f3ab48",
+              "origin": [
+                5,
+                22,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "name": "right_sleeve",
+                  "uuid": "4a6e460f-38bb-47fb-8eeb-20a515e58173",
+                  "origin": [
+                    5,
+                    22,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "right_leg",
+              "uuid": "53ea603a-a5e8-4ee7-8514-de72852831e6",
+              "origin": [
+                1.9,
+                12,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "8e975825-b0a8-493b-8b95-fbc31c5061d2",
+                {
+                  "name": "right_pants",
+                  "uuid": "f31df7b2-e6b9-4f06-850a-f9f3efb5b2bb",
+                  "origin": [
+                    1.9,
+                    12,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "22a8bb7c-0488-4fe3-81f3-42a0ed6cf3d9",
+      "id": "0",
+      "name": "iron.png",
+      "mode": "bitmap",
+      "resource": "minecraft:textures/entity/equipment/humanoid/iron.png",
+      "relative_path": "../textures/4ab8a988d646e8a22a78.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgBAMAAABQs2O3AAAAGFBMVEUAAAD////l5eXZ2dnR0dHCwsK+vr63t7dk3vYkAAAAAXRSTlMAQObYZgAAAT5JREFUeNqdk7FuwyAQht2hzV4p6l7LYg9GeYCAWYPhwprBxmscuPD6xcqEnVKpJ/Ez8HH8HFy1hEWIVSnUZ83KwMDLwL1z4g+AHouA72hTBHR7IEUAItjSIsJCpAGAW1DVVMwtnww97NXnib24wUDQT3aZFXdbIDiI57frLoKTd+fkCw9JPq5JIoSBl69rT9+2Kgba6n/RDRtneap2A6jcbN1uqjPmCXENxPjqTZI81aYprt9Fsf68Y0nRfqmm3yuiSH6qmMnM7kLVB9nLCzHS5D6MVLQ+GjnTdgwiiIcIMgM06zlni3YMIy4ecqNh9JSyMOqk2cLTrwUvfMrgReBOrmo2N4tjM5lTK83k6aqJtNBSCy8AL5yPgGbdRI+jGQN7pF27obtV1bvFW56h6ZlvNMnqm/8RjNFG+O0r/AA8Tmiiltp9cgAAAABJRU5ErkJggg==",
+      "width": 64,
+      "height": 32,
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "distribution": "Mojang client",
+      "sha1": "e877b6a07acd633fb3bb475002175cec036e7b87",
+      "layerIds": [
+        "minecraft:player#boots",
+        "minecraft:player#chestplate",
+        "minecraft:player#helmet",
+        "minecraft:player_slim#boots",
+        "minecraft:player_slim#chestplate",
+        "minecraft:player_slim#helmet"
+      ]
+    }
+  }
+}

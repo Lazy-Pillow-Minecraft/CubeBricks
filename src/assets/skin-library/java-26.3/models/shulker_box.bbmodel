@@ -1,0 +1,246 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "shulker_box",
+  "elements": [
+    {
+      "name": "base",
+      "uuid": "a9c1b432-2ea5-4dde-bee5-57ea2bdb1bc1",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "from": [
+        -8,
+        0,
+        -8
+      ],
+      "to": [
+        8,
+        8,
+        8
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            48,
+            44,
+            64,
+            52
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            16,
+            44,
+            32,
+            52
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            44,
+            16,
+            52
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32,
+            44,
+            48,
+            52
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32,
+            44,
+            16,
+            28
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48,
+            28,
+            32,
+            44
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "lid",
+      "uuid": "5f9fac5b-3375-4e56-8b2f-2ccc9b6416d8",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "from": [
+        -8,
+        4,
+        -8
+      ],
+      "to": [
+        8,
+        16,
+        8
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            48,
+            16,
+            64,
+            28
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            16,
+            16,
+            32,
+            28
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            16,
+            16,
+            28
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32,
+            16,
+            48,
+            28
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32,
+            16,
+            16,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "ede0e3bf-15cb-4999-80ad-a8a55047a9d0",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "base",
+          "uuid": "41107854-e676-44e5-8963-a54df44fc74b",
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "a9c1b432-2ea5-4dde-bee5-57ea2bdb1bc1"
+          ]
+        },
+        {
+          "name": "lid",
+          "uuid": "f3ea0fa1-1b92-4f83-a82c-7208f681596a",
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "5f9fac5b-3375-4e56-8b2f-2ccc9b6416d8"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "textures": [
+    {
+      "uuid": "61c86ec7-c32f-43d2-a1cf-a3faff5d3bc7",
+      "id": "0",
+      "name": "shulker.png",
+      "resource": "minecraft:textures/entity/shulker/shulker.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAyVBMVEUAAACOYI6Xa5eecZ5/WX+PZY+ecJ6PZo9/Wn9wT3B/WH+ecp6OYY5/V3+ebp5/W3+PZI+ec56PZ49wUHCJX4nh6Kjm8K26tnnHw41wTnCsqGuzr3HT1ZpwTHD///8AAACJYIl/XH+HYYeebZ53V3ejdqOMXoyjcqOMYYyMYIyjdKNuSm6OZI6BWoGPY4+BWYGXZZd/Vn93UHduT26HYIeHW4d3UnduS253VXduTG6HXIeHX4d3VHeHXoeXapeXaZeXZ5eXZpeOY45zysO0AAAAAXRSTlMAQObYZgAABGtJREFUeNrlk2lz2zYQhinepCRKlmzVTpukd5vmsC2TFIjFYhf8/z+qCzqmPG5mPGQ+9sVBLHbxYIEBg5fKd7s4T5LNWlq8TX5fiJ58w/g1Ja1BUC2CaRGViV+seB2wU8iMIK2xpNV6MiAHts4RWXbWWtxPBqyRvCxRyMx1EUzVVgGzJWIWDKp8MiAzaEN7R+SEAaacDMjRMT9WYsKb6QC4I2utY0vMjNPvIDE1EROz9FabeDLgS6uJyFqi4Q7WM+6AiO/YegTTjCPEELINLTGTCIrJDykzjXWI0sBR3caTAcmxRW2OCEphrUw+GaDydVGUcVGs85t9WRav/s55FiX5lyjLszTLk6jeJNHWj+Ok2omvjpNIxsttvku3eZKKX+J2VebXbbJl7Z+uAgMKDRg8YrE12ugjmsagL/vM1C0YrbS3Wr1PnmKlgIIiqKDVrFskNNqCiVPxsIwJhm+8FLpDhRYlpjZxpA3QYMtX/EGihsdPvhBDIRkxW0ci6aDYKk1MMkVeWvwNicKQWCYlg1hb9qHWR6FZbzSTtcwkkDs0ZY4UsrUSQM5CW+Y1O2JPZ7HlpSYGxBBx6KzBPmm97SEyY3DxxSCLnJjkFKx2CpwN2S9hEjtIwchYpkJmi6pMdWvZA5x8dFtWjSJLQ3jIoOLIxzsm8mmBKX0G/aLvh0YWCsmgX3lbekvDnfT96tOi/9T3TLjfKhBbilR2WAQbTePjiPyZ67Ndif0Lcv9kX0Cb55pGe+kzuDS6HwGmWV0aONuy26W0Eah0L/GrEWBwEVRanYmNKSNQ5wAwcYTt6E9BxWljRn/VmDj42dyeA/7+XFya2zEg+vPz/tJ8Pm/w4fbtZfss/sPtPviWFl/lx6fudOq6sXbBVHWAImgQa0SNH2cAuubUDfp46vA0B4CdbrSXDF4/wuKF2TWdFoiXkPBhOgA7OElDLZwHnJGBrBuKnL+ZdQSfN5w0dtKdYB7gJMVzsJsDgE4/oDwm2d+zJgMk6+EKEeE0KwOft39ID1IFMeMp1x02CICNRujmAODpT3qQfhYAUA9VpOF1wMvfuRPJ1rL90H/7KS8vojRNo3S0o4vooqounuxoGaVVVEWjv5JoWTICImKyzP1os7X0zL6wlono7A/ZDf5zgLitWzzZqWPn7HMgMTOdgRRa9v4z0RLTOWDJJIjwDLhzfotxg9+cT9g++jeZnNARhUT0V7LR62QZ+R2tQP7J8l83SVotyfoF9o9tXOeJHJ6cEB2Jvw4SBSEaIG3QgcHVTqGMNaFBadBnfnzUDEdkVOKXuMY0BAYGf5Bji0ZWSF8rUPEGjcy0dQsyCyaOtRo84m9krhS/sBQeQVp9jIOsL4u4j4v7Ppfv/dvtqrxZy9y6Xxdlf79P+vWN+PfiK8pFXGT9WmLjm1JsPxc86urqcLi6ur5+8+b6Opijq4PoewCHQf9XgL//57r6qgn3/0JTAT/8Rz8OmnAEr3fvD4f37x7HPw2aCLi+9lf4HYDDoDmAfwH6Yy75kFt8HQAAAABJRU5ErkJggg==",
+      "relative_path": "../textures/0d89ea9689d831b3af58.png",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "mode": "bitmap",
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:shulker_box#main"
+      ]
+    }
+  }
+}

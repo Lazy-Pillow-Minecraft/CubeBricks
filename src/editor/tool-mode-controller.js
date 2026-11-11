@@ -36,6 +36,7 @@ export function createToolModeController({
   }
 
   function setMode(mode) {
+    if (state.project.formatId === 'minecraft_skin') mode = 'paint';
     if (mode === 'display' && state.project.formatId !== 'java_block_item') mode = 'edit';
     if (mode === 'animate' && state.project.formatId === 'java_block_item') mode = 'display';
     if (mode === 'uv' && !state.separateUvMode) mode = 'edit';

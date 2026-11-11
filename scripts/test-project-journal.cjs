@@ -22,6 +22,39 @@ function model(nodes, textures = []) {
     elements: nodes, groups: [], textures
   });
 }
+test('portable export embeds palette cards without changing the working journal', async () => {
+  const directory = await fs.mkdtemp(path.join(__dirname, '..', '.journal-palette-export-test-'));
+  const archivePath = `${directory}.cbmodel`;
+  const snapshotPath = `${directory}-snapshot.cbmodel`;
+  const importedDirectory = `${directory}-opened`;
+  try {
+    const journal = await new ProjectJournal(directory).initialize(model([]));
+    const workingContent = await journal.content();
+    const card = { id: 'palette-used', name: 'Used', colors: ['#123456'], scope: 'project' };
+    const exportedContent = JSON.stringify({ ...JSON.parse(workingContent), palettes: [card] });
+    await journal.archive(archivePath, { includeHistory: true, markSaved: false, currentContent: exportedContent });
+    const entries = unpackArchive(await fs.readFile(archivePath));
+    const manifest = JSON.parse(entries.get('transactions/1.json').toString('utf8'));
+    const information = JSON.parse(entries.get('project_information.json').toString('utf8'));
+    assert.deepEqual(manifest.information.palettes, [card]);
+    assert.deepEqual(information.palettes, [card]);
+    const opened = await ProjectJournal.fromArchive(await fs.readFile(archivePath), importedDirectory);
+    assert.deepEqual(JSON.parse(await opened.content()).palettes, [card],
+      'opening the exported model restores its embedded palette');
+    await journal.archive(snapshotPath, { includeHistory: false, markSaved: false, currentContent: exportedContent });
+    const snapshot = await ProjectJournal.fromArchive(await fs.readFile(snapshotPath), `${directory}-snapshot-opened`);
+    assert.deepEqual(JSON.parse(await snapshot.content()).palettes, [card],
+      'current-state exports also restore their embedded palette');
+    assert.equal(JSON.parse(await journal.content()).palettes, undefined,
+      'embedding must not become an undo step or change the active project');
+  } finally {
+    await fs.rm(archivePath, { force: true });
+    await fs.rm(snapshotPath, { force: true });
+    await fs.rm(importedDirectory, { recursive: true, force: true });
+    await fs.rm(`${directory}-snapshot-opened`, { recursive: true, force: true });
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
 test('undo restores curve nodes and their local handles without mixing node identities', async () => {
   const directory = await fs.mkdtemp(path.join(__dirname, '..', '.journal-curve-node-test-'));
   try {

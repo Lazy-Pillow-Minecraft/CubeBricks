@@ -1,0 +1,340 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "arrow",
+  "elements": [
+    {
+      "name": "back",
+      "uuid": "509f3ed5-a241-4425-869a-54310bcfe6dc",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        9.9,
+        24,
+        0
+      ],
+      "from": [
+        9.9,
+        22.2,
+        -1.8
+      ],
+      "to": [
+        9.9,
+        25.8,
+        1.8
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            10,
+            5,
+            10,
+            10
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            5,
+            5,
+            5,
+            10
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            5,
+            5,
+            10
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            5,
+            5,
+            10,
+            10
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            5,
+            5,
+            5,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            5,
+            0,
+            5,
+            5
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "cross_1",
+      "uuid": "d4dd4819-a459-45d6-9bd8-ed81897c2c52",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -3.6,
+        22.2,
+        0
+      ],
+      "to": [
+        10.8,
+        25.8,
+        0
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            16,
+            0,
+            32,
+            5
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            5
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            0,
+            5
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16,
+            0,
+            16,
+            5
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16,
+            0,
+            0,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32,
+            0,
+            16,
+            0
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "cross_2",
+      "uuid": "4d38f239-ef4f-42c7-91d3-b423f132ba6c",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -3.6,
+        22.2,
+        0
+      ],
+      "to": [
+        10.8,
+        25.8,
+        0
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            16,
+            0,
+            32,
+            5
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            5
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            0,
+            5
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16,
+            0,
+            16,
+            5
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16,
+            0,
+            0,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32,
+            0,
+            16,
+            0
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "f63d8c1c-669a-49ff-8e81-b26f4529cf65",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "back",
+          "uuid": "00a1a5d1-8936-4a43-8662-152a4941518d",
+          "origin": [
+            9.9,
+            24,
+            0
+          ],
+          "rotation": [
+            -45.000002,
+            0,
+            0
+          ],
+          "children": [
+            "509f3ed5-a241-4425-869a-54310bcfe6dc"
+          ]
+        },
+        {
+          "name": "cross_1",
+          "uuid": "0d0d78e2-02b5-4782-b42a-bd39f09b8dae",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            -45.000002,
+            0,
+            0
+          ],
+          "children": [
+            "d4dd4819-a459-45d6-9bd8-ed81897c2c52"
+          ]
+        },
+        {
+          "name": "cross_2",
+          "uuid": "0b8d27d8-622c-4deb-98d8-1590e8852f74",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            -135.000001,
+            0,
+            0
+          ],
+          "children": [
+            "4d38f239-ef4f-42c7-91d3-b423f132ba6c"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "textures": [
+    {
+      "uuid": "b2fc4e46-7e75-49db-b6a4-c5b3f6e2e2b9",
+      "id": "0",
+      "name": "arrow.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/4020078eead4776e857c.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgBAMAAACBVGfHAAAAG1BMVEUAAAD////i4uLBwcGenp68mGK0kFqfhE1zXjnWEScNAAAAAXRSTlMAQObYZgAAAE1JREFUeNpjUFRgQAJMQiAEBMwKTAYgGihd3pYWnpZWYqTsnpZWmpZRDlXB4sDiAFWBYQaDAgMTAwoQYGBE4SsmKokJ4VMBMWMUDDAAADvKCYCege7NAAAAAElFTkSuQmCC",
+      "width": 32,
+      "height": 32,
+      "uv_width": 32,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:arrow#main"
+      ]
+    }
+  }
+}

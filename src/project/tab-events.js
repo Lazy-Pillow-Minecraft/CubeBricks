@@ -69,6 +69,41 @@ export function bindProjectTabEvents({
     projectTabsNode.querySelectorAll('.is-dragging,.drop-before,.drop-after').forEach(node => node.classList.remove('is-dragging', 'drop-before', 'drop-after'));
   });
   $('#newProjectTab').addEventListener('click', () => projectTabsController.addHomeTab());
+  const versionSelect = $('#projectInfoJavaVersion');
+  const versionButton = $('#projectInfoJavaVersionButton');
+  const versionMenu = $('#projectInfoJavaVersionMenu');
+  function closeVersionMenu() {
+    versionMenu.hidden = true;
+    versionButton.setAttribute('aria-expanded', 'false');
+  }
+  versionButton.addEventListener('click', () => {
+    if (!versionMenu.hidden) return closeVersionMenu();
+    versionMenu.replaceChildren(...[...versionSelect.options].map(option => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.role = 'option';
+      button.dataset.version = option.value;
+      button.textContent = option.textContent;
+      button.setAttribute('aria-selected', String(option.value === versionSelect.value));
+      return button;
+    }));
+    versionMenu.hidden = false;
+    versionButton.setAttribute('aria-expanded', 'true');
+  });
+  versionMenu.addEventListener('click', event => {
+    const option = event.target.closest('[data-version]');
+    if (!option) return;
+    versionSelect.value = option.dataset.version;
+    versionButton.textContent = versionSelect.selectedOptions[0]?.textContent || '';
+    closeVersionMenu();
+    versionButton.focus();
+  });
+  projectInfoDialog.addEventListener('pointerdown', event => {
+    if (!event.target.closest('.project-info-version-picker')) closeVersionMenu();
+  });
+  projectInfoDialog.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeVersionMenu();
+  });
   $('#projectInfoForm').addEventListener('submit', event => {
     event.preventDefault();
     applyProjectInfo();

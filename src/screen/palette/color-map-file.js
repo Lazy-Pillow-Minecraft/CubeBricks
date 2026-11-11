@@ -68,7 +68,7 @@ export function encodeColorMap(palettes, updatedAt = Date.now()) {
 // belong to the receiving workspace, not to the reusable color definition.
 export function encodePaletteFile(row) {
   if (!row) throw new Error('請先選擇色卡');
-  const { id, name, ...palette } = row;
+  const { id, name, scope, ...palette } = row;
   return JSON.stringify({ format: COLOR_MAP_FORMAT, version: COLOR_MAP_VERSION, palette }, null, 2);
 }
 

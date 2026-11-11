@@ -1,0 +1,340 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "evoker_fangs",
+  "elements": [
+    {
+      "name": "base",
+      "uuid": "7b2b959d-bfb3-4d06-8374-df00c0a4e9f6",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        5,
+        0,
+        -5
+      ],
+      "from": [
+        -5,
+        -12,
+        -5
+      ],
+      "to": [
+        5,
+        0,
+        5
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            30,
+            10,
+            40,
+            22
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            10,
+            10,
+            20,
+            22
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            10,
+            10,
+            22
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            20,
+            10,
+            30,
+            22
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            20,
+            10,
+            10,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            30,
+            0,
+            20,
+            10
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "lower_jaw",
+      "uuid": "1dc1e94b-196e-43da-a6a9-e31a9ccc53e4",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        1.5,
+        0,
+        4
+      ],
+      "from": [
+        -2.5,
+        -14,
+        4
+      ],
+      "to": [
+        1.5,
+        0,
+        12
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            60,
+            8,
+            64,
+            22
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            48,
+            8,
+            52,
+            22
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            40,
+            8,
+            48,
+            22
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            52,
+            8,
+            60,
+            22
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            52,
+            8,
+            48,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            56,
+            0,
+            52,
+            8
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "upper_jaw",
+      "uuid": "f5320d7e-ae45-4cce-a9da-4d3b95838fb7",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -1.5,
+        0,
+        -4
+      ],
+      "from": [
+        -5.5,
+        -14,
+        -4
+      ],
+      "to": [
+        -1.5,
+        0,
+        4
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            60,
+            8,
+            64,
+            22
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            48,
+            8,
+            52,
+            22
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            40,
+            8,
+            48,
+            22
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            52,
+            8,
+            60,
+            22
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            52,
+            8,
+            48,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            56,
+            0,
+            52,
+            8
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "4c75590a-a71a-4842-824f-af83c6e461b3",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "base",
+          "uuid": "e7eb4f90-aa4a-442e-b5e0-4afe8fccd372",
+          "origin": [
+            5,
+            0,
+            -5
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "7b2b959d-bfb3-4d06-8374-df00c0a4e9f6",
+            {
+              "name": "lower_jaw",
+              "uuid": "0ba49c46-456e-4574-9b7b-b652117ec50a",
+              "origin": [
+                1.5,
+                0,
+                4
+              ],
+              "rotation": [
+                0,
+                -180.000003,
+                243.000018
+              ],
+              "children": [
+                "1dc1e94b-196e-43da-a6a9-e31a9ccc53e4"
+              ]
+            },
+            {
+              "name": "upper_jaw",
+              "uuid": "aba4f0f9-6fe8-4ba7-b1ec-57b3db0c653d",
+              "origin": [
+                -1.5,
+                0,
+                -4
+              ],
+              "rotation": [
+                0,
+                0,
+                116.999987
+              ],
+              "children": [
+                "f5320d7e-ae45-4cce-a9da-4d3b95838fb7"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "textures": [
+    {
+      "uuid": "e67906a7-a96f-491d-9683-d972bb8d0447",
+      "id": "0",
+      "name": "evoker_fangs.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/ba286aa7aa1413368bc3.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgBAMAAABQs2O3AAAAHlBMVEUAAADb1sDNx6u+uZ+moYuHhXdgX1pbUElNRUA3NzSNrI0RAAAAAXRSTlMAQObYZgAAARdJREFUeNrtkDFOw1AQRN98JNrMR6IPR6CghiNwCvsGTm4QjscRfIJk3SMWJ9gyFlIqSl6x24xGT8OFXdM1uwswc1ufAAoACQRrNPRLYCDYsCY/t9cbwEvAgGBNjSUgQ15zOAW/WRzmkjX500GQA2ue3x73h9cpsMGYFTdxjAig7cb92rZr2vbQduNv9h3A3f153rEhiTxlQmakMyAC4GiDC4XIAAJIAJFc6JNwPpR5ogpBsAResCibIiwJBoFZNr0havZ6L1uMtmI8OIoTCWATgD8oQIJIRGASDHAMEhUKDjyVBwjNkvTWKClhC2H5+8grSc/DCyyMPS1ZwKMkrlMJVRXqLNm7SmdJyVjVWLaQzbSkzD9/xxeReGV4xRe96wAAAABJRU5ErkJggg==",
+      "width": 64,
+      "height": 32,
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:evoker_fangs#main"
+      ]
+    }
+  }
+}

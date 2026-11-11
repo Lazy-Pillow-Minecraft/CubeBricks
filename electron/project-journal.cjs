@@ -860,8 +860,8 @@ class ProjectJournal {
   async historyGraph() { return historyGraph(this, await historyRecords(this)); }
   async setHistoryMark(sequence, mark) { return setHistoryMark(this, sequence, mark, writeJson); }
   async pruneHistoryBranch(sequence, { single = false } = {}) { return pruneHistoryBranch(this, sequence, { writeJson, readJson, textureDigest }, single); }
-  async currentSnapshotEntries() {
-    const data = separate(await this.content());
+  async currentSnapshotEntries(currentContent = null) {
+    const data = separate(currentContent || await this.content());
     data.information.projectUuid = this.projectUuid;
     const pointers = {}, nodeHashes = {};
     const placements = placementsFor(data);
@@ -908,11 +908,11 @@ class ProjectJournal {
     }))]);
     return files;
   }
-  async archive(filePath, { includeHistory = true, markSaved = true } = {}) {
+  async archive(filePath, { includeHistory = true, markSaved = true, currentContent = null } = {}) {
     await this.finishHistoryImport();
     await this.ensureReady();
     await this.content();
-    const files = includeHistory ? [] : await this.currentSnapshotEntries();
+    const files = includeHistory ? [] : await this.currentSnapshotEntries(currentContent);
     const archivePaths = [];
     const visit = async directory => {
       for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
@@ -926,6 +926,17 @@ class ProjectJournal {
       for (const file of await mapLimited(archivePaths, 16, async absolute => [
         path.relative(this.directory, absolute).replace(/\\/g, '/'), await fs.readFile(absolute)
       ])) files.push(file);
+      if (currentContent) {
+        const palettes = separate(currentContent).information.palettes || [];
+        const currentManifest = `transactions/${this.activeManifest.sequence}.json`;
+        for (const entry of files) {
+          if (entry[0] !== currentManifest && entry[0] !== 'project_information.json') continue;
+          const record = JSON.parse(entry[1].toString('utf8'));
+          if (entry[0] === currentManifest) record.information.palettes = palettes;
+          else record.palettes = palettes;
+          entry[1] = Buffer.from(pretty(record));
+        }
+      }
     }
     // saved_state contains a machine-local path and is reconstructed on open.
     for (let index = files.length - 1; index >= 0; index--)

@@ -567,11 +567,12 @@ export function createEventBinder({
     });
     $('[data-action="wire"]').addEventListener('click', () => configRegistry.set(ConfigKey.SHOW_WIREFRAME, !state.wire, { source: 'viewport-toolbar' }));
     const snapButton = $('[data-action="cycleSnap"]');
-    snapButton.addEventListener('click', () => cycleSnap(1));
+    snapButton.addEventListener('click', () => { cycleSnap(1); renderScene(); });
     snapButton.addEventListener('contextmenu', event => {
       event.preventDefault();
       event.stopPropagation();
       cycleSnap(-1);
+      renderScene();
     });
     $$('[data-projection]').forEach(button => button.addEventListener('click', () => {
       if (state.axisView) return;

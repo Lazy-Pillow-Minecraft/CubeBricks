@@ -1,0 +1,246 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "shield",
+  "elements": [
+    {
+      "name": "handle",
+      "uuid": "3237259a-e34f-451a-99af-fd1176a1b3c5",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -1,
+        21,
+        -1
+      ],
+      "to": [
+        1,
+        27,
+        5
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            40,
+            6,
+            42,
+            12
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            32,
+            6,
+            34,
+            12
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            26,
+            6,
+            32,
+            12
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            34,
+            6,
+            40,
+            12
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            34,
+            6,
+            32,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            36,
+            0,
+            34,
+            6
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "plate",
+      "uuid": "5e8e4366-ac05-4e57-846d-e40a4c63403b",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -6,
+        13,
+        -2
+      ],
+      "to": [
+        6,
+        35,
+        -1
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            14,
+            1,
+            26,
+            23
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            1,
+            1,
+            13,
+            23
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            1,
+            1,
+            23
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            13,
+            1,
+            14,
+            23
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            13,
+            1,
+            1,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            25,
+            0,
+            13,
+            1
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "80662cae-de35-4a95-854d-a4efe23aa0d1",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "handle",
+          "uuid": "c6d8a8da-a417-4b79-bd6c-1549c97ba52c",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "3237259a-e34f-451a-99af-fd1176a1b3c5"
+          ]
+        },
+        {
+          "name": "plate",
+          "uuid": "4c558f05-fefd-4bcf-8982-20408f0b897f",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "5e8e4366-ac05-4e57-846d-e40a4c63403b"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "textures": [
+    {
+      "uuid": "7b7247e1-1499-4cbd-99bb-7dadd4addf04",
+      "id": "0",
+      "name": "shield_base_nopattern.png",
+      "resource": "minecraft:textures/entity/shield/shield_base_nopattern.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAOVBMVEUAAABucHd4eYGRk5ujpKqFaT51WjBmTSdaRSNVPx1PORkAAAB3b2l6cmt6c2t3cGlEREtXV15lZm3/ybjhAAAAAXRSTlMAQObYZgAAARBJREFUeNrt1LGu00AARNEzGxOng/D/30ioQHqyMxQQuTJyqtf4bDHdFlerjYvN06bAHQ/7posA6PjqIdG6+wHi/4YkGf8Ov27zPF2vt/m3YwZGIpLBo5Soh0NG+XIR3AIYT8cNrNHEx98p0ABty74JXYeyAiSEb4mW5rs2HrsXqBDQBKnKB67htbsNALFpCGy7Y2CaoHNUIMRBg6whLIEIiEK9dsekulxC1lEIMPQaLa+1HxEURIV4+umIEUQJmzpq0OlCmYNC0bdeYtElIN4y0IWwPoUmiHC8AQi8b0IFaBpvGup2AXMoIkiPN/gIYgm8V4BBukKfK/cA5H64wVJAcNs+1dPpdDqdTqfT6RP9AQX6ZqYfeBLEAAAAAElFTkSuQmCC",
+      "relative_path": "../textures/08aa1d4f2eebb31f657f.png",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "mode": "bitmap",
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:shield#main"
+      ]
+    }
+  }
+}

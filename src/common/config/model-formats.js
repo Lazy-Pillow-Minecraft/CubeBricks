@@ -135,16 +135,15 @@ modelFormatRegistry.registerMany([
   {
     id: ModelFormatId.MINECRAFT_SKIN,
     name: 'Minecraft 皮膚',
-    description: 'Minecraft 玩家皮膚模型',
+    description: '以 Java 或基岩版實體模板繪製皮膚',
     category: 'minecraft',
     icon: 'skin',
     blockbenchFormat: 'skin',
     aliases: ['minecraft_skin'],
-    status: 'placeholder',
-    placeholderReason: '皮膚模型目前暫停新建',
     snap: standardSnap,
     defaults: { uvMode: 'box', textureSize: [64, 64], renderType: 'cutout', cullFaces: false },
-    capabilities: { ...cubeCapabilities, singleTexture: true }
+    capabilities: { ...cubeCapabilities, elements: ['cube', 'group', 'locator'], locators: true,
+      animation: false, singleTexture: false }
   },
   {
     id: ModelFormatId.GECKOLIB,

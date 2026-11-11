@@ -9,7 +9,7 @@ export function createTexturePointerController({
   renderTextureUvOverlay, updateFaceSelectionOverlay, updateTextureBrushCursor,
   moveTexturePaintPointer, endTexturePaintPointer, applyTextureUvDrag,
   clamp, snapValue, snapTexturePan, updateTextureStageTransform,
-  snapshot, materializeUvFaces, markDirty, invalidateSelectionRenderGeometry,
+  snapshot, materializeUvFaces, markDirty, invalidateSelectionRenderGeometry, invalidateUvPreviewGeometry,
   scheduleSceneRender, renderAll, toast, setTilingCoordinate
 }) {
   function startTexturePointer(event) {
@@ -183,6 +183,7 @@ export function createTexturePointerController({
       });
       markDirty();
       invalidateSelectionRenderGeometry();
+      invalidateUvPreviewGeometry();
       renderTextureUvOverlay();
       scheduleSceneRender();
     } else if (!drag.moved && drag.blank) {
@@ -244,7 +245,11 @@ export function createTexturePointerController({
   }
 
   function setUvCoordinate(coordinate, value) {
-    if (setTilingCoordinate(coordinate, value)) return;
+    if (setTilingCoordinate(coordinate, value)) {
+      invalidateUvPreviewGeometry();
+      scheduleSceneRender();
+      return;
+    }
     const entries = selectedTextureUvEntries();
     if (!entries.length || !Number.isFinite(value)) return;
     if (entries.some(entry => entry.cube.uvMode === 'box')) return toast('箱型 UV 的六面相對位置固定，不能單獨修改面座標');
@@ -256,6 +261,7 @@ export function createTexturePointerController({
     materializeUvFaces(entries);
     edits.forEach(({ entry, uv }) => { entry.cube.faces[entry.faceName].uv = uv; });
     markDirty();
+    invalidateUvPreviewGeometry();
     renderAll('selection');
     updateTextureStageTransform();
   }

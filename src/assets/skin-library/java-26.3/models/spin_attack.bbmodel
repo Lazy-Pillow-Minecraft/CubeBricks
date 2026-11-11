@@ -1,0 +1,246 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "spin_attack",
+  "elements": [
+    {
+      "name": "box0",
+      "uuid": "fcb96efd-4dfc-4abc-b77a-18e814777333",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -6,
+        7.199999,
+        -6
+      ],
+      "to": [
+        6,
+        31.199999,
+        6
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            48,
+            16,
+            64,
+            48
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            16,
+            16,
+            32,
+            48
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            16,
+            16,
+            48
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32,
+            16,
+            48,
+            48
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32,
+            16,
+            16,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "box1",
+      "uuid": "a77fde1b-99f0-4a50-b0c9-db25fd523926",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -12,
+        -24,
+        -12
+      ],
+      "to": [
+        12,
+        24,
+        12
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            48,
+            16,
+            64,
+            48
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            16,
+            16,
+            32,
+            48
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            16,
+            16,
+            48
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32,
+            16,
+            48,
+            48
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32,
+            16,
+            16,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "9832a0c1-af45-4f44-ae28-1ee931f1ff24",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "box0",
+          "uuid": "e0b5ed39-ca43-49ac-ba95-0303ee7ed543",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "fcb96efd-4dfc-4abc-b77a-18e814777333"
+          ]
+        },
+        {
+          "name": "box1",
+          "uuid": "9c48ae57-8f69-42e2-9609-0be401448145",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "a77fde1b-99f0-4a50-b0c9-db25fd523926"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "textures": [
+    {
+      "uuid": "a06118ea-ee59-4f5c-91b3-eda8b745820f",
+      "id": "0",
+      "name": "trident_riptide.png",
+      "resource": "minecraft:textures/entity/trident/trident_riptide.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAABlBMVEUAAADT6+rX/RPnAAAAAXRSTlMAQObYZgAAAF5JREFUeNrtlDEKwDAMxKz/f7qzl0IqqB04bVoEDrHrFeoDgCpAs5JQIQz9HWhiCgD8MQTWES4KLrCxIHxwCj+GL9zLxucDzr0DIHw2gWzceY/W7iHH7gO5iyGE0HkA9u0A5yCR7kcAAAAASUVORK5CYII=",
+      "relative_path": "../textures/e3cb4d02b65deb2a2ddf.png",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "mode": "bitmap",
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:spin_attack#main"
+      ]
+    }
+  }
+}

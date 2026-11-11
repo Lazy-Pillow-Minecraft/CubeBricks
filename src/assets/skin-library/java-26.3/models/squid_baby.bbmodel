@@ -1,0 +1,911 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "squid_baby",
+  "elements": [
+    {
+      "name": "body",
+      "uuid": "98bef608-0aa7-4ad4-9961-4a59786200f0",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        11,
+        0
+      ],
+      "from": [
+        -4,
+        6,
+        -4
+      ],
+      "to": [
+        4,
+        16,
+        4
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            24,
+            8,
+            32,
+            18
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            8,
+            8,
+            16,
+            18
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            8,
+            8,
+            18
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16,
+            8,
+            24,
+            18
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16,
+            8,
+            8,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            24,
+            0,
+            16,
+            8
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "tentacle0",
+      "uuid": "5de19837-1bd2-443e-9166-673523029dcf",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -3,
+        5.5,
+        0
+      ],
+      "from": [
+        -4,
+        0,
+        -1
+      ],
+      "to": [
+        -2,
+        6,
+        1
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            6,
+            20,
+            8,
+            26
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            20,
+            4,
+            26
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            2,
+            26
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            6,
+            26
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            2,
+            18
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            6,
+            18,
+            4,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "tentacle1",
+      "uuid": "ed081143-ff5d-44a1-8f55-40132a6987ef",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -2.12132,
+        5.5,
+        2.12132
+      ],
+      "from": [
+        -3.12132,
+        0,
+        1.12132
+      ],
+      "to": [
+        -1.12132,
+        6,
+        3.12132
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            6,
+            20,
+            8,
+            26
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            20,
+            4,
+            26
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            2,
+            26
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            6,
+            26
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            2,
+            18
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            6,
+            18,
+            4,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "tentacle2",
+      "uuid": "28908032-2e97-4b8d-b84b-2739062b3235",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        5.5,
+        3
+      ],
+      "from": [
+        -1,
+        0,
+        2
+      ],
+      "to": [
+        1,
+        6,
+        4
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            6,
+            20,
+            8,
+            26
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            20,
+            4,
+            26
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            2,
+            26
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            6,
+            26
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            2,
+            18
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            6,
+            18,
+            4,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "tentacle3",
+      "uuid": "982ef678-cba1-4641-b64f-33a05c3f24db",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        2.12132,
+        5.5,
+        2.12132
+      ],
+      "from": [
+        1.12132,
+        0,
+        1.12132
+      ],
+      "to": [
+        3.12132,
+        6,
+        3.12132
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            6,
+            20,
+            8,
+            26
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            20,
+            4,
+            26
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            2,
+            26
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            6,
+            26
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            2,
+            18
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            6,
+            18,
+            4,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "tentacle4",
+      "uuid": "46958810-201f-43e9-bbda-bf762b98fac2",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        3,
+        5.5,
+        0
+      ],
+      "from": [
+        2,
+        0,
+        -1
+      ],
+      "to": [
+        4,
+        6,
+        1
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            6,
+            20,
+            8,
+            26
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            20,
+            4,
+            26
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            2,
+            26
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            6,
+            26
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            2,
+            18
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            6,
+            18,
+            4,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "tentacle5",
+      "uuid": "3408081c-22d1-4839-9ee1-cdd3302ccff0",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        2.12132,
+        5.5,
+        -2.12132
+      ],
+      "from": [
+        1.12132,
+        0,
+        -3.12132
+      ],
+      "to": [
+        3.12132,
+        6,
+        -1.12132
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            6,
+            20,
+            8,
+            26
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            20,
+            4,
+            26
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            2,
+            26
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            6,
+            26
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            2,
+            18
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            6,
+            18,
+            4,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "tentacle6",
+      "uuid": "38e26baa-d34c-4c5b-a3bd-2afa057c3f46",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        5.5,
+        -3
+      ],
+      "from": [
+        -1,
+        0,
+        -4
+      ],
+      "to": [
+        1,
+        6,
+        -2
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            6,
+            20,
+            8,
+            26
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            20,
+            4,
+            26
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            2,
+            26
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            6,
+            26
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            2,
+            18
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            6,
+            18,
+            4,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "tentacle7",
+      "uuid": "e2555235-6ac9-48ab-b72c-93518b203c7b",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -2.12132,
+        5.5,
+        -2.12132
+      ],
+      "from": [
+        -3.12132,
+        0,
+        -3.12132
+      ],
+      "to": [
+        -1.12132,
+        6,
+        -1.12132
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            6,
+            20,
+            8,
+            26
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            20,
+            4,
+            26
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            20,
+            2,
+            26
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            4,
+            20,
+            6,
+            26
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            4,
+            20,
+            2,
+            18
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            6,
+            18,
+            4,
+            20
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "71ce574f-24d0-477f-a512-fef57e22ed8b",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "body",
+          "uuid": "21ab1232-67fa-4612-b19b-ca53f54506bf",
+          "origin": [
+            0,
+            11,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "98bef608-0aa7-4ad4-9961-4a59786200f0"
+          ]
+        },
+        {
+          "name": "tentacle0",
+          "uuid": "d6ed4614-c0e7-4d04-9bc9-d92dd6b35a8b",
+          "origin": [
+            -3,
+            5.5,
+            0
+          ],
+          "rotation": [
+            0,
+            -90.000004,
+            0
+          ],
+          "children": [
+            "5de19837-1bd2-443e-9166-673523029dcf"
+          ]
+        },
+        {
+          "name": "tentacle1",
+          "uuid": "4fbcd992-e7e8-445d-a016-571370ec9fe5",
+          "origin": [
+            -2.12132,
+            5.5,
+            2.12132
+          ],
+          "rotation": [
+            0,
+            -45.000002,
+            0
+          ],
+          "children": [
+            "ed081143-ff5d-44a1-8f55-40132a6987ef"
+          ]
+        },
+        {
+          "name": "tentacle2",
+          "uuid": "502e1977-e0f0-4ac6-bdaf-699c1c37287a",
+          "origin": [
+            0,
+            5.5,
+            3
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "28908032-2e97-4b8d-b84b-2739062b3235"
+          ]
+        },
+        {
+          "name": "tentacle3",
+          "uuid": "d4eb8628-14b4-4380-a896-a9c07c678d38",
+          "origin": [
+            2.12132,
+            5.5,
+            2.12132
+          ],
+          "rotation": [
+            0,
+            45.000002,
+            0
+          ],
+          "children": [
+            "982ef678-cba1-4641-b64f-33a05c3f24db"
+          ]
+        },
+        {
+          "name": "tentacle4",
+          "uuid": "eba3e7c0-11e6-4521-9925-2decbeae7288",
+          "origin": [
+            3,
+            5.5,
+            0
+          ],
+          "rotation": [
+            0,
+            90.000004,
+            0
+          ],
+          "children": [
+            "46958810-201f-43e9-bbda-bf762b98fac2"
+          ]
+        },
+        {
+          "name": "tentacle5",
+          "uuid": "aa29eec7-a9ef-4962-b0a1-cd796ef296b1",
+          "origin": [
+            2.12132,
+            5.5,
+            -2.12132
+          ],
+          "rotation": [
+            0,
+            135.000001,
+            0
+          ],
+          "children": [
+            "3408081c-22d1-4839-9ee1-cdd3302ccff0"
+          ]
+        },
+        {
+          "name": "tentacle6",
+          "uuid": "0736b6e0-7c38-4652-a3ac-3e22852747ef",
+          "origin": [
+            0,
+            5.5,
+            -3
+          ],
+          "rotation": [
+            0,
+            180.000003,
+            0
+          ],
+          "children": [
+            "38e26baa-d34c-4c5b-a3bd-2afa057c3f46"
+          ]
+        },
+        {
+          "name": "tentacle7",
+          "uuid": "4810bf19-dbcb-4ca5-b22c-adbd77040ce0",
+          "origin": [
+            -2.12132,
+            5.5,
+            -2.12132
+          ],
+          "rotation": [
+            0,
+            224.999993,
+            0
+          ],
+          "children": [
+            "e2555235-6ac9-48ab-b72c-93518b203c7b"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "textures": [
+    {
+      "uuid": "4bea300e-1032-4760-9074-beabd8f6592b",
+      "id": "0",
+      "name": "squid_baby.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/fa894f4884ad7b2bf5e1.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAIVBMVEUAAAASJzciO004UmVUbYBwiJn///8TExRcAACWFxdwGRk6j4tVAAAAAXRSTlMAQObYZgAAAKZJREFUeNrdkNEKwjAAAy/pg/7/3w6cUUpAwY6BvnntemSE0lYUISBQByaGYtky+PrEUEwRQka6JOSijwKCIIDcBRTzTmhzVQhdYrEohMwlm267tlB0dk0k2ZLWLiThwEYGCWRNN6u26N1MQIjm2qjZAg/RXC/eoaQ2adz3+aWZ2iFJmGNOmmvTZn/Q/LJOAKQxOMScofL1DhZz/HCGMTzncaHw1zwAJ0NYy2UP5j8AAAAASUVORK5CYII=",
+      "width": 32,
+      "height": 32,
+      "uv_width": 32,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:squid_baby#main",
+        "minecraft:glow_squid_baby#main"
+      ]
+    }
+  }
+}

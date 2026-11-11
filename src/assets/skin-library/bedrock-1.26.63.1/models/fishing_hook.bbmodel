@@ -1,0 +1,339 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "fishing_hook",
+  "resolution": {
+    "width": 24,
+    "height": 3
+  },
+  "elements": [
+    {
+      "uuid": "faab5e2f-9b32-42ff-834b-39f0d545812b",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -1.5,
+        -1.5,
+        -1.5
+      ],
+      "to": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        180
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0,
+          "uv": [
+            9,
+            0,
+            12,
+            3
+          ],
+          "rotation": 0
+        },
+        "south": {
+          "texture": 0,
+          "uv": [
+            9,
+            0,
+            6,
+            3
+          ],
+          "rotation": 0
+        },
+        "east": {
+          "texture": 0,
+          "uv": [
+            12,
+            0,
+            15,
+            3
+          ],
+          "rotation": 0
+        },
+        "west": {
+          "texture": 0,
+          "uv": [
+            15,
+            0,
+            18,
+            3
+          ],
+          "rotation": 0
+        },
+        "up": {
+          "texture": 0,
+          "uv": [
+            3,
+            3,
+            0,
+            0
+          ],
+          "rotation": 0
+        },
+        "down": {
+          "texture": 0,
+          "uv": [
+            6,
+            3,
+            3,
+            0
+          ],
+          "rotation": 0
+        }
+      }
+    },
+    {
+      "uuid": "af51d76e-da3a-45de-8c91-ac422609a066",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        0,
+        -4.5,
+        -0.5
+      ],
+      "to": [
+        0,
+        -1.5,
+        2.5
+      ],
+      "origin": [
+        0,
+        -3,
+        1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": null
+        },
+        "south": {
+          "texture": null
+        },
+        "east": {
+          "texture": 0,
+          "uv": [
+            18,
+            0,
+            21,
+            3
+          ],
+          "rotation": 0
+        },
+        "west": {
+          "texture": null
+        },
+        "up": {
+          "texture": null
+        },
+        "down": {
+          "texture": null
+        }
+      }
+    },
+    {
+      "uuid": "019338a1-db07-416f-9256-0c3d6c146ac5",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        0,
+        1.5,
+        -1.5
+      ],
+      "to": [
+        0,
+        4.5,
+        1.5
+      ],
+      "origin": [
+        0,
+        3,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": null
+        },
+        "south": {
+          "texture": null
+        },
+        "east": {
+          "texture": 0,
+          "uv": [
+            21,
+            0,
+            24,
+            3
+          ],
+          "rotation": 0
+        },
+        "west": {
+          "texture": null
+        },
+        "up": {
+          "texture": null
+        },
+        "down": {
+          "texture": null
+        }
+      }
+    },
+    {
+      "uuid": "7d22a919-564e-4d83-b053-4b67f4099b74",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -1.5,
+        1.5,
+        0
+      ],
+      "to": [
+        1.5,
+        4.5,
+        0
+      ],
+      "origin": [
+        0,
+        3,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0,
+          "uv": [
+            21,
+            0,
+            24,
+            3
+          ],
+          "rotation": 0
+        },
+        "south": {
+          "texture": null
+        },
+        "east": {
+          "texture": null
+        },
+        "west": {
+          "texture": null
+        },
+        "up": {
+          "texture": null
+        },
+        "down": {
+          "texture": null
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "5989d67e-9aed-4cdf-8321-6c4602980656",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "faab5e2f-9b32-42ff-834b-39f0d545812b",
+        "af51d76e-da3a-45de-8c91-ac422609a066",
+        "019338a1-db07-416f-9256-0c3d6c146ac5",
+        "7d22a919-564e-4d83-b053-4b67f4099b74"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "15a2425e-2df0-47fd-8e22-ebe269d17d83",
+      "id": "0",
+      "name": "fishhook.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/cb6b6686e3ae9639fcb8.png",
+      "resource": "textures/entity/fishhook",
+      "uv_width": 24,
+      "uv_height": 3,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAADCAYAAACJZs+gAAAABGdBTUEAALGPC/xhBQAAAE1JREFUGFdjuHz58n8YnjhxIhwj85HV4FIPBAwgDARwNpgPUggShGkAscGGamn97xQRAWMQGxuGyYMwzGCsFmBzEbpvYPK41MMMR7cIANTUvpeOquADAAAAAElFTkSuQmCC",
+      "width": 24,
+      "height": 3,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.fishing_hook",
+      "texture_width": 24,
+      "texture_height": 3
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.fishing_hook"
+      ]
+    }
+  }
+}

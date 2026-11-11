@@ -1,0 +1,223 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "shulker_bullet",
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "1d9340e5-1706-4354-9067-9747c70bcca2",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -4,
+        -4,
+        -1
+      ],
+      "to": [
+        4,
+        4,
+        1
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "32a480ac-3b83-45ad-a3e1-5b8e9d51fc40",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -1,
+        -4,
+        -4
+      ],
+      "to": [
+        1,
+        4,
+        4
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        10
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "13217b57-152e-426e-b63e-a4a0d30792c9",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -4,
+        -1,
+        -4
+      ],
+      "to": [
+        4,
+        1,
+        4
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        20,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "b85e1968-c86a-4215-935f-d3c907bd5a62",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "1d9340e5-1706-4354-9067-9747c70bcca2",
+        "32a480ac-3b83-45ad-a3e1-5b8e9d51fc40",
+        "13217b57-152e-426e-b63e-a4a0d30792c9"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "80083ddf-6b4f-4b23-83aa-6e3234810487",
+      "id": "0",
+      "name": "spark.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/c5b117ad30580c9212de.png",
+      "resource": "textures/entity/shulker/spark",
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAALTSURBVGje7VhNS8NAEM3vFRSktoh/QFpBEZQWBBEPXjyI3sSbiB4FBQUREVFBi4ggiIqseZt942SbNq2m2pguPJLsTPbjze7s7ARBWF7NUWBuGsY0N4253zCH21ULc7duv63Mom7rInkt0gdCWfNpP0iCX9gG8Hy2JrB1kDk56x9PlE4oC7Iub+Y8eDe30cAwWZlgFwRA5uRoJwkgVwP/z5crdkLNw6/JoY7EaDkIwJN1mRPAyX1cLUqnRItlHLTlfAt2QwDanh2vmOrohH0CqNOWZz3BlZA9Ac6KGAAGdLG7HCMBndsJOj1aCzKtSwumEUCS0dfpzpJtgwRw8loO4J2roT8EOKuw4+mRkn2yYyHAWYh6M2PlmAUh65UAgCRrAlBHgvpKAPc7LYrJ4+lbhnocIPQu91ZiFuqVABItq8wjmLJfJSCJ+TQCelkBdHJ6mwELU5PiBHV7GMf1wapssey3gDqS0BGZ9y2jtwAs4Tsp6qUS4B1z0r5ytp2cbN+cYJJl0LG1DHWc3lypEjsxRM8Osk084eIFkYfAURqX1yO560v+x3fa//Y4rpsP8/KdY7A1AEmyTHd6DRmwDFAm4P73JxgjoB6963hExRtt//8uAe0CGOIrCIrgL+l2ESDh6/v485JKgF7+IfpJANsbTALcMi8cAdxnREEJqMkFqLhboLA+wJ3pFg9bBSQg5Rj0kRYJDhwBSYFNPA8QT4boTA3v6FovdwTwfu/nASRDEy57RmaoY4ZG5wtsMsOFp50ISFttyEz1SlomBOjrJyHWVTEA6pADAHhZIhH0E7kjgNdgP0PDJa6vwfhm1kjnCwAek7kkABNnIoT3e0xWJ0C5UmB96CEXkJQvyP0WwOR53ZVblssFkgDq4p3JTPqJ3BGgMzA6MSn3e+b+PSeI58OxcpZ5dYJd3e+9Y5D+IUnvJzHHnxAwSEHXvydgWIZlWIZl0Mon4vfcWk5B6nkAAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.shulker_bullet",
+      "texture_width": 64,
+      "texture_height": 32
+    },
+    "nativeGeometryVersion": "1.10.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.shulker_bullet"
+      ]
+    }
+  }
+}

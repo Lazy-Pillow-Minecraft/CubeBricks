@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "sulfur_cube.inner",
+  "elements": [
+    {
+      "name": "cube",
+      "uuid": "c18e2860-d756-47ba-b1da-9962ed3021df",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -8,
+        16,
+        -8
+      ],
+      "to": [
+        8,
+        32,
+        8
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            48,
+            52,
+            64,
+            68
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            16,
+            52,
+            32,
+            68
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            52,
+            16,
+            68
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32,
+            52,
+            48,
+            68
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32,
+            52,
+            16,
+            36
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48,
+            36,
+            32,
+            52
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "af9c7dc5-31c2-4ade-b73c-9f67bff5f938",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "cube",
+          "uuid": "9072a727-d48f-4234-9340-0d24431f7ef1",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "c18e2860-d756-47ba-b1da-9962ed3021df"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 128,
+    "height": 128
+  },
+  "textures": [
+    {
+      "uuid": "ae3a96c6-b8a4-437d-af4a-bc322e575f6b",
+      "id": "0",
+      "name": "sulfur_cube_inner.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/16548e8525cd854e0202.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACABAMAAAAxEHz4AAAAG1BMVEUAAAD///rt/+rt+r/s85Do4pLU1JDTw47Rr4oKZJKNAAAAAXRSTlMAQObYZgAAAbpJREFUeNrt1sFtFEEQheH/DQHse0MCO+sIIAZSIAVicAhkaUdA1yawBbbxCYlhlmt/p1JL/asvJTXTNE3TNE3TH8RvD6dRrOYrbx75NwvvFGAU744GurBOfYLRo+p4YLSUUU8MiuZ4wEVOIGy6+nggUYBQowqOB2QTxVBN7gn0E5WIBlrHA6PG4MdTI2BwPEC3u7owAPe8gGdgAPE9gYahOFSQ+ngAAS2DwdwRcNJV4Ip1xzZGye2JfLt7G3sQKI7Kw5ftU178mpI1r9aH7eXg8xZ2LAl5fhsHBkCAA1uU/cDHHgq6mBuVswwEsyTVyLuBW2JnI+DmmoAT4Q0RazcgXfLh4+WyJkI4CaxniqxC7Fkc5eY45ixijLC0hZuVbTewyCRavaVitCahdImwjHcDJ7qwyWr16/Wl5bNjX4mvuwFOjdZA1jOx8SlOKcSJ2LOEq2xc5SVajSBJdy0RZDeg0KIa0sq2WluCUmnJZs9inOAr0mbTJSU4TWwpuwGibJDNCTV0MfIaAJ0L9gMYaBRk1DSRmyBjtBsQBNQA2iy0uhHaHLDZoe/83eP8Ak3TNE3TNE3TNE3Tf/kJO0uHfiMPgF4AAAAASUVORK5CYII=",
+      "width": 128,
+      "height": 128,
+      "uv_width": 128,
+      "uv_height": 128,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:sulfur_cube#inner"
+      ]
+    }
+  }
+}

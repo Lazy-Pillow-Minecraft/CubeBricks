@@ -17,6 +17,15 @@ const { createWorkspaceCatalog } = require('./workspace-catalog.cjs');
 const { readProjectRetention, initializeProjectRetention, retainProject } = require('./project-retention.cjs');
 const { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder, readFontPack } = require('./resource-packs.cjs');
 const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform === 'win32' ? 'shortcut-icon.ico' : 'shortcut-icon.png');
+const skinLibraryRoot = path.join(__dirname, '..', 'src', 'assets', 'skin-library');
+handleIpc('skin-library:read', async (_event, relativePath) => {
+  if (typeof relativePath !== 'string' || !/^[\w./-]+$/.test(relativePath)
+    || !/\.(?:json|bbmodel|png)$/.test(relativePath)) throw new Error('無效的皮膚素材路徑');
+  const file = path.resolve(skinLibraryRoot, relativePath);
+  if (!file.startsWith(`${skinLibraryRoot}${path.sep}`)) throw new Error('無效的皮膚素材路徑');
+  const bytes = await fs.readFile(file);
+  return file.endsWith('.png') ? `data:image/png;base64,${bytes.toString('base64')}` : bytes.toString('utf8');
+});
 const journals = new Map();
 const journalQueues = new Map();
 const journalOwnership = new JournalOwnership();
@@ -819,9 +828,13 @@ handleIpc('project:export', async (event, payload) => {
     await queueJournal(id, async () => {
       let journal = journals.get(id);
       if (!journal) {
-        journal = await openWorkingJournal(id, directory => new ProjectJournal(directory).initialize(payload.cbmodelContent));
-      } else await journal.commit(payload.cbmodelContent, payload.operationId || 'core.project.information', payload.operationLabel || '修改項目信息');
-      await journal.archive(filePath, { includeHistory: payload.includeHistory, markSaved: false });
+        journal = await openWorkingJournal(id, directory => new ProjectJournal(directory)
+          .initialize(payload.workingCbmodelContent || payload.cbmodelContent));
+      }
+      await journal.archive(filePath, {
+        includeHistory: payload.includeHistory, markSaved: false,
+        currentContent: payload.cbmodelContent
+      });
     });
   } else if (extension === '.json' || extension === '.java') {
     if (typeof payload.modelContent !== 'string') return { filePath, extension, requiresContent: true };

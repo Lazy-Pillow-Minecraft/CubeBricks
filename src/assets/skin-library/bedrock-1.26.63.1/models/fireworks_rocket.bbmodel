@@ -1,0 +1,184 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "fireworks_rocket",
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "dfa3baa1-b09f-47a0-b13a-f5c96978f2db",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -8,
+        -8,
+        0
+      ],
+      "to": [
+        8,
+        8,
+        0
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        -90,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0,
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 0
+        },
+        "south": {
+          "texture": null
+        },
+        "east": {
+          "texture": null
+        },
+        "west": {
+          "texture": null
+        },
+        "up": {
+          "texture": null
+        },
+        "down": {
+          "texture": null
+        }
+      }
+    },
+    {
+      "uuid": "c4794247-c3d4-4168-ae84-b4335b06e2f9",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -8,
+        -8,
+        0
+      ],
+      "to": [
+        8,
+        8,
+        0
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        -90,
+        -90,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0,
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 0
+        },
+        "south": {
+          "texture": null
+        },
+        "east": {
+          "texture": null
+        },
+        "west": {
+          "texture": null
+        },
+        "up": {
+          "texture": null
+        },
+        "down": {
+          "texture": null
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "78630ce2-497c-41b7-b6d1-485ad09ed685",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "dfa3baa1-b09f-47a0-b13a-f5c96978f2db",
+        "c4794247-c3d4-4168-ae84-b4335b06e2f9"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "84770246-b0ad-4745-adb6-3ae4f556dc39",
+      "id": "0",
+      "name": "fireworks.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/3f5869dd4f545676a0c9.png",
+      "resource": "textures/entity/fireworks",
+      "uv_width": 32,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAABjSURBVFjDY2AYBaNgFJAAdmpq/p8JxDS1AIS/fPkCxsj8TWcuwvk0cwSyJeiOAMnNhFp+TUsLLEYTByBbhMxvkZYG07ni4mA8IGkA5IgBs3wUjIJRMApGwSgYBaNgFIwCWgEA1lhcm2aN5fEAAAAASUVORK5CYII=",
+      "width": 32,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.fireworks_rocket",
+      "texture_width": 32,
+      "texture_height": 32
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.fireworks_rocket"
+      ]
+    }
+  }
+}

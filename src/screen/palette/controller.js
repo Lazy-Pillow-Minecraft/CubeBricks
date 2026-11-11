@@ -29,6 +29,10 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
       colors: ['#22191b', '#402329', '#663233', '#8b443b', '#b65e48', '#d9805a', '#eca875', '#f6d09b', '#f4e4c2', '#8b705b', '#66503e', '#48382f', '#2f2926', '#1c1d19']
     }
   ];
+  // Older installations kept every card in one application-wide file. Keep
+  // those cards global on migration; newly created cards belong to a project.
+  let globalPaletteRows = paletteRows.map(row => ({ ...row, scope: 'global' }));
+  let activePaletteProject = null;
   const PALETTE_ROWS_KEY = 'cubebricks.palette-rows.v1';
   const PALETTE_UPDATED_KEY = 'cubebricks.palette-rows-updated.v1';
   const PALETTE_COMPACT_KEY = 'cubebricks.palette-compact.v1';
@@ -37,9 +41,11 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
   let localPaletteUpdatedAt = Number.isFinite(storedPaletteTime) ? storedPaletteTime : 0;
   try {
     const saved = localStorage.getItem(PALETTE_ROWS_KEY);
-    if (saved) paletteRows.splice(0, paletteRows.length, ...decodeColorMap(saved, { legacy: true }).palettes);
+    if (saved) globalPaletteRows = decodeColorMap(saved, { legacy: true }).palettes
+      .map(row => ({ ...row, scope: 'global' }));
   } catch { /* A damaged optional palette cache must not block startup. */ }
-  let lastSavedPalettePayload = JSON.stringify(paletteRows);
+  paletteRows.splice(0, paletteRows.length, ...globalPaletteRows);
+  let lastSavedPalettePayload = JSON.stringify(globalPaletteRows);
   let paletteChangedBeforeDiskLoad = false;
   let diskReady = false;
   let diskSaveTimer = null;
@@ -48,7 +54,7 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
   function queueDiskSave() {
     if (!diskReady || !window.cubeBricksDesktop?.saveColorMap) return;
     if (diskSaveTimer !== null) clearTimeout(diskSaveTimer);
-    const content = encodeColorMap(paletteRows, localPaletteUpdatedAt);
+    const content = encodeColorMap(globalPaletteRows, localPaletteUpdatedAt);
     diskSaveTimer = setTimeout(() => {
       diskSaveTimer = null;
       diskSaveQueue = diskSaveQueue.catch(() => {}).then(() => window.cubeBricksDesktop.saveColorMap(content))
@@ -56,7 +62,20 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
     }, 120);
   }
   function savePaletteRows(notify = true) {
-    const payload = JSON.stringify(paletteRows);
+    const project = state.projectHomeActive ? null : state.project;
+    if (project) {
+      const localRows = paletteRows.filter(row => row.scope !== 'global');
+      const previous = JSON.stringify(project.palettes || []);
+      const next = JSON.stringify(localRows);
+      if (next !== previous) {
+        project.palettes = structuredClone(localRows);
+        noteJournalOperation('core.texture.palette');
+        markDirty(true, { constrain: false });
+        if (notify) onPaletteChange?.();
+      }
+    }
+    globalPaletteRows = paletteRows.filter(row => row.scope === 'global');
+    const payload = JSON.stringify(globalPaletteRows);
     if (payload !== lastSavedPalettePayload) {
       lastSavedPalettePayload = payload;
       localPaletteUpdatedAt = Math.max(Date.now(), localPaletteUpdatedAt + 1);
@@ -78,16 +97,15 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
         if (content && !paletteChangedBeforeDiskLoad) {
           const saved = decodeColorMap(content);
           if (saved.updatedAt >= localPaletteUpdatedAt) {
-            paletteRows.splice(0, paletteRows.length, ...saved.palettes);
-            selectedPaletteRowId = paletteRows[0]?.id ?? null;
-            selectedPaletteColorIndex = null;
+            globalPaletteRows = saved.palettes.map(row => ({ ...row, scope: 'global' }));
             localPaletteUpdatedAt = saved.updatedAt;
-            lastSavedPalettePayload = JSON.stringify(paletteRows);
+            lastSavedPalettePayload = JSON.stringify(globalPaletteRows);
+            selectedPaletteColorIndex = null;
+            activateProjectPalettes(true);
             try {
               localStorage.setItem(PALETTE_ROWS_KEY, lastSavedPalettePayload);
               localStorage.setItem(PALETTE_UPDATED_KEY, String(localPaletteUpdatedAt));
             } catch { /* The desktop file is authoritative. */ }
-            renderPalette();
             onPaletteChange?.();
           }
         }
@@ -100,6 +118,18 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
       }
     })();
     return paletteLoadPromise;
+  }
+  function activateProjectPalettes(force = false) {
+    const project = state.projectHomeActive ? null : state.project;
+    if (!force && project === activePaletteProject) return;
+    activePaletteProject = project;
+    const localRows = Array.isArray(project?.palettes) ? project.palettes
+      .map(row => ({ ...structuredClone(row), scope: 'project' })) : [];
+    const localIds = new Set(localRows.map(row => row.id));
+    paletteRows.splice(0, paletteRows.length, ...localRows,
+      ...globalPaletteRows.filter(row => !localIds.has(row.id)));
+    if (!paletteRows.some(row => row.id === selectedPaletteRowId)) selectedPaletteRowId = paletteRows[0]?.id ?? null;
+    renderPalette();
   }
   async function exportColorMap() {
     try {
@@ -136,6 +166,7 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
         while (names.has(row.name)) row.name = `${base} ${suffix++}`;
         names.add(row.name);
         row.id = crypto.randomUUID();
+        row.scope = state.projectHomeActive ? 'global' : 'project';
         paletteRows.push(row);
       }
       selectedPaletteRowId = incoming[0].id;
@@ -469,6 +500,7 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
     <div class="palette-row-card ${selectedPaletteRowId === row.id ? 'selected' : ''}" data-palette-id="${row.id}">
       <div class="palette-row-controls">
         <span class="palette-row-name" title="${escapeAttribute(row.name)}">${escapeHtml(row.name)}</span>
+        <button class="palette-scope-toggle" data-palette-scope="${index}" title="${row.scope === 'global' ? '全局色卡 · 點擊改為此項目專用' : '項目色卡 · 點擊改為全局共用'}">${row.scope === 'global' ? '全局' : '項目'}</button>
         <label class="row-gradient-toggle" title="此行使用連續漸變">
           <input type="checkbox" data-gradient-row="${index}" ${row.gradient ? 'checked' : ''} /> 漸變
         </label>
@@ -547,6 +579,9 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
       paletteRows[Number(toggle.dataset.gradientRow)].gradient = toggle.checked;
       renderPalette();
     }));
+    $$('[data-palette-scope]', rows).forEach(button => button.addEventListener('click', () => {
+      togglePaletteScope(paletteRows[Number(button.dataset.paletteScope)]);
+    }));
     $$('[data-color-space-row]').forEach(toggle => toggle.addEventListener('change', () => {
       const row = paletteRows[Number(toggle.dataset.colorSpaceRow)];
       row.colorSpaceGradient = toggle.checked;
@@ -598,7 +633,7 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
   function addPaletteRow() {
     const number = paletteRows.length + 1;
     paletteRows.push({
-      id: crypto.randomUUID(), name: `自定義 ${number}`, gradient: false, marker: .5,
+      id: crypto.randomUUID(), name: `自定義 ${number}`, scope: state.projectHomeActive ? 'global' : 'project', gradient: false, marker: .5,
       colors: []
     });
     selectedPaletteRowId = paletteRows.at(-1).id;
@@ -606,6 +641,11 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
     renderPalette();
     const rows = $('#paletteRows');
     rows.scrollTop = rows.scrollHeight;
+  }
+  function togglePaletteScope(row) {
+    if (!row || row.scope === 'global' && state.projectHomeActive) return;
+    row.scope = row.scope === 'global' ? 'project' : 'global';
+    renderPalette();
   }
 
   function sampleGradient(colors, ratio) {
@@ -886,7 +926,8 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
     if (notify) toast(`已套用 ${color}`);
   }
   return {
-    paletteRows, renderPalette, renderPaintColorHistory, recordPaintColorHistory,
+    paletteRows, renderPalette, activateProjectPalettes, togglePaletteScope,
+    renderPaintColorHistory, recordPaintColorHistory,
     loadPersistedPalettes, exportColorMap, importColorMap,
     syncPaletteSelectionToPaintColor, samplePaletteGradient, scrollSelectedPaletteColor, addPaletteRow,
     openColorSpaceCurveEditor, addPaintSwatchToSelection, deleteSelectedPaletteColor, applyPaletteColor,

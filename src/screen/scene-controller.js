@@ -4,7 +4,7 @@ export function createSceneController({
   state, $, $$, sceneCanvas, sceneRenderer, inspectorController,
   uvPreviewController, LOCATOR_ICON_SHAPES, getSelectionExpansion,
   getTransformPivot, updateTransformGizmo, refreshUvPreview,
-  currentProjection, buildEditorOverlayLines, updateMirrorGuideOverlay,
+  currentProjection, activeSnapSubdivisions, buildEditorOverlayLines, updateMirrorGuideOverlay,
   updateAxisWidget, updateReferenceImageLayer, updatePaintSelection = () => {}
 }) {
   let lockedHoverFrame = null;
@@ -44,6 +44,7 @@ export function createSceneController({
       selectedUids: hidePaintSelection ? emptyPaintSelection : state.selectedUids,
       selectedUvFaces: hidePaintSelection ? emptyPaintSelection : state.selectedUvFaces,
       projection: currentProjection(),
+      snap: activeSnapSubdivisions(),
       subdivisionEditOwnerUid: inspectorController.subdivisionSession?.ownerUid || null,
       lockedDefaultAlpha: inspectorController.subdivisionSession ? 12 : state.lockedDefaultAlpha,
       lockedHoverFade: inspectorController.subdivisionSession ? false : state.lockedHoverFade,

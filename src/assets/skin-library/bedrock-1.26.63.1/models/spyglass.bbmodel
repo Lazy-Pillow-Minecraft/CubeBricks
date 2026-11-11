@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "spyglass",
+  "resolution": {
+    "width": 16,
+    "height": 16
+  },
+  "elements": [
+    {
+      "uuid": "97002590-e7dc-43e0-9631-17742e2d43f4",
+      "type": "cube",
+      "name": "spyglass",
+      "from": [
+        4.8999999999999995,
+        -0.1,
+        -0.1
+      ],
+      "to": [
+        11.1,
+        2.1,
+        2.1
+      ],
+      "origin": [
+        8,
+        1,
+        1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "ecb6dd4d-e4fe-4aab-8e52-77dae391f48b",
+      "type": "cube",
+      "name": "spyglass",
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        5,
+        2,
+        2
+      ],
+      "origin": [
+        2.5,
+        1,
+        1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        4
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "849f4728-b15c-4cd3-a58c-fb48528fc501",
+      "name": "spyglass",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "97002590-e7dc-43e0-9631-17742e2d43f4",
+        "ecb6dd4d-e4fe-4aab-8e52-77dae391f48b"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "e7bfb932-3140-47b9-8e0b-8feb62405923",
+      "id": "0",
+      "name": "spyglass.png",
+      "resource": "textures/entity/spyglass",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAATpJREFUOI3tkTFIw0AYhb9gx5bCiS1ShCZFSMfi5iAInbuI4C4InR06dXKquDkUB9dScBMcpSAouthFSES4Kh1KjTkIdXCLg15o6O0uftPx+P+7d+9Z/PL5uh8/HN9iu0JLnPW+aPdrvF96FBrVRD/aG9K5f7QAMsxhuyI1SG8IwMhXgIcJa/AUxJWSQEQHmBzM0+7XkrN2lfHeAgBE1uxARjOcfC5Z0ox8RaEBlhZ2q+uxVCHHOwXGkymndxZ1u4yMZnSaKwC0ugEX3ovFHEkG+hXbFdiu4MoPkNEMqUJG/hLjyRSpUrs/F2wUReyIZePwyfUzlZLgcNOl06yytQ2tbhA7+Vy6BalC6nZ5wYHOR6qQm8EHa6tFpAqNbfwdls4ASKWtQzV1ny2fJ2kmGQAL/3TyOWP3/6T5BvfCk5bEtZitAAAAAElFTkSuQmCC",
+      "relative_path": "../textures/5b8c9361037b8596283d.png",
+      "width": 16,
+      "height": 16,
+      "uv_width": 16,
+      "uv_height": 16,
+      "mode": "bitmap",
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.spyglass",
+      "texture_width": 16,
+      "texture_height": 16,
+      "visible_bounds_width": 3,
+      "visible_bounds_height": 1.5,
+      "visible_bounds_offset": [
+        0,
+        0.25,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.16.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.spyglass"
+      ]
+    }
+  }
+}

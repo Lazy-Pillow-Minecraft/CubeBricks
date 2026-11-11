@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "sulfur_cube_small",
+  "elements": [
+    {
+      "name": "cube",
+      "uuid": "7da978ae-95dc-4168-9b61-4708da3b9c33",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -5,
+        19,
+        -5
+      ],
+      "to": [
+        5,
+        29,
+        5
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            30,
+            10,
+            40,
+            20
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            10,
+            10,
+            20,
+            20
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            10,
+            10,
+            20
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            20,
+            10,
+            30,
+            20
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            20,
+            10,
+            10,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            30,
+            0,
+            20,
+            10
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "897c6a82-60ce-4610-9aa8-81411d1b704f",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "cube",
+          "uuid": "1c38c987-d8ba-422d-a744-c3bb62fcd445",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "7da978ae-95dc-4168-9b61-4708da3b9c33"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "textures": [
+    {
+      "uuid": "1c6e0d2d-9330-4233-8113-0be7175c9ef4",
+      "id": "0",
+      "name": "sulfur_cube_outer_small.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/49a70d5bf5711b71375b.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAG1BMVEUAAADq9OrW87Tq9rTw9cHu9cGPZU9SRDdAOzAj+eJ0AAAABnRSTlMAGCxVnc2fn21VAAAAtklEQVR42u2QwQ3CMAxFu0KkskAiFqibASDxABS7naQSC3Rv0qQK0GB6Rso7fFnKlxy/JsKZ5jvs0TN78lKBHPQYQyrAFZBAg1gYlEEaWiMWOuUwxFleoQ9WuHuPMcQzvecQJHrI/HoTWtEf47YiTXuJNkl8RXkhg3ZINt3qPgvcXQxSr8wqaptKiXxTJ+auDYUQu0+uK8a5HWcCbZPOUuK0wLSQg6yzkEgPfLv1WFSlUqlU/oonyT9RnXmq4tUAAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:sulfur_cube_small#main"
+      ]
+    }
+  }
+}

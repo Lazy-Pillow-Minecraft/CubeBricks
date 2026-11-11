@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { COLOR_MAP_FORMAT, decodeColorMap, decodePaletteFile, encodeColorMap, encodePaletteFile } from '../src/screen/palette/color-map-file.js';
+import { palettesForCbmodel } from '../src/common/core/project-palettes.js';
+import { CubeBricksProject } from '../src/model.js';
 
 const rows = [{
   id: 'palette-a', name: '測試色卡', colors: ['#112233', '#aabbcc'], gradient: true,
@@ -46,6 +48,8 @@ assert.equal(JSON.parse(portable).palette.colors.length, 2);
 assert.equal(JSON.parse(portable).palettes, undefined, 'portable exports contain only the selected card');
 assert.equal(JSON.parse(portable).palette.name, undefined, 'portable exports omit the local card name');
 assert.equal(JSON.parse(portable).palette.id, undefined, 'portable exports omit the local card identity');
+assert.equal(JSON.parse(encodePaletteFile({ ...rows[0], scope: 'global' })).palette.scope, undefined,
+  'portable palette files do not impose the sender’s project/global scope');
 const imported = decodePaletteFile(portable, '從檔名取得');
 assert.equal(imported.length, 1);
 assert.equal(imported[0].name, '從檔名取得');
@@ -57,4 +61,20 @@ assert.deepEqual(decodeColorMap(encodeColorMap([])).palettes, [],
   'deleting the final card must survive persistence and reload');
 assert.throws(() => decodePaletteFile(encodeColorMap([]), 'empty'), /沒有色卡/,
   'an empty collection is valid for local storage but not as a palette import');
+const projectCard = { ...rows[0], scope: 'project' };
+const globalCard = { id: 'palette-global', name: 'Shared', colors: ['#ff0000'], scope: 'global' };
+const unusedCard = { id: 'palette-unused', name: 'Unused', colors: ['#00ff00'], scope: 'global' };
+const embedded = palettesForCbmodel([projectCard], [projectCard, globalCard, unusedCard], [
+  { layers: [{ blendMode: 'tone_map', toneMap: { paletteId: globalCard.id } }] }
+]);
+assert.deepEqual(embedded.map(row => row.id), [projectCard.id, globalCard.id],
+  'native exports keep local cards and only globally referenced cards');
+assert.equal(embedded[1].scope, 'project', 'a receiving project owns its embedded card');
+assert.equal(globalCard.scope, 'global', 'export must not change the sender’s global card');
+const firstProject = new CubeBricksProject({ palettes: [projectCard] });
+const reopenedProject = new CubeBricksProject(JSON.parse(firstProject.serialize()));
+const nextProject = new CubeBricksProject({});
+assert.deepEqual(reopenedProject.palettes.map(row => row.id), [projectCard.id],
+  'project palettes persist in the native model document');
+assert.deepEqual(nextProject.palettes, [], 'a new project does not inherit another project’s local cards');
 console.log('Color map file tests passed.');

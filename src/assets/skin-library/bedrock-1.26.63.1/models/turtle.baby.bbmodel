@@ -1,0 +1,469 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "turtle.baby",
+  "resolution": {
+    "width": 16,
+    "height": 16
+  },
+  "elements": [
+    {
+      "uuid": "0076cd11-943f-47ef-9e78-1fde3f3be96a",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -2,
+        0,
+        -1
+      ],
+      "to": [
+        2,
+        2,
+        3
+      ],
+      "origin": [
+        0,
+        1,
+        1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "d0df1d24-7a86-4c7c-8858-888756661c86",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -1.5,
+        0,
+        -4
+      ],
+      "to": [
+        1.5,
+        3,
+        -1
+      ],
+      "origin": [
+        0,
+        1.5,
+        -2.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        6
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "4a710135-5a3a-4fac-8c54-3f3ed2029f25",
+      "type": "cube",
+      "name": "leg0",
+      "from": [
+        2,
+        0,
+        2
+      ],
+      "to": [
+        4,
+        0,
+        3
+      ],
+      "origin": [
+        3,
+        0,
+        2.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        -1,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "c44491c4-8115-4f49-8b91-6afaf638859f",
+      "type": "cube",
+      "name": "leg1",
+      "from": [
+        -4,
+        0,
+        2
+      ],
+      "to": [
+        -2,
+        0,
+        3
+      ],
+      "origin": [
+        -3,
+        0,
+        2.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        -1,
+        1
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "ea4c1e53-01bf-4338-8fee-6e2768c4aab6",
+      "type": "cube",
+      "name": "leg2",
+      "from": [
+        2,
+        0,
+        -1
+      ],
+      "to": [
+        4,
+        0,
+        0
+      ],
+      "origin": [
+        3,
+        0,
+        -0.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        8,
+        6
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "6d199aaf-d379-4577-a4ce-db6539607626",
+      "type": "cube",
+      "name": "leg3",
+      "from": [
+        -4,
+        0,
+        -1
+      ],
+      "to": [
+        -2,
+        0,
+        0
+      ],
+      "origin": [
+        -3,
+        0,
+        -0.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        8,
+        7
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "7ed340f2-cca3-42c5-a034-602c96a82ef4",
+      "name": "body",
+      "origin": [
+        0,
+        1,
+        1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "0076cd11-943f-47ef-9e78-1fde3f3be96a"
+      ]
+    },
+    {
+      "uuid": "29c24c68-1bcb-4bbb-83a9-2f905ae007a0",
+      "name": "head",
+      "origin": [
+        0,
+        1,
+        -1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "d0df1d24-7a86-4c7c-8858-888756661c86"
+      ]
+    },
+    {
+      "uuid": "f1499d2d-74c4-4f27-aa97-a3b12b848a70",
+      "name": "leg0",
+      "origin": [
+        2,
+        0,
+        2.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "4a710135-5a3a-4fac-8c54-3f3ed2029f25"
+      ]
+    },
+    {
+      "uuid": "0e03223c-be7f-45ce-a5ed-e104255eaab0",
+      "name": "leg1",
+      "origin": [
+        -2,
+        0,
+        2.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "c44491c4-8115-4f49-8b91-6afaf638859f"
+      ]
+    },
+    {
+      "uuid": "18c2538a-d022-4597-b7da-abe109624baf",
+      "name": "leg2",
+      "origin": [
+        2,
+        0,
+        -0.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "ea4c1e53-01bf-4338-8fee-6e2768c4aab6"
+      ]
+    },
+    {
+      "uuid": "2d3a288d-05bb-46a2-a120-be2e3bb179a4",
+      "name": "leg3",
+      "origin": [
+        -2,
+        0,
+        -0.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "6d199aaf-d379-4577-a4ce-db6539607626"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "4b9a6dbc-3eb9-4890-b10b-758a11c1b4d9",
+      "id": "0",
+      "name": "sea_turtle_baby.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/dab4fd20db4b4055fbb6.png",
+      "resource": "textures/entity/turtle/sea_turtle_baby",
+      "uv_width": 16,
+      "uv_height": 16,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAsElEQVQ4y2PI2+b933eGw/9Prxb9v3Ki5r9FvdP/7othYAxig8RAcjB5BnQA0gwyBKYQxAZpBGEQG6YRJs9ACJDsAnQAshVmAIi9e3423AUgNk4vwGgYG52PS5wB3Ykwm5BtRpfH6SWYDSAMMwSE0WOKoP9hsQLD6DGF0wBY4IEwTDHBkEcOdXSMHqjgQMMWC4aGBnDFyBgkDpKHJSwQxppwQIqQQxfmdHTNWA0YBQwAiIxko1kKsDUAAAAASUVORK5CYII=",
+      "width": 16,
+      "height": 16,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.turtle.baby",
+      "texture_width": 16,
+      "texture_height": 16,
+      "visible_bounds_width": 2,
+      "visible_bounds_height": 1.5,
+      "visible_bounds_offset": [
+        0,
+        0.25,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.turtle.baby"
+      ]
+    }
+  }
+}

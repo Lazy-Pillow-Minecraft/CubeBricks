@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "leash_knot",
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "ed95d1f5-5f4f-4ae8-8adc-6f2a8d547790",
+      "type": "cube",
+      "name": "knot",
+      "from": [
+        -3,
+        2,
+        -3
+      ],
+      "to": [
+        3,
+        10,
+        3
+      ],
+      "origin": [
+        0,
+        6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "34aca726-c266-4c88-b102-1427898bc810",
+      "name": "knot",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "ed95d1f5-5f4f-4ae8-8adc-6f2a8d547790"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "0eec8ace-e229-4ccf-a44f-bb78fe981150",
+      "id": "0",
+      "name": "lead_knot.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/28df0066c50dd21a8ac7.png",
+      "resource": "textures/entity/lead_knot",
+      "uv_width": 32,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAEaSURBVFjD7VO7CsJAELxvsvBR2NmmEkRFUmgnCKKihdqJhY1WFlrY+AniB+VHTuZgw2a5MzFqtwPD5XYv2Z25jUmSxFhrDVaO7ahpx+1Kymm36hiKm2/ga+K+H7oCKEhEoVC8dPHbLnKcxw3zOPVTUiGunDcg439zgCgbkPGfFgeoGEhWk3Jf3HwLXwOccuhkvHThw6RlOUkd8XleuBU5PnjYI0d58LLpZPY4k9sAul8O6pl75UTOl5cOhFjYAd75cRZllIYcwjsyBxd4vpADeao/cUjuCzvA7/e67jmSK1AFFpkT+hY9fzwDpCCkmu4+lC/tgE+V7475hMsc/ytKOfBOvYzDhVVcc+RnyB06axQKhUKhUCgUOXgBUWVla5i/bx0AAAAASUVORK5CYII=",
+      "width": 32,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.leash_knot",
+      "texture_width": 32,
+      "texture_height": 32
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.leash_knot"
+      ]
+    }
+  }
+}

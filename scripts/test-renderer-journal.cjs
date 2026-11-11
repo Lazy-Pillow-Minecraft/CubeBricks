@@ -38,6 +38,7 @@ function setup() {
   let finish;
   const context = vm.createContext({
     structuredClone, Set, Map, Promise, JSON,
+    palettesForCbmodel: rows => rows || [], paletteRows: [],
     pendingPaintCommit: () => null,
     finishActivePaintGesture() {},
     performanceMonitor: { enabled: false, record() {} },

@@ -61,7 +61,8 @@ export function createElementCommands({
   function addCube() {
     if (state.mode === 'paint') return;
     snapshot('core.cube.create');
-    const cube = new Cube({ position: [-1, 0, -1], size: [2, 2, 2], pivot: [0, 0, 0], color: '#a7d352' });
+    const cube = new Cube({ position: [-1, 0, -1], size: [2, 2, 2], pivot: [0, 0, 0],
+      uvMode: state.project.uvMode, color: '#a7d352' });
     state.project.elements.push(cube);
     insertNewNodeUid(cube.uid);
     alignNewNodeWithParent(cube.uid);
@@ -78,7 +79,8 @@ export function createElementCommands({
     if (!definition.supportsFormat(formatRules(state.project))) return toast('当前模型格式暂不支持此 Shape');
     snapshot('core.shape.create');
     const type = shapeType;
-    const shape = new Shape({ type, shapeType: type, origin: [0, 2, 0], pivot: [0, 2, 0] });
+    const shape = new Shape({ type, shapeType: type, origin: [0, 2, 0], pivot: [0, 2, 0],
+      uvMode: state.project.uvMode });
     state.project.elements.push(shape);
     insertNewNodeUid(shape.uid);
     alignNewNodeWithParent(shape.uid);
@@ -105,7 +107,8 @@ export function createElementCommands({
   function addBezierElement(dimension, variant = 'standard') {
     if (state.mode === 'paint') return;
     snapshot('core.curve.create');
-    const curve = new BezierElement({ origin: [0, 0, 0], rotation: dimension === 2 ? [-90, 0, 0] : [0, 0, 0], variant }, dimension);
+    const curve = new BezierElement({ origin: [0, 0, 0], rotation: dimension === 2 ? [-90, 0, 0] : [0, 0, 0],
+      variant, uvMode: state.project.uvMode }, dimension);
     state.project.elements.push(curve);
     insertNewNodeUid(curve.uid);
     alignNewNodeWithParent(curve.uid);
@@ -120,7 +123,8 @@ export function createElementCommands({
     if (state.mode === 'paint') return;
     const previousRowPositions = captureOutlinerRowPositions();
     snapshot('core.group.create');
-    const group = new Group({ name: allocateGroupName(state.project), unnamed: true, children: [] });
+    const group = new Group({ name: allocateGroupName(state.project), unnamed: true, children: [],
+      uvMode: state.project.uvMode });
     const hadMultipleSelection = selectedNodeUids().length > 1;
     const selectedIds = topLevelSelectedUids();
     state.project.groups.push(group);

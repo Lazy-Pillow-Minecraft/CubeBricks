@@ -1,0 +1,245 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "elytra",
+  "elements": [
+    {
+      "name": "left_wing",
+      "uuid": "cac45573-c7a2-411b-856e-d9641d290e97",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        -5,
+        24,
+        0
+      ],
+      "from": [
+        -5,
+        4,
+        0
+      ],
+      "to": [
+        5,
+        24,
+        2
+      ],
+      "inflate": 1,
+      "faces": {
+        "south": {
+          "uv": [
+            36,
+            2,
+            46,
+            22
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            24,
+            2,
+            34,
+            22
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            22,
+            2,
+            24,
+            22
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            34,
+            2,
+            36,
+            22
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            34,
+            2,
+            24,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            44,
+            0,
+            34,
+            2
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "right_wing",
+      "uuid": "12d4a361-db17-4587-8caf-bc30939de4b0",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        5,
+        24,
+        0
+      ],
+      "from": [
+        -5,
+        4,
+        0
+      ],
+      "to": [
+        5,
+        24,
+        2
+      ],
+      "inflate": 1,
+      "faces": {
+        "south": {
+          "uv": [
+            46,
+            2,
+            36,
+            22
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            34,
+            2,
+            24,
+            22
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            36,
+            2,
+            34,
+            22
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            24,
+            2,
+            22,
+            22
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            24,
+            2,
+            34,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            34,
+            0,
+            44,
+            2
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "b5a456e6-ac99-43c3-af3f-5ccde95d3afc",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "left_wing",
+          "uuid": "180be30e-f8bd-4920-9b2c-987cd16bcc65",
+          "origin": [
+            -5,
+            24,
+            0
+          ],
+          "rotation": [
+            -15.000001,
+            0,
+            -15.000001
+          ],
+          "children": [
+            "cac45573-c7a2-411b-856e-d9641d290e97"
+          ]
+        },
+        {
+          "name": "right_wing",
+          "uuid": "dfaf8c7f-6abc-4eb4-9566-f07b0a787767",
+          "origin": [
+            5,
+            24,
+            0
+          ],
+          "rotation": [
+            -15.000001,
+            0,
+            15.000001
+          ],
+          "children": [
+            "12d4a361-db17-4587-8caf-bc30939de4b0"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "textures": [
+    {
+      "uuid": "8cedfa17-cfec-4960-95ba-2e3b5a4d8e67",
+      "id": "0",
+      "name": "elytra.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/6adbbc0f7d39cd233083.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAMAAACVQ462AAAAIVBMVEUAAAB/j593iJptf5JneIpfb4BYZnVPXGpKVmNGUV1CTFgLTatUAAAAAXRSTlMAQObYZgAAAJpJREFUeNrtzzESwjAMRFFJ1kpa3//ATMxQAAVBblLkH+DNrvyIpK6kGym7kZMk5w6wBEq3FzB3AfYBHkLmBsBZmQnpVZOsqow2UJWZWRHSKysrMwCX09m7EBEA4NoEAkAAPs4D+gUg3Ed3AeDjyK25wIcvoXlhCcOPB90L8hxgZt0FpqarLiCqZvYP4PI5QZfRBsQWoXJ3d9EeqAUEMMmFoygAAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 32,
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:elytra#main"
+      ]
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "player_head",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "573e4ea5-54a7-4709-9b56-198c8de75ce3",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -4,
+        24,
+        -4
+      ],
+      "to": [
+        4,
+        32,
+        4
+      ],
+      "origin": [
+        0,
+        28,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "69fa434f-38e6-4d87-b81a-200eb656b6bf",
+      "name": "head",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "573e4ea5-54a7-4709-9b56-198c8de75ce3"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "e590dbfa-a79f-4a9f-bf17-82fe29e367bb",
+      "id": "0",
+      "name": "steve.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/86312cb1215f9bf7a734.png",
+      "resource": "textures/entity/steve",
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAUNSURBVHja7ZrbSxRRHMf3sbQsoyi0+5ZtWmyWPWiUld2MKDKKyjCxKPOCsHSBIrILlQXVk1BYQRBIFD10ewh77Mn/6dd8z+xv+s3hnBn3os6uc+DLHM/8ztn5fs5lz3omkQhJ9asWErRhxTySeWjN4kq6cTgdqESpJzacXrNISQKAYLJv7zZ6fKrJu0JlBYDN19VUWAEkk0mfUFYWALj39WnAZWUPQJrFCIDkdJgTAEzmwwB0pOrKBwAb37xygcpj9dcBmFQ2ANi4FI+Mkv8aTNVWEARTm2orldntycW0da2r9NqF1LDaXQdSKyvVQohYlAEAx6EO6qIN3Od2w/YRkQIAbVldpYzA4I4N1erKwt/765dQa/0yFQcgHIM6KON2JICgfcSsA1APvcLtNde4Y6wWPV3hgfg5MkATLzL0d3SYJp5nnPx1+nzzPDVtXKJiEIs6DVl4CoLTJtoO20dEYwTUOEN5VZXbq7XuVEA+vb6aPt29Qt8fDarrl+FBGstcoN8jGRq7dkwJMYhFHdRFHm2hTfwdto+IzBRwp8ECSi6fT0/OttDYpYPUklqqzCN17B6hH3euKvPIIwEKYhCLOqiLNmSbYfuI6ABweswdttX0qKORRi/uo6fnmx1zh+jbnR769SDjfb39eTpAH/oO07Cz50cMYlEHddEG975cBG37iEisAXhQDNuetjS97TtBby4d8H7QvOpqcwzupVv7d/r0smsP3T/VrGIQizqoizbUFMhOh7B9xKwD4F9vbHrs6hHVo8/O7aLrR9I0dHALDbbVK7PQ7eM76OHpXUrIIwax73vbVd03l4+612x7DFLfRzC4yO0LzrRPklQqlfIptIHJSfumyLmX6O4OVlgaH3fbgZw8puTJxo3eNRIAbFvjogBg81nNbQDOCJDm1WfMtSlQMIBtqQxBdes61fVQy0ef5D39fkvjCCXu3fuvzk5KvH5NiXfv1IKJr0pePFGmJOMhlMEU6+tXV/y3LZ5j9PtcnzUVADCYDwBIfWhvryvk+cGzEDzz/EAyHpKmpbgdGcsGuQ4D1e/nA8BmMBSA6QH5IfGAGBHSpIyHTOZlGybAMmbWAWDY8wMgLz+cAcgyWzzHwaDM6wblaJqpESBjMO+lPCMsPLw0zXkul7EMQDct6mNTxnribL7w+0MKZTJGv58XADYnR4AVgDQDGBKAyZgExlPAVCc71E0ARoc6PYNcXlQAOa8BOgDZ+3LFlgDkGqCZlkCkOR0AriYAqjwbM+WvwbwB6HMwDID+LWCKtQDQe1gHYJoiRQEQdD9wEdK/AXQApkVLkzRnAxC0RoQCaG1tJSgMAMf19/f75BnijQj3nt77NgAy3rAeSHOmOS4ByCnA1ykDsBkMuy+nCK46QG/HKADoGy9vQeVp4ogXYRsANmkaIbMGwDSCfBAcY6FbaydGluk97FsAHZnWiJwAxClOcYpTnOIUpzjFKU5xilOc4hSnOBWaCj5cLfbhZ8kB0M7/5x4AOQKm4wWIUpsCkQeQ6/sF/N9e37mClPxXuul9glwPP6MCwHbfevrLIGwnSaUEIOh+4EmR6Xi87AEU+/x/JgAU8n7BtJ//zxQA01FXLgDCjr4iDaCQKaADkMdaOgD5fsCUz/+jAsA2RfTDTfn2h376m9fx90wByPf9An2ImwAU9ALEdKdC3y8wne/bAJimSGQA5Hu8burhoJegyhKAbyEUC5z+Csx0APgH+QeX11rs170AAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 64,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.player_head",
+      "texture_width": 64,
+      "texture_height": 64,
+      "visible_bounds_width": 1,
+      "visible_bounds_height": 1,
+      "visible_bounds_offset": [
+        0,
+        0.5,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.8.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.player_head"
+      ]
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "experience_orb",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "f8d37b08-5a86-401c-92fd-9bed364dc0d9",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -16,
+        0,
+        0
+      ],
+      "to": [
+        0,
+        16,
+        0
+      ],
+      "origin": [
+        -8,
+        8,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": false,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": null
+        },
+        "south": {
+          "texture": 0,
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 0
+        },
+        "east": {
+          "texture": null
+        },
+        "west": {
+          "texture": null
+        },
+        "up": {
+          "texture": null
+        },
+        "down": {
+          "texture": null
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "7076f1e5-59c1-418c-a49f-a89f4a0233e9",
+      "name": "body",
+      "origin": [
+        -8,
+        8,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "f8d37b08-5a86-401c-92fd-9bed364dc0d9"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "f0ff1841-72f4-45cc-be8a-f78daea3a285",
+      "id": "0",
+      "name": "experience_orb.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/bfcd9898d3ac7c43040d.png",
+      "resource": "textures/entity/experience_orb",
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAHmSURBVHja7VtbjoMwDOyB+9Gj5Ag5SjlZ+sFmlTV+QQyo67HkPybxjCAZB3g8EIhNvF4vNi/ENy4vwUvFe0n8XNeEdBVfa2XTQ2IKPxAVCWgkOlYrwMC3WmtbloVNi8QUnpIXihdFoOS5yTURrOItEhRPwxRhFICSoMVbAtAi6OQeAfYSGPFS7BKAEtgrgDb5ZQK832tCgAMCpH4EUi6C6bdBGCFYYQQCEddO3/oMT68BMwNEruKch/DiD22BswV4jdAVPmCXC4wYgJKX8Gc5uQgrfHgAi7wlgkXeEkGsnTRDqgh9EGsATQC2E3N0ZCK+lDUdeJY8g+9jsAJ4C3ALsJPAH3wprT2fa5ayuQtUAfrcI97gAAHwCGRfBNNvgzBCsMJohhCael4V78aHEDdOdcVVOBovHKnHCyFNbJzttzPw4/V0CyQvV1rYGsAVr+3DZxqZI/ipXYhT31sAvW01rPCO8DetubleQLPkbh+hkhesJCWh2lDDjqp4xctbd5FbhNkC1EZG6cai8NNW+jQCHdtTwW8KHudmWmKuo4MAoQJkfQTSLoKpt8H0RghWGM0Q2mEE4p+d6c3+L3DrZ2p3/y9w64eKd/8vEPqp6rfhQ19NfSMeAkAACJB8EUy/DcIIwQojUsYHXYuBvsjq4G4AAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 64,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.experience_orb",
+      "texture_width": 64,
+      "texture_height": 64
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.experience_orb"
+      ]
+    }
+  }
+}

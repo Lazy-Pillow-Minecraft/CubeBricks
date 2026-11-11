@@ -261,7 +261,8 @@ export function createTransformInteraction({
         }
         applyTargetRotation(target, targetAxis, degrees, {
           separate, selfRelative: separate && drag.kind === 'rotate' && state.transformSpace === 'self',
-          axisIndex: drag.axisIndex
+          axisIndex: drag.axisIndex,
+          euler: separate && drag.rotationMode === 'euler' && drag.kind === 'rotate'
         });
       }
       return;
@@ -273,10 +274,17 @@ export function createTransformInteraction({
     }
     if (drag.curveNodeContext?.node.autoTangent) bakeCurveNodeTangent(drag.curveNodeContext.curve, drag.curveNodeContext.index);
     const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || drag.item;
-    if (formatRules(state.project).singleAxisRotation && drag.kind === 'rotate'
-      && Number.isInteger(drag.axisIndex) && !drag.curveNodeContext && !drag.modifierAnchorContext) {
+    const constrainedEulerAxis = formatRules(state.project).singleAxisRotation
+      && !drag.curveNodeContext && !drag.modifierAnchorContext;
+    if ((constrainedEulerAxis || drag.rotationMode === 'euler') && drag.kind === 'rotate'
+      && Number.isInteger(drag.axisIndex)) {
       target.rotation = [...drag.rotation];
       target.rotation[drag.axisIndex] = drag.rotation[drag.axisIndex] + degrees;
+      if (drag.curveNodeContext?.curve.dimension === 2) {
+        target.rotation[0] = 0;
+        target.rotation[2] = 0;
+      }
+      if (drag.curveNodeContext) drag.curveNodeContext.node.autoTangent = false;
       return;
     }
     const turn = quaternionFromAxisAngle(drag.rotationAxis, degrees);

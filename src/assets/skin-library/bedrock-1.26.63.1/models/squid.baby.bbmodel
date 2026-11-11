@@ -1,0 +1,676 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "squid.baby",
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "e4d92f46-fddb-442e-820f-8ff10f0f1019",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -4,
+        -4,
+        -4
+      ],
+      "to": [
+        4,
+        6,
+        4
+      ],
+      "origin": [
+        0,
+        1,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "b5b87f4e-97cc-4b96-a01f-76e3f647d808",
+      "type": "cube",
+      "name": "tentacle1",
+      "from": [
+        -4,
+        -10,
+        -1
+      ],
+      "to": [
+        -2,
+        -4,
+        1
+      ],
+      "origin": [
+        -3,
+        -7,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "be2573f9-0ef1-4003-95be-9d4295972b81",
+      "type": "cube",
+      "name": "tentacle2",
+      "from": [
+        -3.3535500000000003,
+        -10,
+        1.35355
+      ],
+      "to": [
+        -1.3535500000000003,
+        -4,
+        3.3535500000000003
+      ],
+      "origin": [
+        -2.35355,
+        -7,
+        2.35355
+      ],
+      "rotation": [
+        0,
+        -45,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "49fba4cf-e059-4130-bb35-9ca257fe0c08",
+      "type": "cube",
+      "name": "tentacle3",
+      "from": [
+        -1,
+        -10,
+        2
+      ],
+      "to": [
+        1,
+        -4,
+        4
+      ],
+      "origin": [
+        0,
+        -7,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "9c4457ee-1e56-452e-8728-e5734f35a08f",
+      "type": "cube",
+      "name": "tentacle4",
+      "from": [
+        1.3535499999999998,
+        -10,
+        1.35355
+      ],
+      "to": [
+        3.35355,
+        -4,
+        3.3535500000000003
+      ],
+      "origin": [
+        2.35355,
+        -7,
+        2.35355
+      ],
+      "rotation": [
+        0,
+        45,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": true,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "9e383829-d927-48f4-998f-7e3d31cc1ac6",
+      "type": "cube",
+      "name": "tentacle5",
+      "from": [
+        2,
+        -10,
+        -1
+      ],
+      "to": [
+        4,
+        -4,
+        1
+      ],
+      "origin": [
+        3,
+        -7,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "1f2b112f-3cba-44ea-bc0c-2c9d260a86c5",
+      "type": "cube",
+      "name": "tentacle6",
+      "from": [
+        1.3535499999999998,
+        -10,
+        -3.35355
+      ],
+      "to": [
+        3.35355,
+        -4,
+        -1.3535499999999998
+      ],
+      "origin": [
+        2.35355,
+        -7,
+        -2.35355
+      ],
+      "rotation": [
+        0,
+        -45,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": true,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "4736a7d9-0e43-426a-b584-c981df6c4510",
+      "type": "cube",
+      "name": "tentacle7",
+      "from": [
+        -1,
+        -10,
+        -4
+      ],
+      "to": [
+        1,
+        -4,
+        -2
+      ],
+      "origin": [
+        0,
+        -7,
+        -3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "ebfcac94-47dd-428a-910e-67a20a949b32",
+      "type": "cube",
+      "name": "tentacle8",
+      "from": [
+        -3.3535500000000003,
+        -10,
+        -3.35355
+      ],
+      "to": [
+        -1.3535500000000003,
+        -4,
+        -1.3535499999999998
+      ],
+      "origin": [
+        -2.35355,
+        -7,
+        -2.35355
+      ],
+      "rotation": [
+        0,
+        45,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        18
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "a6db169d-c0a9-44ea-ae31-0644f58d8f5a",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "e4d92f46-fddb-442e-820f-8ff10f0f1019",
+        {
+          "uuid": "e8487b1e-e4f6-4b29-bf93-d762ee8abbc7",
+          "name": "tentacle1",
+          "origin": [
+            -3,
+            -4.5,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "b5b87f4e-97cc-4b96-a01f-76e3f647d808"
+          ]
+        },
+        {
+          "uuid": "2878fe79-b848-4c08-8558-290cd3c2a14c",
+          "name": "tentacle2",
+          "origin": [
+            -2.35355,
+            -4.5,
+            2.35355
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "be2573f9-0ef1-4003-95be-9d4295972b81"
+          ]
+        },
+        {
+          "uuid": "6ad28211-83a7-4f82-9b38-ba18d9fdc57c",
+          "name": "tentacle3",
+          "origin": [
+            0,
+            -4.5,
+            3
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "49fba4cf-e059-4130-bb35-9ca257fe0c08"
+          ]
+        },
+        {
+          "uuid": "9bbadfd1-a2ab-4ec7-beca-fb11e8ac851e",
+          "name": "tentacle4",
+          "origin": [
+            2.35355,
+            -4.5,
+            2.35355
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "9c4457ee-1e56-452e-8728-e5734f35a08f"
+          ]
+        },
+        {
+          "uuid": "0cbc2762-39bf-49d4-b5f8-0be89dafbed1",
+          "name": "tentacle5",
+          "origin": [
+            3,
+            -4.5,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "9e383829-d927-48f4-998f-7e3d31cc1ac6"
+          ]
+        },
+        {
+          "uuid": "32954091-1258-48b8-acc3-887f7174624b",
+          "name": "tentacle6",
+          "origin": [
+            2.35355,
+            -4.5,
+            -2.35355
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "1f2b112f-3cba-44ea-bc0c-2c9d260a86c5"
+          ]
+        },
+        {
+          "uuid": "6a8dff39-21c1-4b5f-8719-1b5123077a0a",
+          "name": "tentacle7",
+          "origin": [
+            0,
+            -4.5,
+            -3
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "4736a7d9-0e43-426a-b584-c981df6c4510"
+          ]
+        },
+        {
+          "uuid": "2bc98c7a-3ac2-4ef5-9268-36fe5a04ee8f",
+          "name": "tentacle8",
+          "origin": [
+            -2.35355,
+            -4.5,
+            -2.35355
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "ebfcac94-47dd-428a-910e-67a20a949b32"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "5e0e4d80-2c4b-4068-9b13-6f19536a11ab",
+      "id": "0",
+      "name": "squid_baby.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/cddb39b52d6c79ceb37e.png",
+      "resource": "textures/entity/squid/squid_baby",
+      "uv_width": 32,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABKElEQVRYw+1UQQoCMQzMG1QQr158goJv8CIevXoU9gkefYHga5UpjmRj21R2u4JsYNhup2mmTVIRxyar9QNYbnctcN7jpathk83+FHA4XwL4zyAYN4tFC+Q7C8BpdPDmeg/AHE+LgLf5PIBjfMH1IoDBtQh8rYCjSABvoZoAQgsAKKD3G9Ap0HVgb8CmohcB3xQhrdcirN6GsU3s5jV5IWGvWC+syb9zzNbSi1o5fvV/jo/5M3iKd6sci2xwIna6WJfkeLfPEWQ6nYXq5jwMcwzgvRM5vkgATQuAlQSAvyvAS0HqHdC8559MgQ5gYatYQ1e555/jpSSAfWRsP5f4p3hJPRpD4eNFpEIZ2n4moPiK/lYAqzH1/X8Bui9j48EEpCCjjTZaZXsCfreZNM8U4WgAAAAASUVORK5CYII=",
+      "width": 32,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.squid.baby",
+      "texture_width": 32,
+      "texture_height": 32,
+      "visible_bounds_width": 2,
+      "visible_bounds_height": 2,
+      "visible_bounds_offset": [
+        0,
+        0,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.squid.baby"
+      ]
+    }
+  }
+}

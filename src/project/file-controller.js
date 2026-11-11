@@ -11,12 +11,13 @@ import { importModdedJava } from '../model/formats/modded-java.js';
 import { loadRaster } from '../common/core/texture-features.js';
 import { splitTextureAnimation } from '../texture/animation-import.js';
 import { textureSnapshot } from './texture-snapshot.js';
+import { palettesForCbmodel } from '../common/core/project-palettes.js';
 
 export function createProjectFileController({
   state, fileInput, projectTabsController, journalController,
   getShapePacksReady, activateProjectTab, addProjectTab, markDirty,
   discardProjectTabJournal, renderProjectTabs, projectTabById,
-  flushProjectJournal, toast, textureFileController
+  flushProjectJournal, toast, textureFileController, paletteRows = []
 }) {
   const blobTextureSourceCache = new Map();
   const exportNative = createNativeExportController({
@@ -105,6 +106,9 @@ export function createProjectFileController({
     { snapshotOwned = false, compact = false } = {}) {
     const data = typeof project.serialize === 'function' ? JSON.parse(project.serialize())
       : snapshotOwned ? project : structuredClone(project);
+    // Working-journal snapshots keep only project-owned cards. A portable
+    // export additionally carries any global card used by a tone-mapped layer.
+    if (!snapshotOwned) data.palettes = palettesForCbmodel(data.palettes, paletteRows, textureAssets);
     data.textureGroups = snapshotOwned ? textureGroups || [] : structuredClone(textureGroups || []);
     data.textures = textureAssets.map((texture, index) => textureSnapshot(texture, index, data.textureSize, snapshotOwned));
     return JSON.stringify(data, null, compact ? 0 : 2);
@@ -240,7 +244,10 @@ export function createProjectFileController({
         await activeTab?.journalWrites;
         const textureAssets = await serializableTextureAssets(sourceAssets);
         const content = result.extension === '.cbmodel'
-          ? { cbmodelContent: serializeCbmodel(textureAssets, project) }
+          ? {
+            cbmodelContent: serializeCbmodel(textureAssets, project),
+            workingCbmodelContent: serializeCbmodel(textureAssets, project, state.textureGroups, { snapshotOwned: true })
+          }
           : { bbmodelContent: await serializeBbmodel(textureAssets, project) };
         result = await window.cubeBricksDesktop.exportProject({
           ...payload, ...content,

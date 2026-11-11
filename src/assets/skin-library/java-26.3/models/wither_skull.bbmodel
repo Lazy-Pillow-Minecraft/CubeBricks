@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "wither_skull",
+  "elements": [
+    {
+      "name": "head",
+      "uuid": "17bb24c2-3f4e-4086-ad53-0f0e52e57baf",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -4,
+        24,
+        -4
+      ],
+      "to": [
+        4,
+        32,
+        4
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            24,
+            43,
+            32,
+            51
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            8,
+            43,
+            16,
+            51
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            43,
+            8,
+            51
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16,
+            43,
+            24,
+            51
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16,
+            43,
+            8,
+            35
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            24,
+            35,
+            16,
+            43
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "00470afe-92f9-47ed-8377-4a7b0b841b56",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "head",
+          "uuid": "55d1f76b-a1de-4ef3-816d-b0b62fc27c68",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "17bb24c2-3f4e-4086-ad53-0f0e52e57baf"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "textures": [
+    {
+      "uuid": "41df5908-a24b-42cb-807c-2166dff1e72c",
+      "id": "0",
+      "name": "wither.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/586c375f7baacd818395.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAOVBMVEUAAAA0NDQpKSkfHx8bGxsVFRVrioplenoODg53jo7n5+fBwcFLTU2lpaVRU1M8QUEQEBAiIiIXFxfoR211AAAAAXRSTlMAQObYZgAAAi1JREFUeNrtltuOo0AMRKmyO2Ryobv9/x+7YKvFLArrKNLs0xwpxI2sQ5nkwdNAtSipqiWY/oIEyGbWepteo9GjGl0HAUgCrTWzfiIgQADU6DoKBBBP0M4SABAIodF1EFAogma926mAAgGo3vViBCGtmzU7T0AFodF1FEBAmPVmZwJGDzW6dNwXpy5Ylkqv422/HAEg43fUbwJVlVKWWkrUwhWZBuQmxYoAFLjeewBEKcLnsy7PJ0kZ7AJxSEKwwXF2FbVoIeqyUsmychDIyLWP6WehI1Hrc0Up4saVMg00MrLEmAWec+daVFRKcWsRLdfi7IKRMcYEI6eqODplRCtRY8wKRs4SSUsuGBljzDJyDlLBtUgQY6pGfR1Mb2Bv8g8B7Rt+fHXvhxJYQuqwbk6v3a91nLdPr36OY69mP5Bgd+x1j3p5gN16J5ettChzgXV0Lx+PCp8Di5e9E1jeTrD9rdn9sf2x1OXR++sMdsIm8NxkXR5rBvbXGeKRh2sEyhkC2PHaPxf0TwTV/JqOkAuCzwVTQvYOPhMkLy4nmTslWXESkhUnIVtxEvIVJyFfcRLyFScnX3Fy8hUnRxxyX3FIxh0XpgJvnS9flxkCeHWZZ24AzAX7igOCBP3soRxJBQrE8wlgnr+2AABlkAvU1EjgdosPaSvvrzimiotcVkCA82U9QNUd21cuaKYwMdP77XZXEzGoNRukgmbzHC/hdr/fvKKZtcH0yy+//B/+AHkXPGu5/c7sAAAAAElFTkSuQmCC",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:wither_skull#main"
+      ]
+    }
+  }
+}

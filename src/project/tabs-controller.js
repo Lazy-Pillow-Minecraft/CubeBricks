@@ -351,6 +351,9 @@ export function createProjectTabsController({ state, $, escapeHtml, escapeAttrib
     $('#projectInfoFormat').textContent = modelFormatRegistry.get(project.formatId)?.name || project.formatId;
     $('#projectInfoJavaVersionRow').hidden = project.formatId !== 'java_block_item';
     $('#projectInfoJavaVersion').value = project.formatData?.javaBlockVersion || JavaBlockVersion.LEGACY;
+    $('#projectInfoJavaVersionButton').textContent = $('#projectInfoJavaVersion').selectedOptions[0]?.textContent || '';
+    $('#projectInfoJavaVersionMenu').hidden = true;
+    $('#projectInfoJavaVersionButton').setAttribute('aria-expanded', 'false');
     $('#projectInfoTextureWidth').value = project.textureSize?.[0] || 16;
     $('#projectInfoTextureHeight').value = project.textureSize?.[1] || 16;
     $('#projectInfoSnap').value = project.snap?.subdivisions || state.settingsSnap;

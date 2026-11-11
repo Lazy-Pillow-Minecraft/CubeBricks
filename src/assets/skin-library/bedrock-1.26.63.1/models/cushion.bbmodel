@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "cushion",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "1cd9129a-5370-4ad3-bc46-21f4c3e408ac",
+      "type": "cube",
+      "name": "cushion_bone",
+      "from": [
+        -8,
+        -0.125,
+        -8
+      ],
+      "to": [
+        8,
+        3.875,
+        8
+      ],
+      "origin": [
+        0,
+        1.875,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": -0.01,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "d2c97946-581d-47ed-956d-cd03881d91e4",
+      "name": "cushion_bone",
+      "origin": [
+        -23,
+        0,
+        -7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "1cd9129a-5370-4ad3-bc46-21f4c3e408ac"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "c6cb0dbe-d0e0-49a4-9a53-c5c0518aa43b",
+      "id": "0",
+      "name": "black_cushion.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/efd97ffb7ddbe56c1932.png",
+      "resource": "textures/entity/cushion/black_cushion",
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAB5UlEQVR42u2YwUrEQBBE8xl6UVAProKCCrJ48ODB//8iZQK1lLXdnegq20g9aDbJzE7SlZ6enkzTgVxdPnyo3WxeVtvpycXOzs9uZ+OxcG0Y94VNx4advr97/WLqbNTOTuMc/XlsFgS/rQQYDm2f32d7enybDU6OX1zjtmHsPBzFMYvBhnu2EWA81HAKAkAEOIk2vrbk5FIboqCVAJkImTBrBKjyShsBojfNoa7CsBA6BfQNV0l1tB1dgM31du8tD+Mwj0RgAaI8wFk/E6iVABwFcJ7F4EQYrQJqw3EOdZ4OfN5CAI0CnvvjOEqSugrwcgcHcR5FQZskCOcjB3UKcB+IFCW5pSnAkdBKAF3uNAlGIlQZHk5mzrcSQOc4O63Jj9uqYoeFaJ0ENRFmSx+mBgvF870qeFrXARBAhcjWfoiw5g1nArTJAeMhEAWREFoUcRsyfFYH6AZI29sIgChQ42jQNt7Q8HY42gZzQtRt8a/V8lF4VaWoPmQmwiG25hvDT79D7ErpKryq9ZffhlZqlSPR9cp5FTnLEfoMS4LtplBWikZfeqJyVS0bJ/tfdU/umz1nNG41nvabvnODyvE1YvxV36j/2vEmY4wxxhhjjDHGGGOMMcYYY4wxxhhjjDHGGGPMv+QTld2HJwyktXcAAAAASUVORK5CYII=",
+      "width": 64,
+      "height": 64,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.cushion",
+      "texture_width": 64,
+      "texture_height": 64,
+      "visible_bounds_width": 2,
+      "visible_bounds_height": 1.5,
+      "visible_bounds_offset": [
+        0,
+        0.25,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.cushion"
+      ]
+    }
+  }
+}

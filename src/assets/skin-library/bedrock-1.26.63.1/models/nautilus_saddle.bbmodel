@@ -1,0 +1,140 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "nautilus_saddle",
+  "resolution": {
+    "width": 128,
+    "height": 128
+  },
+  "elements": [
+    {
+      "uuid": "80d722d7-40e3-4201-8407-80812ba5e499",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -7,
+        8,
+        -8
+      ],
+      "to": [
+        7,
+        18,
+        8
+      ],
+      "origin": [
+        0,
+        13,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0.2,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "9a987ecf-6821-4c0a-861e-8a29db1d811b",
+      "name": "nautilus",
+      "origin": [
+        0,
+        -5,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "uuid": "d2db0889-be38-4cd1-9f31-10a8ffe0a4c6",
+          "name": "head",
+          "origin": [
+            0,
+            8,
+            -1
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "80d722d7-40e3-4201-8407-80812ba5e499"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "40a97eb0-d893-4910-859b-b246a191f47c",
+      "id": "0",
+      "name": "nautilus_saddle.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/28bab5e40ab1c8449121.png",
+      "resource": "textures/entity/nautilus/nautilus_saddle",
+      "uv_width": 128,
+      "uv_height": 128,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAAAXNSR0IArs4c6QAAAa1JREFUeJzt2TFqG0EUANCf4MIguTLBqy4uhIPAwkaF0RVSGFylUOkD5Agih3GdU4RUghCDsXGRdFljXMUCd5tCrEIsyYRotNrg9yqx2p0Z+H+H+X8jgOfrRcrBhv1WERHx5tXmH9cvbx8iIuLD5x9J52N5G6kGGvZbxWB/O3baBzP/vY2Im+svERGFJKiXJAlQBn+UjyPyT9M3vlTuCIP97QhJUCtJEuBr/jMiJoHuZY3oZY2Ze0b5OM7O76b3Ug8vUw1UBn+RXtaYORuwfksnwMlus6jiGVZj6QToZluVPMNqLJ0A/3Kgcwisj2RngMvbh0kVsMAoH89UB6xfkiqgm21FWQbOC/SjMjA+frtPMS0JJNuKn2oERUwaQWfnd7b/mtEKBmCek91mUW7rVRr2W4VmUTWSlYH8nxYmwPD9aTHv96qta97namECXFx9j4jJl77DTruq9cRhpz39YliugdV5shG0sXcUnb3XFS3lt+7xO8EHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOBv/QJJpHnY8dh/OwAAAABJRU5ErkJggg==",
+      "width": 128,
+      "height": 128,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.nautilus_saddle",
+      "texture_width": 128,
+      "texture_height": 128,
+      "visible_bounds_width": 4,
+      "visible_bounds_height": 2.5,
+      "visible_bounds_offset": [
+        0,
+        0.75,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.nautilus_saddle"
+      ]
+    }
+  }
+}

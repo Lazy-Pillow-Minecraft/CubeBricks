@@ -17,6 +17,7 @@ export function createUvPreviewController({
   let uvPreviewResizeFrame = null;
   let uvPreviewLastFrame = 0;
   let uvPreviewProjectCache = null;
+  let uvPreviewRetainedFit = null;
   let uvPreviewDrag = null;
   let uvPreviewTextureDirty = true;
   let uvPreviewRenderDirty = true;
@@ -24,6 +25,15 @@ export function createUvPreviewController({
   const uvPreviewFaceLabelCanvas = document.createElement('canvas');
   let uvPreviewFaceLabelCacheKey = null;
   let uvPreviewFaceLabelFontRevision = 0;
+  function invalidateUvPreviewGeometry() {
+    const cache = uvPreviewProjectCache;
+    if (cache?.fit) uvPreviewRetainedFit = {
+      source: cache.source, key: cache.key,
+      hierarchyRevision: cache.hierarchyRevision, fit: cache.fit
+    };
+    uvPreviewProjectCache = null;
+    uvPreviewRenderDirty = true;
+  }
   const dockManagerProxy = { get current() { return getDockManager(); } };
   function uvPreviewIsActive() {
     const panel = dockManagerProxy.current?.get('uvPreview');
@@ -75,9 +85,13 @@ export function createUvPreviewController({
       hierarchyRevision: state.project.hierarchyRevision,
       elements,
       project,
-      fit: null,
+      fit: uvPreviewRetainedFit?.source === state.project
+        && uvPreviewRetainedFit.key === key
+        && uvPreviewRetainedFit.hierarchyRevision === state.project.hierarchyRevision
+        ? uvPreviewRetainedFit.fit : null,
       hasCulledFaces
     };
+    uvPreviewRetainedFit = null;
     uvPreviewRenderer.invalidateGeometry();
     return uvPreviewProjectCache;
   }
@@ -369,7 +383,7 @@ export function createUvPreviewController({
     if (action === 'mirror-y') [data.face.uv[1], data.face.uv[3]] = [data.face.uv[3], data.face.uv[1]];
     data.cube.autoUv = data.cube.uvMode === 'box';
     markDirty();
-    uvPreviewProjectCache = null;
+    invalidateUvPreviewGeometry();
     invalidateSelectionRenderGeometry();
     renderScene();
   }
@@ -409,7 +423,7 @@ export function createUvPreviewController({
       if (removed.has(state.uvPreviewSelectedFace?.uid)) state.uvPreviewSelectedFace = null;
     }
     markDirty();
-    uvPreviewProjectCache = null;
+    invalidateUvPreviewGeometry();
     renderAll();
     if (removed.size) toast(removed.size > 1 ? `全部面已剔除，已刪除 ${removed.size} 個 Cube` : '全部面已剔除，Cube 已刪除');
     else toast(culled ? `已剔除 ${targets.length} 個面` : `已恢復 ${targets.length} 個面`);
@@ -490,13 +504,6 @@ export function createUvPreviewController({
         stopUvPreviewAnimation();
         return;
       }
-      if (state.dragging?.type === 'pan' || state.dragging?.type === 'orbit') {
-        // The preview is purely visual. Give the main camera's frame the GPU
-        // while it is being dragged, then resume rotation from this angle.
-        uvPreviewLastFrame = now;
-        uvPreviewAnimationFrame = requestAnimationFrame(tick);
-        return;
-      }
       if (!uvPreviewLastFrame) uvPreviewLastFrame = now;
       const elapsed = Math.min(80, now - uvPreviewLastFrame);
       if (elapsed >= 30) {
@@ -528,6 +535,6 @@ export function createUvPreviewController({
     uvPreviewIsActive, uvPreviewElements, getUvPreviewProject,
     syncUvPreviewPanelAspect, effectiveFaceTextureReference, ensureCubeFaceRecord,
     setCubeFaceCulled, selectedUvFaceData, updateUvFaceUi, editSelectedUvFace,
-    renderUvPreview, stopUvPreviewAnimation, refreshUvPreview
+    renderUvPreview, stopUvPreviewAnimation, refreshUvPreview, invalidateUvPreviewGeometry
   };
 }

@@ -1,0 +1,245 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "happy_ghast_baby_harness",
+  "elements": [
+    {
+      "name": "goggles",
+      "uuid": "4936f972-cdcc-463a-bc37-3528f71ec3e2",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        2.243859,
+        -1.240937
+      ],
+      "from": [
+        -1.805,
+        1.679797,
+        -1.805
+      ],
+      "to": [
+        1.805,
+        2.807922,
+        -0.676875
+      ],
+      "inflate": 0.033844,
+      "faces": {
+        "south": {
+          "uv": [
+            26,
+            37,
+            42,
+            42
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            5,
+            37,
+            21,
+            42
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            37,
+            5,
+            42
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            21,
+            37,
+            26,
+            42
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            21,
+            37,
+            5,
+            32
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            37,
+            32,
+            21,
+            37
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "harness",
+      "uuid": "57d982b8-f231-4cd9-812e-1e060f6d0091",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        -0.012391,
+        0
+      ],
+      "from": [
+        -1.805,
+        -0.012391,
+        -1.805
+      ],
+      "to": [
+        1.805,
+        3.597609,
+        1.805
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            48,
+            16,
+            64,
+            32
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            16,
+            16,
+            32,
+            32
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            16,
+            16,
+            32
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32,
+            16,
+            48,
+            32
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32,
+            16,
+            16,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "98173c47-c94c-470f-8bf5-39071f7e485b",
+      "origin": [
+        0,
+        5.402609,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "goggles",
+          "uuid": "dfdb3858-8b01-471a-a3e7-183ba1f35d4a",
+          "origin": [
+            0,
+            2.243859,
+            -1.240937
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "4936f972-cdcc-463a-bc37-3528f71ec3e2"
+          ]
+        },
+        {
+          "name": "harness",
+          "uuid": "0069a593-6cc4-4e39-a208-ec603b364214",
+          "origin": [
+            0,
+            -0.012391,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "57d982b8-f231-4cd9-812e-1e060f6d0091"
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "textures": [
+    {
+      "uuid": "a058a1f6-7175-48a2-af67-9d4d2133fccc",
+      "id": "0",
+      "name": "white_harness.png",
+      "mode": "bitmap",
+      "relative_path": "../textures/0718e991a42718816b65.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAAV1BMVEUAAAAwGw1EJxJeNxqLwc3Q6umo0NltmKH/////1Rnt7e3Q0NCzs7OXl5fFYxjUiSb0ziWNXD55Ty1sRShbOB1LLBZaNx1CJxUuGw/Y2NioqKhxcXFeXl7RU2/pAAAAAXRSTlMAQObYZgAABGFJREFUeNrt1s1uG8kVBeDvVJOtia1xAswqct7/zTRZBYglWfFIYp/YgQOiAcH02CBX/W3IYte9fVj9Gyf8RlKtFEAqkZZ/+TnDd4oTzh2gJ/JcegV6wQChJQKQCsgFAsRRgBBaiJ+0c0pAUAEkFOL8ASAULZBUAs4foIKiFaAdKuj5z4EqQAJIClTPHkBpUNbSi6wAEGJtutA5kHhFgOT8h6BLgb668fwBaEE4Kmi5QAAKxVo5U4DTYuXyAXrZAIFgLRcKkMBaQHKBABkBBIAcN17iPnBi4yUexxBREBTgci8kRYvABOQSKxCoSgWaOpiQCzwNR0iFtSwNGWdfgV9KyR9NAZrmqoTzXwVCtMJRtHKRl9J/B64LqAB1Dxd4HygwByQgM9DzB0DrIQJtC5EHLc4eIEpBFCqgVPyk3W8gWlIghTc+rHY4HaQIU0HFNfmrR9bliQIkpbJwHIu07EAo1hqApun8lFGQdm6qAK8Xp0CgSEEgILWD9QSaQqW0CWIWQAnSClGsy1fxSVONElIaabELXvfpl3d3KB48vCcAKbdc0+CdT14TqyVEkBKkgt1VeQJaQCAByANuYe3huoAo1Er2BFXy3Ozzh5j/91WJGKJzRJvxVVtJetz/6x4CNIm246u0IvsKRLBPk0GSZg5C7e64LkYVYEhQqI/wuo9vGlqSSgGGoHIH8K70ScKThnvAbkmgRYbK0lKhqG9qqLYgo2JpNcFdC+LuXedPjaCuShtqIEHImPfzPI9ABHj0qtXGCGTM8+cWIwQJSkGUq89W/647MD+lkbno/FTCXNQJjZifKOsGc4G00bt3NCqKuzaoXYPuhTjA7qqoQp1wrF83WNfTO7v0A670g4Iy6D1CAATBfXn0TY/HegGQYz1CuiyFZVEsBdih9wBvSz4AqDqp6b3XGxQhhTItlOlFQwQ7jVYIDqZSFSrfF6ChIupghzq2SAPqJUpfEJAaChrAgSrR+k6tUOUASEFBCJ7zvNDnvCwIMAJAASgtY++k/aClrzaKABFPi/D1IyKMEIRiXZjlyUlZQoSjEoQgkNUPERBDGPvdyAQTSCTTvBc4bT9PiQRMMGXs9oMgmYjElx93IxGQTJK/aVvRSd8o/yFZWok8P/q2N/tqJaPlL8RjHKKSRFudKqm2RIwq1UmuCSh524PdRzQ01INvu5bjdG9fTPlYAopQUYQGRRroINx/Fvl1ZJrGNcL9wz1xwnrq9ZimjF8j958R+NKawJeZ94TAlznh6P0B8k8/6u+F6dYP+ge48cNujm2+1846Qf2MvCc2m81ms9lsNn9KrAxpoAtM0NRyoQADQLowFcDiTHYACWVEWKYXk/r/6FlyphQDuAmKjDGS6YCuRjBuzrQCq74pr4/Kjd/PEeD391BQiCpVCCji9jyH4PaWggRLBy3HkX6dd9arILI/MMhzKzmOFDh3ABGwqIig6hIB1qNaD7d79maz2Ww2m81ms9lsNpvNZrPZbM7lv1mWSpYb1d81AAAAAElFTkSuQmCC",
+      "width": 128,
+      "height": 128,
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:happy_ghast_baby_harness#main"
+      ]
+    }
+  }
+}

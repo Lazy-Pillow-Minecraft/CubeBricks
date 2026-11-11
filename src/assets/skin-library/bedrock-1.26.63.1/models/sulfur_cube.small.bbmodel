@@ -1,0 +1,177 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "sulfur_cube.small",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "elements": [
+    {
+      "uuid": "a0538fe3-383a-4a82-aeb7-44c11ee87bfd",
+      "type": "cube",
+      "name": "sulfur_cube",
+      "from": [
+        -5,
+        0,
+        -5
+      ],
+      "to": [
+        5,
+        10,
+        5
+      ],
+      "origin": [
+        0,
+        5,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "968ffe93-7da6-49e0-9d6c-2368c96b72a0",
+      "type": "cube",
+      "name": "sulfur_cube",
+      "from": [
+        -4,
+        1,
+        -4
+      ],
+      "to": [
+        4,
+        9,
+        4
+      ],
+      "origin": [
+        0,
+        5,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": -0.05,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        20
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "89361ef9-2785-4d40-a8ae-2d4c78817c88",
+      "name": "sulfur_cube",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "a0538fe3-383a-4a82-aeb7-44c11ee87bfd",
+        "968ffe93-7da6-49e0-9d6c-2368c96b72a0"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "d6f3fdec-60aa-419b-a00a-fb2eed4f14ab",
+      "id": "0",
+      "name": "sulfur_cube_inner_small.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/deb04657cca029cff70c.png",
+      "resource": "textures/entity/sulfur_cube/sulfur_cube_inner_small",
+      "uv_width": 64,
+      "uv_height": 64,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAG1BMVEUAAAD///rt/+rt+r/s85Do4pLU1JDTw47Rr4oKZJKNAAAAAXRSTlMAQObYZgAAALdJREFUSA3twdFxAiEQANBtAc4KOBuApQED2oBDtIFbbCCwDSRs2eGbCf9mhvdgWd7RbrWRDma0M0pqZZhx3ulWiGEGz4iNMsOMOVktRAIzSjnTamGY0cZuwo1hRm0XJR38ZQ+q+1DdZjd0MPLRodVorHZ7ND7A6Eqe7mf0wfiQMCYYpa9bLSFeD/RUwu2AER1PoSNlip/0nR4Eo1pejWoWosKFXhVG3KQr3LLIT5YKIxnAsiz/wi8xfj/4+XODfQAAAABJRU5ErkJggg==",
+      "width": 64,
+      "height": 64,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.sulfur_cube.small",
+      "texture_width": 64,
+      "texture_height": 64,
+      "visible_bounds_width": 2,
+      "visible_bounds_height": 2.5,
+      "visible_bounds_offset": [
+        0,
+        0.75,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.12.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.sulfur_cube.small"
+      ]
+    }
+  }
+}

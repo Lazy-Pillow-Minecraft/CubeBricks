@@ -13,6 +13,7 @@
 | `.png` / `.png.mcmeta` | Independently saved composite images; animation uses a vertical frame strip and companion metadata. |
 | `.cbtextures.json` | A native model's companion relative texture-path/material index. It is not a model format and must not be opened as a model on its own. |
 | `.cbcmap` | Portable JSON for one palette's colors, gradient spacing, and color-space curve. It does not contain the palette's local name or ID. |
+| Palettes in `.cbmodel` | Stores project palettes and embeds global palettes referenced by layers during export. Imported cards become local to the receiving project. |
 
 ## Modeling-format boundaries
 

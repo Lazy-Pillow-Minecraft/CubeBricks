@@ -1,0 +1,448 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "pufferfish.small.v1.8",
+  "resolution": {
+    "width": 32,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "f9dabd50-1b0d-43b7-924d-5f8366dc0382",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -1.5,
+        0,
+        -1.5
+      ],
+      "to": [
+        1.5,
+        2,
+        1.5
+      ],
+      "origin": [
+        0,
+        1,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        27
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "0790335d-c449-480e-8798-a3e621e9141b",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -1.5,
+        2,
+        -1.5
+      ],
+      "to": [
+        -0.5,
+        3,
+        -0.5
+      ],
+      "origin": [
+        -1,
+        2.5,
+        -1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        24,
+        6
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "b7af5e0a-cae7-42c6-87f5-4b500d45c431",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        0.5,
+        2,
+        -1.5
+      ],
+      "to": [
+        1.5,
+        3,
+        -0.5
+      ],
+      "origin": [
+        1,
+        2.5,
+        -1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        28,
+        6
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "5458471e-cb88-471d-81d3-d02bdb6ae2bf",
+      "type": "locator",
+      "name": "lead",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "d7d828a4-5b1d-4e1d-a123-8ef6c885f6e2",
+      "type": "cube",
+      "name": "tailfin",
+      "from": [
+        -1.5,
+        1,
+        1.5
+      ],
+      "to": [
+        1.5,
+        1,
+        4.5
+      ],
+      "origin": [
+        0,
+        1,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        -3,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "b87f3f7c-e5ac-4b66-ac57-5063d76ab4bb",
+      "type": "cube",
+      "name": "leftFin",
+      "from": [
+        -2.5,
+        0,
+        -1.5
+      ],
+      "to": [
+        -1.5,
+        1,
+        0.5
+      ],
+      "origin": [
+        -2,
+        0.5,
+        -0.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": true,
+      "box_uv": true,
+      "uv_offset": [
+        25,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "a067b612-5b07-43e9-9e8d-aca77d44d4c6",
+      "type": "cube",
+      "name": "rightFin",
+      "from": [
+        1.5,
+        0,
+        -1.5
+      ],
+      "to": [
+        2.5,
+        1,
+        0.5
+      ],
+      "origin": [
+        2,
+        0.5,
+        -0.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        25,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "63227248-43ac-4c00-9d0f-6c436c96213c",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "f9dabd50-1b0d-43b7-924d-5f8366dc0382",
+        "0790335d-c449-480e-8798-a3e621e9141b",
+        "b7af5e0a-cae7-42c6-87f5-4b500d45c431",
+        "5458471e-cb88-471d-81d3-d02bdb6ae2bf",
+        {
+          "uuid": "6aa73721-3cdc-4f18-a167-7f9ba9a5bbe3",
+          "name": "tailfin",
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "d7d828a4-5b1d-4e1d-a123-8ef6c885f6e2"
+          ]
+        },
+        {
+          "uuid": "05c1e8d1-a6db-4c44-a39a-8ebb187e0f35",
+          "name": "leftFin",
+          "origin": [
+            -6.5,
+            5,
+            0.5
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "b87f3f7c-e5ac-4b66-ac57-5063d76ab4bb"
+          ]
+        },
+        {
+          "uuid": "99c9a806-9435-46aa-b980-2311072245bf",
+          "name": "rightFin",
+          "origin": [
+            6.5,
+            5,
+            0.5
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "a067b612-5b07-43e9-9e8d-aca77d44d4c6"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "0bae52a3-0efd-4bd5-abc8-1ebf99854f3c",
+      "id": "0",
+      "name": "pufferfish.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/bb9ed079a76b41996106.png",
+      "resource": "textures/entity/fish/pufferfish",
+      "uv_width": 32,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAIGNIUk0AAHolAACAgwAA+f8AAIDpAAB1MAAA6mAAADqYAAAXb5JfxUYAAATwSURBVHjaxJdfaFNXHMc/t2aKJMbmdg1LG2vTyFKmY6MUGqfCVFTGoGxPPowpTplQGXtSU/egQsvG9uTDfNiEqU/6sodSNzbMMpgMC8X5oNIMmkgaDcs0qdktGdr27CGe03NvblL3B/aDy7m/c3739/ud772/3/0eI5McFZEdJ4yF+0mxomOngUN+HA0LgFBA2OYL5ZppW3cfzeTld8YMgM+/nxTFcoXTe3fYYrR09Q5QvnlO5KYmXB1ULS+hgKBQNoiaFRW4ankB8IXiDYPra1/nyq42ntTP+5QS4USdQc86C4Ct0Ue2UUqrGQTitJpB8rfHAAhvHGS2VHy6VpPkoV2GawKetNEUwkLZIBQQTJf8RM2KGuW8PxgBwB+MEGZQ3c+WimoN4OTlH0Qw4OfI7n5bQM/rH+WbZhAKCKJmRenyfmv0EdMlP7mpCbp6B6gUs/iDEXJTE/iDEVrNILmpCSIdO22v4YgTAZaRzIxP7TzWXyI9aRI1K1ybXksoIOjqHVC7Bup0Kc6PT32EyyWw2jenYAeI9ZcUMoWyQaWYBXAdZRJ9b24X/vY24W9vq9OXRWCp5PxEqSUxXfKratC/AdexvU20vvC8dCX87W3oupEa6RSyxqVTuTtZaqt9c+i9wFmKq31z6hmnXdXyqnWAhUVY0bK01lK1vBTKhs3p0MrzpDZcVAjsu+Rly7EsmRkfmRkfW45l2XfJq9ZTGy4ytPI8VcuL7k8mKOdgKbgscSM10imkof7eq5aX8KYY+VtpNbftwAUAfvpqv3LutHH6koH0hHRUPTqMMqjeTMLAw7s32HbgAgfeOwjA0Xf7eHj3Bm3dffhCceIbB1UTcktG7lifl2vGN4kXhQwqW2erGawro0oxa+t0znVpM1sqYhWu25JpVF1Vy4tR+uVLoTuT5eMc76TO8NL2DxvqzlFPOn8rTXhTDF9oqWXLOSOTHBVuO/63IvuBFPlvmC0VtX8IrDi423tq0RPg0YN7GItPWOUNKAervAHupM7QHok31OWoB/5t5lf+rM7xIJNk0RPgQSbJYytP5fc0j628ul/0BDCEEPyf0qKTDicJkTKciIjhhPsrGk5EhLQfTkSE2/NNRQix7JUa6RSJ493PZOv2rOZD6LoQApuR8yF5JY53808TWO5qAfjuj+dsqLhwBLFnzRNXBBfuJ4UcyzfPCV1/5lfg3PH8vati/t7Vhoj8l5drFSzcT9ZqVGMzjWQ4EWHPmidC/4sCrN88ZKv3p2IEXj1Uz4iewmVoAQVg6DC7UXZdJFmNmnBtem1dO3c2Jicjcjq36c2Cf/xJVpFWQFE12fFk4EadtkULogd8Jvh1xqST1ULZUNBLotoUgb8TrBFzvja9Fk/PvEJC/yF19Q40RMD2EabPdgrJgDe8ddH1FXw7HBP6gSUz4wPgjbdzNR+Tpppz2jjJSNXy2llx1Kzg6ZknalbqWK7baSnWX6JnncXhcVgIj7MQHif42mkOj9dsJIOW9vpxb/3mIXp37bcn0DPawXzGQ89oB/nbY+SmJhQJcZP0pAnAlUSMSjGrGNOVRMy2rkt871F2f3BWnR+M1EinkCdcXyjOyU+/4PSx9xWreXj3hs3BK2+e4vrlz2zwxvceJX97DF8ojlW4TnjjYJ2NDK7zAX8wUmNEjcpEwi9pli8Utx3DmpVZM6aky18DAJzHrTXm8x85AAAAAElFTkSuQmCC",
+      "width": 32,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.pufferfish.small.v1.8",
+      "texture_width": 32,
+      "texture_height": 32,
+      "visible_bounds_width": 0.5,
+      "visible_bounds_height": 0.5
+    },
+    "nativeGeometryVersion": "1.8.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.pufferfish.small.v1.8"
+      ]
+    }
+  }
+}

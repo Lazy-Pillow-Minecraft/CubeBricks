@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "item_sprite",
+  "resolution": {
+    "width": 8,
+    "height": 8
+  },
+  "elements": [
+    {
+      "uuid": "963683fd-5605-46f1-8160-aa809ac79f0e",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -4,
+        -2,
+        0
+      ],
+      "to": [
+        4,
+        6,
+        0
+      ],
+      "origin": [
+        0,
+        2,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "d051786e-85c2-4424-bd1a-ab96b738358d",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "963683fd-5605-46f1-8160-aa809ac79f0e"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "fbb0eadc-3b7e-454d-933d-d010ceea97fd",
+      "id": "0",
+      "name": "egg.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/65cd2a3771a77d89bda0.png",
+      "resource": "textures/items/egg",
+      "uv_width": 8,
+      "uv_height": 8,
+      "use_as_default": true,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAABuSURBVDjLY2AYvqAkO/A/MiZZ8+altf/vn5sNxiA20YbANH94dgxuAAj3NUUTZwhIEUgzugEgQ0P9rP+TZTvMAJAr8BoCMgBdI7IBBF1BMwNgmokyADn60DUTDAMQACkAKUTWSLRmZEOw4cGZZwD3pfdrV1I8pQAAAABJRU5ErkJggg==",
+      "width": 16,
+      "height": 16,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.item_sprite",
+      "texture_width": 8,
+      "texture_height": 8
+    },
+    "nativeGeometryVersion": "1.21.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.item_sprite"
+      ]
+    }
+  }
+}

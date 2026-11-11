@@ -14,6 +14,8 @@ import { loadAppliedTransform, translateAppliedPositionBaseline } from './common
 import { materializeFormatCubeRotations } from './model/format-materialization.js';
 import { materializeJavaProceduralDocument } from './model/formats/procedural-format-export.js';
 import { booleanProperty, cloneData } from './model/value-normalization.js';
+import { importBlockbenchCubeUv } from './model/formats/blockbench-uv.js';
+import { getBlockbenchBoxUv } from './common/core/geometry-utils.js';
 import {
   affineCompose, affineIdentity, affineIsIdentity,
   affinePoint, applyGroupChainPoint, groupChainMatrix, inverseGroupChainPoint,
@@ -310,6 +312,7 @@ export class Cube {
     this.uvNormalized = booleanProperty(data.uvNormalized ?? data.uv_normalized, true);
     this.uv = data.uv || [0, 0];
     this.uvScale = Number.isFinite(Number(data.uvScale)) && Number(data.uvScale) > 0 ? Number(data.uvScale) : 1;
+    if (data.boxUvFloor === true) this.boxUvFloor = true;
     this.mirrorUv = data.mirrorUv ?? data.mirror_uv ?? false;
     this.faces = data.faces || null;
     this.autoUv = booleanProperty(data.autoUv ?? data.autouv, !hasAssignedTexture(this.faces));
@@ -868,6 +871,11 @@ export class CubeBricksProject {
     this.historyLimit = Number.isInteger(data.historyLimit) && data.historyLimit >= 0 && data.historyLimit <= 10000
       ? data.historyLimit : null;
     this.referenceImages = normalizeReferenceImages(data.referenceImages);
+    // Palette cards owned by this project travel with its native model file.
+    // Global cards are added only when an export actually references them.
+    this.palettes = Array.isArray(data.palettes) ? structuredClone(data.palettes.slice(0, 256))
+      .filter(row => row && typeof row.id === 'string' && typeof row.name === 'string' && Array.isArray(row.colors))
+      .map(row => ({ ...row, scope: 'project' })) : [];
     const unchangedElements = reuseElementsFrom && Array.isArray(changedUids)
       ? new Map(reuseElementsFrom.elements.map(element => [element.uid, element])) : null;
     const changedElementUids = unchangedElements ? new Set(changedUids) : null;
@@ -1364,6 +1372,7 @@ export function importBlockbench(data) {
       // the first texture. Explicit null still means a culled face.
       if (face && typeof face === 'object' && face.enabled !== false && face.texture === undefined) face.texture = fallbackTexture;
     }
+    const uvLayout = importBlockbenchCubeUv(item, faces, data.meta?.box_uv);
     return new Cube({
       uid: item.uuid,
       name: item.name,
@@ -1373,7 +1382,8 @@ export function importBlockbench(data) {
       rescale: item.rescale,
       pivot: item.origin,
       rotation: item.rotation,
-      uvMode: item.box_uv === false ? 'face' : 'box',
+      uvMode: uvLayout.uvMode,
+      boxUvFloor: uvLayout.boxUvFloor,
       uvNormalized: booleanProperty(item.uv_normalized, true),
       uv: item.uv_offset,
       mirrorUv: item.mirror_uv,
@@ -1454,24 +1464,12 @@ export function importBlockbench(data) {
 function blockbenchCube(cube, offset = [0, 0, 0]) {
   const from = cube.position.map((value, axis) => value + offset[axis]);
   const origin = cube.pivot.map((value, axis) => value + offset[axis]);
-  const scaledBoxUv = cube.uvMode === 'box' && Number(cube.uvScale || 1) !== 1;
-  const faces = cube.faces ? structuredClone(cube.faces) : scaledBoxUv ? {} : undefined;
-  if (scaledBoxUv) {
-    const [u, v] = cube.uv || [0, 0];
-    const [x, y, z] = cube.size.map(value => {
-      const length = Math.abs(Number(value) || 0) * cube.uvScale;
-      return length > 0 ? Math.max(1, Math.round(length)) : 0;
-    });
-    const layout = {
-      east: [u, v + z, u + z, v + z + y],
-      north: [u + z, v + z, u + z + x, v + z + y],
-      west: [u + z + x, v + z, u + z + x + z, v + z + y],
-      south: [u + z + x + z, v + z, u + z + x + z + x, v + z + y],
-      up: [u + z + x, v + z, u + z, v],
-      down: [u + z + x + x, v, u + z + x, v + z]
-    };
-    for (const [direction, uv] of Object.entries(layout)) if (faces[direction] !== null) {
-      faces[direction] = { ...(faces[direction] || {}), uv };
+  const materializeBoxUv = cube.uvMode === 'box'
+    && (Number(cube.uvScale || 1) !== 1 || cube.boxUvFloor === true);
+  const faces = cube.faces ? structuredClone(cube.faces) : materializeBoxUv ? {} : undefined;
+  if (materializeBoxUv) {
+    for (const direction of ['north', 'south', 'east', 'west', 'up', 'down']) if (faces[direction] !== null) {
+      faces[direction] = { ...(faces[direction] || {}), uv: getBlockbenchBoxUv(cube, direction) };
     }
   }
   const hasExplicitFaceUv = Object.values(faces || {}).some(face => Array.isArray(face?.uv) && face.uv.length >= 4);

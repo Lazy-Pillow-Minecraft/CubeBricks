@@ -1,0 +1,275 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "free"
+  },
+  "name": "wall_banner",
+  "elements": [
+    {
+      "name": "bar",
+      "uuid": "ebcb1c5f-acd4-4373-ac58-3fc15b029b89",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "from": [
+        -10,
+        42.5,
+        9.5
+      ],
+      "to": [
+        10,
+        44.5,
+        11.5
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            24,
+            44,
+            44,
+            46
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            2,
+            44,
+            22,
+            46
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            44,
+            2,
+            46
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            22,
+            44,
+            24,
+            46
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            22,
+            44,
+            2,
+            42
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            42,
+            42,
+            22,
+            44
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "flag",
+      "uuid": "937cdfef-8e90-407e-b04b-b97d9dc8277e",
+      "type": "cube",
+      "box_uv": false,
+      "origin": [
+        0,
+        44.5,
+        10.5
+      ],
+      "from": [
+        -10,
+        4.5,
+        8.5
+      ],
+      "to": [
+        10,
+        44.5,
+        9.5
+      ],
+      "inflate": 0,
+      "faces": {
+        "south": {
+          "uv": [
+            22,
+            1,
+            42,
+            41
+          ],
+          "texture": 0
+        },
+        "north": {
+          "uv": [
+            1,
+            1,
+            21,
+            41
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            1,
+            1,
+            41
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            21,
+            1,
+            22,
+            41
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            21,
+            1,
+            1,
+            0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            41,
+            0,
+            21,
+            1
+          ],
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "name": "root",
+      "uuid": "30e30116-0c46-4749-bfc4-0a86d1c5bcca",
+      "origin": [
+        0,
+        24,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "name": "bar",
+          "uuid": "405a8071-c27e-4e46-a1e5-3b546389eefe",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "ebcb1c5f-acd4-4373-ac58-3fc15b029b89"
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "57a3cc5a-c6bc-4709-9ace-12ae60524264",
+      "name": "Flag",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "visibility": true,
+      "children": [
+        {
+          "name": "root",
+          "uuid": "eef588e6-9998-465d-91b7-f595c43bcc5d",
+          "origin": [
+            0,
+            24,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "name": "flag",
+              "uuid": "6c3032a0-c750-41fb-96ed-109e2b818e57",
+              "origin": [
+                0,
+                44.5,
+                10.5
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "children": [
+                "937cdfef-8e90-407e-b04b-b97d9dc8277e"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "textures": [
+    {
+      "uuid": "45b14bd4-2625-42c1-807c-7386e39a9103",
+      "id": "0",
+      "name": "base.png",
+      "resource": "minecraft:textures/entity/banner/base.png",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAb1BMVEUAAAD29vb19fX09PTz8/Py8vLx8fHw8PDv7+/u7u7t7e3s7Ozr6+vq6urp6eno6Ojn5+fm5ubl5eXk5OTj4+Pi4uLh4eHg4ODf39/e3t7d3d3c3Nzb29va2trZ2dnY2NjX19fW1tbV1dXU1NTR0dGcBdnnAAAAAXRSTlMAQObYZgAAAnhJREFUeNrt0tutHckRRNEV2X0PyXmYIP+tkgH6F0CJ91SGDBg29D/gNmAhK1DxO0nbwSw0f75vm4J01qx/+Wn5x4/vs+++mlrvz/u+5mtf859MO9XbFeX+p591832n/eycOfc6x3yZ69+9fkxV9kTxh582daY7k0Ywo6ubc9MGredmD+7qhYK+ewW53NSFxDPQGD6haE5VHBGh2vYB8Dll9UoZRLNRER1EOA/AghW5ZouyPwbQnktKnoDRLsKaYRkAVAn1AFzppRcUjGQLkAqV5AH4b9WiOwjsXgBArvfb8wZLqBO6Zc8PCATh4+oD8Bc5TD8aKh2QxhOwUAUxYE9FEFDnEYgC3ApIg1KxFNfjBUFhAZgCihrPT5gRE6gFHApVUOIB6GfEG8YABgxAceYBuO8I0IU6wIYQoB6Ak4RoBBAxFAA8/oMCDABqCUDFY6MwAQtxArvK/x1RoLAu0FOIY5iALp4BBdDNayiAEM8XZAsUALuNAADzAOxbACksbEYVoPR5xADCAWpDJtNaJOQByMf+RV9tp3BRQT0BKQABzuQEOMTCPgAVG5QUMFKI1BulD0CQMCiHq9ftIwL0tiLXI1BQegVXc11QJVI3uo/A6GrozoZyf9SSLjKLPAF3IZDSlfZ8q1KigPsB8PVFGp3SiXNHKowc2havByCHrLITaV3NoAwkmXpsZukQ08jg/moX3tqUTvvytMFv95e71DY05pW7vx8VUWjaJ2DyajehH1XpteotYcv1PviWZ2D+/PpKSZi5Xx/fZH776BwrcFU+bj/tPpv3fZ2kvNJzPu/94/j88rU/7JzLJV+++P72q1/96le/+vv3P5ALggAsEXoXAAAAAElFTkSuQmCC",
+      "relative_path": "../textures/ee3c0b5e0f0f54275369.png",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "mode": "bitmap",
+      "use_as_default": true
+    }
+  ],
+  "_cubebricksFormatData": {
+    "minecraftReference": {
+      "edition": "java",
+      "version": "26.3",
+      "layerIds": [
+        "minecraft:wall_banner#main",
+        "minecraft:wall_banner#flag"
+      ]
+    }
+  }
+}

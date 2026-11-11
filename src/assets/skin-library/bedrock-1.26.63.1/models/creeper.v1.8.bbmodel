@@ -1,0 +1,469 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "bedrock"
+  },
+  "name": "creeper.v1.8",
+  "resolution": {
+    "width": 64,
+    "height": 32
+  },
+  "elements": [
+    {
+      "uuid": "9d74540b-dc75-45be-ab2f-0b51188c771f",
+      "type": "cube",
+      "name": "body",
+      "from": [
+        -4,
+        6,
+        -2
+      ],
+      "to": [
+        4,
+        18,
+        2
+      ],
+      "origin": [
+        0,
+        12,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        16,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "37e2ec78-262f-49a1-8001-c89b8151b1a2",
+      "type": "cube",
+      "name": "head",
+      "from": [
+        -4,
+        18,
+        -4
+      ],
+      "to": [
+        4,
+        26,
+        4
+      ],
+      "origin": [
+        0,
+        22,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        0
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "0396ee8a-b4e4-4d8b-a1c0-9e07157b4ce3",
+      "type": "cube",
+      "name": "leg0",
+      "from": [
+        0,
+        0,
+        2
+      ],
+      "to": [
+        4,
+        6,
+        6
+      ],
+      "origin": [
+        2,
+        3,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "761975f8-657d-40a2-a1c6-f84ec537b6db",
+      "type": "cube",
+      "name": "leg1",
+      "from": [
+        -4,
+        0,
+        2
+      ],
+      "to": [
+        0,
+        6,
+        6
+      ],
+      "origin": [
+        -2,
+        3,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "89d4a385-060c-4d3b-b878-53206fcc74a1",
+      "type": "cube",
+      "name": "leg2",
+      "from": [
+        0,
+        0,
+        -6
+      ],
+      "to": [
+        4,
+        6,
+        -2
+      ],
+      "origin": [
+        2,
+        3,
+        -4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    },
+    {
+      "uuid": "decd4a9c-168a-472f-9d7d-b4c2c47f0916",
+      "type": "cube",
+      "name": "leg3",
+      "from": [
+        -4,
+        0,
+        -6
+      ],
+      "to": [
+        0,
+        6,
+        -2
+      ],
+      "origin": [
+        -2,
+        3,
+        -4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "inflate": 0,
+      "mirror_uv": false,
+      "box_uv": true,
+      "uv_offset": [
+        0,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": 0
+        },
+        "south": {
+          "texture": 0
+        },
+        "east": {
+          "texture": 0
+        },
+        "west": {
+          "texture": 0
+        },
+        "up": {
+          "texture": 0
+        },
+        "down": {
+          "texture": 0
+        }
+      }
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "310d6117-aeb6-43f5-8fd1-7564cbede9ea",
+      "name": "body",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        "9d74540b-dc75-45be-ab2f-0b51188c771f",
+        {
+          "uuid": "32187ff5-ca9b-42fb-9b26-7dbf932c6ddc",
+          "name": "head",
+          "origin": [
+            0,
+            18,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "37e2ec78-262f-49a1-8001-c89b8151b1a2"
+          ]
+        },
+        {
+          "uuid": "51c42b9e-8cb1-4402-abd8-9f1a3a9a3ea4",
+          "name": "leg0",
+          "origin": [
+            2,
+            6,
+            4
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "0396ee8a-b4e4-4d8b-a1c0-9e07157b4ce3"
+          ]
+        },
+        {
+          "uuid": "81579d66-d636-4689-9ae6-98a2b60842cd",
+          "name": "leg1",
+          "origin": [
+            -2,
+            6,
+            4
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "761975f8-657d-40a2-a1c6-f84ec537b6db"
+          ]
+        },
+        {
+          "uuid": "484680e9-6a48-4cdd-b844-8d7c8ee348b0",
+          "name": "leg2",
+          "origin": [
+            2,
+            6,
+            -4
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "89d4a385-060c-4d3b-b878-53206fcc74a1"
+          ]
+        },
+        {
+          "uuid": "82398d47-1981-4857-83ca-64bd9500a829",
+          "name": "leg3",
+          "origin": [
+            -2,
+            6,
+            -4
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "children": [
+            "decd4a9c-168a-472f-9d7d-b4c2c47f0916"
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "uuid": "6c66d481-73e1-494a-848e-9e910319fec8",
+      "id": "0",
+      "name": "creeper.png",
+      "namespace": "",
+      "path": "",
+      "relative_path": "../textures/de7cb032dc9a81732535.png",
+      "resource": "textures/entity/creeper/creeper",
+      "uv_width": 64,
+      "uv_height": 32,
+      "use_as_default": true,
+      "source": "data:image/png;base64,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",
+      "width": 64,
+      "height": 32,
+      "mode": "bitmap"
+    }
+  ],
+  "_cubebricksFormatData": {
+    "nativeGeometryDescription": {
+      "identifier": "geometry.creeper.v1.8",
+      "texture_width": 64,
+      "texture_height": 32,
+      "visible_bounds_width": 1,
+      "visible_bounds_height": 2,
+      "visible_bounds_offset": [
+        0,
+        0.75,
+        0
+      ]
+    },
+    "nativeGeometryVersion": "1.8.0",
+    "minecraftReference": {
+      "edition": "bedrock",
+      "version": "1.26.63.1",
+      "geometryIds": [
+        "geometry.creeper.v1.8"
+      ]
+    }
+  }
+}
