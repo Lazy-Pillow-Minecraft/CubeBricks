@@ -40,6 +40,7 @@ export {
 
 const MIPPED_SUPERSAMPLE = 1.5;
 const CUBE_LIFETIME_ANIMATION_MS = 60;
+const SOLID_RENDER_PIPELINE = getMinecraftRenderType(MinecraftRenderType.SOLID);
 const EMPTY_FACE_SELECTION = new Set();
 const ZERO_COLOR_OVERRIDE = Object.freeze([0, 0, 0, 0]);
 function sameMatrixValues(previous, current) {
@@ -520,7 +521,7 @@ export class WebGLSceneRenderer {
 
     const wireframe = camera.renderMode === 'wireframe';
     const pipeline = camera.renderMode === 'textured'
-      ? minecraftRenderType : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+      ? minecraftRenderType : SOLID_RENDER_PIPELINE;
     const primitive = wireframe ? gl.LINES : gl.TRIANGLES;
     const options = wireframe
       ? { depthWrite: true, cull: false, renderMode: 0, blend: false }
@@ -755,7 +756,7 @@ export class WebGLSceneRenderer {
     const now = this.cubeTransitionFrameTime ?? performance.now();
     const pipeline = camera.renderMode === 'textured'
       ? getMinecraftRenderType(project.renderType)
-      : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+      : SOLID_RENDER_PIPELINE;
     for (const transition of this.cubeTransitions) {
       const progress = Math.min(1, (now - transition.started) / transition.duration);
       if (progress >= 1) continue;
@@ -1038,7 +1039,7 @@ export class WebGLSceneRenderer {
     const renderMode = getSurfaceRenderMode(camera.renderMode);
     const pipeline = camera.renderMode === 'textured'
       ? minecraftRenderType
-      : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+      : SOLID_RENDER_PIPELINE;
     const batches = this.ensureLockedBatches(camera, dynamicUids, lockedUids);
     for (let index = 0; index < batches.counts.length; index++) {
       const options = camera.renderMode === 'wireframe'
@@ -1370,7 +1371,7 @@ export class WebGLSceneRenderer {
     const renderMode = getSurfaceRenderMode(camera.renderMode);
     const pipeline = camera.renderMode === 'textured'
       ? minecraftRenderType
-      : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+      : SOLID_RENDER_PIPELINE;
     const options = {
       depthWrite: pipeline.depthWrite,
       cull: cullsBackfaces(project),
@@ -1481,7 +1482,7 @@ export class WebGLSceneRenderer {
       if (camera.modifierResultGhost) {
         const wireframe = camera.renderMode === 'wireframe';
         const pipeline = camera.renderMode === 'textured'
-          ? getMinecraftRenderType(project.renderType) : MINECRAFT_RENDER_TYPES[MinecraftRenderType.SOLID];
+          ? getMinecraftRenderType(project.renderType) : SOLID_RENDER_PIPELINE;
         const primitive = wireframe ? gl.LINES : gl.TRIANGLES;
         const options = wireframe
           ? { depthWrite: true, cull: false, renderMode: 0, blend: false }

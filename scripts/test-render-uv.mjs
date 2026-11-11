@@ -63,6 +63,30 @@ import {
 }
 
 {
+  const renderer = Object.create(WebGLSceneRenderer.prototype);
+  const passes = [];
+  renderer.gl = { TRIANGLES: 4 };
+  renderer.paintPixelGrid = false;
+  renderer.selectedCache = { triangles: [] };
+  renderer.ensureVisibleStaticBatches = () => ({ triangleCount: 36 });
+  renderer.drawBuffer = (_buffer, count, _primitive, _matrix, options) => passes.push({ count, ...options });
+  renderer.drawBufferExcluding = () => {};
+  renderer.drawMirrorInstances = () => {};
+  const project = { formatId: 'bedrock_entity', renderType: MinecraftRenderType.TRANSLUCENT };
+  const empty = new Set();
+  renderer.cubeTransitions = [];
+  for (const mode of ['solid', 'normal']) {
+    renderer.drawSurfaceGeometry(project, { renderMode: mode },
+      getMinecraftRenderType(project.renderType), empty, empty, [], {});
+  }
+  assert.deepEqual(passes.map(({ count, renderMode, alphaMode, depthWrite, blend }) =>
+    [count, renderMode, alphaMode, depthWrite, blend]), [
+    [36, 1, 0, true, false],
+    [36, 4, 0, true, false]
+  ], 'solid and normal modes draw opaque geometry even for projects with translucent textures');
+}
+
+{
   const uploads = [], draws = [];
   const renderer = Object.create(WebGLSceneRenderer.prototype);
   renderer.gl = { TRIANGLES: 4, DYNAMIC_DRAW: 5 };
