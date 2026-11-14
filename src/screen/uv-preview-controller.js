@@ -262,7 +262,7 @@ export function createUvPreviewController({
     const cacheKey = `${uvPreviewFaceLabelFontRevision}:${info}`;
     if (uvPreviewFaceLabelCacheKey !== cacheKey) {
       const context = uvPreviewFaceLabelCanvas.getContext('2d');
-      const font = '12px "Fusion Pixel Latin", monospace';
+      const font = `12px ${getComputedStyle(document.documentElement).fontFamily || 'system-ui, sans-serif'}`;
       context.font = font;
       const metrics = context.measureText(info);
       const ascent = Math.ceil(metrics.actualBoundingBoxAscent || 10);

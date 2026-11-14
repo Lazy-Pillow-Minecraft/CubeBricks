@@ -2,6 +2,7 @@ import { Cube, Group, setPivotPreservingGeometry } from '../model.js';
 import { constrainNode, formatRules, captureFormatGeometry, restoreFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { paintSymmetryRelationCache } from '../paint/symmetry-relations.js';
 import { canPreviewRigidGroup } from './rigid-transform-preview.js';
+import { shapeRegistry } from '../shapes/builtins.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import {
   inverseRotateVector, quaternionFromAxisAngle, quaternionFromEuler, quaternionMultiply, eulerFromQuaternion,
@@ -29,6 +30,28 @@ export function createTransformInteraction({
   updateKnifeHover, schedulePaintSymmetryBuild, currentProjection
 }) {
   let transformUpdateFrame = null;
+  const shapeDimensionKeys = item => shapeRegistry.get(item?.shapeType)?.dimensionKeys;
+
+  function resizeShapeDimensions(item, starting, drag, dx, dy, axisDelta, planeDistances, event, fallbackScale) {
+    const keys = shapeDimensionKeys(item);
+    if (!keys || !starting) return false;
+    const changes = [0, 0, 0];
+    if (drag.kind === 'uniform') {
+      changes.fill(-dy * fallbackScale);
+    } else if (drag.kind === 'plane-uniform') {
+      const distance = getPlaneUniformDistance(drag, dx, dy) * 2;
+      for (const axis of drag.axisIndices) changes[axis] = distance;
+    } else if (drag.kind === 'plane') {
+      drag.axisIndices.forEach((axis, index) => { changes[axis] = planeDistances[index] || 0; });
+    } else changes[drag.axisIndex ?? 0] = axisDelta ?? dx * fallbackScale;
+    keys.forEach((key, axis) => {
+      if (!changes[axis]) return;
+      const minimum = shapeRegistry.get(item.shapeType).fields.find(field => field.key === key)?.min ?? 0.1;
+      item.parameters[key] = Math.max(minimum, snapShapeDimension(item, key, starting[axis] + changes[axis], event));
+    });
+    return true;
+  }
+
   function startTransformDrag(event, axisIndex, captureTarget, kind = 'free', sign = 1, handleElement = null,
     axisKey = axisIndex === null ? 'free' : String(axisIndex), axisIndices = axisIndex === null ? [] : [axisIndex], axisSigns = [sign]) {
     if (event.button !== 0) return;
@@ -56,6 +79,10 @@ export function createTransformInteraction({
     const targets = (resizeBatch || selectionContext.multiple) && ['move', 'rotate', 'resize'].includes(state.tool)
       ? targetNodes.map(captureTransformTarget)
       : [captureTransformTarget(item)];
+    for (const target of targets) {
+      const keys = shapeDimensionKeys(target.node);
+      if (keys) target.dimensionValues = keys.map(key => Number(target.node.parameters[key]));
+    }
     const rect = sceneCanvas.getBoundingClientRect();
     let handle = axisIndex === null ? null : state.gizmoAxes?.[axisIndex];
     const referenceHandle = handle || state.gizmoAxes?.[axisIndices[0]] || null;
@@ -174,6 +201,7 @@ export function createTransformInteraction({
       nodeRoll: curveNodeContext?.node.roll || 0,
       radius: item.parameters?.radius,
       height: item.parameters?.height,
+      dimensionValues: shapeDimensionKeys(item)?.map(key => Number(item.parameters[key])),
       modifierAnchors: captureModifierAnchors(item),
       uvFrozen: false,
       groupMembers: item.type === 'group' ? captureGroupMembers(item) : [],
@@ -930,6 +958,8 @@ export function createTransformInteraction({
           targetItem.position = position;
           targetItem.size = size;
         } else if (isShapeElement(targetItem)) {
+          if (resizeShapeDimensions(targetItem, target.dimensionValues, drag, dx, dy, axisDelta,
+            planeDistances, event, fallbackScale)) continue;
           if (targetItem.shapeType !== 'polygon_prism') {
             const distance = drag.kind === 'uniform'
               ? snapValue(-dy * fallbackScale, event) / 2
@@ -1009,7 +1039,12 @@ export function createTransformInteraction({
         item.size = size;
       }
       if (isShapeElement(item)) {
-        if (item.shapeType !== 'polygon_prism') {
+        const dimensionDistances = drag.kind === 'plane'
+          ? getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event)) : [];
+        if (resizeShapeDimensions(item, drag.dimensionValues, drag, dx, dy, axisDelta,
+          dimensionDistances, event, fallbackScale)) {
+          drag.tooltipText = `尺寸 ${shapeDimensionKeys(item).map(key => formatNumber(item.parameters[key])).join(' × ')} px`;
+        } else if (item.shapeType !== 'polygon_prism') {
           const distances = drag.kind === 'plane' ? getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event)) : [];
           const distance = drag.kind === 'uniform'
             ? snapValue(-dy * fallbackScale, event) / 2

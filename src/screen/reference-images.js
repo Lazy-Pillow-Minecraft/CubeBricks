@@ -274,30 +274,43 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
     updateReferenceImageLayer();
   }
 
+  function readReferenceImageSource(source, name, key) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onerror = reject;
+      image.onload = () => {
+        const record = {
+          uid: `reference_${crypto.randomUUID().slice(0, 8)}`,
+          name,
+          source,
+          naturalWidth: Math.max(1, image.naturalWidth || image.width),
+          naturalHeight: Math.max(1, image.naturalHeight || image.height),
+          offset: [0, 0],
+          scale: 1
+        };
+        record.scale = referenceDefaultScale(record, key);
+        resolve(record);
+      };
+      image.src = source;
+    });
+  }
+
   function readReferenceImageFile(file, key) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = reject;
-      reader.onload = () => {
-        const image = new Image();
-        image.onerror = reject;
-        image.onload = () => {
-          const record = {
-            uid: `reference_${crypto.randomUUID().slice(0, 8)}`,
-            name: file.name || 'reference.png',
-            source: String(reader.result),
-            naturalWidth: Math.max(1, image.naturalWidth || image.width),
-            naturalHeight: Math.max(1, image.naturalHeight || image.height),
-            offset: [0, 0],
-            scale: 1
-          };
-          record.scale = referenceDefaultScale(record, key);
-          resolve(record);
-        };
-        image.src = String(reader.result);
-      };
+      reader.onload = () => readReferenceImageSource(String(reader.result), file.name || 'reference.png', key).then(resolve, reject);
       reader.readAsDataURL(file);
     });
+  }
+
+  function addReferenceImageRecords(records, key) {
+    snapshot('core.reference.add');
+    referenceImagesForView(key).push(...records);
+    state.referenceImageSelection[key] = records.at(-1).uid;
+    referenceImageEditing = key === referenceViewKey();
+    markDirty();
+    updateReferenceImageLayer();
   }
 
   async function loadReferenceImageFiles(files, key) {
@@ -307,14 +320,35 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
     const settled = await Promise.allSettled(candidates.map(file => readReferenceImageFile(file, key)));
     const records = settled.filter(result => result.status === 'fulfilled').map(result => result.value);
     if (!records.length) return toast('無法讀取這些參考圖');
-    snapshot('core.reference.add');
-    referenceImagesForView(key).push(...records);
-    state.referenceImageSelection[key] = records.at(-1).uid;
-    referenceImageEditing = key === referenceViewKey();
-    markDirty();
-    updateReferenceImageLayer();
+    addReferenceImageRecords(records, key);
     if (settled.some(result => result.status === 'rejected')) toast(`已導入 ${records.length} 張參考圖，部分檔案無法讀取`);
     else toast(`已導入${key === 'general' ? '一般視圖' : key.toUpperCase() + ' 軸視圖'}參考圖 · ${records.length} 張`);
+  }
+
+  async function addReferenceImageFromClipboard() {
+    const key = referenceViewKey();
+    const project = state.project;
+    setReferenceImageMenu(false);
+    try {
+      let record;
+      if (window.cubeBricksDesktop?.readClipboardImage) {
+        const source = await window.cubeBricksDesktop.readClipboardImage();
+        if (!source) return toast('剪切板中沒有圖片');
+        record = await readReferenceImageSource(source, 'clipboard.png', key);
+      } else if (navigator.clipboard?.read) {
+        const items = await navigator.clipboard.read();
+        const item = items.find(entry => entry.types.some(type => type.startsWith('image/')));
+        if (!item) return toast('剪切板中沒有圖片');
+        const type = item.types.find(value => value.startsWith('image/'));
+        const blob = await item.getType(type);
+        record = await readReferenceImageFile(new File([blob], 'clipboard.png', { type }), key);
+      } else return toast('目前無法讀取系統剪切板');
+      if (state.project !== project) return;
+      addReferenceImageRecords([record], key);
+      toast('已從剪切板添加參考圖');
+    } catch (error) {
+      toast(`無法讀取剪切板圖片：${error.message}`);
+    }
   }
 
   function referenceDragBasis() {
@@ -428,7 +462,7 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
     get editing() { return referenceImageEditing; }, get drag() { return referenceImageDrag; },
     get importViewKey() { return referenceImportViewKey; }, resetInteraction, selectReference,
     referenceViewKey, referenceImagesForView, referenceImageAt, updateReferenceImageLayer, sampleReferenceImage, setReferenceImageEditing, setReferenceImageMenu,
-    beginReferenceImageImport, resetReferenceImage, removeReferenceImage, loadReferenceImageFiles,
+    beginReferenceImageImport, addReferenceImageFromClipboard, resetReferenceImage, removeReferenceImage, loadReferenceImageFiles,
     reorderReferenceImage,
     beginReferenceImageDrag, moveReferenceImageDrag, endReferenceImageDrag, scaleReferenceImage
   };

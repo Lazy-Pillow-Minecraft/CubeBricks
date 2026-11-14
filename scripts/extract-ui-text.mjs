@@ -26,7 +26,9 @@ async function visit(folder) {
     if (!/\.(?:js|html)$/.test(entry.name) || ignored.has(entry.name)) continue;
     const contents = await fs.readFile(file, 'utf8');
     const relative = path.relative(root, file).replaceAll('\\', '/');
-    if (relative === 'src/common/i18n/simplified.js' || relative === 'src/common/i18n/messages.js') continue;
+    // Skin model names already contain explicit Simplified, Traditional and English values.
+    if (relative === 'src/common/i18n/simplified.js' || relative === 'src/common/i18n/messages.js'
+      || relative === 'src/project/skin-model-labels.js') continue;
     const conversionTableStart = entry.name === 'app-config.js' ? contents.indexOf('const SIMPLIFIED_PHRASES') : -1;
     const conversionTableEnd = conversionTableStart < 0 ? -1 : contents.indexOf('function toSimplified', conversionTableStart);
     const translatorStart = entry.name === 'app-config.js' ? contents.indexOf('export function translateUiText')

@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const { packZip } = require('../electron/zip-store.cjs');
-const { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder, readFontPack } =
+const { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder, readFontPack, loadFont, resourcePackFolder } =
   require('../electron/resource-packs.cjs');
 const root = await mkdtemp(path.join(process.cwd(), '.tmp-resource-packs-'));
 
@@ -48,6 +48,13 @@ try {
   await writeFile(singleFont, Buffer.from([0, 1, 0, 0, 0, 0]));
   assert.equal(await installPack(root, 'font', singleFont), 'font:single.ttf');
   assert.equal((await readFontPack(root, 'font:single.ttf')).fonts.length, 1);
+  assert.equal(resourcePackFolder(root, 'font'), path.join(root, 'fontpacks'));
+  assert.throws(() => resourcePackFolder(root, '../projects'));
+  assert.throws(() => resourcePackFolder(root, '__proto__'));
+  const fusionPack = await loadFont(path.join(process.cwd(), 'packs', 'Fusion-Pixel-12px.zip'),
+    'Fusion-Pixel-12px.zip', { includeSources: false });
+  assert.equal(fusionPack.name, 'Fusion Pixel 12px');
+  assert.equal(fusionPack.fonts.length, 5, 'the separate font pack includes every language subset');
   await assert.rejects(removePack(root, 'language:../sample-language.json'));
   console.log('Resource pack tests passed.');
 } finally {

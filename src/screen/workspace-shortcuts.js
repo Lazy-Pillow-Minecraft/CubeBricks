@@ -1,4 +1,5 @@
 import { performanceMonitor } from '../utils/performance-monitor.js';
+import { shortcutMatches, shortcutTriggerReleased } from './shortcuts.js';
 
 // Dispatch clipboard commands by focus before falling through to editor tools.
 export function bindWorkspaceShortcuts({
@@ -16,9 +17,7 @@ export function bindWorkspaceShortcuts({
   // Focus-specific clipboard commands run before the global shortcuts.
   window.addEventListener('keydown', event => {
     if (state.projectHomeActive || event.defaultPrevented || event.isComposing) return;
-    const key = event.key.toLowerCase();
-    const commandKey = event.ctrlKey || event.metaKey;
-    if (!event.repeat && event.ctrlKey && event.shiftKey && key === 'f12') {
+    if (!event.repeat && shortcutMatches(event, 'performance')) {
       event.preventDefault();
       toast('開始記錄 8 秒，請持續操作主視圖');
       performanceMonitor.capture(8000).then(async report => {
@@ -32,26 +31,26 @@ export function bindWorkspaceShortcuts({
       });
       return;
     }
-    if (event.key === 'Alt' && !event.repeat && beginTemporaryEyedropper()) {
+    if (!event.repeat && shortcutMatches(event, 'temporaryEyedropper') && beginTemporaryEyedropper()) {
       event.preventDefault();
       return;
     }
-    if (commandKey && key === 'z') {
+    if (shortcutMatches(event, 'undo') || shortcutMatches(event, 'redo')) {
       if (event.target instanceof Element
         && (event.target.closest('input, textarea, [contenteditable]') || event.target.isContentEditable)) return;
       event.preventDefault();
-      event.shiftKey ? redo() : undo();
+      shortcutMatches(event, 'redo') ? redo() : undo();
       return;
     }
-    if (commandKey && key === 's') {
+    if (shortcutMatches(event, 'save') || shortcutMatches(event, 'export')) {
       event.preventDefault();
-      if (!event.repeat) event.shiftKey ? exportProject() : saveProject();
+      if (!event.repeat) shortcutMatches(event, 'export') ? exportProject() : saveProject();
       return;
     }
     if (event.target instanceof Element
       && (event.target.closest('input, select, textarea, [contenteditable]') || event.target.isContentEditable)) return;
     if (state.mode === 'display') return;
-    if (commandKey && key === 'a'
+    if (shortcutMatches(event, 'selectAll')
       && event.target instanceof Element
       && (viewport.contains(event.target) || outliner.contains(event.target))) {
       event.preventDefault();
@@ -62,8 +61,8 @@ export function bindWorkspaceShortcuts({
     const textureListFocused = focus?.closest('#textureList');
     const texturePanelFocused = focus?.closest('[data-panel="texture"]')
       || focus === document.body && uvEditorController.focusedDockHotspot === 'texture';
-    if (texturePanelFocused && commandKey && !event.shiftKey && !event.altKey) {
-      const pixelCommand = { x: 'cut', c: 'copy', v: 'paste', d: 'duplicate' }[key];
+    if (texturePanelFocused) {
+      const pixelCommand = ['cut', 'copy', 'paste', 'duplicate'].find(id => shortcutMatches(event, id));
       if (pixelCommand && handlePixelShortcut(pixelCommand, {
         repeat: event.repeat, allowUnselectedPaste: !textureListFocused
       })) {
@@ -71,34 +70,34 @@ export function bindWorkspaceShortcuts({
         return;
       }
     }
-    if (textureListFocused && commandKey) {
-      if (key === 'c') {
+    if (textureListFocused) {
+      if (shortcutMatches(event, 'copy')) {
         event.preventDefault();
         copyTexture();
         return;
       }
-      if (key === 'x') {
+      if (shortcutMatches(event, 'cut')) {
         event.preventDefault();
         cutTexture();
         return;
       }
-      if (key === 'v') {
+      if (shortcutMatches(event, 'paste')) {
         event.preventDefault();
         pasteTexture();
         return;
       }
-      if (key === 'd') {
+      if (shortcutMatches(event, 'duplicate')) {
         event.preventDefault();
         pasteTexture({ inPlace: true });
         return;
       }
     }
-    if (event.key === 'Alt' && state.mode !== 'paint' && state.tool === 'rotate' && !state.rotationVertexPick) {
+    if (shortcutMatches(event, 'temporaryEyedropper') && state.mode !== 'paint' && state.tool === 'rotate' && !state.rotationVertexPick) {
       event.preventDefault();
       state.rotationVertexPick = true;
       updateTransformGizmo();
     }
-    if (event.key === 'Escape') {
+    if (shortcutMatches(event, 'dismiss')) {
       setRenderModeMenu(false);
       setReferenceImageMenu(false);
       if (referenceImages.editing) setReferenceImageEditing(false);
@@ -106,27 +105,27 @@ export function bindWorkspaceShortcuts({
       if (inspectorController.subdivisionSession) exitSubdivisionEdit();
       clearPaintGradientSelection();
     }
-    if (commandKey && key === 'c') {
+    if (shortcutMatches(event, 'copy')) {
       event.preventDefault();
       copySelected();
       return;
     }
-    if (commandKey && key === 'x') {
+    if (shortcutMatches(event, 'cut')) {
       event.preventDefault();
       cutSelected();
       return;
     }
-    if (commandKey && key === 'v') {
+    if (shortcutMatches(event, 'paste')) {
       event.preventDefault();
       pasteElements();
       return;
     }
-    if (commandKey && key === 'd') {
+    if (shortcutMatches(event, 'duplicate')) {
       event.preventDefault();
       pasteElements({ inPlace: true });
       return;
     }
-    if (event.key === 'Delete') {
+    if (shortcutMatches(event, 'delete')) {
       if (handlePixelShortcut('delete', { repeat: event.repeat })) {
         event.preventDefault();
         return;
@@ -150,13 +149,12 @@ export function bindWorkspaceShortcuts({
       if (state.mode !== 'paint') deleteSelected();
       return;
     }
-    const plainKey = !commandKey && !event.shiftKey && !event.altKey;
-    if (plainKey && !document.querySelector('dialog[open]')) {
-      if (key === 'arrowleft' || key === 'arrowright') {
+    if (!document.querySelector('dialog[open]')) {
+      if (shortcutMatches(event, 'previousTool') || shortcutMatches(event, 'nextTool')) {
         const tools = $$('.tool-lane .tool').filter(button => !button.disabled && button.getClientRects().length)
           .map(button => button.dataset.tool || state.paintShapeTool);
         if (tools.length) {
-          const index = tools.indexOf(state.tool), step = key === 'arrowleft' ? -1 : 1;
+          const index = tools.indexOf(state.tool), step = shortcutMatches(event, 'previousTool') ? -1 : 1;
           const next = tools[index < 0 ? (step > 0 ? 0 : tools.length - 1) : (index + step + tools.length) % tools.length];
           event.preventDefault();
           if (next !== state.tool) {
@@ -166,10 +164,10 @@ export function bindWorkspaceShortcuts({
         }
         return;
       }
-      if (state.mode === 'edit' && (key === 'c' || key === 's')) {
+      if (state.mode === 'edit' && (shortcutMatches(event, 'addCube') || shortcutMatches(event, 'addShape'))) {
         event.preventDefault();
         if (!event.repeat) {
-          if (key === 'c') {
+          if (shortcutMatches(event, 'addCube')) {
             closeShapeCreateMenu();
             addCube();
           }
@@ -182,37 +180,40 @@ export function bindWorkspaceShortcuts({
         return;
       }
     }
-    if (event.key.toLowerCase() === 'f') {
+    if (shortcutMatches(event, 'zoomReset')) {
       cancelCameraFocus();
       state.zoom = 1.12;
       state.panX = 0;
       state.panY = 0;
       renderScene();
     }
-    if (event.key.toLowerCase() === 'r') {
+    if (shortcutMatches(event, 'focus') || shortcutMatches(event, 'focusReset')) {
       event.preventDefault();
-      if (uvEditorController.focusedDockHotspot === 'texture') event.shiftKey ? resetTextureView() : focusSelectedTextureUvs();
-      else event.shiftKey ? focusSceneOrigin() : focusSelected();
+      if (uvEditorController.focusedDockHotspot === 'texture') shortcutMatches(event, 'focusReset') ? resetTextureView() : focusSelectedTextureUvs();
+      else shortcutMatches(event, 'focusReset') ? focusSceneOrigin() : focusSelected();
     }
-    if (state.mode === 'paint' && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      const paintShortcuts = { b: 'brush', l: 'line', m: 'rectangle', o: 'ellipse', g: 'fill', j: 'gradient', i: 'eyedropper' };
-      const paintTool = paintShortcuts[event.key.toLowerCase()];
+    if (state.mode === 'paint') {
+      const paintShortcuts = { paintBrush: 'brush', paintLine: 'line', paintRectangle: 'rectangle', paintEllipse: 'ellipse', paintFill: 'fill', paintGradient: 'gradient', paintEyedropper: 'eyedropper' };
+      const paintTool = Object.entries(paintShortcuts).find(([id]) => shortcutMatches(event, id))?.[1];
       if (paintTool) {
         event.preventDefault();
         setTool(paintTool);
       }
     }
-    const shortcuts = { '1': 'move', '2': 'resize', '3': 'rotate', '4': 'pivot', '5': 'vertexSnap', '6': 'knife', '7': 'faceSelect' };
-    if (shortcuts[event.key]) setTool(shortcuts[event.key]);
+    if (state.mode !== 'paint') {
+      const shortcuts = { toolMove: 'move', toolResize: 'resize', toolRotate: 'rotate', toolPivot: 'pivot', toolVertexSnap: 'vertexSnap', toolKnife: 'knife', toolFaceSelect: 'faceSelect' };
+      const tool = Object.entries(shortcuts).find(([id]) => shortcutMatches(event, id))?.[1];
+      if (tool) setTool(tool);
+    }
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
   });
   window.addEventListener('keyup', event => {
-    if (event.key === 'Alt' && state.rotationVertexPick) {
+    if (shortcutTriggerReleased(event, 'temporaryEyedropper') && state.rotationVertexPick) {
       state.rotationVertexPick = false;
       updateTransformGizmo();
       event.preventDefault();
     }
-    if (event.key === 'Alt' && endTemporaryEyedropper()) {
+    if (shortcutTriggerReleased(event, 'temporaryEyedropper') && endTemporaryEyedropper()) {
       event.preventDefault();
       return;
     }

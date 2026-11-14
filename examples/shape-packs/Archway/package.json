@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "hotReload": true,
+  "shapes": [
+    { "id": "archway", "label": "拱門", "file": "arch.js", "icon": "arch.svg" }
+  ]
+}

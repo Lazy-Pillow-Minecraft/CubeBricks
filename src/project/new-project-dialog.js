@@ -1,5 +1,6 @@
 import { ModelFormatId } from '../common/config/model-formats.js';
 import { bindDialogDrag } from '../utils/dom/dialog-drag.js';
+import { shortcutMatches } from '../screen/shortcuts.js';
 import { availableUvModes, JAVA_BLOCK_VERSIONS, newProjectDefaults,
   prepareNewProjectData } from './new-project-options.js';
 
@@ -53,7 +54,7 @@ export function createNewProjectDialog({ $, language, createProject, toast }) {
   });
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
   dialog.addEventListener('close', closeMenus);
-  dialog.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenus(); });
+  dialog.addEventListener('keydown', event => { if (shortcutMatches(event, 'dismiss')) closeMenus(); });
   dialog.querySelectorAll('[data-action="cancelNewModelProject"]').forEach(button =>
     button.addEventListener('click', () => dialog.close()));
   bindDialogDrag(dialog, dialog.querySelector('.dialog-heading'));

@@ -1,6 +1,7 @@
 import { activeLayer, layerRasterCache, loadRaster, releaseLayerRaster, selectedLayerEntry } from '../common/core/texture-features.js';
 import { activeTextureFrame, frameLayerUids } from '../common/core/frame-links.js';
 import { binarizePixelAlpha, captureLayerBranch, instantiateLayerBranch, layerBranchEntries } from './layer-clipboard.js';
+import { shortcutMatches } from '../screen/shortcuts.js';
 
 export function createLayerCommands({ state, activeTextureAsset, textureCanvas, finishLayerEdit,
   pushTexturePaintHistory, refreshLayeredTexture, onChange, root, toast }) {
@@ -172,13 +173,12 @@ export function createLayerCommands({ state, activeTextureAsset, textureCanvas, 
   }
 
   root?.addEventListener('keydown', event => {
-    const key = event.key.toLowerCase();
-    if (!(event.ctrlKey || event.metaKey) || !['c', 'v', 'd'].includes(key)
-      || event.target.closest('input,select,textarea,[contenteditable="true"]')) return;
+    const action = ['copy', 'paste', 'duplicate'].find(id => shortcutMatches(event, id));
+    if (!action || event.target.closest('input,select,textarea,[contenteditable="true"]')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (event.repeat) return;
-    (key === 'c' ? copy() : paste({ inPlace: key === 'd' })).catch(error => toast(error.message));
+    (action === 'copy' ? copy() : paste({ inPlace: action === 'duplicate' })).catch(error => toast(error.message));
   });
   return { copy, paste, binarizeAlpha, canPaste: () => Boolean(clipboard) };
 }

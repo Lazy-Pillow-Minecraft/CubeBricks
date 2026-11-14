@@ -5,6 +5,7 @@ import { Cube, Group, Shape } from '../model.js';
 import { shapeRegistry } from '../shapes/builtins.js';
 import { createViewportInputBinder } from './viewport-input.js';
 import { bindWorkspaceShortcuts } from './workspace-shortcuts.js';
+import { bindShortcutSettings } from './shortcut-settings.js';
 import { createExternalFileDropHandler } from '../project/file-drop.js';
 import { bindProjectTabEvents } from '../project/tab-events.js';
 import { bindUvPreviewEvents } from './uv-preview-events.js';
@@ -21,6 +22,7 @@ export function createEventBinder({
   openColorPickerPopup, closeProjectTab, activateProjectTab, openProjectInfo,
   projectTabInsertionIndex, previewProjectTabInsertion, moveProjectTabToIndex,
   applyProjectInfo, setReferenceImageMenu, beginReferenceImageImport,
+  addReferenceImageFromClipboard,
   setReferenceImageEditing, resetReferenceImage, removeReferenceImage,
   loadReferenceImageFiles, beginReferenceImageDrag, moveReferenceImageDrag,
   endReferenceImageDrag, scaleReferenceImage, createTextureTemplate,
@@ -518,7 +520,7 @@ export function createEventBinder({
         refreshUvPreview(false);
       });
     }).observe(uvPreviewViewport);
-    document.fonts?.load('12px "Fusion Pixel Latin"').then(() => {
+    window.addEventListener('cubebricks:font-changed', () => {
       uvPreviewController.uvPreviewFaceLabelFontRevision++;
       uvPreviewController.invalidateFaceLabelCache();
       refreshUvPreview();
@@ -586,6 +588,7 @@ export function createEventBinder({
       event.stopPropagation();
       const action = button.dataset.referenceAction;
       if (action === 'import') beginReferenceImageImport();
+      if (action === 'clipboard') addReferenceImageFromClipboard();
       if (action === 'edit') {
         setReferenceImageEditing(!referenceImages.editing);
         setReferenceImageMenu(false);
@@ -945,6 +948,7 @@ export function createEventBinder({
       resetTextureView, focusSelectedTextureUvs, focusSceneOrigin, focusSelected,
       refreshKnifeFromModifierEvent
     });
+    bindShortcutSettings();
     document.addEventListener('visibilitychange', scheduleTextureAnimation);
   }
 

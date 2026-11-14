@@ -1,4 +1,7 @@
 import { dot3 } from '../utils/math/vector3.js';
+import { shortcutFor } from './shortcuts.js';
+
+const shortcutHtml = id => shortcutFor(id).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
 export function createCameraController({ state, $, $$, sceneCanvas, sceneRenderer, viewport,
   renderScene, scheduleSceneRender = renderScene, toast, mapProjectionZoom, setReferenceImageEditing }) {
@@ -191,7 +194,7 @@ export function createCameraController({ state, $, $$, sceneCanvas, sceneRendere
       ? '<kbd>中鍵</kbd> 平移 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>拖動輪盤</kbd> 一般視圖'
       : state.blockbenchControls && state.mode !== 'paint'
         ? '<kbd>左鍵拖動</kbd> 旋轉 <kbd>右鍵拖動</kbd> 平移 <kbd>Shift + 左鍵</kbd> 框選 <kbd>中鍵</kbd> 旋轉／平移'
-        : '<kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>R</kbd> 聚焦 <kbd>Shift+R</kbd> 中心';
+        : `<kbd>中鍵</kbd> 旋轉 <kbd>Shift + 中鍵</kbd> 平移 <kbd>滾輪</kbd> 縮放 <kbd>${shortcutHtml('focus')}</kbd> 聚焦 <kbd>${shortcutHtml('focusReset')}</kbd> 中心`;
     if ($('#viewHint').innerHTML !== viewHint) $('#viewHint').innerHTML = viewHint;
   }
 

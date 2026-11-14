@@ -1,3 +1,5 @@
+import { shortcutMatches } from '../screen/shortcuts.js';
+
 export function bindProjectTabEvents({
   $, $$, projectTabsNode, projectTabsController, projectInfoDialog,
   activateProjectTab, closeProjectTab, openProjectInfo, applyProjectInfo,
@@ -102,7 +104,7 @@ export function bindProjectTabEvents({
     if (!event.target.closest('.project-info-version-picker')) closeVersionMenu();
   });
   projectInfoDialog.addEventListener('keydown', event => {
-    if (event.key === 'Escape') closeVersionMenu();
+    if (shortcutMatches(event, 'dismiss')) closeVersionMenu();
   });
   $('#projectInfoForm').addEventListener('submit', event => {
     event.preventDefault();

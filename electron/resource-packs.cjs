@@ -7,17 +7,18 @@ const { listShapePacks, loadShapePack } = require('./shape-packs.cjs');
 const FOLDERS = Object.freeze({ shape: 'shapepacks', language: 'languagepacks', font: 'fontpacks' });
 const FONT_EXTENSION = /\.(ttf|otf|woff2?)$/i;
 const MAX_ARCHIVE = 32 * 1024 * 1024;
+const MAX_FONT_UNPACKED = 64 * 1024 * 1024;
 const SAFE_ENTRY = /^(?!.*[. ]$)[^\\/:*?"<>|.][^\\/:*?"<>|]*$/;
 
 function folder(root, kind) {
-  if (!FOLDERS[kind]) throw new Error('未知包類型');
+  if (typeof kind !== 'string' || !Object.hasOwn(FOLDERS, kind)) throw new Error('未知包類型');
   return path.join(root, FOLDERS[kind]);
 }
 
-async function entriesFromArchive(file) {
+async function entriesFromArchive(file, maxTotalSize = MAX_ARCHIVE) {
   const bytes = await fs.readFile(file);
   if (bytes.length > MAX_ARCHIVE) throw new Error('包文件超過 32 MiB');
-  const unpacked = unpackZip(bytes, { maxEntrySize: 16 * 1024 * 1024, maxTotalSize: MAX_ARCHIVE });
+  const unpacked = unpackZip(bytes, { maxEntrySize: 16 * 1024 * 1024, maxTotalSize });
   const names = [...unpacked.keys()];
   const prefix = names.length && names.every(name => name.startsWith(names[0].split('/')[0] + '/'))
     ? names[0].split('/')[0] + '/' : '';
@@ -61,7 +62,7 @@ async function loadLanguage(file, name) {
 
 async function loadFont(file, name, { includeSources = true } = {}) {
   const archive = /\.zip$/i.test(name);
-  const entries = archive ? await entriesFromArchive(file) : new Map([[name, await fs.readFile(file)]]);
+  const entries = archive ? await entriesFromArchive(file, MAX_FONT_UNPACKED) : new Map([[name, await fs.readFile(file)]]);
   const manifest = entries.get('package.json');
   const metadata = manifest ? JSON.parse(manifest.toString('utf8')) : {};
   const fonts = [...entries].filter(([entryName]) => FONT_EXTENSION.test(entryName)).map(([entryName, bytes]) => {
@@ -181,5 +182,5 @@ async function savePackOrder(root, order) {
 
 module.exports = {
   listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder,
-  loadLanguage, loadFont, readFontPack
+  loadLanguage, loadFont, readFontPack, resourcePackFolder: folder
 };

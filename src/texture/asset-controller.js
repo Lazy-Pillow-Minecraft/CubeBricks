@@ -10,7 +10,7 @@ import { createFrameConnections } from './frame-connections-controller.js';
 import { activeTextureFrame, frameLayerUids, framePaintLayer, frameVisibilityControls, rememberFramePaintLayer, setFrameLayerLink, setFrameLayerVisibility } from '../common/core/frame-links.js';
 import { createFramePlayback } from './frame-playback-controller.js';
 import { readCompanionAnimation, splitTextureAnimation } from './animation-import.js';
-import { paintCanvasIsBound, rememberEditablePaintSource } from '../paint/canvas-layer-binding.js';
+import { boundPaintLayer, paintCanvasIsBound, rememberEditablePaintSource } from '../paint/canvas-layer-binding.js';
 import { isolateTextureLayerIds, reidentifyTextureLayers } from '../common/core/texture-layer-identity.js';
 import { createLayerCommands } from './layer-commands.js';
 import { decodedRasterImage } from '../utils/image/raster-cache.js';
@@ -19,6 +19,7 @@ const CUBE_FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
 const TEXTURE_MODE_LABEL = '貼圖模式';
 const TEXTURE_MODES = [['default', '默認'], ['tiled', '平鋪']];
 let textureClipboard = null;
+let textureCopyRevision = 0;
 const decodedTextureImages = new WeakMap();
 
 export function createTextureAssetController({
@@ -688,10 +689,41 @@ export function createTextureAssetController({
     return assigned;
   }
 
-  function copyTexture(asset = activeTextureAsset()) {
+  async function copyTexture(asset = activeTextureAsset()) {
     if (!asset) return false;
+    const revision = ++textureCopyRevision;
     textureClipboard = { asset: structuredClone(asset), cut: false };
-    toast(`已複製貼圖 ${asset.name}`);
+    try {
+      if (layerEditSession?.asset === asset) await finishLayerEdit();
+      if (asset.layers?.length) await prepareLayers(asset);
+      if (revision !== textureCopyRevision) return false;
+      const liveLayer = asset === activeTextureAsset() ? boundPaintLayer(asset, textureCanvas) : null;
+      const canvas = asset.layers?.length
+        ? compositeLayers(asset, liveLayer ? textureCanvas : null, null, null, null, liveLayer?.uid)
+        : await loadRaster(asset.source);
+      if (!canvas) throw new Error('無法合成貼圖');
+      const png = canvas.toDataURL('image/png');
+      if (revision !== textureCopyRevision) return false;
+      const copied = structuredClone(asset);
+      copied.source = png;
+      if (liveLayer) {
+        const layer = copied.layers.find(entry => entry.uid === liveLayer.uid);
+        if (layer) layer.source = textureCanvas.toDataURL('image/png');
+      }
+      textureClipboard.asset = copied;
+      if (window.cubeBricksDesktop?.copyCaptureImage) await window.cubeBricksDesktop.copyCaptureImage(png);
+      else if (navigator.clipboard?.write) {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!blob) throw new Error('無法產生 PNG 圖片');
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      } else throw new Error('目前無法寫入系統剪切板');
+    } catch (error) {
+      if (revision !== textureCopyRevision) return false;
+      toast(`已在軟件內複製貼圖，但無法寫入系統剪切板：${error.message}`);
+      return true;
+    }
+    if (revision !== textureCopyRevision) return false;
+    toast(`已複製貼圖 ${asset.name}，並放入系統剪切板`);
     return true;
   }
 
@@ -803,6 +835,7 @@ export function createTextureAssetController({
 
   function cutTexture(asset = activeTextureAsset()) {
     if (!asset) return false;
+    ++textureCopyRevision;
     noteJournalOperation('core.texture.cut');
     textureClipboard = { asset: structuredClone(asset), cut: true };
     const index = state.textureAssets.indexOf(asset);

@@ -14,6 +14,11 @@ export const shapeRegistry = Object.freeze({
       !/^[a-z][a-z0-9_]{0,63}$/i.test(field.key) || typeof field.label !== 'string'))) {
       throw new Error(`Shape ${definition.id} 的 fields 不合法`);
     }
+    if (definition.dimensionKeys && (!Array.isArray(definition.dimensionKeys)
+      || definition.dimensionKeys.length !== 3
+      || definition.dimensionKeys.some(key => !definition.fields?.some(field => field.key === key)))) {
+      throw new Error(`Shape ${definition.id} 的 dimensionKeys 必須對應三個數值欄位`);
+    }
     if (definition.constrainFormat !== undefined && typeof definition.constrainFormat !== 'function'
       || definition.supportsFormat !== undefined && typeof definition.supportsFormat !== 'function') throw new Error('Invalid Shape format hook');
     if (external) for (const field of definition.fields || []) {

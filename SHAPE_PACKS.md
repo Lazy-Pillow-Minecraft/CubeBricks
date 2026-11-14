@@ -62,6 +62,8 @@ export default {
 
 `generate(shape, api)` 必须同步返回 Cube 数组；也可返回传入 `new Cube(...)` 的普通数据对象。生成的 Cube 使用 Shape 的局部坐标，编辑器在后续统一套用 Shape 自身的 `origin`、`pivot`、`rotation`、父组变换、细分覆盖与修改器。不要在 `generate` 内自行重复加上 `origin`。`shape.parameters` 保存可编辑参数；当前通用属性面板自动呈现 `fields` 中的数值栏位。参数、细分覆盖及 Shape ID 随 `.cbmodel` 保存；未安装对应包时保留数据但不生成几何，重新安装后恢复。
 
+如果三个尺寸参数需要分别对应 X、Y、Z 轴，可以在定义中加入 `dimensionKeys: ['width', 'height', 'depth']`，并在 `fields` 中定义这三个数值参数。属性面板会把它们合成一个三轴尺寸栏，缩放手柄也会分别调整对应的轴。没有声明 `dimensionKeys` 的包仍使用原来的独立数值栏。
+
 `utils` 暴露当前 `src/utils/` 的全部公共模块：`utils.math.vector3`、`utils.math.rotation`、`utils.shape.polyhedronGeometry`、`utils.shape.bezierGeometry`、`utils.shape.javaCurveFit`、`utils.templatePacker`。使用命名空间可避免不同模块的同名函数冲突；新增公共工具时同步更新 `src/utils/index.js`。工具只提供计算，不会替包脚本绕过 Cube 数量和格式约束。
 
 内置 Shape 也按同一注册界面拆分在 `src/shapes/`；多边形、正十二面体、足球和两种贝塞尔各有自己的定义文件，共用几何计算放在 `src/utils/shape/`。

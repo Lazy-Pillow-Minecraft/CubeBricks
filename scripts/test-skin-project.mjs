@@ -97,11 +97,11 @@ assert.equal(canvases.at(-1).width, ghastSource.textures[0].width,
 assert.equal(ghastTemplate.textureAssets[0].uvWidth, ghastSource.textures[0].uv_width,
   'high-resolution templates keep the logical UV dimensions');
 for (const record of catalog.entries) {
-  assert(fs.existsSync(`src/assets/skin-library/${record.cover}`), `${record.id}: cover exists`);
-  assert(fs.existsSync(`src/assets/skin-library/${record.templatePreview}`), `${record.id}: template preview exists`);
+  assert(!('cover' in record) && !('templatePreview' in record), `${record.id}: no pre-rendered preview references`);
+  assert(fs.existsSync(`src/assets/skin-library/${record.model}`), `${record.id}: source model exists`);
   for (const texture of record.textures) {
     assert(fs.existsSync(`src/assets/skin-library/${texture.file}`), `${record.id}: game texture exists`);
-    assert(fs.existsSync(`src/assets/skin-library/${texture.preview}`), `${record.id}: game texture preview exists`);
+    assert(!('preview' in texture), `${record.id}: game texture has no pre-rendered preview`);
   }
   const source = JSON.parse(fs.readFileSync(`src/assets/skin-library/${record.model}`));
   const before = painted;

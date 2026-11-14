@@ -2,6 +2,7 @@ import { createListDragAutoScroll } from '../screen/list-drag-scroll.js';
 import { verticalDropTarget } from '../screen/vertical-drop.js';
 import { createTextureFrameElement, insertTextureFrameElement, moveTextureFrameElement, textureFrameElements } from './frame-elements.js';
 import { activeTextureFrame, selectTextureFrame } from '../common/core/frame-links.js';
+import { shortcutMatches } from '../screen/shortcuts.js';
 
 export function createTextureFrameList({ $, activeTextureAsset, noteJournalOperation, markDirty, showContextMenu, onSelect, onChange }) {
   const panel = $('#textureFrameEditor'), list = $('#textureFrameList'), add = $('#addTextureFrame');
@@ -93,12 +94,12 @@ export function createTextureFrameList({ $, activeTextureAsset, noteJournalOpera
   });
   add.addEventListener('click', create);
   list.addEventListener('keydown', event => {
-    const key = event.key.toLowerCase(), modified = event.ctrlKey || event.metaKey;
-    if (!(modified && ['c', 'x', 'v', 'd'].includes(key)) && key !== 'delete') return;
+    const action = ['copy', 'cut', 'paste', 'duplicate', 'delete'].find(id => shortcutMatches(event, id));
+    if (!action) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (event.repeat) return;
-    if (key === 'delete') remove(); else if (key === 'c') copy(); else if (key === 'x') remove(true); else paste(key === 'd');
+    if (action === 'delete') remove(); else if (action === 'copy') copy(); else if (action === 'cut') remove(true); else paste(action === 'duplicate');
   });
   list.addEventListener('contextmenu', event => {
     const row = event.target.closest('[data-texture-frame]'), asset = activeTextureAsset();

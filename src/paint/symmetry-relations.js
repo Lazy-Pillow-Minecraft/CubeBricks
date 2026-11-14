@@ -1,8 +1,16 @@
 import { isCubeFaceCulled } from '../common/core/geometry-utils.js';
-import { dot3 } from '../utils/math/vector3.js';
+import { cross3, dot3 } from '../utils/math/vector3.js';
 
 export const paintSymmetryRelationCache = new Map();
 const paintSymmetryBuildScheduled = new Set();
+
+function faceNormal(points) {
+  const first = points[2].map((value, axis) => value - points[0][axis]);
+  const second = points[1].map((value, axis) => value - points[0][axis]);
+  const normal = cross3(first, second);
+  const length = Math.hypot(...normal);
+  return length > 1e-9 ? normal.map(value => value / length) : null;
+}
 
 export function createPaintSymmetryController({ state, sceneRenderer, faceUvPixelSlots, symmetryModifierAngles,
   mirrorControllerWorldFrame, barycentricPoint, renderInspector, PAINT_FACE_EDGES }) {
@@ -20,7 +28,7 @@ export function createPaintSymmetryController({ state, sceneRenderer, faceUvPixe
       if (cube?.type !== 'cube' || isCubeFaceCulled(cube.faces?.[face.faceName])) return [];
       const uvSlots = faceUvPixelSlots(cube, face.faceName);
       if (!uvSlots) return [];
-      return [{ ...face, cube, uvSlots, key: paintSymmetryFaceKey(face) }];
+      return [{ ...face, cube, uvSlots, normal: faceNormal(face.facePoints), key: paintSymmetryFaceKey(face) }];
     });
   }
 
@@ -34,6 +42,14 @@ export function createPaintSymmetryController({ state, sceneRenderer, faceUvPixe
       + frame.axes[0][axis] * point[0]
       + frame.axes[1][axis] * point[1]
       + frame.axes[2][axis] * point[2]);
+  }
+
+  function paintSymmetryTransformedNormal(frame, normal, transform) {
+    if (!normal) return null;
+    const local = frame.axes.map(axis => dot3(normal, axis));
+    const mirrored = transform(local);
+    return [0, 1, 2].map(axis => frame.axes.reduce((sum, direction, index) =>
+      sum + direction[axis] * mirrored[index], 0));
   }
 
   function paintSymmetryTransforms(operator) {
@@ -122,11 +138,13 @@ export function createPaintSymmetryController({ state, sceneRenderer, faceUvPixe
     for (const transform of cache.transforms) {
       const transformed = source.facePoints.map(point => paintSymmetryWorldPoint(cache.frame,
         transform(paintSymmetryFramePoint(cache.frame, point))));
+      const transformedNormal = paintSymmetryTransformedNormal(cache.frame, source.normal, transform);
+      if (!transformedNormal) continue;
       const candidates = cache.centerBuckets.get(paintSymmetryCenterKey(transformed)) || [];
       for (const target of candidates) {
+        if (!target.normal || dot3(transformedNormal, target.normal) < .99999) continue;
         const permutation = paintSymmetryPermutation(transformed, target.facePoints, tolerance);
         if (!permutation || !paintSymmetryUvEdgesMatch(source, target, permutation)) continue;
-        if (source.key === target.key && permutation.every((slot, index) => slot === index)) continue;
         const relationKey = `${target.key}:${permutation.join('')}`;
         if (seen.has(relationKey)) continue;
         seen.add(relationKey);

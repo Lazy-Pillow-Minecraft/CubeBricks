@@ -1,4 +1,5 @@
 import { performanceMonitor } from '../utils/performance-monitor.js';
+import { shortcutHeld } from './shortcuts.js';
 
 // Keep pointer capture, camera input sampling and the rotation double-click
 // state together. The workspace binder calls this in the original event order.
@@ -136,7 +137,7 @@ export function createViewportInputBinder({
         return;
       }
       if (handle.dataset.kind === 'rotation-pivot-vertex') {
-        if (event.altKey && state.rotationVertexPick) {
+        if (state.rotationVertexPick) {
           movePivotToRotationVertex(state.rotationPivotVertices[Number(handle.dataset.vertexIndex)]);
         }
         return;
@@ -304,7 +305,7 @@ export function createViewportInputBinder({
     sceneCanvas.addEventListener('lostpointercapture', endPointerDrag);
     sceneCanvas.addEventListener('auxclick', event => { if (event.button === 1) event.preventDefault(); });
     window.addEventListener('wheel', event => {
-      if (!event.altKey || !palette.scrollSelectedPaletteColor(event.deltaY)) return;
+      if (!shortcutHeld('temporaryEyedropper') || !palette.scrollSelectedPaletteColor(event.deltaY)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     }, { capture: true, passive: false });

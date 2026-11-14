@@ -2,10 +2,8 @@ import { ConfigKey, configRegistry, replaceLanguagePacks, resolveUiLanguage } fr
 import { showAppConfirm } from './prompt-dialog.js';
 
 const KIND_LABELS = { language: '語言包', font: '字體包', shape: 'Shape 包' };
-const BUILTIN_FONTS = [
-  { value: 'pixel', label: 'Fusion Pixel（內置）' },
-  { value: 'system', label: '系統字體' }
-];
+const BUILTIN_FONTS = [{ value: 'system', label: '系統字體' }];
+const FUSION_PIXEL_PACK = 'Fusion-Pixel-12px.zip';
 
 export function createPacksController({ $, toast, reloadShapePacks }) {
   const desktop = window.cubeBricksDesktop;
@@ -25,21 +23,30 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
     fontFaces = [];
   }
 
+  function notifyFontApplied() {
+    window.dispatchEvent(new Event('cubebricks:font-changed'));
+  }
+
   async function applyFont() {
     const generation = ++fontGeneration;
     clearFontFaces();
     const selected = configRegistry.get(ConfigKey.FONT);
-    document.documentElement.toggleAttribute('data-pixel-font', selected === 'pixel');
     document.documentElement.style.removeProperty('--ui-font');
-    if (selected === 'pixel' || selected === 'system') return;
+    if (selected === 'pixel' || selected === 'system') {
+      notifyFontApplied();
+      return;
+    }
     const pack = packs.find(entry => entry.kind === 'font' && entry.id === selected);
-    if (!pack) return;
+    if (!pack) {
+      notifyFontApplied();
+      return;
+    }
     const language = resolveUiLanguage().toLowerCase();
     if (!fontSourceCache.has(pack.id)) {
       try { fontSourceCache.set(pack.id, await desktop.readFontPack(pack.id)); }
       catch (error) {
         console.warn('字體包讀取失敗', pack.id, error);
-        if (generation === fontGeneration) document.documentElement.style.setProperty('--ui-font', 'system-ui, sans-serif');
+        if (generation === fontGeneration) notifyFontApplied();
         return;
       }
     }
@@ -74,6 +81,7 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
     document.documentElement.style.setProperty('--ui-font',
       loaded.length ? [...loaded.map(entry => `"${entry.family}"`), 'system-ui', 'sans-serif'].join(', ')
         : 'system-ui, sans-serif');
+    notifyFontApplied();
   }
 
   function updateFontSelect() {
@@ -81,8 +89,20 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
       .map(pack => ({ value: pack.id, label: pack.name }))];
     fontSelect.replaceChildren(...options.map(option => new Option(option.label, option.value)));
     const current = configRegistry.get(ConfigKey.FONT);
-    if (!options.some(option => option.value === current)) configRegistry.set(ConfigKey.FONT, 'pixel', { source: 'font-pack' });
+    if (current === 'pixel') {
+      const legacyPack = packs.find(pack => pack.kind === 'font'
+        && pack.filename.toLowerCase() === FUSION_PIXEL_PACK.toLowerCase());
+      if (legacyPack) configRegistry.set(ConfigKey.FONT, legacyPack.id, { source: 'font-pack-migration' });
+      else {
+        // Keep the old preference so installing the separate pack later restores it.
+        fontSelect.value = 'system';
+        return;
+      }
+    } else if (!options.some(option => option.value === current)) {
+      configRegistry.set(ConfigKey.FONT, 'system', { source: 'font-pack' });
+    }
     fontSelect.value = configRegistry.get(ConfigKey.FONT);
+    return current !== configRegistry.get(ConfigKey.FONT);
   }
 
   function action(label, operation, title, disabled = false) {
@@ -143,8 +163,8 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
     errors.textContent = result.errors.join('\n');
     errors.hidden = !result.errors.length;
     replaceLanguagePacks(packs.filter(pack => pack.kind === 'language'));
-    updateFontSelect();
-    await applyFont();
+    const selectionChanged = updateFontSelect();
+    if (!selectionChanged) await applyFont();
     if (shapes) await reloadShapePacks();
     render();
   }
@@ -198,6 +218,10 @@ export function createPacksController({ $, toast, reloadShapePacks }) {
       void refresh({ shapes: true }).catch(error => toast(`資源包讀取失敗：${error.message}`));
     });
     $('#installPackButton').disabled = !desktop?.installResourcePack;
+    $('#openPackFolderButton').disabled = !desktop?.openResourcePackFolder;
+    $('#openPackFolderButton').addEventListener('click', () => {
+      void desktop.openResourcePackFolder(kind).catch(error => toast(`打開文件夾失敗：${error.message}`));
+    });
     $('#installPackButton').addEventListener('click', async () => {
       try {
         const installed = await desktop.installResourcePack(kind);

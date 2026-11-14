@@ -14,6 +14,7 @@ export const AppLanguage = Object.freeze({
 export const ConfigKey = Object.freeze({
   LANGUAGE: 'application.language',
   FONT: 'application.font',
+  SHORTCUTS: 'application.shortcuts',
   HISTORY_LIMIT: 'application.history-limit',
   SEPARATE_UV_MODE: 'editor.separate-uv-mode',
   BLOCKBENCH_CONTROLS: 'editor.blockbench-controls',
@@ -161,6 +162,11 @@ configRegistry.register({
 });
 
 configRegistry.registerMany([
+  {
+    id: ConfigKey.SHORTCUTS, type: ConfigType.OBJECT, scope: ConfigScope.APPLICATION,
+    defaultValue: {}, validate: value => Object.values(value).every(entry => typeof entry === 'string' && entry.length < 160),
+    description: 'User-defined keyboard shortcuts; omitted actions use built-in bindings.'
+  },
   {
     id: ConfigKey.FONT,
     type: ConfigType.STRING,

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen, shell } = require('electron');
 const { startMainPerformanceCapture, stopMainPerformanceCapture, trackMainOperation } = require('./main-performance.cjs');
 const handleIpc = (name, handler) => ipcMain.handle(name, trackMainOperation(name, handler));
 const path = require('path');
@@ -15,7 +15,7 @@ const { openIndexedArchive } = require('./archive-index.cjs');
 const { JournalOwnership } = require('./journal-ownership.cjs');
 const { createWorkspaceCatalog } = require('./workspace-catalog.cjs');
 const { readProjectRetention, initializeProjectRetention, retainProject } = require('./project-retention.cjs');
-const { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder, readFontPack } = require('./resource-packs.cjs');
+const { listResourcePacks, orderedShapePacks, installPack, removePack, savePackOrder, readFontPack, resourcePackFolder } = require('./resource-packs.cjs');
 const appIcon = path.join(__dirname, '..', 'src', 'assets', process.platform === 'win32' ? 'shortcut-icon.ico' : 'shortcut-icon.png');
 const skinLibraryRoot = path.join(__dirname, '..', 'src', 'assets', 'skin-library');
 handleIpc('skin-library:read', async (_event, relativePath) => {
@@ -748,6 +748,13 @@ handleIpc('project:workspace-root', async () => (await ensureWorkspaceLayout()).
 handleIpc('shape-packs:list', async () => orderedShapePacks((await ensureWorkspaceLayout()).root));
 handleIpc('packs:list', async () => listResourcePacks((await ensureWorkspaceLayout()).root));
 handleIpc('packs:font-data', async (_event, id) => readFontPack((await ensureWorkspaceLayout()).root, id));
+handleIpc('packs:open-folder', async (_event, kind) => {
+  const directory = resourcePackFolder((await ensureWorkspaceLayout()).root, kind);
+  await fs.mkdir(directory, { recursive: true });
+  const error = await shell.openPath(directory);
+  if (error) throw new Error(error);
+  return directory;
+});
 handleIpc('packs:install', async (event, kind) => {
   const filters = {
     shape: [{ name: 'ui.shape-pack-zip-filter', extensions: ['zip'] }],
@@ -923,6 +930,14 @@ handleIpc('image:copy-capture', (_event, dataUrl) => {
   if (image.isEmpty()) throw new Error('無法讀取模型截圖');
   clipboard.writeImage(image);
   return true;
+});
+
+handleIpc('image:clipboard-read', () => {
+  const image = clipboard.readImage();
+  if (image.isEmpty()) return null;
+  const png = image.toPNG();
+  if (!png.length || png.length > 64 * 1024 * 1024) throw new Error('剪切板圖片尺寸無效');
+  return `data:image/png;base64,${png.toString('base64')}`;
 });
 
 queueExternalProject(externalProjectPath(process.argv.slice(1)));

@@ -4,6 +4,7 @@ import { projectSizeBounds } from '../common/core/format-constraints.js';
 import { bindDialogDrag } from '../utils/dom/dialog-drag.js';
 import { isSharedHumanoidArmor } from './skin-catalog.js';
 import { modelFormatRegistry, ModelFormatId } from '../common/config/model-formats.js';
+import { createSkinLivePreview } from './skin-live-preview.js';
 
 const libraryBase = 'assets/skin-library/';
 
@@ -25,7 +26,7 @@ async function readLibraryAsset(relativePath) {
 }
 
 export function createSkinPicker({ $, escapeHtml, escapeAttribute, configRegistry,
-  addProjectTab, markDirty, setMode, toast, state, renderScene }) {
+  addProjectTab, markDirty, setMode, toast, state, renderScene, createPreviewRenderer }) {
   const dialog = $('#skinPickerDialog');
   const list = $('#skinPickerList');
   const search = $('#skinPickerSearch');
@@ -33,6 +34,14 @@ export function createSkinPicker({ $, escapeHtml, escapeAttribute, configRegistr
   const createButton = $('#skinPickerCreate');
   const preview = $('#skinPickerSelectedPreview');
   const fields = $('#skinPickerFields');
+  const livePreview = createSkinLivePreview({ canvas: preview, list,
+    readAsset: readLibraryAsset, createRenderer: createPreviewRenderer,
+    onError: error => console.warn('皮膚預覽渲染失敗', error),
+    onStatus: status => {
+      const node = $('#skinPickerPreviewStatus');
+      node.hidden = status === 'ready' || status === 'empty';
+      node.textContent = status === 'loading' ? '正在渲染模型…' : '預覽無法顯示';
+    } });
   let catalogPromise = null;
   let edition = 'java';
   let selected = null;
@@ -41,17 +50,13 @@ export function createSkinPicker({ $, escapeHtml, escapeAttribute, configRegistr
   const languageKey = () => ({ 'zh-Hans': 'zhHans', 'zh-Hant': 'zhHant' })[
     resolveUiLanguage(configRegistry.get(ConfigKey.LANGUAGE))] || 'en';
   const label = record => record.names?.[languageKey()] || record.names?.en || record.variant;
-  const assetUrl = relative => new URL(`${libraryBase}${relative}`, document.baseURI).href;
   const catalog = () => catalogPromise ||= readLibraryAsset('catalog.json').then(JSON.parse)
     .catch(error => { catalogPromise = null; throw error; });
 
   function renderPreview() {
     const template = $('#skinPickerTemplateTexture').checked;
     const texture = selected?.textures.find(item => item.id === textureSelect.value);
-    const source = selected && (template ? selected.templatePreview : texture?.preview) || selected?.cover || '';
-    preview.hidden = !source;
-    if (source) preview.src = assetUrl(source);
-    else preview.removeAttribute('src');
+    void livePreview.select(selected, texture?.id || selected?.defaultTextureId, template);
   }
 
   function renderDetail() {
@@ -78,8 +83,9 @@ export function createSkinPicker({ $, escapeHtml, escapeAttribute, configRegistr
     $('#skinPickerCount').textContent = `${filtered.length} 個模型`;
     list.innerHTML = filtered.map(record => `<button type="button" class="skin-picker-card ${selected?.id === record.id ? 'active' : ''}"
       data-skin-id="${escapeAttribute(record.id)}" title="${escapeAttribute(record.entityIds.join('、') || record.variant)}">
-      <img loading="lazy" src="${escapeAttribute(assetUrl(record.cover))}" alt="" />
+      <canvas aria-hidden="true"></canvas>
       <strong>${escapeHtml(label(record))}</strong><small>${escapeHtml(record.variant)}</small></button>`).join('');
+    livePreview.observeCards(filtered);
   }
 
   async function open() {
@@ -88,6 +94,7 @@ export function createSkinPicker({ $, escapeHtml, escapeAttribute, configRegistr
     edition = 'java';
     $('#skinPickerGameTexture').checked = true;
     $('#skinPickerTemplateTexture').checked = false;
+    livePreview.reset();
     $('#skinPickerSnap').value = modelFormatRegistry.get(ModelFormatId.MINECRAFT_SKIN)?.snap?.subdivisions || 16;
     $$Tabs();
     renderDetail();
@@ -142,6 +149,7 @@ export function createSkinPicker({ $, escapeHtml, escapeAttribute, configRegistr
 
   dialog.querySelector('.dialog-heading') && bindDialogDrag(dialog, dialog.querySelector('.dialog-heading'));
   $('#skinPickerClose').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => livePreview.reset());
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
   dialog.querySelectorAll('[data-skin-edition]').forEach(button => button.addEventListener('click', () => {
     edition = button.dataset.skinEdition;

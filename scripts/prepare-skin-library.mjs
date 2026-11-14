@@ -9,11 +9,7 @@ import { skinModelNames } from '../src/project/skin-model-labels.js';
 
 const root = path.resolve('build/minecraft-entity-models');
 const output = path.resolve('src/assets/skin-library');
-const previousCatalog = fs.existsSync(path.join(output, 'catalog.json'))
-  ? JSON.parse(fs.readFileSync(path.join(output, 'catalog.json'))) : { entries: [] };
-const previousEntries = new Map(previousCatalog.entries.map(entry => [entry.id, entry]));
 const source = JSON.parse(fs.readFileSync(path.join(root, 'index.json')));
-const previews = JSON.parse(fs.readFileSync(path.join(root, 'preview-index.json')));
 const editions = { java: 'java-26.3', bedrock: 'bedrock-1.26.63.1' };
 const indexFile = 'D:/MCLDownload/Game/.minecraft/assets/indexes/1.18.json';
 const objectRoot = 'D:/MCLDownload/Game/.minecraft/assets/objects';
@@ -104,15 +100,9 @@ for (const [edition, folder] of Object.entries(editions)) {
         size: info.size || null, ...(bindingByTexture.get(id)?.entityId
           ? { entityId: bindingByTexture.get(id).entityId } : {}) };
     }).filter(Boolean);
-    const cover = previews.editions[edition].models[model]?.file || null;
     const id = `${edition}:${model}`;
-    const previous = previousEntries.get(id);
     const record = { id, edition, version, model: `${folder}/${model}`,
-      cover, entityIds: aliases, names, variant,
-      textures: textures.map(texture => ({ ...texture,
-        ...(previous?.textures.find(old => old.id === texture.id)?.preview
-          ? { preview: previous.textures.find(old => old.id === texture.id).preview } : {}) })),
-      ...(previous?.templatePreview ? { templatePreview: previous.templatePreview } : {}),
+      entityIds: aliases, names, variant, textures,
       defaultTextureId: modelInfo.defaultTexture || textures[0]?.id || null };
     if (edition === 'java' && aliases.length > 1) {
       const layers = new Map();
@@ -133,7 +123,7 @@ for (const [edition, folder] of Object.entries(editions)) {
 
 fs.mkdirSync(output, { recursive: true });
 for (const folder of Object.values(editions)) {
-  for (const category of ['models', 'previews', 'textures']) {
+  for (const category of ['models', 'textures']) {
     const target = path.join(output, folder, category);
     fs.mkdirSync(target, { recursive: true });
     for (const file of fs.readdirSync(path.join(root, folder, category)))

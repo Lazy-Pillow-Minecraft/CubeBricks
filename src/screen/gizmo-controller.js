@@ -1,6 +1,7 @@
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { findVertexSnapIntersections } from '../common/core/vertex-intersections.js';
 import { syncSvgMarkup } from '../utils/dom/svg-markup.js';
+import { shapeRegistry } from '../shapes/builtins.js';
 
 export function createGizmoController({
   state, $, sceneCanvas, sceneRenderer, selected, isBezierElement,
@@ -667,6 +668,8 @@ export function createGizmoController({
           extent = sceneRenderer.getSelectionProjectionExtent(state.project, state.selectedUids, gizmoOrigin, axis) ?? 0;
         } else extent = item.type === 'cube'
           ? Math.abs(item.size[index]) / 2
+          : shapeRegistry.get(item.shapeType)?.dimensionKeys
+            ? Math.abs(Number(item.parameters[shapeRegistry.get(item.shapeType).dimensionKeys[index]]) || 0) / 2
           : item.shapeType !== 'polygon_prism' || index !== 1
             ? Math.abs(item.parameters.radius)
             : Math.abs(item.parameters.height) / 2;

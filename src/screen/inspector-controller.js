@@ -153,7 +153,8 @@ export function createInspectorController({
       ${vectorField('位置', 'origin', item.origin, items)}
       ${vectorField('樞軸', 'pivot', item.pivot, items)}
       ${vectorField('旋轉', 'rotation', rotation, items)}
-      ${(shapeRegistry.get(item.shapeType).fields || []).map(field => `<div class="option-row"><span>${escapeHtml(field.label || field.key)}</span><div class="number-wrap" style="width:68px"><input type="number" data-parameter="${escapeAttribute(field.key)}" data-operation-id="shape.${escapeAttribute(item.shapeType)}.parameter.${escapeAttribute(field.key.toLowerCase())}" data-min="${Number.isFinite(field.min) ? field.min : -1000000}" step="${Number(field.step) || .1}" value="${Number(item.parameters[field.key]) || 0}" /></div></div>`).join('')}
+      ${shapeDimensionField(item, items)}
+      ${(shapeRegistry.get(item.shapeType).fields || []).filter(field => !shapeRegistry.get(item.shapeType).dimensionKeys?.includes(field.key)).map(field => `<div class="option-row"><span>${escapeHtml(field.label || field.key)}</span><div class="number-wrap" style="width:68px"><input type="number" data-parameter="${escapeAttribute(field.key)}" data-operation-id="shape.${escapeAttribute(item.shapeType)}.parameter.${escapeAttribute(field.key.toLowerCase())}" data-min="${Number.isFinite(field.min) ? field.min : -1000000}" step="${Number(field.step) || .1}" value="${Number(item.parameters[field.key]) || 0}" /></div></div>`).join('')}
       <div class="option-row"><span>生成 Cube</span><strong style="color:var(--accent)">${item.toCubes().length} 個</strong></div>`
           : isShapeElement(item) ? item.shapeType !== 'polygon_prism' ? `
       <div class="field-title"><span>${item.shapeType === 'truncated_icosahedron' ? '足球（截角二十面體）' : '正十二面體'}</span><span>${item.shapeType === 'truncated_icosahedron' ? 'TRUNCATED ICOSAHEDRON' : 'REGULAR DODECAHEDRON'}</span></div>
@@ -273,6 +274,19 @@ export function createInspectorController({
     const step = field === 'size' && rules.integerCubeSize ? '1' : field === 'rotation' && rules.rotationStep ? String(rules.rotationStep) : '0.0001';
     const disabled = field === 'rotation' && rules.moddedEntity && nodes[0]?.type === 'cube' ? 'disabled title="Cube 不能旋轉；請旋轉其所屬的組"' : '';
     return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="${step}" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} ${disabled} /></label>`).join('')}${field === 'pivot' ? '<button type="button" class="pivot-center-field-button" data-action="centerPivot" title="將所選物件的樞軸點移到整體幾何中心">居中</button>' : ''}</div>`;
+  }
+
+  function shapeDimensionField(item, nodes) {
+    const definition = shapeRegistry.get(item.shapeType);
+    if (!definition?.dimensionKeys) return '';
+    return `<div class="vector-field"><span>尺寸</span>${definition.dimensionKeys.map((key, axis) => {
+      const field = definition.fields.find(entry => entry.key === key);
+      const first = nodes[0]?.parameters?.[key];
+      const value = nodes.length <= 1 ? first
+        : Number.isFinite(first) && nodes.every(node => Number.isFinite(node?.parameters?.[key])
+          && Math.abs(node.parameters[key] - first) < 1e-9) ? first : null;
+      return `<label class="number-wrap"><b>${'XYZ'[axis]}</b><input type="number" data-parameter="${escapeAttribute(key)}" data-operation-id="shape.${escapeAttribute(item.shapeType)}.parameter.${escapeAttribute(key.toLowerCase())}" data-min="${Number.isFinite(field.min) ? field.min : 0.1}" step="${Number(field.step) || 0.1}" ${numberInputAttributes(value)} /></label>`;
+    }).join('')}</div>`;
   }
 
   function scalarField(label, field, value, nodes = [selected()]) {

@@ -146,7 +146,7 @@ const referenceImages = createReferenceImageController({
   setPaintColor, updateToolOptions
 });
 const { referenceViewKey, updateReferenceImageLayer, setReferenceImageEditing, setReferenceImageMenu,
-  beginReferenceImageImport, resetReferenceImage, removeReferenceImage, loadReferenceImageFiles,
+  beginReferenceImageImport, addReferenceImageFromClipboard, resetReferenceImage, removeReferenceImage, loadReferenceImageFiles,
   beginReferenceImageDrag, moveReferenceImageDrag, endReferenceImageDrag, scaleReferenceImage } = referenceImages;
 const cameraController = createCameraController({
   state, $, $$, sceneCanvas, sceneRenderer, viewport,
@@ -745,7 +745,7 @@ function exportProject(...args) { return projectFileController.exportProject(...
 
 const skinPicker = createSkinPicker({
   $, escapeHtml, escapeAttribute, configRegistry, addProjectTab, markDirty, setMode, toast,
-  state, renderScene
+  state, renderScene, createPreviewRenderer: canvas => new WebGLSceneRenderer(canvas)
 });
 const modelFormatPicker = createModelFormatPicker({
   $, escapeHtml, escapeAttribute,
@@ -839,6 +839,7 @@ const eventBinder = createEventBinder({
   applyProjectInfo, setReferenceImageMenu, beginReferenceImageImport,
   setReferenceImageEditing, resetReferenceImage, removeReferenceImage,
   loadReferenceImageFiles, beginReferenceImageDrag, moveReferenceImageDrag,
+  addReferenceImageFromClipboard,
   endReferenceImageDrag, scaleReferenceImage, createTextureTemplate,
   addPaletteRow, renderPalette, enterAxisView, beginAxisWidgetDrag,
   moveAxisWidgetDrag, endAxisWidgetDrag, restore, cancelCameraFocus,

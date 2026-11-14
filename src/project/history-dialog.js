@@ -5,6 +5,7 @@ import { showAppConfirm } from '../screen/prompt-dialog.js';
 import { layoutProjectHistory, nearestHistoryNode } from './history-layout.js';
 import { editHistoryNodeMark } from './history-mark-editor.js';
 import { historyMarkPath } from './history-mark-shapes.js';
+import { shortcutMatches } from '../screen/shortcuts.js';
 
 export function createProjectHistoryDialog({
   $,
@@ -265,13 +266,13 @@ export function createProjectHistoryDialog({
     });
   });
   window.addEventListener('keydown', event => {
-    if (!dialog.open || event.ctrlKey || event.metaKey || event.altKey || event.key.toLowerCase() !== 'r') return;
+    if (!dialog.open || !(shortcutMatches(event, 'focus') || shortcutMatches(event, 'focusReset'))) return;
     if (event.target.closest?.('input,select,textarea,[contenteditable]')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if ([...document.querySelectorAll('dialog[open]')].at(-1) !== dialog || busy || event.repeat) return;
     closeContextMenu();
-    if (event.shiftKey) focusView([0, 0], 1);
+    if (shortcutMatches(event, 'focusReset')) focusView([0, 0], 1);
     else {
       const node = layout?.byId.get(selectedSequence) ?? layout?.byId.get(graph?.current);
       if (node) focusView([node.x, node.y], Math.max(4, zoom));

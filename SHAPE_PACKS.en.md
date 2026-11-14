@@ -62,6 +62,8 @@ export default {
 
 `generate(shape, api)` must return an array of cubes synchronously. Plain objects suitable for `new Cube(...)` are also accepted. Generated cubes use Shape-local coordinates. The editor subsequently applies the Shape's `origin`, `pivot`, `rotation`, parent-group transform, subdivision overrides, and modifiers; do not add `origin` inside `generate` a second time. `shape.parameters` stores editable values. The generic property panel currently renders numeric `fields` automatically. The Shape ID, parameters, and subdivision overrides are saved in `.cbmodel`. If the pack is missing, the project retains the data but does not generate geometry; reinstalling the pack restores it.
 
+For three independent X, Y, and Z dimensions, add `dimensionKeys: ['width', 'height', 'depth']` to the definition and declare those three numeric keys in `fields`. The inspector groups them into one XYZ size row, and resize handles edit each axis independently. Packs without `dimensionKeys` keep their separate numeric fields.
+
 `utils` exposes the public modules under `src/utils/`: `utils.math.vector3`, `utils.math.rotation`, `utils.shape.polyhedronGeometry`, `utils.shape.bezierGeometry`, `utils.shape.javaCurveFit`, and `utils.templatePacker`. Namespaces prevent collisions between functions from different modules. When adding a public utility, update `src/utils/index.js`. Utilities provide calculations; they do not bypass cube-count or format constraints.
 
 Built-in Shapes follow the same registration interface and live in separate files under `src/shapes/`. Polygon, dodecahedron, soccer ball, and the two Bezier variants have their own definitions; shared geometry lives under `src/utils/shape/`.

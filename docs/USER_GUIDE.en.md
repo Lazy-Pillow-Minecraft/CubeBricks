@@ -4,7 +4,7 @@
 
 ## 1. Create, save, and switch projects
 
-1. Choose a project format from the model-type list on the start page. The format supplies initial snapping and UV capabilities. Java Block/Item version restrictions can be changed in Project Information.
+1. Choose a project format from the model-type list on the start page. Java Block/Item and Bedrock models open a creation dialog for snapping, texture size, UV mode, and applicable version limits. Modded entities are created directly.
 2. Use the top tabs to switch projects or drag them to reorder. Right-click a project tab for information; middle-click or use its hover-only close icon to close it. The plus directly after the list adds a home tab without closing projects. Creating or opening from that home replaces its tab in place.
 3. `Ctrl+S` or **Save** retains the project's working folder without creating a separate file. `Ctrl+Shift+S` or **Export** opens a format window offering `.cbmodel`, `.bbmodel`, and the current format's native JSON or Java output. Unsupported options are omitted.
 4. Saved status is stored in the project directory and survives restarts. Previously saved projects save automatically when closing a tab or the application, without a prompt or automatic folder deletion. Only new, never-saved projects ask whether to keep or discard them; canceling keeps the project open.
@@ -12,7 +12,7 @@
 
 Opening an existing project shows a progress dialog only after half a second. Large history archives restore the current model and textures first, then read remaining history in the background. A thin progress bar at the bottom tracks this work while editing and undo remain available.
 
-Choose **Minecraft Skin** on the home page to open the model picker. Switch between Java and Bedrock, then search or select an entity template. The preview on the left changes with the selected in-game texture or UV-preserving six-face template; it shows an empty checkerboard before a model is selected. **Start painting** creates a paint-only skin project without model editing or animation modes.
+Choose **Minecraft Skin** on the home page to open the model picker. Switch between Java and Bedrock, then search or select an entity template. Visible list entries render thumbnails on demand. The large preview renders the selected model and its chosen game texture or UV-preserving six-face template directly; drag it with the left mouse button to rotate the view. It shows an empty checkerboard before selection. **Start painting** creates a paint-only skin project without model editing or animation modes.
 
 **History**, directly after **Export**, opens a radial branch window. Terminal nodes receive equal circular sectors. The current node is highlighted, tips have a secondary highlight, and ordinary nodes use dots matching the line color, with a diameter twice the line width. Nodes are evenly spaced along each straight segment between forks or leading to a tip. Hover for operation and timestamp details. Use the wheel to zoom; drag empty space or middle-drag to pan.
 

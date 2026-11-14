@@ -2,6 +2,7 @@ import { bakeProceduralShape } from '../model.js';
 import { paintSymmetryRelationCache } from '../paint/symmetry-relations.js';
 import { ConfigKey } from '../common/config/app-config.js';
 import { insetControlRatio } from './color-picker/math.js';
+import { shortcutFor } from './shortcuts.js';
 
 export function createContextMenuController({
   state, $, outliner, inspector, sceneCanvas, sceneRenderer, inspectorController,
@@ -213,10 +214,10 @@ export function createContextMenuController({
         }] : []),
         ...(node.subdivisionOwnerUid ? [{ icon: '◆', label: '完成細分編輯', action: () => exitSubdivisionEdit() }] : []),
         { separator: true },
-        { icon: '□', label: '複製　Ctrl+C', action: copySelected },
-        { icon: '✂', label: '剪切　Ctrl+X', action: cutSelected },
-        { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
-        { icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) },
+        { icon: '□', label: `複製　${shortcutFor('copy')}`, action: copySelected },
+        { icon: '✂', label: `剪切　${shortcutFor('cut')}`, action: cutSelected },
+        { icon: '▣', label: `貼上　${shortcutFor('paste')}`, action: () => pasteElements() },
+        { icon: '⧉', label: `複製元素　${shortcutFor('duplicate')}`, action: () => pasteElements({ inPlace: true }) },
         ...(node.subdivisionOwnerUid ? [] : [
           { separator: true },
           { icon: '×', label: '刪除選中項', danger: true, action: deleteSelected }
@@ -241,10 +242,11 @@ export function createContextMenuController({
     const viewportBackgroundItems = (paint = false) => [
       { icon: '⌖', label: '聚焦選中物件', action: focusSelected },
       { icon: '◎', label: '回到場景中心', action: focusSceneOrigin },
+      { icon: '▣', label: '從剪切板添加參考圖', action: () => referenceImages.addReferenceImageFromClipboard() },
       ...(!paint ? [
         { separator: true },
-        { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
-        ...(selectedNodeUids().length ? [{ icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) }] : [])
+        { icon: '▣', label: `貼上　${shortcutFor('paste')}`, action: () => pasteElements() },
+        ...(selectedNodeUids().length ? [{ icon: '⧉', label: `複製元素　${shortcutFor('duplicate')}`, action: () => pasteElements({ inPlace: true }) }] : [])
       ] : []),
       { separator: true },
       captureItem(),
@@ -369,8 +371,8 @@ export function createContextMenuController({
       if (!item) {
         showContextMenu(event, {
           title: state.project.name, source: outliner, items: [
-            { icon: '▣', label: '貼上　Ctrl+V', action: () => pasteElements() },
-            ...(selectedNodeUids().length ? [{ icon: '⧉', label: '複製元素　Ctrl+D', action: () => pasteElements({ inPlace: true }) }] : [])
+            { icon: '▣', label: `貼上　${shortcutFor('paste')}`, action: () => pasteElements() },
+            ...(selectedNodeUids().length ? [{ icon: '⧉', label: `複製元素　${shortcutFor('duplicate')}`, action: () => pasteElements({ inPlace: true }) }] : [])
           ]
         });
         return;

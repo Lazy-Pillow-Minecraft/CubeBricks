@@ -1,6 +1,14 @@
 // Fallback patterns for runtime-composed UI messages. Static messages use stable IDs in messages.js.
 export function translateEnglishUiText(text, language, translateUiText) {
   const upcoming = {
+    '以 Java 或基岩版實體模板繪製皮膚': 'Paint a skin using a Java or Bedrock entity template',
+    '皮膚貼圖載入失敗': 'Failed to load skin texture',
+    '皮膚預覽渲染失敗': 'Failed to render skin preview',
+    '底图': 'Base layer',
+    '無法確認撤回前的歷史位置；已停止後續寫入': 'Could not verify the history position before undo; further writes were stopped',
+    '預覽無法顯示': 'Preview unavailable',
+    '歷史指針未能安全恢復，請先另存目前模型並重新開啟': 'The history pointer could not be restored safely. Save the current model separately and reopen it',
+    '正在渲染模型…': 'Rendering model…',
     '新建模型': 'New model',
     '建立後仍可修改': 'Can be changed later',
     '決定 Cube 的角度與旋轉軸限制': 'Controls Cube angle and rotation axis limits',
@@ -25,6 +33,42 @@ export function translateEnglishUiText(text, language, translateUiText) {
     '新建模板紋理': 'Create template texture',
     '模板使用六面配色描邊，保留此模型的原始 UV 位置與尺寸。': 'The six-face colored template keeps the model’s original UV positions and sizes.',
     '開始繪畫': 'Start painting',
+    '快捷鍵': 'Keyboard shortcuts',
+    '編輯': 'Editing',
+    '視圖與建立': 'View and creation',
+    '建模工具': 'Modeling tools',
+    '繪畫工具': 'Painting tools',
+    '上一個工具': 'Previous tool',
+    '下一個工具': 'Next tool',
+    '暫時取色／選頂點': 'Temporary eyedropper / vertex pick',
+    '重置全部快捷鍵': 'Reset all shortcuts',
+    '重置快捷鍵': 'Reset shortcut',
+    '重置': 'Reset',
+    '通用': 'General',
+    '保存項目': 'Save project',
+    '導出項目': 'Export project',
+    '全選': 'Select all',
+    '回到預設視圖': 'Return to default view',
+    '重置視圖縮放': 'Reset view zoom',
+    '聚焦選中': 'Focus selection',
+    '性能記錄': 'Performance capture',
+    '關閉臨時操作': 'Dismiss temporary controls',
+    '新建 Cube': 'Create Cube',
+    '新建 Shape': 'Create Shape',
+    '刀具': 'Knife',
+    '屏幕高度對應的像素數': 'Number of pixels across the screen height',
+    'paint.explode-gap · 模型單位': 'paint.explode-gap · model units',
+    '點擊輸入框後按下鍵位；Enter 或失焦保存': 'Click a field and press keys; Enter or focus loss saves',
+    '語言、資源包與項目存儲': 'Language, resource packs and project storage',
+    '操作方式、模型與繪畫行為': 'Controls, modeling and painting behavior',
+    '從剪切板添加參考圖': 'Add reference image from clipboard',
+    '▣ 從剪切板添加參考圖': '▣ Add reference image from clipboard',
+    '剪切板中沒有圖片': 'The clipboard has no image',
+    '已從剪切板添加參考圖': 'Added a reference image from the clipboard',
+    '目前無法讀取系統剪切板': 'Cannot read the system clipboard here',
+    '目前無法寫入系統剪切板': 'Cannot write to the system clipboard here',
+    '無法合成貼圖': 'Could not composite the texture',
+    '無法產生 PNG 圖片': 'Could not create the PNG image',
     '正在讀取模型列表…': 'Loading models…',
     '正在建立…': 'Creating…',
     '箱型 UV 的小数精度过高，无法无损烘焙': 'The box UV fractional precision is too high for lossless baking',
@@ -67,6 +111,8 @@ export function translateEnglishUiText(text, language, translateUiText) {
     '正在烘焙导出贴图': 'Baking export textures',
     '烘焙贴图超出可用尺寸，请减少帧数或平铺范围': 'The baked texture exceeds the supported size. Reduce the frame count or tiled span.',
     '打開項目首頁': 'Open project home',
+    '打開文件夾': 'Open folder',
+    '打開文件夾失敗：${error.message}': 'Could not open folder: ${error.message}',
     '刪除項目': 'Delete project',
     '保存並關閉': 'Save and close',
     '不保留': 'Discard',
@@ -291,6 +337,12 @@ export function translateEnglishUiText(text, language, translateUiText) {
   if (match) return `Imported ${match[2]} reference images for ${match[1] === '一般視圖' ? 'the general view' : `the ${match[1][0]}-axis view`}`;
   match = text.match(/^已導入 (\d+) 張參考圖，部分檔案無法讀取$/);
   if (match) return `Imported ${match[1]} reference images; some files could not be read`;
+  match = text.match(/^無法讀取剪切板圖片：(.+)$/);
+  if (match) return `Cannot read clipboard image: ${match[1]}`;
+  match = text.match(/^已在軟件內複製貼圖，但無法寫入系統剪切板：(.+)$/);
+  if (match) return `Texture copied in the app, but could not be written to the system clipboard: ${match[1]}`;
+  match = text.match(/^已複製貼圖 (.+)，並放入系統剪切板$/);
+  if (match) return `Copied texture ${match[1]} to the app and system clipboard`;
   match = text.match(/^已沿 ([XYZ]) 軸切割 (.+)$/);
   if (match) return `Cut ${match[2]} along the ${match[1]} axis`;
   match = text.match(/^預覽：(豎切|橫切)$/);
