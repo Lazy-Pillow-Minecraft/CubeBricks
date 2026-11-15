@@ -107,6 +107,7 @@ const coreOperations = {
   'core.texture.layer.paste': '粘贴图层',
   'core.texture.layer.duplicate': '就地复制图层',
   'core.texture.layer.alpha_binary': '二值化透明度',
+  'core.texture.layer.random_points': '生成均勻隨機點',
   'core.texture.group': '編輯貼圖組',
   'core.texture.paint': '繪畫貼圖',
   'core.texture.selection-transform': '變換選區像素',

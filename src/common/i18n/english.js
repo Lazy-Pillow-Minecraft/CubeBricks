@@ -1,6 +1,24 @@
 // Fallback patterns for runtime-composed UI messages. Static messages use stable IDs in messages.js.
 export function translateEnglishUiText(text, language, translateUiText) {
   const upcoming = {
+    '生成均勻隨機點': 'Generate evenly spaced random dots',
+    '生成隨機點': 'Generate random dots',
+    '使用目前繪畫顏色': 'Use the current paint color',
+    '點尺寸（直徑，px）': 'Dot diameter (px)',
+    '最小間隔（px）': 'Minimum edge gap (px)',
+    '對稱面共用同一組隨機點': 'Share one random pattern across symmetric faces',
+    '最小間隔按兩個圓點的邊緣計算；保留圖層原有像素。': 'The gap is measured between dot edges. Existing layer pixels are preserved.',
+    '正在準備圖層…': 'Preparing layer…',
+    '正在計算點位…': 'Calculating dots…',
+    '正在繪製點位…': 'Drawing dots…',
+    '正在同步對稱面…': 'Synchronizing symmetric faces…',
+    '點尺寸、間隔及畫布尺寸必須是有效像素數值': 'Dot size, gap and canvas dimensions must be valid pixel values',
+    '點的密度過高，請增加尺寸或最小間隔': 'Dot density is too high. Increase the diameter or gap.',
+    '點尺寸須為 1–256 px；最小間隔須為 0–4096 px。': 'Dot diameter must be 1–256 px and minimum gap must be 0–4096 px.',
+    '生成': 'Generate',
+    '生成中…': 'Generating…',
+    '目標圖層已改變，請重新打開': 'The target layer changed. Reopen this dialog.',
+    '點尺寸超過圖層尺寸': 'Dot diameter exceeds the layer dimensions',
     '以 Java 或基岩版實體模板繪製皮膚': 'Paint a skin using a Java or Bedrock entity template',
     '皮膚貼圖載入失敗': 'Failed to load skin texture',
     '皮膚預覽渲染失敗': 'Failed to render skin preview',
@@ -442,5 +460,9 @@ export function translateEnglishUiText(text, language, translateUiText) {
   if (match) return `Could not save texture: ${translateUiText(match[1], language)}`;
   match = text.match(/^已导出 \.(json|java)$/);
   if (match) return `Exported .${match[1]}`;
+  match = text.match(/^已計算 (\d+) 個點…$/);
+  if (match) return `Calculated ${match[1]} dots…`;
+  match = text.match(/^已繪製 (\d+) \/ (\d+) 個點…$/);
+  if (match) return `Drawn ${match[1]} / ${match[2]} dots…`;
   return text;
 }

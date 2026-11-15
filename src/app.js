@@ -126,7 +126,7 @@ const { selectedMirrorGuideGroup, mirrorControllerWorldFrame, symmetryModifierAn
     projectViewportPoint, addScaled3, clamp
   });
 const { paintSymmetryFaceKey, paintSymmetryRelatedHits, scheduleAllPaintSymmetryBuilds,
-  schedulePaintSymmetryBuild, ensurePaintSymmetryCache } = createPaintSymmetryController({
+  schedulePaintSymmetryBuild, ensurePaintSymmetryCache, paintSymmetryFaceGraph } = createPaintSymmetryController({
     state, sceneRenderer, faceUvPixelSlots, symmetryModifierAngles,
     mirrorControllerWorldFrame, barycentricPoint, renderInspector, PAINT_FACE_EDGES
   });
@@ -670,7 +670,7 @@ const textureAssetController = createTextureAssetController({
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
   noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu,
-  textureSaveIndicators: textureFileController
+  textureSaveIndicators: textureFileController, paintSymmetryFaceGraph
 });
 function textureUid(...args) { return textureAssetController.textureUid(...args); }
 function renderTextureList(...args) { return textureAssetController.renderTextureList(...args); }
@@ -703,6 +703,7 @@ function copyTextureLayer(...args) { return textureAssetController.copyTextureLa
 function pasteTextureLayer(...args) { return textureAssetController.pasteTextureLayer(...args); }
 function binarizeTextureLayerAlpha(...args) { return textureAssetController.binarizeTextureLayerAlpha(...args); }
 function canPasteTextureLayer(...args) { return textureAssetController.canPasteTextureLayer(...args); }
+function openLayerPointsDialog(...args) { return textureAssetController.openLayerPointsDialog(...args); }
 
 const toolModeController = createToolModeController({
   state, $, $$, inspectorController, exitSubdivisionEdit, renderOutliner,
@@ -797,7 +798,7 @@ const contextMenuController = createContextMenuController({
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown,
-  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer,
+  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer, openLayerPointsDialog,
   saveTexture: textureFileController.saveTexture
 });
 function closeContextMenu(...args) { return contextMenuController.closeContextMenu(...args); }

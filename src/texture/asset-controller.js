@@ -14,6 +14,9 @@ import { boundPaintLayer, paintCanvasIsBound, rememberEditablePaintSource } from
 import { isolateTextureLayerIds, reidentifyTextureLayers } from '../common/core/texture-layer-identity.js';
 import { createLayerCommands } from './layer-commands.js';
 import { decodedRasterImage } from '../utils/image/raster-cache.js';
+import { sampleRandomPoints, drawRandomPoints } from './random-points.js';
+import { copyRandomPointsToSymmetricFaces } from './random-points-symmetry.js';
+import { createLayerPointsDialog } from './layer-points-dialog.js';
 
 const CUBE_FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
 const TEXTURE_MODE_LABEL = '貼圖模式';
@@ -34,7 +37,8 @@ export function createTextureAssetController({
   updateTexturePreviewFrame, syncRendererTexture, syncRendererTextureAsset, getAllTextureAssets, texturePlaybackKey, selectedElementUids,
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
-  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu, textureSaveIndicators
+  noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu, textureSaveIndicators,
+  paintSymmetryFaceGraph
 }) {
   let textureLoadRevision = 0;
   let pendingTextureImage = null;
@@ -97,6 +101,58 @@ export function createTextureAssetController({
       layerEditor.render();
     }
   });
+  const layerPointsDialog = createLayerPointsDialog({ $, onGenerate: generateLayerRandomPoints });
+
+  function openLayerPointsDialog(uid) {
+    const asset = activeTextureAsset();
+    const layer = asset?.layers?.find(entry => entry.uid === uid);
+    if (!layer || layer.type === 'group' || layer.locked) return;
+    layerPointsDialog.open({ uid, name: layer.name, color: state.paintColor });
+  }
+
+  async function generateLayerRandomPoints({ uid, color, diameter, gap, symmetry }, onProgress) {
+    const project = state.project, asset = activeTextureAsset();
+    const layer = asset?.layers?.find(entry => entry.uid === uid);
+    if (!asset || !layer || layer.type === 'group' || layer.locked) return false;
+    await finishLayerEdit();
+    onProgress('正在準備圖層…');
+    await prepareLayers(asset);
+    const existing = layerRasterCache.get(uid)?.canvas;
+    if (!existing) return false;
+    const overlay = document.createElement('canvas');
+    overlay.width = existing.width;
+    overlay.height = existing.height;
+    onProgress('正在計算點位…');
+    const points = await sampleRandomPoints({
+      width: overlay.width, height: overlay.height, diameter, gap,
+      onProgress: count => onProgress(`已計算 ${count} 個點…`)
+    });
+    if (!points.length) throw new RangeError('點尺寸超過圖層尺寸');
+    onProgress('正在繪製點位…');
+    await drawRandomPoints(overlay.getContext('2d'), points, diameter, color,
+      count => onProgress(`已繪製 ${count} / ${points.length} 個點…`));
+    if (symmetry) {
+      onProgress('正在同步對稱面…');
+      copyRandomPointsToSymmetricFaces(overlay, paintSymmetryFaceGraph?.(), record =>
+        textureAssetForReference(record.cube?.faces?.[record.faceName]?.texture) === asset);
+    }
+    if (state.project !== project || !state.textureAssets.includes(asset)
+      || !asset.layers.includes(layer) || activeTextureAsset() !== asset) return false;
+    const result = document.createElement('canvas');
+    result.width = existing.width;
+    result.height = existing.height;
+    const context = result.getContext('2d');
+    context.drawImage(existing, 0, 0);
+    context.drawImage(overlay, 0, 0);
+    pushTexturePaintHistory(asset, textureCanvas, null, 'core.texture.layer.random_points');
+    layer.source = result.toDataURL('image/png');
+    releaseLayerRaster(uid);
+    layerRasterCache.set(uid, { canvas: result, savedSource: layer.source });
+    await refreshLayeredTexture(asset);
+    renderTextureFeatureControls();
+    layerEditor.render();
+    return points.length;
+  }
 
   function finishLayerEdit() {
     const session = layerEditSession;
@@ -1137,6 +1193,6 @@ export function createTextureAssetController({
     copyTexture, cutTexture, pasteTexture, removeTexture, removeActiveLayer, removeTextureLayer, mergeTextureLayerDown,
     copyTextureLayer: layerCommands.copy, pasteTextureLayer: layerCommands.paste,
     binarizeTextureLayerAlpha: layerCommands.binarizeAlpha, canPasteTextureLayer: layerCommands.canPaste,
-    syncToneMappedPalettes, releaseTextureAssets, moveSelectionToLayer
+    syncToneMappedPalettes, releaseTextureAssets, moveSelectionToLayer, openLayerPointsDialog
   };
 }

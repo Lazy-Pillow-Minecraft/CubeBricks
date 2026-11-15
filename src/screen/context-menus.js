@@ -21,7 +21,7 @@ export function createContextMenuController({
   setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown, saveTexture,
-  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer
+  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer, openLayerPointsDialog
 }) {
   let contextMenuSource = null;
   const contextMenuHome = $('#contextMenu').parentNode;
@@ -539,6 +539,10 @@ export function createContextMenuController({
             icon: '◐',
             label: '二值化透明度',
             action: () => binarizeTextureLayerAlpha(layer.uid).catch(error => toast(error.message))
+          },
+          {
+            icon: '✦', label: '生成均勻隨機點', disabled: layer.type === 'group' || layer.locked,
+            action: () => openLayerPointsDialog(layer.uid)
           },
           { separator: true },
           ...(canMerge ? [{

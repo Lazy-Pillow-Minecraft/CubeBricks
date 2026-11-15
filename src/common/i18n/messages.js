@@ -15,6 +15,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "1.21.6 – 1.21.10 · 自由角度／单轴",
     "en": "1.21.6–1.21.10 · Free angle / one axis"
   },
+  "ui.1-256-px-0-4096-px": {
+    "zhHant": "點尺寸須為 1–256 px；最小間隔須為 0–4096 px。",
+    "zhHans": "点尺寸须为 1–256 px；最小间隔须为 0–4096 px。",
+    "en": "Dot diameter must be 1–256 px and minimum gap must be 0–4096 px."
+  },
   "ui.1-9-1-21-5-22-5-one-axis": {
     "zhHant": "1.9 – 1.21.5 · 22.5°／單軸",
     "zhHans": "1.9 – 1.21.5 · 22.5°／单轴",
@@ -690,6 +695,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "按明度",
     "en": "By value"
   },
+  "ui.calculating-dots": {
+    "zhHant": "正在計算點位…",
+    "zhHans": "正在计算点位…",
+    "en": "Calculating dots…"
+  },
   "ui.can-be-changed-in-project-information": {
     "zhHant": "可在項目信息中修改",
     "zhHans": "可在项目信息中修改",
@@ -1169,6 +1179,16 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "Shape 包掃描失敗",
     "zhHans": "形状包扫描失败",
     "en": "Could not scan shape packs"
+  },
+  "ui.count": {
+    "zhHant": "已計算 ${count} 個點…",
+    "zhHans": "已计算 ${count} 个点…",
+    "en": "已計算 ${count} 個點…"
+  },
+  "ui.count-points-length": {
+    "zhHant": "已繪製 ${count} / ${points.length} 個點…",
+    "zhHans": "已绘制 ${count} / ${points.length} 个点…",
+    "en": "已繪製 ${count} / ${points.length} 個點…"
   },
   "ui.create": {
     "zhHant": "建立",
@@ -1845,6 +1865,26 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "完成",
     "en": "Done"
   },
+  "ui.dot-density-is-too-high-increase-the-diameter-or-gap": {
+    "zhHant": "點的密度過高，請增加尺寸或最小間隔",
+    "zhHans": "点的密度过高，请增加尺寸或最小间隔",
+    "en": "Dot density is too high. Increase the diameter or gap."
+  },
+  "ui.dot-diameter-exceeds-the-layer-dimensions": {
+    "zhHant": "點尺寸超過圖層尺寸",
+    "zhHans": "点尺寸超过图层尺寸",
+    "en": "Dot diameter exceeds the layer dimensions"
+  },
+  "ui.dot-diameter-px": {
+    "zhHant": "點尺寸（直徑，px）",
+    "zhHans": "点尺寸（直径，px）",
+    "en": "Dot diameter (px)"
+  },
+  "ui.dot-size-gap-and-canvas-dimensions-must-be-valid-pixel-values": {
+    "zhHant": "點尺寸、間隔及畫布尺寸必須是有效像素數值",
+    "zhHans": "点尺寸、间隔及画布尺寸必须是有效像素数值",
+    "en": "Dot size, gap and canvas dimensions must be valid pixel values"
+  },
   "ui.down": {
     "zhHant": "下",
     "zhHans": "下",
@@ -1899,6 +1939,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "正在繪製並分配 UV…",
     "zhHans": "正在绘制并分配 UV…",
     "en": "Drawing and assigning UVs…"
+  },
+  "ui.drawing-dots": {
+    "zhHant": "正在繪製點位…",
+    "zhHans": "正在绘制点位…",
+    "en": "Drawing dots…"
   },
   "ui.drop-the-texture-onto-a-cube-face": {
     "zhHant": "請把貼圖拖到 Cube 面上",
@@ -2709,6 +2754,16 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "一般視圖參考圖",
     "zhHans": "普通视图参考图",
     "en": "General-view reference"
+  },
+  "ui.generate-evenly-spaced-random-dots": {
+    "zhHant": "生成均勻隨機點",
+    "zhHans": "生成均勻随机点",
+    "en": "Generate evenly spaced random dots"
+  },
+  "ui.generate-random-dots": {
+    "zhHant": "生成隨機點",
+    "zhHans": "生成随机点",
+    "en": "Generate random dots"
   },
   "ui.generate-texture-template": {
     "zhHant": "生成貼圖模板",
@@ -3840,6 +3895,21 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "基岩模型包含重名骨骼",
     "en": "The Bedrock model contains duplicate bone names"
   },
+  "ui.message-66": {
+    "zhHant": "生成",
+    "zhHans": "生成",
+    "en": "Generate"
+  },
+  "ui.message-67": {
+    "zhHant": "生成中…",
+    "zhHans": "生成中…",
+    "en": "Generating…"
+  },
+  "ui.message-68": {
+    "zhHant": "目標圖層已改變，請重新打開",
+    "zhHans": "目标图层已改变，请重新打开",
+    "en": "The target layer changed. Reopen this dialog."
+  },
   "ui.message-7": {
     "zhHant": "色卡已導出",
     "zhHans": "色卡已导出",
@@ -3889,6 +3959,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "Minecraft 皮膚",
     "zhHans": "Minecraft 皮肤",
     "en": "Minecraft Skin"
+  },
+  "ui.minimum-edge-gap-px": {
+    "zhHant": "最小間隔（px）",
+    "zhHans": "最小间隔（px）",
+    "en": "Minimum edge gap (px)"
   },
   "ui.mirror-controller": {
     "zhHant": "鏡像軸點",
@@ -4704,6 +4779,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "正在準備 ${faceCount} 個面…",
     "zhHans": "正在准备 ${faceCount} 个面…",
     "en": "Preparing ${faceCount} 個面…"
+  },
+  "ui.preparing-layer": {
+    "zhHant": "正在準備圖層…",
+    "zhHans": "正在准备图层…",
+    "en": "Preparing layer…"
   },
   "ui.preparing-uvs": {
     "zhHant": "正在準備 UV…",
@@ -5660,6 +5740,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "改为全局色卡",
     "en": "Share globally"
   },
+  "ui.share-one-random-pattern-across-symmetric-faces": {
+    "zhHant": "對稱面共用同一組隨機點",
+    "zhHans": "对称面共用同一组随机点",
+    "en": "Share one random pattern across symmetric faces"
+  },
   "ui.shift": {
     "zhHant": "左鍵拖動旋轉、右鍵拖動平移；Shift + 左鍵框選",
     "zhHans": "左键拖动旋转、右键拖动平移；Shift + 左键框选",
@@ -6030,6 +6115,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHans": "对称轴数量",
     "en": "Symmetry axis count"
   },
+  "ui.synchronizing-symmetric-faces": {
+    "zhHant": "正在同步對稱面…",
+    "zhHans": "正在同步对称面…",
+    "en": "Synchronizing symmetric faces…"
+  },
   "ui.system-font": {
     "zhHant": "系統字體",
     "zhHans": "系统字体",
@@ -6159,6 +6249,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "鎖定透明度時橡皮擦不會改變貼圖",
     "zhHans": "锁定透明度时橡皮擦不会改变贴图",
     "en": "The eraser cannot change the texture while alpha lock is enabled"
+  },
+  "ui.the-gap-is-measured-between-dot-edges-existing-layer-pixels-are-preserved": {
+    "zhHant": "最小間隔按兩個圓點的邊緣計算；保留圖層原有像素。",
+    "zhHans": "最小间隔按两个圆点的边缘计算；保留图层原有像素。",
+    "en": "The gap is measured between dot edges. Existing layer pixels are preserved."
   },
   "ui.the-gradient-points-are-too-close-together": {
     "zhHant": "漸變兩點距離太短",
@@ -6609,6 +6704,11 @@ export const UI_MESSAGES = Object.freeze({
     "zhHant": "模型製作與 UV 調整使用不同模式",
     "zhHans": "模型制作与 UV 调整使用不同模式",
     "en": "Use separate modes for modelling and UV editing"
+  },
+  "ui.use-the-current-paint-color": {
+    "zhHant": "使用目前繪畫顏色",
+    "zhHans": "使用当前绘画颜色",
+    "en": "Use the current paint color"
   },
   "ui.use-the-same-fixed-relative-length-as-the-move-gizmo": {
     "zhHant": "手柄使用和移動工具相同的固定視覺長度",

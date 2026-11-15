@@ -38,6 +38,17 @@
       ]
     },
     {
+      "key": "ui.1-256-px-0-4096-px",
+      "zhHant": "點尺寸須為 1–256 px；最小間隔須為 0–4096 px。",
+      "zhHans": "点尺寸须为 1–256 px；最小间隔须为 0–4096 px。",
+      "en": "Dot diameter must be 1–256 px and minimum gap must be 0–4096 px.",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/layer-points-dialog.js:36"
+      ]
+    },
+    {
       "key": "ui.1-9-1-21-5-22-5-one-axis",
       "zhHant": "1.9 – 1.21.5 · 22.5°／單軸",
       "zhHans": "1.9 – 1.21.5 · 22.5°／单轴",
@@ -302,7 +313,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:583"
+        "src/screen/context-menus.js:587"
       ]
     },
     {
@@ -335,7 +346,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:133",
+        "src/common/core/operation-registry.js:134",
         "src/texture/frame-list-controller.js:112"
       ]
     },
@@ -407,7 +418,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:600"
+        "src/screen/context-menus.js:604"
       ]
     },
     {
@@ -686,7 +697,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:174"
+        "src/common/core/operation-registry.js:175"
       ]
     },
     {
@@ -943,7 +954,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:157",
+        "src/common/core/operation-registry.js:158",
         "src/screen/outliner-view.js:207"
       ]
     },
@@ -1167,7 +1178,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:159"
+        "src/common/core/operation-registry.js:160"
       ]
     },
     {
@@ -1395,7 +1406,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:118"
+        "src/common/core/operation-registry.js:119"
       ]
     },
     {
@@ -1406,7 +1417,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:122"
+        "src/common/core/operation-registry.js:123"
       ]
     },
     {
@@ -1508,6 +1519,17 @@
       ]
     },
     {
+      "key": "ui.calculating-dots",
+      "zhHant": "正在計算點位…",
+      "zhHans": "正在计算点位…",
+      "en": "Calculating dots…",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/asset-controller.js:125"
+      ]
+    },
+    {
       "key": "ui.can-be-changed-in-project-information",
       "zhHant": "可在項目信息中修改",
       "zhHans": "可在项目信息中修改",
@@ -1542,6 +1564,7 @@
         "src/index.html:496",
         "src/index.html:647",
         "src/index.html:665",
+        "src/index.html:751",
         "src/project/file-controller.js:238",
         "src/project/file-controller.js:305",
         "src/project/file-controller.js:310",
@@ -1593,7 +1616,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:751",
+        "src/index.html:765",
         "src/screen/context-menus.js:237"
       ]
     },
@@ -1660,7 +1683,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:143"
+        "src/common/core/operation-registry.js:144"
       ]
     },
     {
@@ -1671,7 +1694,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:141"
+        "src/common/core/operation-registry.js:142"
       ]
     },
     {
@@ -1907,9 +1930,9 @@
         "src/index.html:602",
         "src/index.html:684",
         "src/index.html:704",
-        "src/index.html:742",
-        "src/index.html:751",
-        "src/index.html:755",
+        "src/index.html:756",
+        "src/index.html:765",
+        "src/index.html:769",
         "src/index.html:87",
         "src/project/history-mark-editor.js:13"
       ]
@@ -2185,7 +2208,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:139"
+        "src/common/core/operation-registry.js:140"
       ]
     },
     {
@@ -2368,7 +2391,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:755"
+        "src/index.html:769"
       ]
     },
     {
@@ -2445,7 +2468,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/app.js:1051"
+        "src/app.js:1052"
       ]
     },
     {
@@ -2561,6 +2584,28 @@
       "englishMissing": false,
       "locations": [
         "src/shapes/pack-loader.js:48"
+      ]
+    },
+    {
+      "key": "ui.count",
+      "zhHant": "已計算 ${count} 個點…",
+      "zhHans": "已计算 ${count} 个点…",
+      "en": "已計算 ${count} 個點…",
+      "dynamic": true,
+      "englishMissing": true,
+      "locations": [
+        "src/texture/asset-controller.js:128"
+      ]
+    },
+    {
+      "key": "ui.count-points-length",
+      "zhHant": "已繪製 ${count} / ${points.length} 個點…",
+      "zhHans": "已绘制 ${count} / ${points.length} 个点…",
+      "en": "已繪製 ${count} / ${points.length} 個點…",
+      "dynamic": true,
+      "englishMissing": true,
+      "locations": [
+        "src/texture/asset-controller.js:133"
       ]
     },
     {
@@ -2844,7 +2889,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:174"
+        "src/common/core/operation-registry.js:175"
       ]
     },
     {
@@ -2884,7 +2929,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:175"
+        "src/common/core/operation-registry.js:176"
       ]
     },
     {
@@ -3351,7 +3396,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:135"
+        "src/common/core/operation-registry.js:136"
       ]
     },
     {
@@ -3395,7 +3440,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:128",
+        "src/common/core/operation-registry.js:129",
         "src/screen/context-menus.js:459"
       ]
     },
@@ -3581,7 +3626,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:148"
+        "src/common/core/operation-registry.js:149"
       ]
     },
     {
@@ -3603,7 +3648,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:579"
+        "src/screen/context-menus.js:583"
       ]
     },
     {
@@ -3636,7 +3681,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:134"
+        "src/common/core/operation-registry.js:135"
       ]
     },
     {
@@ -3656,7 +3701,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:149",
+        "src/common/core/operation-registry.js:150",
         "src/project/history-dialog.js:283"
       ]
     },
@@ -3679,7 +3724,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:551"
+        "src/screen/context-menus.js:555"
       ]
     },
     {
@@ -3769,7 +3814,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:127",
+        "src/common/core/operation-registry.js:128",
         "src/screen/context-menus.js:463"
       ]
     },
@@ -3874,7 +3919,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:593"
+        "src/screen/context-menus.js:597"
       ]
     },
     {
@@ -3896,7 +3941,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:140"
+        "src/common/core/operation-registry.js:141"
       ]
     },
     {
@@ -3907,7 +3952,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:158"
+        "src/common/core/operation-registry.js:159"
       ]
     },
     {
@@ -3972,7 +4017,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:174"
+        "src/common/core/operation-registry.js:175"
       ]
     },
     {
@@ -4006,6 +4051,50 @@
       "englishMissing": false,
       "locations": [
         "src/index.html:586"
+      ]
+    },
+    {
+      "key": "ui.dot-density-is-too-high-increase-the-diameter-or-gap",
+      "zhHant": "點的密度過高，請增加尺寸或最小間隔",
+      "zhHans": "点的密度过高，请增加尺寸或最小间隔",
+      "en": "Dot density is too high. Increase the diameter or gap.",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/random-points.js:19"
+      ]
+    },
+    {
+      "key": "ui.dot-diameter-exceeds-the-layer-dimensions",
+      "zhHant": "點尺寸超過圖層尺寸",
+      "zhHans": "点尺寸超过图层尺寸",
+      "en": "Dot diameter exceeds the layer dimensions",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/asset-controller.js:130"
+      ]
+    },
+    {
+      "key": "ui.dot-diameter-px",
+      "zhHant": "點尺寸（直徑，px）",
+      "zhHans": "点尺寸（直径，px）",
+      "en": "Dot diameter (px)",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:746"
+      ]
+    },
+    {
+      "key": "ui.dot-size-gap-and-canvas-dimensions-must-be-valid-pixel-values",
+      "zhHant": "點尺寸、間隔及畫布尺寸必須是有效像素數值",
+      "zhHans": "点尺寸、间隔及画布尺寸必须是有效像素数值",
+      "en": "Dot size, gap and canvas dimensions must be valid pixel values",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/random-points.js:13"
       ]
     },
     {
@@ -4087,7 +4176,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:121"
+        "src/common/core/operation-registry.js:122"
       ]
     },
     {
@@ -4098,7 +4187,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:119"
+        "src/common/core/operation-registry.js:120"
       ]
     },
     {
@@ -4109,7 +4198,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:120"
+        "src/common/core/operation-registry.js:121"
       ]
     },
     {
@@ -4121,6 +4210,17 @@
       "englishMissing": false,
       "locations": [
         "src/texture/template-controller.js:381"
+      ]
+    },
+    {
+      "key": "ui.drawing-dots",
+      "zhHant": "正在繪製點位…",
+      "zhHans": "正在绘制点位…",
+      "en": "Drawing dots…",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/asset-controller.js:131"
       ]
     },
     {
@@ -4154,7 +4254,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:137"
+        "src/common/core/operation-registry.js:138"
       ]
     },
     {
@@ -4165,7 +4265,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:130",
+        "src/common/core/operation-registry.js:131",
         "src/screen/context-menus.js:461"
       ]
     },
@@ -4285,7 +4385,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:599"
+        "src/screen/context-menus.js:603"
       ]
     },
     {
@@ -4362,7 +4462,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:163"
+        "src/common/core/operation-registry.js:164"
       ]
     },
     {
@@ -4404,7 +4504,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:178"
+        "src/common/core/operation-registry.js:179"
       ]
     },
     {
@@ -4415,7 +4515,7 @@
       "dynamic": true,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:170"
+        "src/common/core/operation-registry.js:171"
       ]
     },
     {
@@ -4448,7 +4548,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:124"
+        "src/common/core/operation-registry.js:125"
       ]
     },
     {
@@ -4536,7 +4636,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:110"
+        "src/common/core/operation-registry.js:111"
       ]
     },
     {
@@ -4558,7 +4658,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:125"
+        "src/common/core/operation-registry.js:126"
       ]
     },
     {
@@ -4656,7 +4756,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:593"
+        "src/screen/context-menus.js:597"
       ]
     },
     {
@@ -4667,7 +4767,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:586"
+        "src/screen/context-menus.js:590"
       ]
     },
     {
@@ -4939,7 +5039,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:158",
+        "src/common/core/operation-registry.js:159",
         "src/index.html:370",
         "src/index.html:73",
         "src/project/file-controller.js:238"
@@ -5603,7 +5703,7 @@
       "locations": [
         "src/screen/context-menus.js:243",
         "src/screen/context-menus.js:365",
-        "src/screen/context-menus.js:634"
+        "src/screen/context-menus.js:638"
       ]
     },
     {
@@ -5627,7 +5727,7 @@
       "locations": [
         "src/screen/context-menus.js:141",
         "src/screen/context-menus.js:169",
-        "src/screen/context-menus.js:616"
+        "src/screen/context-menus.js:620"
       ]
     },
     {
@@ -5894,6 +5994,29 @@
       ]
     },
     {
+      "key": "ui.generate-evenly-spaced-random-dots",
+      "zhHant": "生成均勻隨機點",
+      "zhHans": "生成均勻随机点",
+      "en": "Generate evenly spaced random dots",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/common/core/operation-registry.js:110",
+        "src/screen/context-menus.js:544"
+      ]
+    },
+    {
+      "key": "ui.generate-random-dots",
+      "zhHant": "生成隨機點",
+      "zhHans": "生成随机点",
+      "en": "Generate random dots",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:743"
+      ]
+    },
+    {
       "key": "ui.generate-texture-template",
       "zhHant": "生成貼圖模板",
       "zhHans": "生成贴图模板",
@@ -6052,7 +6175,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:123"
+        "src/common/core/operation-registry.js:124"
       ]
     },
     {
@@ -6195,7 +6318,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:173",
+        "src/common/core/operation-registry.js:174",
         "src/index.html:631"
       ]
     },
@@ -6218,7 +6341,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:619",
+        "src/screen/context-menus.js:623",
         "src/screen/outliner-view.js:201"
       ]
     },
@@ -6283,7 +6406,7 @@
       "englishMissing": false,
       "locations": [
         "src/index.html:74",
-        "src/index.html:742"
+        "src/index.html:756"
       ]
     },
     {
@@ -6490,7 +6613,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:126",
+        "src/common/core/operation-registry.js:127",
         "src/index.html:203"
       ]
     },
@@ -6535,7 +6658,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:167",
+        "src/common/core/operation-registry.js:168",
         "src/screen/inspector-controller.js:191",
         "src/screen/inspector-controller.js:86"
       ]
@@ -6593,7 +6716,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:158"
+        "src/common/core/operation-registry.js:159"
       ]
     },
     {
@@ -6604,7 +6727,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:173"
+        "src/common/core/operation-registry.js:174"
       ]
     },
     {
@@ -6904,7 +7027,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:574"
+        "src/screen/context-menus.js:578"
       ]
     },
     {
@@ -7251,7 +7374,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:759",
+        "src/index.html:773",
         "src/project/history-dialog.js:147"
       ]
     },
@@ -7382,7 +7505,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:158",
+        "src/common/core/operation-registry.js:159",
         "src/screen/outliner-view.js:203",
         "src/screen/outliner-view.js:210"
       ]
@@ -7459,7 +7582,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:147"
+        "src/common/core/operation-registry.js:148"
       ]
     },
     {
@@ -7513,7 +7636,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:546"
+        "src/screen/context-menus.js:550"
       ]
     },
     {
@@ -7843,7 +7966,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/app.js:1014",
+        "src/app.js:1015",
         "src/index.html:86"
       ]
     },
@@ -8021,7 +8144,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/app.js:1014"
+        "src/app.js:1015"
       ]
     },
     {
@@ -8087,7 +8210,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:753"
+        "src/index.html:767"
       ]
     },
     {
@@ -8175,7 +8298,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/app.js:1053"
+        "src/app.js:1054"
       ]
     },
     {
@@ -8197,7 +8320,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/asset-controller.js:20"
+        "src/texture/asset-controller.js:23"
       ]
     },
     {
@@ -8380,6 +8503,40 @@
       ]
     },
     {
+      "key": "ui.message-66",
+      "zhHant": "生成",
+      "zhHans": "生成",
+      "en": "Generate",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:751",
+        "src/texture/layer-points-dialog.js:27"
+      ]
+    },
+    {
+      "key": "ui.message-67",
+      "zhHant": "生成中…",
+      "zhHans": "生成中…",
+      "en": "Generating…",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/layer-points-dialog.js:27"
+      ]
+    },
+    {
+      "key": "ui.message-68",
+      "zhHant": "目標圖層已改變，請重新打開",
+      "zhHans": "目标图层已改变，请重新打开",
+      "en": "The target layer changed. Reopen this dialog.",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/layer-points-dialog.js:44"
+      ]
+    },
+    {
       "key": "ui.message-7",
       "zhHant": "色卡已導出",
       "zhHans": "色卡已导出",
@@ -8487,6 +8644,17 @@
       "englishMissing": false,
       "locations": [
         "src/common/config/model-formats.js:137"
+      ]
+    },
+    {
+      "key": "ui.minimum-edge-gap-px",
+      "zhHant": "最小間隔（px）",
+      "zhHans": "最小间隔（px）",
+      "en": "Minimum edge gap (px)",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:747"
       ]
     },
     {
@@ -8979,7 +9147,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:156",
+        "src/common/core/operation-registry.js:157",
         "src/index.html:628",
         "src/index.html:712",
         "src/project/history-mark-editor.js:9"
@@ -9212,7 +9380,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:157",
+        "src/common/core/operation-registry.js:158",
         "src/screen/outliner-view.js:208"
       ]
     },
@@ -9616,7 +9784,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:167",
+        "src/common/core/operation-registry.js:168",
         "src/screen/inspector-controller.js:191",
         "src/screen/inspector-controller.js:86"
       ]
@@ -9811,7 +9979,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:111"
+        "src/common/core/operation-registry.js:112"
       ]
     },
     {
@@ -9957,7 +10125,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:136"
+        "src/common/core/operation-registry.js:137"
       ]
     },
     {
@@ -9968,7 +10136,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:129",
+        "src/common/core/operation-registry.js:130",
         "src/screen/context-menus.js:460",
         "src/screen/context-menus.js:493"
       ]
@@ -10040,7 +10208,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:166",
+        "src/common/core/operation-registry.js:167",
         "src/screen/shortcuts.js:20"
       ]
     },
@@ -10251,7 +10419,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:166"
+        "src/common/core/operation-registry.js:167"
       ]
     },
     {
@@ -10274,6 +10442,17 @@
       "englishMissing": false,
       "locations": [
         "src/texture/template-controller.js:271"
+      ]
+    },
+    {
+      "key": "ui.preparing-layer",
+      "zhHant": "正在準備圖層…",
+      "zhHans": "正在准备图层…",
+      "en": "Preparing layer…",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/asset-controller.js:118"
       ]
     },
     {
@@ -10317,7 +10496,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:160"
+        "src/common/core/operation-registry.js:161"
       ]
     },
     {
@@ -10458,7 +10637,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:744"
+        "src/index.html:758"
       ]
     },
     {
@@ -10586,7 +10765,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:173"
+        "src/common/core/operation-registry.js:174"
       ]
     },
     {
@@ -10689,7 +10868,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:145",
+        "src/common/core/operation-registry.js:146",
         "src/index.html:82",
         "src/screen/shortcuts.js:5"
       ]
@@ -10848,7 +11027,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:573"
+        "src/screen/context-menus.js:577"
       ]
     },
     {
@@ -10881,7 +11060,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:138"
+        "src/common/core/operation-registry.js:139"
       ]
     },
     {
@@ -10903,7 +11082,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:131"
+        "src/common/core/operation-registry.js:132"
       ]
     },
     {
@@ -11087,7 +11266,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:146"
+        "src/common/core/operation-registry.js:147"
       ]
     },
     {
@@ -11165,7 +11344,7 @@
       "englishMissing": false,
       "locations": [
         "src/screen/context-menus.js:244",
-        "src/screen/context-menus.js:635"
+        "src/screen/context-menus.js:639"
       ]
     },
     {
@@ -11238,7 +11417,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:166",
+        "src/common/core/operation-registry.js:167",
         "src/editor/tool-mode-controller.js:167",
         "src/index.html:105",
         "src/index.html:139",
@@ -11362,7 +11541,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:755"
+        "src/index.html:769"
       ]
     },
     {
@@ -11794,7 +11973,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:142"
+        "src/common/core/operation-registry.js:143"
       ]
     },
     {
@@ -11990,7 +12169,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:114"
+        "src/common/core/operation-registry.js:115"
       ]
     },
     {
@@ -12001,7 +12180,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:113"
+        "src/common/core/operation-registry.js:114"
       ]
     },
     {
@@ -12012,7 +12191,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:116"
+        "src/common/core/operation-registry.js:117"
       ]
     },
     {
@@ -12023,7 +12202,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:117"
+        "src/common/core/operation-registry.js:118"
       ]
     },
     {
@@ -12045,7 +12224,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:115"
+        "src/common/core/operation-registry.js:116"
       ]
     },
     {
@@ -12177,7 +12356,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:156",
+        "src/common/core/operation-registry.js:157",
         "src/index.html:442"
       ]
     },
@@ -12352,7 +12531,18 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:574"
+        "src/screen/context-menus.js:578"
+      ]
+    },
+    {
+      "key": "ui.share-one-random-pattern-across-symmetric-faces",
+      "zhHant": "對稱面共用同一組隨機點",
+      "zhHans": "对称面共用同一组随机点",
+      "en": "Share one random pattern across symmetric faces",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:749"
       ]
     },
     {
@@ -12444,7 +12634,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:619"
+        "src/screen/context-menus.js:623"
       ]
     },
     {
@@ -12627,7 +12817,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:173"
+        "src/common/core/operation-registry.js:174"
       ]
     },
     {
@@ -12659,7 +12849,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:167",
+        "src/common/core/operation-registry.js:168",
         "src/index.html:157",
         "src/index.html:167"
       ]
@@ -13126,7 +13316,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:159"
+        "src/common/core/operation-registry.js:160"
       ]
     },
     {
@@ -13165,6 +13355,17 @@
       ]
     },
     {
+      "key": "ui.synchronizing-symmetric-faces",
+      "zhHant": "正在同步對稱面…",
+      "zhHans": "正在同步对称面…",
+      "en": "Synchronizing symmetric faces…",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/asset-controller.js:135"
+      ]
+    },
+    {
       "key": "ui.system-font",
       "zhHant": "系統字體",
       "zhHans": "系统字体",
@@ -13184,7 +13385,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:156"
+        "src/common/core/operation-registry.js:157"
       ]
     },
     {
@@ -13305,7 +13506,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/asset-controller.js:19"
+        "src/texture/asset-controller.js:22"
       ]
     },
     {
@@ -13453,6 +13654,17 @@
       "englishMissing": false,
       "locations": [],
       "key": "ui.the-eraser-cannot-change-the-texture-while-alpha-lock-is-enabled"
+    },
+    {
+      "key": "ui.the-gap-is-measured-between-dot-edges-existing-layer-pixels-are-preserved",
+      "zhHant": "最小間隔按兩個圓點的邊緣計算；保留圖層原有像素。",
+      "zhHans": "最小间隔按两个圆点的边缘计算；保留图层原有像素。",
+      "en": "The gap is measured between dot edges. Existing layer pixels are preserved.",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/texture/layer-points-dialog.js:19"
+      ]
     },
     {
       "key": "ui.the-gradient-points-are-too-close-together",
@@ -13910,7 +14122,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/texture/asset-controller.js:20"
+        "src/texture/asset-controller.js:23"
       ]
     },
     {
@@ -13983,7 +14195,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:132"
+        "src/common/core/operation-registry.js:133"
       ]
     },
     {
@@ -14103,7 +14315,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:112"
+        "src/common/core/operation-registry.js:113"
       ]
     },
     {
@@ -14147,7 +14359,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/index.html:752"
+        "src/index.html:766"
       ]
     },
     {
@@ -14191,7 +14403,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:144",
+        "src/common/core/operation-registry.js:145",
         "src/index.html:81",
         "src/screen/shortcuts.js:5"
       ]
@@ -14384,7 +14596,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/screen/context-menus.js:586"
+        "src/screen/context-menus.js:590"
       ]
     },
     {
@@ -14428,6 +14640,17 @@
       "englishMissing": false,
       "locations": [],
       "key": "ui.use-separate-modes-for-modelling-and-uv-editing"
+    },
+    {
+      "key": "ui.use-the-current-paint-color",
+      "zhHant": "使用目前繪畫顏色",
+      "zhHans": "使用当前绘画颜色",
+      "en": "Use the current paint color",
+      "dynamic": false,
+      "englishMissing": false,
+      "locations": [
+        "src/index.html:744"
+      ]
     },
     {
       "key": "ui.use-the-same-fixed-relative-length-as-the-move-gizmo",
@@ -14536,7 +14759,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:157",
+        "src/common/core/operation-registry.js:158",
         "src/index.html:461",
         "src/index.html:462"
       ]
@@ -14775,7 +14998,7 @@
       "dynamic": false,
       "englishMissing": false,
       "locations": [
-        "src/common/core/operation-registry.js:156"
+        "src/common/core/operation-registry.js:157"
       ]
     },
     {

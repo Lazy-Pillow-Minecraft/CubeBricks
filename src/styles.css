@@ -5569,6 +5569,17 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
   color-scheme: dark;
   overflow: hidden;
 }
+.layer-points-dialog { width: min(430px, calc(100vw - 30px)); }
+.layer-points-target { display: flex; align-items: center; gap: 8px; margin: 12px 0 16px; font-size: .73rem; }
+.layer-points-target strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-points-target small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+.layer-points-target > span { width: 18px; height: 18px; flex: 0 0 18px; border: 1px solid var(--line-strong); border-radius: 3px; }
+.layer-points-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.layer-points-fields label { display: grid; gap: 5px; font-size: .7rem; color: var(--muted); }
+.layer-points-fields input { width: 100%; }
+.layer-points-option { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: .72rem; }
+.layer-points-option input { accent-color: var(--accent); }
+.layer-points-dialog #layerPointsStatus { min-height: 2.2em; margin: 12px 0; }
 .skin-picker-dialog[open] { display: flex; flex-direction: column; gap: 12px; }
 .skin-picker-dialog > .dialog-heading { flex: 0 0 auto; cursor: move; user-select: none; }
 .skin-picker-tabs { display: flex; align-items: center; gap: 7px; }

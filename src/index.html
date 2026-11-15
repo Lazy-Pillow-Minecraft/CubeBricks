@@ -738,6 +738,20 @@
     </div></div>
   </dialog>
 
+  <dialog id="layerPointsDialog" class="theme-dialog layer-points-dialog" aria-labelledby="layerPointsTitle">
+    <form id="layerPointsForm">
+      <div class="dialog-heading"><div><span class="eyebrow">RANDOM POINTS</span><h2 id="layerPointsTitle">生成隨機點</h2></div></div>
+      <div class="layer-points-target"><span id="layerPointsSwatch" aria-hidden="true"></span><strong id="layerPointsTarget"></strong><small>使用目前繪畫顏色</small></div>
+      <div class="layer-points-fields">
+        <label>點尺寸（直徑，px）<input id="layerPointSize" type="number" min="1" max="256" step="1" value="2" required></label>
+        <label>最小間隔（px）<input id="layerPointGap" type="number" min="0" max="4096" step="1" value="4" required></label>
+      </div>
+      <label class="layer-points-option"><input id="layerPointsSymmetry" type="checkbox"><span>對稱面共用同一組隨機點</span></label>
+      <p id="layerPointsStatus" aria-live="polite"></p>
+      <div class="dialog-actions"><button type="button" id="layerPointsCancel">取消</button><button type="submit" class="primary-button" id="layerPointsGenerate">生成</button></div>
+    </form>
+  </dialog>
+
   <dialog id="projectHistoryDialog" class="theme-dialog project-history-dialog" aria-labelledby="projectHistoryTitle">
     <div class="dialog-heading"><h2 id="projectHistoryTitle">歷史記錄</h2><button type="button" class="close-button" id="closeProjectHistory" aria-label="關閉">×</button></div>
     <div class="project-history-viewport" id="projectHistoryViewport" tabindex="0">

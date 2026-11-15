@@ -294,8 +294,25 @@ export function createPaintSymmetryController({ state, sceneRenderer, faceUvPixe
     }
     return [...result.values()];
   }
+  function paintSymmetryFaceGraph() {
+    const records = new Map(), relations = new Map();
+    for (const owner of [...(state.project.groups || []), ...(state.project.elements || [])]) {
+      for (const operator of owner.operators || []) {
+        if (!operator.enabled || operator.type !== 'paint_symmetry') continue;
+        const cache = ensurePaintSymmetryCache(owner, operator);
+        if (!cache) continue;
+        for (const [key, record] of cache.records) {
+          records.set(key, record);
+          const links = relations.get(key) || [];
+          links.push(...buildPaintSymmetryRelationsForFace(cache, key));
+          relations.set(key, links);
+        }
+      }
+    }
+    return { records, relations };
+  }
   return {
     paintSymmetryFaceKey, paintSymmetryRelatedHits, scheduleAllPaintSymmetryBuilds,
-    schedulePaintSymmetryBuild, ensurePaintSymmetryCache
+    schedulePaintSymmetryBuild, ensurePaintSymmetryCache, paintSymmetryFaceGraph
   };
 }
