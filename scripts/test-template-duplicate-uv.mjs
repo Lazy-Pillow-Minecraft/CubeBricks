@@ -6,15 +6,18 @@ const source = { _uid: 'source', id: 'source', name: 'source.png', uvWidth: 64, 
 const faceNames = ['north', 'south', 'east', 'west', 'up', 'down'];
 const original = new Cube({
   size: [2, 2, 2], uvMode: 'face', autoUv: false,
-  faces: Object.fromEntries(faceNames.map(name => [name, { uv: [0, 0, 2, 2], texture: '#source' }]))
+  faces: Object.fromEntries(faceNames.map(name => [name, { uv: [2, 4, 4, 6], texture: '#source' }]))
 });
 const copy = new Cube(structuredClone(original));
 copy.uid = 'copied-cube';
 const project = new CubeBricksProject({ elements: [original, copy], outliner: [original.uid, copy.uid] });
 const [storedOriginal, storedCopy] = project.elements;
 const state = { project, textureAssets: [source], activeTextureUid: source._uid, history: [] };
+const sourceRaster = { width: 128, height: 192 };
+const drawCalls = [];
 const fakeContext = {
-  clearRect() {}, fillRect() {}, strokeRect() {}, drawImage() {},
+  clearRect() {}, fillRect() {}, strokeRect() {},
+  drawImage(image, ...coordinates) { if (image === sourceRaster) drawCalls.push(coordinates); },
   set imageSmoothingEnabled(value) {}, set fillStyle(value) {}, set strokeStyle(value) {}, set lineWidth(value) {}
 };
 const fakeCanvas = () => ({
@@ -38,7 +41,7 @@ try {
     markDirty() {}, snapshot() {}, toast() {}, setCubeFaceCulled() {}, invalidateAllRenderGeometry() {},
     renderAll() {}, activeSnapSubdivisions: () => 16,
     textureAssetForReference: reference => reference === '#source' ? source : null,
-    loadTextureAssetImage: async () => fakeCanvas()
+    loadTextureAssetImage: async () => sourceRaster
   });
   await controller.createTextureTemplate({
     name: 'new.png', selectedOnly: false, cleanInvalidFaces: false,
@@ -49,6 +52,9 @@ try {
     faceNames.map(name => storedCopy.faces[name].uv),
     'unchecked no-share option lets identical source UVs reuse one atlas slot across cubes');
   assert.equal(state.textureAssets.at(-1).templateUvIndependent, false);
+  assert.equal(drawCalls.length, 12);
+  for (const coordinates of drawCalls) assert.deepEqual(coordinates.slice(0, 4), [4, 12, 4, 6],
+    'template crops the physical raster using UV coordinates scaled independently on each axis');
   await controller.createTextureTemplate({
     name: 'all-faces.png', selectedOnly: false, cleanInvalidFaces: false,
     boxUv: false, powerOfTwo: false, keepMultiTexture: true, keepLayers: false,

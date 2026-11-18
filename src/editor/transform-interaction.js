@@ -2,7 +2,12 @@ import { Cube, Group, setPivotPreservingGeometry } from '../model.js';
 import { constrainNode, formatRules, captureFormatGeometry, restoreFormatGeometry, keepFormatEditWithinLimit } from '../common/core/format-constraints.js';
 import { paintSymmetryRelationCache } from '../paint/symmetry-relations.js';
 import { canPreviewRigidGroup } from './rigid-transform-preview.js';
+import { viewportGroupSelection } from './viewport-pointer-controller.js';
+import { signedDragDistance, transformFeedback } from './transform-feedback.js';
+import { translateSiblingCopyNodes } from '../common/core/copy-node-transforms.js';
 import { shapeRegistry } from '../shapes/builtins.js';
+import { proceduralMirrorVector } from '../common/core/procedural-mirror.js';
+import { generatedSelection, generatedSelectionFrame, sourceVector, sourcePoint, generatedRotationSign } from '../common/core/modifier-selection.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import {
   inverseRotateVector, quaternionFromAxisAngle, quaternionFromEuler, quaternionMultiply, eulerFromQuaternion,
@@ -14,12 +19,12 @@ export function createTransformInteraction({
   activeCurveNodeContext, activeModifierAnchorContext, applyTargetRotation,
   applyViewportBoxSelection, bakeCurveNodeTangent, captureGroupMembers,
   captureModifierAnchors, captureTransformTarget, clearSelection,
-  discardSubdivisionEdits, finishScenePaintDrag, formatNumber, formatSigned,
+  discardSubdivisionEdits, finishScenePaintDrag, formatSigned,
   freezeCubeUvs, getAngleSnapStep, getSelectionTransformContext,
   clearSelectionTransformContext, setNodePivotAtWorldPoint,
   intersectRayPlane, invalidateSelectionRenderGeometry, isBezierElement,
   isEffectivelyLocked, isShapeElement, localDeltaFromWorld, markDirty,
-  moveScenePaintDrag, polyhedronEdgeLength, queueSceneBrushPointer,
+  moveScenePaintDrag, queueSceneBrushPointer,
   refreshSelectionUi, renderInspector, renderScene, rotatePointAroundAxis,
   rotationMatrixAroundAxis, scheduleSceneRender, selected, selectedElementUids,
   selectItem, setCurveHandle, snapAngle, snapShapeDimension, snapshot,
@@ -27,10 +32,14 @@ export function createTransformInteraction({
   translateCapturedTarget, translateModifierAnchorsFromSnapshot,
   translationMatrix, updatePaintGradientHover, updateSelectionMarquee,
   viewportSelectionMode, worldPointToCurveLocal, worldPointToParentLocal,
-  updateKnifeHover, schedulePaintSymmetryBuild, currentProjection
+  updateKnifeHover, schedulePaintSymmetryBuild, currentProjection, toolbox
 }) {
   let transformUpdateFrame = null;
   const shapeDimensionKeys = item => shapeRegistry.get(item?.shapeType)?.dimensionKeys;
+  // Interpret the handle using the size captured at pointer-down. Crossing
+  // zero changes the geometry but cannot change the active endpoint.
+  const resizePolarity = size => size < 0 ? -1 : 1;
+  const rotationParity = drag => generatedRotationSign(drag.generatedFrame) * (drag.curveNodeContext?.curve.geometryMirrorX ? -1 : 1);
 
   function resizeShapeDimensions(item, starting, drag, dx, dy, axisDelta, planeDistances, event, fallbackScale) {
     const keys = shapeDimensionKeys(item);
@@ -56,12 +65,14 @@ export function createTransformInteraction({
     axisKey = axisIndex === null ? 'free' : String(axisIndex), axisIndices = axisIndex === null ? [] : [axisIndex], axisSigns = [sign]) {
     if (event.button !== 0) return;
     if (state.mode === 'paint') return;
+    if (state.tool === 'toolbox') return toolbox?.startScale(event, captureTarget, handleElement);
     const modifierAnchorContext = activeModifierAnchorContext();
     const baseSelectionContext = getSelectionTransformContext();
     const selectionContext = modifierAnchorContext
       ? { nodes: [modifierAnchorContext.owner], multiple: false, commonGroup: null, center: null, pivot: null }
       : baseSelectionContext;
     const curveNodeContext = activeCurveNodeContext();
+    const generatedFrame = !modifierAnchorContext && !curveNodeContext ? generatedSelectionFrame(state, sceneRenderer) : null;
     let item = selected();
     if (!item || !['move', 'resize', 'rotate', 'pivot'].includes(state.tool)) return;
     if (state.tool === 'rotate' && formatRules(state.project).moddedEntity && item.type === 'cube') {
@@ -114,8 +125,9 @@ export function createTransformInteraction({
     const planeAxes = kind.startsWith('plane') ? axisIndices.map((index, pairIndex) => {
       const source = state.gizmoAxes[index];
       const axisSign = axisSigns[pairIndex] || 1;
-      let stored = source.vector.map(value => value * axisSign);
+      let stored = sourceVector(generatedFrame, source.vector.map(value => value * axisSign));
       chain.forEach(group => { stored = inverseRotateVector(stored, group.rotation || [0, 0, 0]); });
+      if (curveNodeContext) stored = proceduralMirrorVector(curveNodeContext.curve, stored);
       if (state.tool === 'resize' && item.type !== 'group') stored = inverseRotateVector(stored, item.rotation || [0, 0, 0]);
       return {
         index,
@@ -140,11 +152,14 @@ export function createTransformInteraction({
         const cameraFrame = sceneRenderer.getCameraFrame();
         const toCamera = cameraFrame.forward.map(value => -value);
         rotationScreenSign = dot3(handle.vector, toCamera) >= 0 ? -1 : 1;
-        rotationAxis = [...storedAxis];
+        rotationAxis = sourceVector(generatedFrame, storedAxis);
         chain.forEach(group => { rotationAxis = inverseRotateVector(rotationAxis, group.rotation || [0, 0, 0]); });
+        if (curveNodeContext) rotationAxis = proceduralMirrorVector(curveNodeContext.curve, rotationAxis);
         if (state.transformSpace === 'self' && kind === 'rotate') rotationAxis = [0, 0, 0].map((_, index) => index === axisIndex ? 1 : 0);
       } else {
+        storedAxis = sourceVector(generatedFrame, storedAxis);
         chain.forEach(group => { storedAxis = inverseRotateVector(storedAxis, group.rotation || [0, 0, 0]); });
+        if (curveNodeContext) storedAxis = proceduralMirrorVector(curveNodeContext.curve, storedAxis);
         if (state.tool === 'resize' && item.type !== 'group') storedAxis = inverseRotateVector(storedAxis, item.rotation || [0, 0, 0]);
       }
     }
@@ -163,6 +178,7 @@ export function createTransformInteraction({
       ? rotationPlanePoint.map((value, axis) => value - state.gizmoOrigin[axis]) : null;
     state.dragging = {
       type: 'transform', tool: state.tool, pointerId: event.pointerId,
+      generatedFrame,
       snapshotTaken: false,
       x: event.clientX, y: event.clientY, item, axisIndex, axisIndices, axisSigns, axisKey,
       axis: handle ? { ...handle, screen: handle.screen.map(value => value * sign) } : null,
@@ -180,7 +196,7 @@ export function createTransformInteraction({
       javaRotationGeometry: state.tool === 'rotate' && formatRules(state.project).singleAxisRotation
         && !modifierAnchorContext && !curveNodeContext ? captureFormatGeometry(targets.map(target => target.node).filter(node => node.type === 'cube')) : null,
       rect, storedAxis, chain, selectionContext, targets, multiTransformMode: state.multiTransformMode,
-      batchPreview: (selectionContext.multiple ? state.multiTransformMode === 'unified'
+      batchPreview: !generatedFrame && (selectionContext.multiple ? state.multiTransformMode === 'unified'
         : !modifierAnchorContext && !curveNodeContext && canPreviewRigidGroup(state.project, item))
         && ['move', 'rotate'].includes(state.tool),
       baseSelectionCenter: selectionContext.center ? [...selectionContext.center] : null,
@@ -276,9 +292,10 @@ export function createTransformInteraction({
   }
 
   function applyExactRotation(drag, degrees) {
+    degrees *= rotationParity(drag);
     if (drag.targets.length > 1) {
-      const commonAxis = drag.axis?.vector.map(value => value * drag.sign) || [0, 1, 0];
-      const commonPivot = drag.selectionContext.pivot || drag.selectionContext.center || state.gizmoOrigin;
+      const commonAxis = sourceVector(drag.generatedFrame, drag.axis?.vector.map(value => value * drag.sign) || [0, 1, 0]);
+      const commonPivot = drag.selectionContext.pivot || drag.selectionContext.center || sourcePoint(drag.generatedFrame, state.gizmoOrigin);
       for (const target of drag.targets) {
         const separate = drag.multiTransformMode === 'separate';
         const targetAxis = separate && drag.kind === 'rotate' ? target.transformAxes[drag.axisIndex] : commonAxis;
@@ -327,6 +344,7 @@ export function createTransformInteraction({
   }
 
   function onPointerMove(event) {
+    if (state.dragging?.type === 'toolbox-scale') return toolbox?.moveScale(event);
     if (state.dragging?.type === 'texture-paint-3d') {
       event.preventDefault?.();
       moveScenePaintDrag(event);
@@ -379,6 +397,7 @@ export function createTransformInteraction({
         ? worldPointToParentLocal(drag.curve, intersection)
         : worldPointToCurveLocal(drag.curve, intersection);
       if (isBezierElement(drag.curve) && drag.node.autoTangent) bakeCurveNodeTangent(drag.curve, drag.nodeIndex);
+      drag.startHandle ||= [...drag.node[drag.property]];
       let handle = inverseRotateVector(
         curvePoint.map((value, axis) => value - drag.node.position[axis]),
         drag.node.rotation || [0, 0, 0]
@@ -386,7 +405,9 @@ export function createTransformInteraction({
       if (drag.curve.dimension === 2) handle[1] = 0;
       if (isBezierElement(drag.curve)) drag.node.autoTangent = false;
       setCurveHandle(drag.node, drag.property, handle, drag.curve.dimension === 2);
-      drag.tooltipText = `${drag.property === 'handleIn' ? '前' : '後'}手柄 ${formatNumber(Math.hypot(...handle))} px`;
+      drag.tooltipText = `${formatSigned(signedDragDistance(
+        handle.map((value, axis) => value - drag.startHandle[axis])
+      ))} px`;
       invalidateSelectionRenderGeometry();
       updateTransformTooltip(event, drag);
       renderScene();
@@ -408,7 +429,8 @@ export function createTransformInteraction({
       const rect = sceneCanvas.getBoundingClientRect();
       state.dragging.currentX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
       state.dragging.currentY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
-      state.dragging.mode = viewportSelectionMode(event);
+      const mode = viewportSelectionMode(event);
+      state.dragging.mode = state.dragging.groupPress && mode === 'replace' ? 'add' : mode;
       if (!state.dragging.moved && Math.hypot(dx, dy) < 4) return;
       state.dragging.moved = true;
       updateSelectionMarquee(state.dragging);
@@ -521,6 +543,7 @@ export function createTransformInteraction({
       for (const target of drag.targets || []) constrainNode(target.node, rules);
     }
     if (before) keepFormatEditWithinLimit(state.project, before);
+    drag.tooltipText = transformFeedback(drag, { formatSigned });
     updateTransformTooltip(pending.event, drag);
     if (!drag.batchPreview) invalidateSelectionRenderGeometry();
     if (drag.modifierAnchorContext) sceneRenderer.invalidateMirrorGeometry();
@@ -567,7 +590,9 @@ export function createTransformInteraction({
 
   function endPointerDrag(event) {
     if (!state.dragging) return;
+    if (state.dragging.type === 'toolbox-scale') return toolbox?.finishScale(event);
     const finishedDrag = state.dragging;
+    if (finishedDrag.groupPress && event.type === 'pointerup') onPointerMove(event);
     if (finishedDrag.type === 'texture-paint-3d') {
       if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
         finishedDrag.latestClient = [event.clientX, event.clientY];
@@ -596,6 +621,7 @@ export function createTransformInteraction({
       selectionMarquee.hidden = true;
       selectionMarquee.classList.remove('is-add', 'is-remove');
       finishedDrag.mode = viewportSelectionMode(event);
+      if (finishedDrag.groupPress && finishedDrag.mode === 'replace') finishedDrag.mode = 'add';
       if (event.type !== 'pointercancel' && finishedDrag.moved) {
         const hitUids = sceneRenderer.selectInScreenRect(state.project, {
           x1: finishedDrag.startX, y1: finishedDrag.startY,
@@ -603,33 +629,16 @@ export function createTransformInteraction({
         }, state.geometryOnly);
         applyViewportBoxSelection(hitUids, finishedDrag);
       } else if (event.type !== 'pointercancel') {
+        if (finishedDrag.groupPress) {
+          const group = viewportGroupSelection(state.project, finishedDrag.selection, finishedDrag.hitUid);
+          if (group) selectItem(group, { revealInOutliner: true,
+            generated: finishedDrag.generatedHit ? generatedSelection(finishedDrag.generatedHit, group) : null });
+          return;
+        }
         if (finishedDrag.generatedHit && !state.modifierResultGhost) {
-          if (finishedDrag.generatedHit.copyNodeUid && finishedDrag.generatedHit.copyOwnerUid) {
-            const owner = state.project.getNode(finishedDrag.generatedHit.copyOwnerUid);
-            const modifier = owner?.modifiers?.find(entry => entry.uid === finishedDrag.generatedHit.copyModifierUid);
-            if (modifier?.nodes?.some(node => node.uid === finishedDrag.generatedHit.copyNodeUid)) {
-              sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
-              state.selectedGenerated = null;
-              state.selectedUid = owner.uid;
-              state.selectedUids = new Set([owner.uid]);
-              state.selectedModifierUid = modifier.uid;
-              state.selectedModifierNodeUid = finishedDrag.generatedHit.copyNodeUid;
-              state.selectedCurveNodeIndex = null;
-              state.inspectorPage = 'modifiers';
-              refreshSelectionUi();
-              return;
-            }
-          }
-          sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
-          state.selectedUids = new Set();
-          state.selectedUid = null;
-          state.selectedGenerated = {
-            uid: finishedDrag.generatedHit.uid,
-            instanceKey: finishedDrag.generatedHit.instanceKey
-          };
-          state.selectedCurveNodeIndex = null;
-          state.selectedModifierUid = null;
-          refreshSelectionUi();
+          selectItem(finishedDrag.generatedHit.uid, { revealInOutliner: true,
+            toggle: event.ctrlKey || event.metaKey, range: event.shiftKey,
+            generated: generatedSelection(finishedDrag.generatedHit) });
         } else if (finishedDrag.hitUid) selectItem(finishedDrag.hitUid, {
           revealInOutliner: true,
           toggle: event.ctrlKey || event.metaKey,
@@ -717,7 +726,7 @@ export function createTransformInteraction({
   function applyTransformDrag(drag, dx, dy, event) {
     const rotationDragSensitivity = .75;
     const item = drag.item;
-    const axisDelta = drag.kind.startsWith('rotate') && drag.axis
+    let axisDelta = drag.kind.startsWith('rotate') && drag.axis
       ? (() => {
         if (Math.hypot(event.clientX - drag.gizmoCenter.x, event.clientY - drag.gizmoCenter.y) < 8)
           return drag.accumulatedAngle * 180 / Math.PI * (drag.rotationPlaneAxis ? 1 : drag.rotationScreenSign) * rotationDragSensitivity;
@@ -760,6 +769,13 @@ export function createTransformInteraction({
     const fallbackScale = drag.axis?.worldPerPixel || drag.referenceWorldPerPixel || (currentProjection() === 'perspective'
       ? 2 * (42 / state.zoom) * Math.tan(Math.PI / 8) / drag.rect.height
       : 36 / (drag.rect.height * state.zoom));
+    if (drag.tool !== 'rotate') {
+      const distance = drag.kind === 'uniform' ? -dy * fallbackScale
+        : drag.kind === 'plane-uniform' ? getPlaneUniformDistance(drag, dx, dy)
+          : drag.kind === 'plane' ? signedDragDistance(getPlaneDragDistances(drag, event, dx, dy))
+            : drag.axis ? axisDelta : signedDragDistance([dx, -dy]) * fallbackScale;
+      drag.feedbackDelta = snapValue(distance, event);
+    }
     if (drag.tool === 'pivot') {
       let delta;
       if (drag.kind === 'plane') {
@@ -781,7 +797,9 @@ export function createTransformInteraction({
         delta = pointer && drag.freeMoveStart
           ? pointer.map((value, axis) => value - drag.freeMoveStart[axis])
           : [0, 1, 2].map(axis => frame.right[axis] * dx * fallbackScale + frame.up[axis] * -dy * fallbackScale);
+        delta = sourceVector(drag.generatedFrame, delta);
         drag.chain.forEach(group => { delta = inverseRotateVector(delta, group.rotation || [0, 0, 0]); });
+        if (drag.curveNodeContext) delta = proceduralMirrorVector(drag.curveNodeContext.curve, delta);
       }
       const nextPivot = drag.axis || drag.kind === 'plane'
         ? drag.pivot.map((value, axis) => value + delta[axis])
@@ -795,7 +813,6 @@ export function createTransformInteraction({
         drag.selectionContext.pivot = [...nextPivot];
       } else if (item.type === 'node') item.position = nextPivot;
       else setPivotPreservingGeometry(state.project, item, nextPivot);
-      drag.tooltipText = `${drag.modifierAnchorContext ? '對稱軸點' : drag.curveNodeContext || item.type === 'node' ? '節點' : '樞軸'} ${nextPivot.map(formatNumber).join(' / ')}`;
     }
     if (drag.tool === 'move' && (drag.targets.length > 1 || drag.batchPreview)) {
       let distances = [];
@@ -806,12 +823,10 @@ export function createTransformInteraction({
         drag.planeAxes.forEach((axis, index) => {
           commonWorldDelta = commonWorldDelta.map((value, component) => value + axis.worldAxis[component] * distances[index]);
         });
-        drag.tooltipText = `距離 ${drag.axisIndices.map(index => 'XYZ'[index]).join('')} ${distances.map(formatSigned).join(' / ')} px`;
       } else if (drag.axis) {
         distances = [snapValue(axisDelta, event)];
         const direction = drag.axis.vector.map(value => value * drag.sign);
         commonWorldDelta = direction.map(value => value * distances[0]);
-        drag.tooltipText = `距離 ${formatSigned(distances[0])} px`;
       } else {
         const frame = sceneRenderer.getCameraFrame();
         const pointer = intersectRayPlane(
@@ -823,8 +838,8 @@ export function createTransformInteraction({
           ? pointer.map((value, axis) => value - drag.freeMoveStart[axis])
           : [0, 1, 2].map(axis => frame.right[axis] * dx * fallbackScale + frame.up[axis] * -dy * fallbackScale);
         commonWorldDelta = commonWorldDelta.map(value => snapValue(value, event));
-        drag.tooltipText = `距離 ${formatSigned(Math.hypot(...commonWorldDelta))} px`;
       }
+      commonWorldDelta = sourceVector(drag.generatedFrame, commonWorldDelta);
       if (drag.batchPreview) {
         drag.previewCommit = { type: 'move', worldDelta: [...commonWorldDelta] };
         sceneRenderer.setSelectionPreviewTransform(translationMatrix(commonWorldDelta));
@@ -860,7 +875,6 @@ export function createTransformInteraction({
         drag.planeAxes.forEach((axis, index) => {
           delta = delta.map((value, component) => value + axis.storedAxis[component] * distances[index]);
         });
-        drag.tooltipText = `距離 ${drag.axisIndices.map(index => 'XYZ'[index]).join('')} ${distances.map(formatSigned).join(' / ')} px`;
       } else if (drag.axis) {
         const snappedDistance = snapValue(axisDelta, event);
         delta = drag.storedAxis.map(value => value * snappedDistance);
@@ -875,13 +889,13 @@ export function createTransformInteraction({
         const worldDelta = pointer && drag.freeMoveStart
           ? pointer.map((value, axis) => value - drag.freeMoveStart[axis])
           : [0, 1, 2].map(axis => frame.right[axis] * dx * fallbackScale + frame.up[axis] * -dy * fallbackScale);
-        delta = [...worldDelta];
+        delta = sourceVector(drag.generatedFrame, worldDelta);
         drag.chain.forEach(group => { delta = inverseRotateVector(delta, group.rotation || [0, 0, 0]); });
+        if (drag.curveNodeContext) delta = proceduralMirrorVector(drag.curveNodeContext.curve, delta);
       }
       const next = drag.axis || drag.kind === 'plane'
         ? drag.position.map((value, axis) => value + delta[axis])
         : drag.position.map((value, axis) => snapValue(value + delta[axis], event));
-      if (drag.kind !== 'plane') drag.tooltipText = `距離 ${formatSigned(Math.hypot(...next.map((value, axis) => value - drag.position[axis])))} px`;
       if (drag.modifierAnchorContext) {
         drag.modifierAnchorContext.modifier.anchor.position = next;
       } else if (drag.curveNodeContext) {
@@ -906,6 +920,7 @@ export function createTransformInteraction({
         item.pivot = next;
         translateModifierAnchorsFromSnapshot(item, drag.modifierAnchors, delta);
         drag.groupMembers.forEach(member => {
+          translateSiblingCopyNodes(member.node, delta, member.copyNodes);
           if (member.node.type === 'cube') {
             member.node.position = member.position.map((value, axis) => value + delta[axis]);
             member.node.pivot = member.pivot.map((value, axis) => value + delta[axis]);
@@ -931,29 +946,33 @@ export function createTransformInteraction({
           if (drag.kind === 'plane-uniform') {
             const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
             for (const targetAxis of drag.axisIndices) {
-              const proposed = target.size[targetAxis] + distance * 2;
+              const proposed = target.size[targetAxis] + distance * 2 * resizePolarity(target.size[targetAxis]);
               size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
               position[targetAxis] = target.position[targetAxis] - (size[targetAxis] - target.size[targetAxis]) / 2;
             }
           } else if (drag.kind === 'uniform') {
             const distance = snapValue(-dy * fallbackScale, event);
             for (let axis = 0; axis < 3; axis++) {
-              const proposed = target.size[axis] + distance;
+              const proposed = target.size[axis] + distance * resizePolarity(target.size[axis]);
               size[axis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
               position[axis] = target.position[axis] - (size[axis] - target.size[axis]) / 2;
             }
           } else if (drag.kind === 'plane') {
             drag.axisIndices.forEach((targetAxis, index) => {
-              const proposed = target.size[targetAxis] + planeDistances[index];
+              const polarity = resizePolarity(target.size[targetAxis]);
+              const proposed = target.size[targetAxis] + planeDistances[index] * polarity * (event.altKey ? 2 : 1);
               size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
-              if ((drag.axisSigns[index] || 1) < 0) position[targetAxis] = target.position[targetAxis] - (size[targetAxis] - target.size[targetAxis]);
+              const anchorOffset = event.altKey ? .5 : Number((drag.axisSigns[index] || 1) * polarity < 0);
+              position[targetAxis] -= (size[targetAxis] - target.size[targetAxis]) * anchorOffset;
             });
           } else {
             const targetAxis = drag.axis ? drag.axisIndex : 0;
             const requestedChange = drag.axis ? snapValue(axisDelta, event) : snapValue(dx * fallbackScale, event);
-            const proposed = target.size[targetAxis] + requestedChange;
+            const polarity = resizePolarity(target.size[targetAxis]);
+            const proposed = target.size[targetAxis] + requestedChange * polarity * (event.altKey ? 2 : 1);
             size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
-            if (drag.axis && drag.sign < 0) position[targetAxis] = target.position[targetAxis] - (size[targetAxis] - target.size[targetAxis]);
+            const anchorOffset = event.altKey ? .5 : Number(drag.axis && drag.sign * polarity < 0);
+            position[targetAxis] -= (size[targetAxis] - target.size[targetAxis]) * anchorOffset;
           }
           targetItem.position = position;
           targetItem.size = size;
@@ -988,7 +1007,6 @@ export function createTransformInteraction({
           else targetItem.parameters.radius = Math.max(0, snapShapeDimension(targetItem, 'radius', target.radius + (axisDelta ?? dx * fallbackScale), event));
         }
       }
-      drag.tooltipText = drag.kind === 'uniform' ? `等距縮放 ${drag.targets.length} 項` : `縮放 ${drag.targets.length} 項`;
       return;
     }
     if (drag.tool === 'resize') {
@@ -998,43 +1016,46 @@ export function createTransformInteraction({
           const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
           const position = [...drag.position];
           for (const targetAxis of drag.axisIndices) {
-            const proposed = drag.size[targetAxis] + distance * 2;
+            const proposed = drag.size[targetAxis] + distance * 2 * resizePolarity(drag.size[targetAxis]);
             size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
             const appliedChange = size[targetAxis] - drag.size[targetAxis];
             position[targetAxis] = drag.position[targetAxis] - appliedChange / 2;
           }
           item.position = position;
-          drag.tooltipText = `平面等距 ${drag.axisIndices.map(index => `${'XYZ'[index]} ${formatNumber(size[index])}`).join(' / ')} px`;
         } else if (drag.kind === 'uniform') {
           const distance = snapValue(-dy * fallbackScale, event);
           const changes = [];
           for (let axis = 0; axis < 3; axis++) {
-            const proposed = drag.size[axis] + distance;
+            const proposed = drag.size[axis] + distance * resizePolarity(drag.size[axis]);
             size[axis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
             changes[axis] = size[axis] - drag.size[axis];
           }
           item.position = drag.position.map((value, axis) => value - changes[axis] / 2);
-          drag.tooltipText = `等距尺寸 ${size.map(formatNumber).join(' × ')} px`;
         } else if (drag.kind === 'plane') {
           const distances = getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event));
           let position = [...drag.position];
           drag.planeAxes.forEach((planeAxis, index) => {
             const targetAxis = planeAxis.index;
-            const proposed = drag.size[targetAxis] + distances[index];
+            const polarity = resizePolarity(drag.size[targetAxis]);
+            const proposed = drag.size[targetAxis] + distances[index] * polarity * (event.altKey ? 2 : 1);
             size[targetAxis] = state.allowNegativeSize ? proposed : Math.max(0, proposed);
             const appliedChange = size[targetAxis] - drag.size[targetAxis];
-            if (planeAxis.sign < 0) position = position.map((value, component) => value + planeAxis.storedAxis[component] * appliedChange);
+            if (event.altKey) position[targetAxis] -= appliedChange / 2;
+            else if (planeAxis.sign * polarity < 0) position = position.map((value, component) =>
+              value + planeAxis.storedAxis[component] * appliedChange * polarity);
           });
           item.position = position;
-          drag.tooltipText = `尺寸 ${drag.axisIndices.map(index => `${'XYZ'[index]} ${formatNumber(size[index])}`).join(' / ')} px`;
         } else {
           const targetAxis = drag.axis ? drag.axisIndex : 0;
           const requestedChange = drag.axis ? snapValue(axisDelta, event) : snapValue(dx * fallbackScale, event);
-          const proposedSize = drag.size[targetAxis] + requestedChange;
+          const polarity = resizePolarity(drag.size[targetAxis]);
+          const proposedSize = drag.size[targetAxis] + requestedChange * polarity * (event.altKey ? 2 : 1);
           size[targetAxis] = state.allowNegativeSize ? proposedSize : Math.max(0, proposedSize);
           const appliedChange = size[targetAxis] - drag.size[targetAxis];
-          if (drag.axis && drag.sign < 0) item.position = drag.position.map((value, component) => value + drag.storedAxis[component] * appliedChange);
-          drag.tooltipText = `尺寸 ${'XYZ'[targetAxis]} ${formatNumber(size[targetAxis])} px`;
+          item.position = drag.position.map((value, component) => {
+            if (event.altKey) return component === targetAxis ? value - appliedChange / 2 : value;
+            return drag.axis && drag.sign * polarity < 0 ? value + drag.storedAxis[component] * appliedChange * polarity : value;
+          });
         }
         item.size = size;
       }
@@ -1042,9 +1063,8 @@ export function createTransformInteraction({
         const dimensionDistances = drag.kind === 'plane'
           ? getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event)) : [];
         if (resizeShapeDimensions(item, drag.dimensionValues, drag, dx, dy, axisDelta,
-          dimensionDistances, event, fallbackScale)) {
-          drag.tooltipText = `尺寸 ${shapeDimensionKeys(item).map(key => formatNumber(item.parameters[key])).join(' × ')} px`;
-        } else if (item.shapeType !== 'polygon_prism') {
+          dimensionDistances, event, fallbackScale)) return;
+        if (item.shapeType !== 'polygon_prism') {
           const distances = drag.kind === 'plane' ? getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event)) : [];
           const distance = drag.kind === 'uniform'
             ? snapValue(-dy * fallbackScale, event) / 2
@@ -1054,17 +1074,14 @@ export function createTransformInteraction({
                 ? distances.reduce((sum, value) => sum + value, 0) / Math.max(1, distances.length)
                 : axisDelta ?? dx * fallbackScale;
           item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + distance, event));
-          drag.tooltipText = `半徑 ${formatNumber(item.parameters.radius)} / 邊長 ${formatNumber(polyhedronEdgeLength(item, item.parameters.radius))} px`;
         } else if (drag.kind === 'plane-uniform') {
           const distance = snapValue(getPlaneUniformDistance(drag, dx, dy), event);
           if (drag.axisIndices.includes(1)) item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + distance * 2, event));
           if (drag.axisIndices.some(index => index !== 1)) item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + distance, event));
-          drag.tooltipText = `平面等距 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
         } else if (drag.kind === 'uniform') {
           const distance = snapValue(-dy * fallbackScale, event);
           item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + distance / 2, event));
           item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + distance, event));
-          drag.tooltipText = `等距尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
         } else if (drag.kind === 'plane') {
           const distances = getPlaneDragDistances(drag, event, dx, dy).map(value => snapValue(value, event));
           const radialChanges = [];
@@ -1073,22 +1090,21 @@ export function createTransformInteraction({
             else radialChanges.push(distances[index]);
           });
           if (radialChanges.length) item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + radialChanges.reduce((sum, value) => sum + value, 0) / radialChanges.length, event));
-          drag.tooltipText = `尺寸 半徑 ${formatNumber(item.parameters.radius)} / 高度 ${formatNumber(item.parameters.height)} px`;
         } else {
           if (drag.axisIndex === 1) item.parameters.height = Math.max(0, snapShapeDimension(item, 'height', drag.height + axisDelta, event));
           else item.parameters.radius = Math.max(0, snapShapeDimension(item, 'radius', drag.radius + (axisDelta ?? dx * fallbackScale), event));
-          drag.tooltipText = `${drag.axisIndex === 1 ? '高度' : '半徑'} ${formatNumber(drag.axisIndex === 1 ? item.parameters.height : item.parameters.radius)} px`;
         }
       }
     }
     if (drag.tool === 'rotate' && (drag.targets.length > 1 || drag.batchPreview)) {
       const angleStep = getAngleSnapStep(event);
       const angle = drag.axis ? axisDelta : (dx - dy) * .4 * rotationDragSensitivity;
-      const snappedDelta = snapAngle(angle, angleStep);
-      const commonAxis = drag.axis
+      const snappedDelta = snapAngle(angle, angleStep) * rotationParity(drag);
+      drag.feedbackDelta = snappedDelta * rotationParity(drag);
+      const commonAxis = sourceVector(drag.generatedFrame, drag.axis
         ? drag.axis.vector.map(value => value * drag.sign)
-        : [0, 1, 0];
-      const commonPivot = drag.selectionContext.pivot || drag.selectionContext.center || state.gizmoOrigin;
+        : [0, 1, 0]);
+      const commonPivot = drag.selectionContext.pivot || drag.selectionContext.center || sourcePoint(drag.generatedFrame, state.gizmoOrigin);
       if (drag.batchPreview) {
         drag.previewCommit = {
           type: 'rotate', axis: [...commonAxis], pivot: [...commonPivot], degrees: snappedDelta,
@@ -1116,7 +1132,6 @@ export function createTransformInteraction({
           euler: separate && drag.rotationMode === 'euler' && drag.kind === 'rotate'
         });
       }
-      drag.tooltipText = `角度 ${formatSigned(snappedDelta)}°`;
       return;
     }
     if (drag.tool === 'rotate') {
@@ -1128,15 +1143,16 @@ export function createTransformInteraction({
         && drag.axisIndex === 2;
       if (editsCurveRoll) {
         const snappedDelta = snapAngle(angle, angleStep);
-        drag.curveNodeContext.node.roll = drag.nodeRoll + snappedDelta;
-        drag.tooltipText = `滾動角 ${formatSigned(drag.curveNodeContext.node.roll)}°`;
+        drag.feedbackDelta = snappedDelta;
+        drag.curveNodeContext.node.roll = drag.nodeRoll + snappedDelta * rotationParity(drag);
         return;
       }
       if (drag.curveNodeContext?.node.autoTangent) {
         bakeCurveNodeTangent(drag.curveNodeContext.curve, drag.curveNodeContext.index);
       }
       if (drag.axis) {
-        const snappedDelta = snapAngle(angle, angleStep);
+        const snappedDelta = snapAngle(angle, angleStep) * rotationParity(drag);
+        drag.feedbackDelta = snappedDelta * rotationParity(drag);
         if (drag.rotationMode === 'euler' && drag.kind === 'rotate') {
           const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || item;
           target.rotation = [...drag.rotation];
@@ -1154,7 +1170,6 @@ export function createTransformInteraction({
           drag.curveNodeContext.node.rotation[2] = 0;
         }
         if (drag.curveNodeContext) drag.curveNodeContext.node.autoTangent = false;
-        drag.tooltipText = `角度 ${formatSigned(snappedDelta)}°`;
       } else {
         const target = drag.modifierAnchorContext?.modifier.anchor || drag.curveNodeContext?.node || item;
         target.rotation = [snapAngle(drag.rotation[0] - dy * .4 * rotationDragSensitivity, angleStep), snapAngle(drag.rotation[1] + dx * .4 * rotationDragSensitivity, angleStep), drag.rotation[2]];
@@ -1163,7 +1178,7 @@ export function createTransformInteraction({
           target.rotation[2] = 0;
         }
         if (drag.curveNodeContext) drag.curveNodeContext.node.autoTangent = false;
-        drag.tooltipText = `角度 ${formatSigned(Math.hypot(dx, dy) * .4 * rotationDragSensitivity)}°`;
+        drag.feedbackDelta = snapAngle(signedDragDistance([dx, -dy]) * .4 * rotationDragSensitivity, angleStep);
       }
     }
   }
@@ -1172,7 +1187,10 @@ export function createTransformInteraction({
     const tooltip = $('#transformTooltip');
     const viewportRect = $('#viewport').getBoundingClientRect();
     tooltip.textContent = drag.tooltipText || '';
-    tooltip.style.left = `${Math.max(8, Math.min(viewportRect.width - 150, event.clientX - viewportRect.left + 14))}px`;
+    const pointerX = event.clientX - viewportRect.left;
+    const rightSide = pointerX > viewportRect.width / 2;
+    tooltip.style.left = rightSide ? 'auto' : `${Math.max(8, pointerX + 14)}px`;
+    tooltip.style.right = rightSide ? `${Math.max(8, viewportRect.width - pointerX + 14)}px` : 'auto';
     tooltip.style.top = `${Math.max(28, event.clientY - viewportRect.top - 10)}px`;
     tooltip.hidden = !drag.tooltipText;
   }

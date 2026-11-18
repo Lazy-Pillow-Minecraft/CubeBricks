@@ -1,0 +1,118 @@
+/* Independent block themes share their palette's light/dark colors. Scope
+   the chrome only: model guides, UV outlines and picker markers keep theirs. */
+:root[data-theme-style="blocks"] {
+  --block-hover: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+  --block-selected: color-mix(in srgb, var(--accent) 24%, var(--panel-2));
+}
+
+:root[data-theme-style="blocks"] :is(
+  .dock-zone, .dock-panel, .panel-section, .panel-drag-handle, .viewport-toolbar,
+  .settings-layout, .settings-nav, .theme-grid label, .project-tab, .texture-item,
+  .texture-layer-row, .texture-frame-row, .field-group, .modifier-settings, .modifier-page,
+  .tool-options, .paint-tool-options, .color-picker-modes, .uv-face-actions, .uv-preview-options,
+  .toolbar-lane, .toolbar-segment, .toolbar-option
+) {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme-style="blocks"] :is(.dock-zone, .dock-panel, .panel-section) {
+  border-radius: 0;
+}
+:root[data-theme-style="blocks"] :is(.panel-drag-handle, .viewport-toolbar) {
+  background: var(--panel-2);
+}
+:root[data-theme-style="blocks"] :is(.settings-layout, .settings-nav) {
+  background: var(--bg);
+}
+:root[data-theme-style="blocks"] .settings-layout { border-radius: 3px; }
+
+:root[data-theme-style="blocks"] :is(
+  .theme-dialog, .dock-panel.detached, .context-menu, .context-menu-submenu-panel,
+  .render-mode-popover, .paint-tool-menu, .paint-mode-picker
+) {
+  border-color: transparent;
+  border-radius: 3px;
+  background: var(--panel-2);
+  box-shadow: 0 8px 24px rgba(0,0,0,.16);
+}
+
+:root[data-theme-style="blocks"] :is(
+  .theme-grid label, .field-group, .modifier-settings, .copy-node-card,
+  .texture-item, .texture-layer-row, .texture-frame-row
+) {
+  border-color: transparent;
+  border-radius: 3px;
+  background: var(--panel-2);
+}
+:root[data-theme-style="blocks"] :is(.theme-grid label, .modifier-settings) {
+  background: var(--panel);
+}
+
+:root[data-theme-style="blocks"] :is(
+  button, select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])
+) {
+  border-color: transparent;
+  border-radius: 3px;
+  box-shadow: none;
+}
+:root[data-theme-style="blocks"] :is(
+  select, .config-number-label input, .axis-inputs input, .texture-uv-fields input,
+  .color-picker-values input, .color-picker-footer input, .shortcut-input
+) {
+  background: var(--panel-3);
+}
+:root[data-theme-style="blocks"] :is(.segmented, .color-picker-modes, .paint-tool-options, .toolbar-lane, .toolbar-segment) {
+  border-radius: 3px;
+  background: var(--panel-2);
+}
+:root[data-theme-style="blocks"] :is(.settings-nav button, .preset-row button) {
+  background: var(--panel);
+}
+
+:root[data-theme-style="blocks"] :is(
+  .texture-item:hover, .texture-layer-row:hover, .texture-frame-row:hover,
+  .project-tab:hover, .settings-nav button:hover, .preset-row button:hover,
+  .context-menu button:hover, .context-menu button:focus-visible, .tool:hover
+) {
+  background: var(--block-hover);
+  color: var(--text);
+}
+:root[data-theme-style="blocks"] :is(
+  .texture-item.active, .texture-layer-row.active, .texture-layer-row.is-group.active,
+  .texture-frame-row.active, .project-tab.active
+) {
+  background: var(--block-selected);
+  color: var(--text);
+}
+:root[data-theme-style="blocks"] .outliner-item { border-radius: 3px; }
+:root[data-theme-style="blocks"] .outliner-item:hover { --row-highlight: var(--block-hover); }
+:root[data-theme-style="blocks"] .outliner-item.active { --row-highlight: var(--block-selected); }
+
+:root[data-theme-style="blocks"] :is(
+  .tool.active, .mode-tab.active, .segmented button.active, .settings-nav button.active,
+  .preset-row button[aria-pressed="true"], .color-picker-modes button.active, .primary-button
+) {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+:root[data-theme-style="blocks"] .mode-tab.active span { color: inherit; }
+:root[data-theme-style="blocks"] .context-menu-separator {
+  margin: 6px 0;
+  height: 4px;
+  background: var(--panel);
+}
+:root[data-theme-style="blocks"] input[type="checkbox"] {
+  border-color: transparent;
+  border-radius: 2px;
+  background: var(--panel-3);
+  box-shadow: none;
+}
+:root[data-theme-style="blocks"] input[type="checkbox"]:checked { background: var(--accent); }
+:root[data-theme-style="blocks"] :is(
+  button, select, input, [role="button"], .color-picker-surface
+):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

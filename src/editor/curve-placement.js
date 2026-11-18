@@ -2,6 +2,7 @@ import { CurveNode } from '../model.js';
 import { applyGroupTransforms } from '../common/core/geometry-utils.js';
 import { rotateVector, inverseRotateVector } from '../utils/math/rotation.js';
 import { normalize3 } from '../utils/math/vector3.js';
+import { proceduralMirrorPoint } from '../common/core/procedural-mirror.js';
 
 export function createCurvePlacementController({
   state, sceneCanvas, sceneRenderer, intersectRayPlane, snapValue,
@@ -33,7 +34,7 @@ export function createCurvePlacementController({
 
   function worldPointToCurveLocal(curve, worldPoint) {
     const parentPoint = worldPointToParentLocal(curve, worldPoint);
-    return inverseRotateVector(parentPoint.map((value, axis) => value - curve.origin[axis]), curve.rotation || [0, 0, 0]);
+    return proceduralMirrorPoint(curve, inverseRotateVector(parentPoint.map((value, axis) => value - curve.origin[axis]), curve.rotation || [0, 0, 0]));
   }
 
   function getCurveWorldPlane(curve, planePoint = null) {

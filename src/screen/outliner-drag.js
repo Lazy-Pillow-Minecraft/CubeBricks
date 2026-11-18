@@ -71,10 +71,10 @@ export function createOutlinerDragController({
     let destinationParent = null;
     let destination;
     let insertionIndex;
-    if (target?.type === 'group' && zone === 'inside') {
+    if (target?.type === 'group' && (zone === 'inside' || zone === 'inside-first')) {
       destinationParent = target;
       destination = target.children;
-      insertionIndex = destination.length;
+      insertionIndex = zone === 'inside-first' ? 0 : destination.length;
     } else if (target) {
       const container = nodeContainer(target.uid);
       destinationParent = container.parent;

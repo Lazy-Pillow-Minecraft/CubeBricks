@@ -2,6 +2,7 @@ import { ColorSpaceCurveViewport, changeColorSpaceMode, colorAtPosition, colorSp
 import { insetControlRatio, insetControlPosition } from '../color-picker/math.js';
 import { pickerSession } from '../color-picker/session.js';
 import { COLOR_MAP_MAX_BYTES, decodeColorMap, decodePaletteFile, encodeColorMap, encodePaletteFile } from './color-map-file.js';
+import { movePaletteColor } from './drag-colors.js';
 
 export function createPaletteController({ state, $, $$, clamp, escapeHtml, escapeAttribute, hexToRgb,
   snapshot, renderPaintGradientPreview, setPaintColor, updatePaintColorPickerVisual,
@@ -483,7 +484,6 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
       selectedPaletteRowId = paletteRows[0]?.id ?? null;
       selectedPaletteColorIndex = null;
     }
-    $('#paletteSummary').textContent = `${paletteRows.length} 行 · ${paletteCompact ? '縮略選色' : '每行獨立設定'}`;
     $('#paletteCompactToggle').setAttribute('aria-pressed', String(paletteCompact));
     rows.classList.toggle('palette-compact', paletteCompact);
     paletteRows.forEach(row => {
@@ -536,26 +536,19 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
     $$('.swatch-item').forEach(item => {
       item.addEventListener('dragstart', event => {
         const row = paletteRows.find(entry => entry.id === item.dataset.paletteRowId);
-        if (!row || row.gradient) return event.preventDefault();
+        if (paletteCompact || !row || row.gradient || row.colorSpaceGradient) return event.preventDefault();
         draggedPaletteColor = { rowId: row.id, index: Number(item.dataset.paletteColorIndex) };
         event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('application/x-cubebricks-palette-color', JSON.stringify(draggedPaletteColor));
       });
       item.addEventListener('dragover', event => { if (draggedPaletteColor) event.preventDefault(); });
       item.addEventListener('drop', event => {
         if (!draggedPaletteColor) return;
         event.preventDefault();
-        const source = paletteRows.find(entry => entry.id === draggedPaletteColor.rowId);
-        const target = paletteRows.find(entry => entry.id === item.dataset.paletteRowId);
-        if (!source || !target || target.gradient) return;
-        const [color] = source.colors.splice(draggedPaletteColor.index, 1);
-        let targetIndex = Number(item.dataset.paletteColorIndex);
-        if (source === target && draggedPaletteColor.index < targetIndex) targetIndex--;
-        target.colors.splice(targetIndex, 0, color);
-        selectedPaletteRowId = target.id;
-        selectedPaletteColorIndex = targetIndex;
-        draggedPaletteColor = null;
-        if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
-        renderPalette();
+        event.stopPropagation();
+        const bounds = item.getBoundingClientRect();
+        const index = Number(item.dataset.paletteColorIndex) + Number(event.clientX >= bounds.left + bounds.width / 2);
+        dropPaletteColor(item.dataset.paletteRowId, index);
       });
       item.addEventListener('dragend', () => { draggedPaletteColor = null; });
     });
@@ -563,16 +556,10 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
       rowNode.addEventListener('dragover', event => { if (draggedPaletteColor) event.preventDefault(); });
       rowNode.addEventListener('drop', event => {
         if (!draggedPaletteColor || event.target.closest('.swatch-item')) return;
-        const source = paletteRows.find(entry => entry.id === draggedPaletteColor.rowId);
+        event.preventDefault();
+        event.stopPropagation();
         const target = paletteRows.find(entry => entry.id === rowNode.dataset.paletteRow);
-        if (!source || !target || target.gradient) return;
-        const [color] = source.colors.splice(draggedPaletteColor.index, 1);
-        target.colors.push(color);
-        selectedPaletteRowId = target.id;
-        selectedPaletteColorIndex = target.colors.length - 1;
-        draggedPaletteColor = null;
-        if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
-        renderPalette();
+        dropPaletteColor(target?.id, target?.colors.length);
       });
     });
     $$('[data-gradient-row]').forEach(toggle => toggle.addEventListener('change', () => {
@@ -628,6 +615,16 @@ export function createPaletteController({ state, $, $$, clamp, escapeHtml, escap
     if (restoreFocus) rows.focus({ preventScroll: true });
     if (state.tool === 'gradient' && state.paintGradientPalette) renderPaintGradientPreview();
     savePaletteRows();
+  }
+
+  function dropPaletteColor(rowId, index) {
+    const result = paletteCompact ? null : movePaletteColor(paletteRows, draggedPaletteColor, rowId, index);
+    draggedPaletteColor = null;
+    if (!result) return;
+    selectedPaletteRowId = result.row.id;
+    selectedPaletteColorIndex = result.index;
+    if (state.mode === 'paint') syncPaletteSelectionToPaintColor();
+    renderPalette();
   }
 
   function addPaletteRow() {

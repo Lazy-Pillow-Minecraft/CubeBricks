@@ -11,6 +11,24 @@ const content = x => JSON.stringify({
   groups: [], textures: [{ uuid: 'texture_a', source: encodePng({ width: 1, height: 1, rgba: Buffer.from([x, 10, 20, 255]) }) }], outliner: ['cube_a']
 });
 
+test('a damaged non-current branch stays visible without breaking the healthy branch', async t => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.history-damaged-branch-test-'));
+  t.after(async () => fs.rm(root, { recursive: true, force: true }));
+  const journal = await new ProjectJournal(root).initialize(content(0));
+  await journal.commit(content(10), 'core.element.move');
+  await journal.commit(content(20), 'core.element.move');
+  await journal.checkout(2);
+  await journal.commit(content(30), 'core.element.move');
+  const damaged = journal.file('transactions/3.json');
+  await fs.writeFile(damaged, '{broken');
+  const graph = await journal.historyGraph();
+  assert.deepEqual(graph.nodes.map(node => [node.sequence, node.damaged]),
+    [[1, false], [2, false], [3, true], [4, false]]);
+  assert.equal(JSON.parse(await journal.content()).elements[0].position[0], 30);
+  assert.equal(await fs.readFile(damaged, 'utf8'), '{broken', 'viewing history must not alter the damaged file');
+  await assert.rejects(journal.pruneHistoryBranch(3), 'destructive maintenance remains strict');
+});
+
 test('branch pruning preserves siblings, restores an affected current state, and cannot resurrect deleted history', async t => {
   const root = await fs.mkdtemp(path.join(__dirname, '..', '.history-tree-test-'));
   t.after(async () => {

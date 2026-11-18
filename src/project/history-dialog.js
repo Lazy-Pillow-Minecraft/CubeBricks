@@ -20,6 +20,7 @@ export function createProjectHistoryDialog({
   const dialog = $('#projectHistoryDialog'), svg = $('#projectHistoryGraph'), viewport = $('#projectHistoryViewport'), status = $('#projectHistoryStatus');
   const ns = 'http://www.w3.org/2000/svg';
   let graph = null, layout = null, tabId = null, hover = null, revision = 0, frame = null, busy = false, drag = null;
+  let refreshPromise = null, refreshAgain = false;
   let zoom = 1, center = [0, 0], selectedSequence = null, viewFrame = null;
   const elements = new Map(), decorations = [];
   const make = (tag, attributes) => {
@@ -29,7 +30,7 @@ export function createProjectHistoryDialog({
   };
   function tooltip(node) {
     const label = operationDefinition(node.operationId)?.label || node.label || node.operationId;
-    return [node.mark?.name, `#${node.sequence}`, translateUiText(label), node.timestamp ? new Date(node.timestamp).toLocaleString() : '',
+    return [node.mark?.name, `#${node.sequence}`, node.damaged ? translateUiText('記錄損壞') : translateUiText(label), node.timestamp ? new Date(node.timestamp).toLocaleString() : '',
     node.current ? translateUiText('目前狀態') : ''].filter(Boolean).join(' · ');
   }
   function setHover(node) {
@@ -105,7 +106,7 @@ export function createProjectHistoryDialog({
     }
     for (const node of [...layout.points].sort((a, b) => Number(a.current) - Number(b.current))) {
       const group = make('g', {
-        'data-history-node': node.sequence, class: `history-tree-node${node.tip ? ' is-tip' : ''}${node.current ? ' is-current' : ''}${node.sequence === selectedSequence ? ' is-selected' : ''}${node.mark ? ' is-marked' : ''}`,
+        'data-history-node': node.sequence, class: `history-tree-node${node.tip ? ' is-tip' : ''}${node.current ? ' is-current' : ''}${node.sequence === selectedSequence ? ' is-selected' : ''}${node.mark ? ' is-marked' : ''}${node.damaged ? ' is-damaged' : ''}`,
         transform: `translate(${node.x} ${node.y})`
       });
       group.append(make('circle', { class: 'history-node-marker', r: 3 }), make('circle', { class: 'history-node-hit', r: 9 }));
@@ -142,25 +143,39 @@ export function createProjectHistoryDialog({
   }
   async function refresh({ force = false } = {}) {
     if (!dialog.open || busy && !force) return;
-    const generation = ++revision;
-    status.hidden = false;
-    status.textContent = '正在讀取歷史記錄';
-    try {
-      const result = await journalController.getProjectHistoryGraph();
-      if (!dialog.open || generation !== revision) return;
-      graph = result;
-      if (!graph) {
-        svg.replaceChildren();
-        status.textContent = '歷史記錄僅在桌面版可用';
-        return;
-      }
-      draw();
-      status.hidden = true;
-    } catch (error) {
-      if (generation === revision) {
-        status.textContent = '歷史記錄讀取失敗';
-        toast(error.message);
-      }
+    if (refreshPromise) {
+      refreshAgain = true;
+      return refreshPromise;
+    }
+    const generation = revision;
+    refreshPromise = (async () => {
+      do {
+        refreshAgain = false;
+        status.hidden = false;
+        status.textContent = '正在讀取歷史記錄';
+        try {
+          const result = await journalController.getProjectHistoryGraph();
+          if (!dialog.open || generation !== revision) break;
+          graph = result;
+          if (!graph) {
+            svg.replaceChildren();
+            status.textContent = '歷史記錄僅在桌面版可用';
+            break;
+          }
+          draw();
+          status.hidden = true;
+        } catch (error) {
+          if (dialog.open && generation === revision) {
+            status.textContent = '歷史記錄讀取失敗';
+            toast(error.message);
+          }
+        }
+      } while (refreshAgain && dialog.open && generation === revision);
+    })();
+    try { await refreshPromise; }
+    finally {
+      refreshPromise = null;
+      if (refreshAgain && dialog.open) void refresh({ force: true });
     }
   }
   function scheduleRefresh() {
@@ -237,7 +252,7 @@ export function createProjectHistoryDialog({
       source: elements.get(node.sequence), items: [
         {
           label: '切換到此歷史狀態',
-          disabled: node.current,
+          disabled: node.current || node.damaged,
           action: () => run(() => journalController.checkoutProjectHistory(node.sequence))
         },
         {
@@ -293,6 +308,7 @@ export function createProjectHistoryDialog({
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     revision++;
+    refreshAgain = false;
     closeContextMenu();
     setHover(null);
     stopPan();
@@ -309,6 +325,7 @@ export function createProjectHistoryDialog({
     if (state.projectHomeActive) return;
     closeContextMenu();
     tabId = projectTabsController.activeId;
+    revision++;
     zoom = 1;
     center = [0, 0];
     selectedSequence = null;

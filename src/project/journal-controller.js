@@ -6,7 +6,9 @@ import { PROJECT_SESSION_KEYS } from './tabs-controller.js';
 import { ConfigKey, configRegistry } from '../common/config/app-config.js';
 import { performanceMonitor } from '../utils/performance-monitor.js';
 import { RecentModelHistory, historySnapshot } from './recent-model-history.js';
-import { pendingPaintCommit } from '../paint/commit-order.js';
+import { pendingPaintCommit, consumePaintCommitError } from '../paint/commit-order.js';
+import { claimNumericSnapshot, isNumericEditActive } from '../common/core/numeric-edit-session.js';
+import { captureResizeUvState, restoreResizeUvState } from '../texture/resize-uv.js';
 
 export function createProjectJournalController({ state, projectTabsController, textureCanvas,
   isBezierElement, textureUid, clearSubdivisionSession, renderAll, toast,
@@ -56,6 +58,7 @@ export function createProjectJournalController({ state, projectTabsController, t
   function snapshot(operationId = 'core.element.property') {
     if (state.projectHomeActive) return;
     requireOperation(operationId);
+    if (!claimNumericSnapshot(state.project, operationId)) return;
     const tab = projectTabById(projectTabsController.activeId);
     if (tab) tab.journalEditRevision = (tab.journalEditRevision || 0) + 1;
     if (tab?.journalPending) void flushProjectJournal(tab);
@@ -143,6 +146,7 @@ export function createProjectJournalController({ state, projectTabsController, t
           animation: asset.animation ? structuredClone(asset.animation) : null,
           width: asset.uvWidth || textureCanvas.width,
           height: asset.uvHeight || textureCanvas.height,
+          ...(entry.textureResizeUvs ? { textureResizeUvs: captureResizeUvState(state.project, entry.textureResizeUvs) } : {}),
           group: entry.group || null
         });
         asset.source = entry.source;
@@ -151,6 +155,7 @@ export function createProjectJournalController({ state, projectTabsController, t
         if (Object.hasOwn(entry, 'animation')) asset.animation = entry.animation ? structuredClone(entry.animation) : null;
         asset.uvWidth = entry.width;
         asset.uvHeight = entry.height;
+        if (entry.textureResizeUvs) restoreResizeUvState(state.project, entry.textureResizeUvs);
         activeAsset ||= asset;
       }
       while (targetStack.length > 60) targetStack.shift();
@@ -163,10 +168,27 @@ export function createProjectJournalController({ state, projectTabsController, t
       // the previous GPU copy. UV/geometry has not changed, so the existing
       // mesh buffers stay valid; rebuilding them made paint undo visibly stall.
       rebuildTextureAtlas();
+      if (entries.some(entry => entry.textureResizeUvs)) renderAll('all');
       markDirty();
       return true;
     }
     return false;
+  }
+
+  async function recoverFailedJournalWrite(tab) {
+    const failed = tab.journalFailedWrites;
+    if (!failed?.length) return null;
+    let result;
+    while (failed.length) {
+      result = await failed[0]();
+      failed.shift();
+    }
+    if (tab.journalWriteFailureBlocked) {
+      tab.journalWriteFailureBlocked = false;
+      tab.journalWriteBlocked = false;
+    }
+    tab.journalRecoveryScheduled = false;
+    return result;
   }
 
   async function navigateProjectJournal(direction, request = {}) {
@@ -176,6 +198,11 @@ export function createProjectJournalController({ state, projectTabsController, t
     if (paintCommit) {
       await paintCommit;
       if (tab.id !== projectTabsController.activeId) return true;
+    }
+    const paintError = consumePaintCommitError(state.project);
+    if (paintError) {
+      toast(`繪畫提交失敗：${paintError.message}`);
+      return true;
     }
     const requestedAt = performanceMonitor.enabled ? performance.now() : 0;
     // Reserve a place in the same queue as commits before yielding. Rapid undo /
@@ -233,6 +260,7 @@ export function createProjectJournalController({ state, projectTabsController, t
       if (profile) performanceMonitor.record('journal.queue', performance.now() - queuedAt);
       const waitStart = profile ? performance.now() : 0;
       await tab.journalReady;
+      if (tab.journalFailedWrites?.length) await recoverFailedJournalWrite(tab);
       const localError = await localResult;
       if (localError) throw localError;
       if (preview && tab.journalWriteBlocked) throw new Error('工作記錄寫入失敗，已停止後續切換');
@@ -311,7 +339,10 @@ export function createProjectJournalController({ state, projectTabsController, t
     try {
       await navigation;
     } catch (error) {
-      if (diskCheckoutApplied || preview) tab.journalWriteBlocked = true;
+      if (diskCheckoutApplied || preview) {
+        tab.journalWriteBlocked = true;
+        tab.journalWriteFailureBlocked = false;
+      }
       tab.recentModelHistory?.reset(null, null);
       toast(`操作記錄切換失敗：${error.message}`);
     } finally {
@@ -347,6 +378,7 @@ export function createProjectJournalController({ state, projectTabsController, t
     void flushProjectJournal(tab);
     const read = (tab.journalWrites || Promise.resolve()).catch(() => {}).then(async () => {
       await tab.journalReady;
+      if (tab.journalFailedWrites?.length) await recoverFailedJournalWrite(tab);
       if (tab.journalPending) throw Error('目前變更尚未寫入工作記錄');
       const graph = await window.cubeBricksDesktop.projectHistoryGraph({ journalId: tab.journalId });
       tab.journalHead = graph.current;
@@ -472,7 +504,7 @@ export function createProjectJournalController({ state, projectTabsController, t
       journalTimers.delete(tab.id);
       performanceMonitor.mark('journal.autosaveWake');
       const editingDrag = state.dragging && !['pan', 'orbit', 'selection-box'].includes(state.dragging.type);
-      if (pendingPaintCommit(tab.session.project)) {
+      if (pendingPaintCommit(tab.session.project) || isNumericEditActive(tab.session.project)) {
         scheduleProjectJournal(tab);
         return;
       }
@@ -499,16 +531,25 @@ export function createProjectJournalController({ state, projectTabsController, t
   }
 
   async function flushProjectJournal(tab = projectTabById(projectTabsController.activeId)) {
-    if (!tab?.journalPending || !window.cubeBricksDesktop?.commitProjectJournal) return null;
+    if (!tab || !window.cubeBricksDesktop?.commitProjectJournal) return null;
+    if (!tab.journalPending && !tab.journalFailedWrites?.length) return null;
     clearTimeout(journalTimers.get(tab.id));
     journalTimers.delete(tab.id);
+    if (!tab.journalPending) {
+      tab.journalWrites = (tab.journalWrites || Promise.resolve()).catch(() => {}).then(() => recoverFailedJournalWrite(tab));
+      try { return await tab.journalWrites; }
+      catch (error) {
+        toast(`操作記錄恢復失敗：${error.message}`);
+        return null;
+      }
+    }
     if (tab.id === projectTabsController.activeId) syncActiveProjectTab();
     const operationId = requireOperation(tab.journalPending);
-    tab.journalPending = null;
-    tab.journalPendingGroup = null;
     const session = tab.session;
     const retention = session.project.historyLimit ?? configRegistry.get(ConfigKey.HISTORY_LIMIT);
     const ordinal = tab.journalCommitOrdinal = (tab.journalCommitOrdinal || 0) + 1;
+    const profile = performanceMonitor.enabled;
+    const captureStartedAt = profile ? performance.now() : 0;
     let modelSnapshot = tab.journalModelSnapshot;
     if (modelSnapshot?.project !== session.project || !PIXEL_HISTORY_OPS.has(operationId)) {
       const text = session.project.serialize();
@@ -527,18 +568,37 @@ export function createProjectJournalController({ state, projectTabsController, t
         || (Number.isInteger(entry.sequence) && Number.isInteger(tab.journalLatestSequence)
           && tab.journalLatestSequence - entry.sequence + ordinal - (tab.journalCommittedOrdinal || 0) <= retention)
     });
-    const textureSnapshot = serializableTextureAssets(assets);
+    if (profile) performanceMonitor.record('journal.captureSnapshot', performance.now() - captureStartedAt);
+    const requestId = crypto.randomUUID();
+    let payload;
+    tab.journalPending = null;
+    tab.journalPendingGroup = null;
     const write = async () => {
       await tab.journalReady;
-      if (tab.journalWriteBlocked) throw new Error('歷史指針未能安全恢復，請先另存目前模型並重新開啟');
-      const textures = await textureSnapshot;
-      const content = serializeCbmodel(textures, { ...modelSnapshot.data }, textureGroups, { snapshotOwned: true, compact: true });
-      const result = await window.cubeBricksDesktop.commitProjectJournal({
-        journalId: tab.journalId, content, operationId,
-        operationLabel: operationDefinition(operationId).label,
-        operationIndex: operationIndex(),
-        historyLimit: retention
-      });
+      if (tab.journalWriteBlocked && !tab.journalWriteFailureBlocked)
+        throw new Error('歷史指針未能安全恢復，請先另存目前模型並重新開啟');
+      if (!payload) {
+        const textures = await serializableTextureAssets(assets);
+        const serializeStartedAt = profile ? performance.now() : 0;
+        const content = serializeCbmodel(textures, { ...modelSnapshot.data }, textureGroups, { snapshotOwned: true, compact: true });
+        if (profile) performanceMonitor.record('journal.serializeSnapshot', performance.now() - serializeStartedAt);
+        payload = {
+          journalId: tab.journalId, content, operationId,
+          operationLabel: operationDefinition(operationId).label,
+          operationIndex: operationIndex(),
+          historyLimit: retention, requestId
+        };
+      }
+      let result;
+      // The journal verifies disk state before accepting the same request again.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          result = await window.cubeBricksDesktop.commitProjectJournal(payload);
+          break;
+        } catch (error) {
+          if (attempt) throw error;
+        }
+      }
       if (result?.sequence) {
         tab.journalHead = result.sequence;
         tab.journalLatestSequence = Math.max(tab.journalLatestSequence || 0, result.sequence);
@@ -550,13 +610,27 @@ export function createProjectJournalController({ state, projectTabsController, t
       if (result?.historyWarning) toast(`歷史裁剪未完成：${result.historyWarning}`);
       return result;
     };
-    tab.journalWrites = (tab.journalWrites || Promise.resolve()).catch(() => {}).then(write);
+    tab.journalWrites = (tab.journalWrites || Promise.resolve()).catch(() => {}).then(async () => {
+      try {
+        if (tab.journalFailedWrites?.length) await recoverFailedJournalWrite(tab);
+        return await write();
+      } catch (error) {
+        (tab.journalFailedWrites ||= []).push(write);
+        if (tab.journalPreviewCount && !tab.journalWriteBlocked) {
+          tab.journalWriteBlocked = true;
+          tab.journalWriteFailureBlocked = true;
+        }
+        throw error;
+      }
+    });
     try { return await tab.journalWrites; }
     catch (error) {
-      if (tab.journalPreviewCount) tab.journalWriteBlocked = true;
       tab.recentModelHistory?.reset(null, null);
-      tab.journalPending ||= operationId;
       toast(`操作記錄失敗：${error.message}`);
+      if (tab.journalFailedWrites?.length && !tab.journalWriteBlocked && !tab.journalRecoveryScheduled) {
+        tab.journalRecoveryScheduled = true;
+        setTimeout(() => { void flushProjectJournal(tab); }, 1200);
+      }
       return null;
     }
   }

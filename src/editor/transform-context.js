@@ -1,6 +1,7 @@
 import { applyGroupTransforms } from '../common/core/geometry-utils.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { rotateVector, inverseRotateVector } from '../utils/math/rotation.js';
+import { proceduralMirrorVector } from '../common/core/procedural-mirror.js';
 
 export function createTransformContext({
   state, $, $$, sceneRenderer, deepestCommonSelectionGroup,
@@ -245,7 +246,7 @@ export function createTransformContext({
           : context.node.rotation || [0, 0, 0];
         direction = rotateVector(direction, rotation);
       }
-      return normalize3(applyGroupTransforms(direction, chain));
+      return normalize3(applyGroupTransforms(proceduralMirrorVector(context.curve, direction), chain));
     });
   }
 

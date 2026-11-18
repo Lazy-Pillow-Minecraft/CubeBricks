@@ -13,7 +13,7 @@ export function createInspectorController({
   setTool, invalidateAllRenderGeometry, renderAll, updateToolVisibility, toast,
   openIconMarkup, escapeHtml, escapeAttribute, renderPaintColorPicker,
   polyhedronEdgeLength, formatNumber, freezeCubeUvs, openColorPickerPopup,
-  snapshot, markDirty, invalidateSelectionRenderGeometry, renderScene,
+  snapshot, markDirty, invalidateSelectionRenderGeometry, renderScene, renderOutliner,
   syncInspectorValues, translateModifierAnchors, setCurveHandle,
   bakeCurveNodeTangent, updateSelectionLabels, setMode, schedulePaintSymmetryBuild,
   deleteSelected, isUvCapable, centerSelectedPivots
@@ -29,7 +29,7 @@ export function createInspectorController({
   const { modifierVectorField, modifierPanelMarkup, operatorPanelMarkup, bindStackPanels } = createInspectorStackPanels({
     state, $, $$, sceneRenderer, round, openIconMarkup, escapeHtml,
     schedulePaintSymmetryBuild, snapshot, markDirty, renderInspector, renderScene,
-    updateSelectionLabels, toast, renderAll, setTool, syncInspectorValues, setMode
+    updateSelectionLabels, toast, renderAll, renderOutliner, setTool, syncInspectorValues, setMode
   });
 
   function inspectorBatchNodes() {
@@ -106,9 +106,7 @@ export function createInspectorController({
     $('#inspectorMetaStrip').hidden = false;
     const item = selected();
     if (!item) {
-      inspector.innerHTML = state.selectedGenerated
-        ? '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">已選中修改器生成結果；可作頂點捕捉參考，但不能直接編輯。請選擇來源物件或烘焙修改器。</p></div>'
-        : '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。</p></div>';
+      inspector.innerHTML = '<div class="field-section"><p style="color:var(--muted);font-size:.7rem">選擇一個 Cube、Shape、節點、貝塞爾、Locator 或組來編輯。</p></div>';
       return;
     }
     if (isBezierElement(item) && Number.isInteger(state.selectedCurveNodeIndex) && item.nodes[state.selectedCurveNodeIndex]) {
@@ -273,7 +271,7 @@ export function createInspectorController({
     const rules = formatRules(state.project);
     const step = field === 'size' && rules.integerCubeSize ? '1' : field === 'rotation' && rules.rotationStep ? String(rules.rotationStep) : '0.0001';
     const disabled = field === 'rotation' && rules.moddedEntity && nodes[0]?.type === 'cube' ? 'disabled title="Cube 不能旋轉；請旋轉其所屬的組"' : '';
-    return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="${step}" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} ${disabled} /></label>`).join('')}${field === 'pivot' ? '<button type="button" class="pivot-center-field-button" data-action="centerPivot" title="將所選物件的樞軸點移到整體幾何中心">居中</button>' : ''}</div>`;
+    return `<div class="vector-field"><span>${label}</span>${displayed.map((value, index) => `<label class="number-wrap"><b>${'XYZ'[index]}</b><input type="number" step="${step}" data-vector="${field}" data-axis="${index}" ${numberInputAttributes(value)} ${disabled} /></label>`).join('')}${field === 'pivot' ? '<button type="button" class="pivot-center-field-button" data-action="centerPivot" title="將所選物件的樞軸點移到整體幾何中心"><i class="ui-mask-icon" style="--ui-icon:url(assets/ui-icons/center.svg)" aria-hidden="true"></i></button>' : ''}</div>`;
   }
 
   function shapeDimensionField(item, nodes) {
@@ -390,6 +388,7 @@ export function createInspectorController({
       });
     });
     $$('[data-vector]', inspector).forEach(input => {
+      input.dataset.numericLive = 'input';
       let snapshotTaken = false;
       let javaRotationGeometry = null;
       const apply = () => {
@@ -494,6 +493,7 @@ export function createInspectorController({
       });
     });
     $$('[data-parameter]', inspector).forEach(input => {
+      input.dataset.numericLive = 'input';
       let snapshotTaken = false;
       const apply = () => {
         const value = Number(input.value);
@@ -615,6 +615,7 @@ export function createInspectorController({
       renderAll('selection');
     }));
     $$('[data-curve-node-roll]', inspector).forEach(input => {
+      input.dataset.numericLive = 'input';
       let snapshotTaken = false;
       const apply = () => {
         const node = item.nodes?.[Number(input.dataset.curveNodeRoll)];
@@ -644,6 +645,7 @@ export function createInspectorController({
       renderAll('selection');
     }));
     $$('[data-curve-node-radius]', inspector).forEach(input => {
+      input.dataset.numericLive = 'input';
       let snapshotTaken = false;
       const apply = () => {
         const node = item.nodes?.[Number(input.dataset.curveNodeRadius)];

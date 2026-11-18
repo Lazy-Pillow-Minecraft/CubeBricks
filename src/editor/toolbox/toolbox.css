@@ -1,0 +1,18 @@
+.toolbox-options, .toolbox-category { display:flex; align-items:center; gap:4px; }
+.toolbox-options[hidden], .toolbox-category[hidden] { display:none; }
+.toolbox-picker { position:relative; }
+.toolbox-select { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:27px; padding:3px 7px; color:var(--text); background:var(--panel-2); border:1px solid var(--line-strong); border-radius:4px; font-size:.64rem; }
+.toolbox-select [data-toolbox-label] { display:flex; align-items:center; gap:5px; }
+.toolbox-select > b { color:var(--muted); font-weight:normal; }
+.toolbox-picker .paint-tool-menu { width:max-content; min-width:165px; }
+.toolbox-picker .paint-tool-menu button::before { content:none; }
+.toolbox-options .ui-mask-icon, .uv-face-actions .ui-mask-icon, .pivot-center-field-button .ui-mask-icon { width:18px; height:18px; }
+.toolbox-action { display:grid; place-items:center; width:29px; min-width:29px; height:27px; padding:3px; border:1px solid var(--line); border-radius:4px; background:var(--panel-2); color:var(--muted); }
+.toolbox-action:hover:not(:disabled) { background:rgba(var(--accent-rgb),.12); border-color:var(--accent); color:var(--text); }
+.toolbox-action:disabled, .uv-face-actions button:disabled { opacity:1; cursor:not-allowed; }
+.toolbox-caption { color:var(--muted); font-size:.62rem; padding-left:4px; white-space:nowrap; }
+.toolbox-clockwise { transform:scaleX(-1); }
+.pivot-center-field-button { display:grid; place-items:center; flex:0 0 27px; width:27px; min-width:27px; height:27px; padding:0; }
+.uv-face-actions button { color:var(--muted); }
+.uv-face-actions button:has(.ui-mask-icon) { display:grid; place-items:center; }
+.shape-create-menu [data-external-shape] > .ui-mask-icon { width:18px; height:18px; }

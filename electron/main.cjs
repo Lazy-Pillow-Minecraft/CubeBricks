@@ -6,6 +6,8 @@ const fs = require('fs/promises');
 const syncFs = require('fs');
 const crypto = require('crypto');
 const { atomicWrite } = require('./project-journal.cjs');
+const { createAppearanceStore } = require('./appearance-store.cjs');
+const { createDockLayoutStore } = require('./dock-layout-store.cjs');
 const { readTextureAssets, registerTextureFiles } = require('./texture-files.cjs');
 const { localizeDialogOptions } = require('./dialog-i18n.cjs');
 const { readNativeModel, writeTextureReferences } = require('./native-model-io.cjs');
@@ -35,6 +37,12 @@ const {
   mutateWorkspaceCatalog, indexWorkingJournal, unindexWorkingJournal
 } = createWorkspaceCatalog({ app, journals, journalOwnership, workspaceSettingsPath });
 const colorMapSettingsPath = () => path.join(app.getPath('userData'), 'palettes.cbcmap');
+const appearanceStore = createAppearanceStore(() => path.join(app.getPath('userData'), 'appearance.json'), atomicWrite);
+handleIpc('appearance:read', () => appearanceStore.read());
+handleIpc('appearance:write', (_event, value) => appearanceStore.write(value));
+const dockLayoutStore = createDockLayoutStore(() => path.join(app.getPath('userData'), 'dock-layout.json'), atomicWrite);
+handleIpc('dock-layout:read', () => dockLayoutStore.read());
+handleIpc('dock-layout:write', (_event, value) => dockLayoutStore.write(value));
 const retainedTabsPath = () => path.join(app.getPath('userData'), 'retained-project-tabs.json');
 const coverPath = id => path.join(app.getPath('userData'), 'project-covers', `${safeSessionId(id)}.png`);
 onHistoryProgress(({ directory, ...progress }) => {
@@ -383,6 +391,9 @@ handleIpc('app:confirm-close', async (event, payload) => {
   const handled = new Set([...journals.keys(), ...discarded]);
   const otherTabs = Array.isArray(previousTabs) ? previousTabs.filter(tab => !handled.has(tab.journalId)) : [];
   await atomicWrite(retainedTabsPath(), JSON.stringify([...otherTabs, ...retained]));
+  await appearanceStore.flush();
+  await dockLayoutStore.flush();
+  event.sender.session.flushStorageData();
   await journalOwnership.releaseAll();
   win.approveProjectClose();
   return true;
@@ -596,7 +607,7 @@ handleIpc('project:journal-commit', async (_event, payload) => {
   return queueJournal(id, async () => {
     const journal = journals.get(id);
     if (!journal) throw new Error('項目工作目錄尚未建立');
-    const result = await journal.commit(payload.content, payload.operationId, payload.operationLabel, payload.operationIndex || []);
+    const result = await journal.commit(payload.content, payload.operationId, payload.operationLabel, payload.operationIndex || [], payload.requestId || null);
     if (Number.isInteger(payload.historyLimit)) {
       try { await journal.compactHistory(payload.historyLimit); }
       catch (error) { result.historyWarning = error.message; }

@@ -76,6 +76,9 @@ import { createTimelineController } from './screen/timeline-controller.js';
 import { createWorkspaceCoordinator } from './editor/workspace-coordinator.js';
 import { createDockSystem } from './screen/dock-bootstrap.js';
 import { showAppChoice } from './screen/prompt-dialog.js';
+import { bindNumberInputs } from './screen/number-input/controller.js';
+import { createToolboxController } from './editor/toolbox/controller.js';
+import { syncCreationIcons } from './screen/object-icons.js';
 
 // Compose the editor once. Forwarding functions let controllers refer to
 // each other without importing each other or calling a partially built controller.
@@ -87,7 +90,6 @@ const CUBE_FACE_NAMES = ['north', 'east', 'south', 'west', 'up', 'down'];
 const PAINT_FACE_EDGES = Object.freeze([[0, 1], [1, 3], [2, 3], [0, 2]]);
 const livePaintTextureSources = new Map();
 const animationRasterCache = new Map();
-const paintHitAlphaCache = new Map();
 let preciseRotationInput = null;
 
 state.selectedUid = state.project.elements[0]?.uid;
@@ -289,7 +291,7 @@ const inspectorController = createInspectorController({
   setTool, invalidateAllRenderGeometry, renderAll, updateToolVisibility, toast,
   openIconMarkup, escapeHtml, escapeAttribute, renderPaintColorPicker,
   polyhedronEdgeLength, formatNumber, freezeCubeUvs, openColorPickerPopup,
-  snapshot, markDirty, invalidateSelectionRenderGeometry, renderScene,
+  snapshot, markDirty, invalidateSelectionRenderGeometry, renderScene, renderOutliner,
   syncInspectorValues, translateModifierAnchors, setCurveHandle,
   bakeCurveNodeTangent, updateSelectionLabels, setMode, schedulePaintSymmetryBuild,
   deleteSelected, isUvCapable, centerSelectedPivots
@@ -342,6 +344,8 @@ function addShape(...args) { return elementCommands.addShape(...args); }
 function addLocator(...args) { return elementCommands.addLocator(...args); }
 function addBezierElement(...args) { return elementCommands.addBezierElement(...args); }
 function addGroup(...args) { return elementCommands.addGroup(...args); }
+function addEmptyGroup(...args) { return elementCommands.addEmptyGroup(...args); }
+function groupSelected(...args) { return elementCommands.groupSelected(...args); }
 function deleteSelected(...args) { return elementCommands.deleteSelected(...args); }
 function captureSelectedElements(...args) { return elementCommands.captureSelectedElements(...args); }
 function copySelected(...args) { return elementCommands.copySelected(...args); }
@@ -373,7 +377,6 @@ const uvPreviewController = createUvPreviewController({
 function uvPreviewIsActive(...args) { return uvPreviewController.uvPreviewIsActive(...args); }
 function uvPreviewElements(...args) { return uvPreviewController.uvPreviewElements(...args); }
 function getUvPreviewProject(...args) { return uvPreviewController.getUvPreviewProject(...args); }
-function syncUvPreviewPanelAspect(...args) { return uvPreviewController.syncUvPreviewPanelAspect(...args); }
 function effectiveFaceTextureReference(...args) { return uvPreviewController.effectiveFaceTextureReference(...args); }
 function ensureCubeFaceRecord(...args) { return uvPreviewController.ensureCubeFaceRecord(...args); }
 function setCubeFaceCulled(...args) { return uvPreviewController.setCubeFaceCulled(...args); }
@@ -511,7 +514,7 @@ const paintStrokeController = createPaintStrokeController({
   paintCanvasForAsset, syncRendererTextureAsset,
   scheduleSceneRender,
   updateTexturePreviewFrame, noteJournalOperation, markDirty, toast,
-  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache, animationRasterCache, livePaintTextureSources
+  renderScene, invalidateAllRenderGeometry, animationRasterCache, livePaintTextureSources
 });
 function paintPointFromEvent(...args) { return paintStrokeController.paintPointFromEvent(...args); }
 function paintPointInside(...args) { return paintStrokeController.paintPointInside(...args); }
@@ -575,7 +578,7 @@ const scenePaintController = createScenePaintController({
   queuePaintedTextureSync, syncPaintedTextureNow, discardPaintedTextureSync, drawPaintSegment,
   drawPaintShape, drawScreenPaintPixel, flushScreenPaintSurface, resetScreenPaintPreview,
   paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
-  loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
+  loadTextureAssetImage, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
   activateProjectTexture, sampleReferenceImage: referenceImages.sampleReferenceImage,
   capturePaintStyle: paintStrokeController.capturePaintStyle, scheduleSceneRender
@@ -670,7 +673,8 @@ const textureAssetController = createTextureAssetController({
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
   noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu,
-  textureSaveIndicators: textureFileController, paintSymmetryFaceGraph
+  textureSaveIndicators: textureFileController, paintSymmetryFaceGraph,
+  finishPaintSelection: () => paintSelectionController.finishActive()
 });
 function textureUid(...args) { return textureAssetController.textureUid(...args); }
 function renderTextureList(...args) { return textureAssetController.renderTextureList(...args); }
@@ -704,6 +708,11 @@ function pasteTextureLayer(...args) { return textureAssetController.pasteTexture
 function binarizeTextureLayerAlpha(...args) { return textureAssetController.binarizeTextureLayerAlpha(...args); }
 function canPasteTextureLayer(...args) { return textureAssetController.canPasteTextureLayer(...args); }
 function openLayerPointsDialog(...args) { return textureAssetController.openLayerPointsDialog(...args); }
+function openTextureResizeDialog(...args) { return textureAssetController.openTextureResizeDialog(...args); }
+
+const toolboxController = createToolboxController({ state, $, sceneCanvas, sceneRenderer, selectedTopLevelNodes,
+  isEffectivelyLocked, getSnapStep, snapshot, markDirty, renderAll, renderScene,
+  invalidateSelectionRenderGeometry, updateToolOptions, discardSubdivisionEdits });
 
 const toolModeController = createToolModeController({
   state, $, $$, inspectorController, exitSubdivisionEdit, renderOutliner,
@@ -715,7 +724,8 @@ const toolModeController = createToolModeController({
   updateScaleHandleModeButtons, updateMultiTransformModeButtons,
   getDockManager: () => dockManager,
   finishPaintSelection: paintSelectionController.finishActive,
-  saveProjectTools: projectTabsController.saveProjectTools
+  saveProjectTools: projectTabsController.saveProjectTools,
+  refreshToolbox: () => toolboxController.refresh()
 });
 function toolSupportsMode(...args) { return toolModeController.toolSupportsMode(...args); }
 function applyModePanelVisibility(...args) { return toolModeController.applyModePanelVisibility(...args); }
@@ -775,10 +785,11 @@ function setConfigFromControl(...args) { return settingsController.setConfigFrom
 function initializeDockSystem() {
   dockManager = createDockSystem({
     state, $, stopUvPreviewAnimation, refreshUvPreview,
-    uvPreviewController, syncUvPreviewPanelAspect, syncTexturePreviewPriority,
-    scheduleOutlinerWindow, renderScene
+    uvPreviewController, syncTexturePreviewPriority,
+    scheduleOutlinerWindow, renderScene, toast
   });
   applyModePanelVisibility();
+  void dockManager.ready.then(applyModePanelVisibility);
 }
 
 const contextMenuController = createContextMenuController({
@@ -795,10 +806,10 @@ const contextMenuController = createContextMenuController({
   renderTexture, rebuildTextureAtlas, noteJournalOperation,
   setMode, deleteSelectedPaletteColor, insertPaletteGradientNode,
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
-  setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
+  setNodeVisibility, setNodeFlag, renderOutliner, groupSelected,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown,
-  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer, openLayerPointsDialog,
+  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer, openLayerPointsDialog, openTextureResizeDialog,
   saveTexture: textureFileController.saveTexture
 });
 function closeContextMenu(...args) { return contextMenuController.closeContextMenu(...args); }
@@ -845,7 +856,7 @@ const eventBinder = createEventBinder({
   addPaletteRow, renderPalette, enterAxisView, beginAxisWidgetDrag,
   moveAxisWidgetDrag, endAxisWidgetDrag, restore, cancelCameraFocus,
   deleteSelectedPaletteColor, refreshKnifeFromModifierEvent,
-  activateDock, addBezierElement, addCube, addGroup, addLocator, addShape,
+  activateDock, addBezierElement, addCube, addGroup, addEmptyGroup, groupSelected, addLocator, addShape,
   animateLockedHoverStrength, applyPreset,
   beginTemporaryEyedropper, bindContextMenus, bindTextureFaceDropSurface,
   cameraController, clamp, clearOutlinerDropState,
@@ -947,12 +958,12 @@ const transformInteraction = createTransformInteraction({
   activeCurveNodeContext, activeModifierAnchorContext, applyTargetRotation,
   applyViewportBoxSelection, bakeCurveNodeTangent, captureGroupMembers,
   captureModifierAnchors, captureTransformTarget, clearSelection,
-  discardSubdivisionEdits, finishScenePaintDrag, formatNumber, formatSigned,
+  discardSubdivisionEdits, finishScenePaintDrag, formatSigned,
   freezeCubeUvs, getAngleSnapStep, getSelectionTransformContext,
   clearSelectionTransformContext, setNodePivotAtWorldPoint,
   intersectRayPlane, invalidateSelectionRenderGeometry, isBezierElement,
   isEffectivelyLocked, isShapeElement, localDeltaFromWorld, markDirty,
-  moveScenePaintDrag, polyhedronEdgeLength, queueSceneBrushPointer,
+  moveScenePaintDrag, queueSceneBrushPointer,
   refreshSelectionUi, renderInspector, renderScene, rotatePointAroundAxis,
   rotationMatrixAroundAxis, scheduleSceneRender, selected, selectedElementUids,
   selectItem, setCurveHandle, snapAngle, snapShapeDimension, snapshot,
@@ -960,7 +971,7 @@ const transformInteraction = createTransformInteraction({
   translateCapturedTarget, translateModifierAnchorsFromSnapshot,
   translationMatrix, updatePaintGradientHover, updateSelectionMarquee,
   viewportSelectionMode, worldPointToCurveLocal, worldPointToParentLocal,
-  updateKnifeHover, schedulePaintSymmetryBuild, currentProjection
+  updateKnifeHover, schedulePaintSymmetryBuild, currentProjection, toolbox: toolboxController
 });
 function startTransformDrag(...args) { return transformInteraction.startTransformDrag(...args); }
 function dismissPreciseRotationInput(...args) { return transformInteraction.dismissPreciseRotationInput(...args); }
@@ -1005,7 +1016,7 @@ modelFormatRegistry.subscribe(() => {
   if (document.body.classList.contains('project-home-active')) void modelFormatPicker.renderProjectHome();
   updateSelectionLabels();
 });
-loadTheme();
+const themeReady = loadTheme();
 if (window.cubeBricksDesktop?.platform === 'win32' && window.cubeBricksDesktop.windowControl) {
   const controls = $('#windowControls');
   controls.hidden = false;
@@ -1037,7 +1048,11 @@ renderTexture();
 renderPalette();
 void palette.loadPersistedPalettes();
 modelFormatPicker.bindProjectHome();
+bindNumberInputs({ getSnapStep, getAngleSnapStep, getProject: () => state.project,
+  getShape: selected, edgeLength: polyhedronEdgeLength, radiusFromEdge: radiusFromPolyhedronEdge });
 bindEvents();
+toolboxController.bind();
+syncCreationIcons($('#shapeCreateMenu'));
 window.cubeBricksDesktop?.onExternalProjectOpen?.(filePath => { void openProject(filePath); });
 paintSelectionController.bind();
 updateToolVisibility();
@@ -1051,7 +1066,7 @@ void (async () => {
     await packsController.refresh();
   } catch (error) { console.warn('資源包載入失敗', error); }
 })();
-void projectHomeReady.catch(error => console.warn('項目首頁載入失敗', error)).finally(() => {
+void Promise.all([projectHomeReady, themeReady, dockManager.ready]).catch(error => console.warn('項目首頁載入失敗', error)).finally(() => {
   // External packs and optional fonts must not delay the first usable home page.
   requestAnimationFrame(() => $('#startupCover')?.remove());
 });

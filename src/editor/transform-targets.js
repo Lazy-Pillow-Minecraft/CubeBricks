@@ -1,6 +1,7 @@
 import { applyGroupTransforms } from '../common/core/geometry-utils.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { rotateVector, inverseRotateVector, quaternionMultiply, quaternionFromEuler, quaternionFromAxisAngle, eulerFromQuaternion } from '../utils/math/rotation.js';
+import { captureSiblingCopyNodes, translateSiblingCopyNodes } from '../common/core/copy-node-transforms.js';
 
 export function createTransformTargets({
   state, isShapeElement, subdivisionOwner, getTransformPivot,
@@ -24,8 +25,10 @@ export function createTransformTargets({
       });
     };
     group.children.forEach(visit);
-    for (const member of members) member.appliedPosition = member.node.appliedTransform?.position
-      ? [...member.node.appliedTransform.position] : null;
+    for (const member of members) {
+      member.appliedPosition = member.node.appliedTransform?.position ? [...member.node.appliedTransform.position] : null;
+      member.copyNodes = captureSiblingCopyNodes(member.node);
+    }
     return members;
   }
 
@@ -106,6 +109,7 @@ export function createTransformTargets({
     else if (node.type === 'group') {
       node.pivot = target.position.map((value, axis) => value + delta[axis]);
       target.groupMembers.forEach(member => {
+        translateSiblingCopyNodes(member.node, delta, member.copyNodes);
         if (member.appliedPosition)
           member.node.appliedTransform.position = member.appliedPosition.map((value, axis) => value + delta[axis]);
         if (member.node.type === 'cube') {

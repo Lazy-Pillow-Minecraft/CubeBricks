@@ -1,5 +1,6 @@
 import { performanceMonitor } from '../utils/performance-monitor.js';
 import { shortcutMatches, shortcutTriggerReleased } from './shortcuts.js';
+import { bindShortcutMouseButtons } from './shortcut-mouse.js';
 
 // Dispatch clipboard commands by focus before falling through to editor tools.
 export function bindWorkspaceShortcuts({
@@ -10,13 +11,14 @@ export function bindWorkspaceShortcuts({
   pasteTexture, updateTransformGizmo, setRenderModeMenu, setReferenceImageMenu,
   referenceImages, setReferenceImageEditing, exitSubdivisionEdit, clearPaintGradientSelection,
   copySelected, cutSelected, pasteElements, deleteSelectedPaletteColor, removeActiveLayer,
-  removeTexture, deleteSelected, setTool, addCube, cancelCameraFocus, renderScene,
+  removeTexture, deleteSelected, setTool, addCube, addEmptyGroup, groupSelected, cancelCameraFocus, renderScene,
   resetTextureView, focusSelectedTextureUvs, focusSceneOrigin, focusSelected,
   refreshKnifeFromModifierEvent
 }) {
   // Focus-specific clipboard commands run before the global shortcuts.
-  window.addEventListener('keydown', event => {
+  const press = event => {
     if (state.projectHomeActive || event.defaultPrevented || event.isComposing) return;
+    const target = typeof event.key === 'string' ? event.target : document.activeElement;
     if (!event.repeat && shortcutMatches(event, 'performance')) {
       event.preventDefault();
       toast('開始記錄 8 秒，請持續操作主視圖');
@@ -36,8 +38,8 @@ export function bindWorkspaceShortcuts({
       return;
     }
     if (shortcutMatches(event, 'undo') || shortcutMatches(event, 'redo')) {
-      if (event.target instanceof Element
-        && (event.target.closest('input, textarea, [contenteditable]') || event.target.isContentEditable)) return;
+      if (target instanceof Element
+        && (target.closest('input, textarea, [contenteditable]') || target.isContentEditable)) return;
       event.preventDefault();
       shortcutMatches(event, 'redo') ? redo() : undo();
       return;
@@ -47,12 +49,12 @@ export function bindWorkspaceShortcuts({
       if (!event.repeat) shortcutMatches(event, 'export') ? exportProject() : saveProject();
       return;
     }
-    if (event.target instanceof Element
-      && (event.target.closest('input, select, textarea, [contenteditable]') || event.target.isContentEditable)) return;
+    if (target instanceof Element
+      && (target.closest('input, select, textarea, [contenteditable]') || target.isContentEditable)) return;
     if (state.mode === 'display') return;
     if (shortcutMatches(event, 'selectAll')
-      && event.target instanceof Element
-      && (viewport.contains(event.target) || outliner.contains(event.target))) {
+      && target instanceof Element
+      && (viewport.contains(target) || outliner.contains(target))) {
       event.preventDefault();
       selectAllElements();
       return;
@@ -150,6 +152,14 @@ export function bindWorkspaceShortcuts({
       return;
     }
     if (!document.querySelector('dialog[open]')) {
+      if (state.mode === 'edit' && (shortcutMatches(event, 'addGroup') || shortcutMatches(event, 'groupSelected'))) {
+        event.preventDefault();
+        if (!event.repeat) {
+          closeShapeCreateMenu();
+          shortcutMatches(event, 'groupSelected') ? groupSelected() : addEmptyGroup();
+        }
+        return;
+      }
       if (shortcutMatches(event, 'previousTool') || shortcutMatches(event, 'nextTool')) {
         const tools = $$('.tool-lane .tool').filter(button => !button.disabled && button.getClientRects().length)
           .map(button => button.dataset.tool || state.paintShapeTool);
@@ -201,13 +211,13 @@ export function bindWorkspaceShortcuts({
       }
     }
     if (state.mode !== 'paint') {
-      const shortcuts = { toolMove: 'move', toolResize: 'resize', toolRotate: 'rotate', toolPivot: 'pivot', toolVertexSnap: 'vertexSnap', toolKnife: 'knife', toolFaceSelect: 'faceSelect' };
+      const shortcuts = { toolMove: 'move', toolResize: 'resize', toolRotate: 'rotate', toolPivot: 'pivot', toolVertexSnap: 'vertexSnap', toolKnife: 'knife', toolFaceSelect: 'faceSelect', toolToolbox: 'toolbox' };
       const tool = Object.entries(shortcuts).find(([id]) => shortcutMatches(event, id))?.[1];
       if (tool) setTool(tool);
     }
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
-  });
-  window.addEventListener('keyup', event => {
+  };
+  const release = event => {
     if (shortcutTriggerReleased(event, 'temporaryEyedropper') && state.rotationVertexPick) {
       state.rotationVertexPick = false;
       updateTransformGizmo();
@@ -218,7 +228,10 @@ export function bindWorkspaceShortcuts({
       return;
     }
     if (state.tool === 'knife' && state.knifePointer && ['Shift', 'Control'].includes(event.key)) refreshKnifeFromModifierEvent(event);
-  });
+  };
+  window.addEventListener('keydown', press);
+  window.addEventListener('keyup', release);
+  bindShortcutMouseButtons(press, release);
   window.addEventListener('blur', () => {
     endTemporaryEyedropper();
     if (state.rotationVertexPick) {

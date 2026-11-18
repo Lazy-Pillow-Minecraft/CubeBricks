@@ -173,7 +173,7 @@ const virtualWindow = { style: {}, innerHTML: '' };
 const outlinerView = { scrollTop: 0, clientHeight: 300, innerHTML: '' };
 const outlinerState = {
   project: outlinerProject, selectedUids: new Set(), selectedCurveNodeIndex: null,
-  collapsedGroups: new Set(), mode: 'edit', outlinerDetailed: false
+  collapsedGroups: new Set(), collapsedCopyNodes: new Set(), mode: 'edit', outlinerDetailed: false
 };
 const outlinerController = createOutlinerViewController({
   state: outlinerState,
@@ -196,8 +196,20 @@ assert.match(virtualWindow.innerHTML, /data-group-line-uid="outliner-outer"/,
 outlinerState.selectedUids.add(outerGroup.uid);
 outlinerState.outlinerWindowStart = -1;
 outlinerController.renderOutlinerWindow();
-assert.doesNotMatch(virtualWindow.innerHTML, /is-selected-group-line/,
-  'a selected group keeps normal rails until the pointer hovers over one');
+assert.match(virtualWindow.innerHTML, /class="outliner-group-end-branch is-selected-group-line" data-group-line-uid="outliner-outer"/);
+assert.doesNotMatch(virtualWindow.innerHTML, /is-selected-group-line" data-group-line-uid="outliner-inner"/);
+outlinerProject.getNode(innerGroup.uid).modifiers = [{
+  uid: 'outliner-copy', type: 'element_copy', enabled: true, nodes: [{ uid: 'outliner-copy-node' }]
+}];
+outlinerController.renderOutliner();
+assert.match(virtualWindow.innerHTML, /data-disclosure="outliner-inner"/);
+assert.match(virtualWindow.innerHTML, /data-copy-disclosure="outliner-inner"/);
+assert.match(virtualWindow.innerHTML, /data-copy-node-uid="outliner-copy-node"/);
+outlinerState.collapsedCopyNodes.add(innerGroup.uid);
+outlinerController.renderOutliner();
+assert.doesNotMatch(virtualWindow.innerHTML, /data-copy-node-uid="outliner-copy-node"/);
+assert.match(virtualWindow.innerHTML, /data-uid="outliner-cube"/,
+  'collapsing copy nodes leaves ordinary group children visible');
 const localDockRegistry = new DockPanelRegistry();
 localDockRegistry.register({
   id: 'sample', index: 2, modes: ['edit'], defaultDock: 'right',
@@ -206,6 +218,39 @@ localDockRegistry.register({
 assert.throws(() => localDockRegistry.register({ id: 'sample', index: 3, modes: ['edit'], defaultDock: 'left' }), /already registered/);
 assert.throws(() => localDockRegistry.register({ id: 'second', index: 2, modes: ['edit'], defaultDock: 'left' }), /unique integer index/);
 const dockHarness = Object.create(DockManager.prototype);
+{
+  const makeLayoutElement = () => {
+    const classes = new Set(), styles = new Map();
+    return {
+      hidden: false,
+      classList: {
+        contains: name => classes.has(name),
+        toggle: (name, on) => on ? classes.add(name) : classes.delete(name)
+      },
+      style: { setProperty: (name, value) => styles.set(name, value) },
+      styles
+    };
+  };
+  const regular = { element: makeLayoutElement(), state: { collapsed: false } };
+  const picker = { element: makeLayoutElement(), state: { collapsed: false },
+    heightSnap: { modes: ['paint'], chromeHeight: () => 80 } };
+  const zone = { ...makeLayoutElement(), clientHeight: 350 };
+  const dock = Object.assign(Object.create(DockManager.prototype), {
+    zones: new Map([['right', zone]]), panels: new Map([['regular', regular], ['picker', picker]]),
+    zonePanels: () => [regular, picker], zoneState: {}, mode: 'paint', heightSnapping: true
+  });
+  dock.refreshHeightSnaps();
+  assert.equal(picker.element.styles.get('--dock-snap-visual-height'), '180px');
+  assert.ok(picker.element.classList.contains('is-height-snap-bottom'));
+  assert.ok(regular.element.classList.contains('is-height-seam-locked'));
+  picker.state.collapsed = true;
+  dock.refreshHeightSnaps();
+  assert.ok(!regular.element.classList.contains('is-height-seam-locked'));
+  picker.state.collapsed = false;
+  dock.heightSnapping = false;
+  dock.refreshHeightSnaps();
+  assert.ok(!picker.element.classList.contains('is-height-snapped'));
+}
 const makeDockPanel = (id, dock, width, height) => ({
   id, index: width, modes: ['edit'], state: {
     dock, x: width, y: height, width, height, collapsed: false, stackId: null, stackOrder: 0, stackActive: false

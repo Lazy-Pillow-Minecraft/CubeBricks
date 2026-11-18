@@ -17,6 +17,7 @@ import { decodedRasterImage } from '../utils/image/raster-cache.js';
 import { sampleRandomPoints, drawRandomPoints } from './random-points.js';
 import { copyRandomPointsToSymmetricFaces } from './random-points-symmetry.js';
 import { createLayerPointsDialog } from './layer-points-dialog.js';
+import { createTextureResizeController } from './resize-controller.js';
 
 const CUBE_FACES = ['north', 'east', 'south', 'west', 'up', 'down'];
 const TEXTURE_MODE_LABEL = '貼圖模式';
@@ -38,7 +39,7 @@ export function createTextureAssetController({
   activeSnapSubdivisions, renderTexture,
   paletteRows, samplePaletteGradient,
   noteJournalOperation, snapshot, markDirty, toast, formatNumber, clamp, showContextMenu, textureSaveIndicators,
-  paintSymmetryFaceGraph
+  paintSymmetryFaceGraph, finishPaintSelection
 }) {
   let textureLoadRevision = 0;
   let pendingTextureImage = null;
@@ -102,6 +103,13 @@ export function createTextureAssetController({
     }
   });
   const layerPointsDialog = createLayerPointsDialog({ $, onGenerate: generateLayerRandomPoints });
+  const textureResize = createTextureResizeController({
+    state, $, textureCanvas, activeTextureAsset, finishPaintSelection, finishLayerEdit, loadTextureAssetImage,
+    pushTexturePaintHistory, livePaintTextureSources, animationRasterCache, invalidateUvPreviewTextureState,
+    showLayerComposite, renderTextureFeatureControls, renderLayerEditor: () => layerEditor.render(),
+    renderTextureList, rebuildTextureAtlas, invalidateAllRenderGeometry, markDirty, renderScene, toast
+  });
+  const openTextureResizeDialog = asset => textureResize.open(asset);
 
   function openLayerPointsDialog(uid) {
     const asset = activeTextureAsset();
@@ -1193,6 +1201,6 @@ export function createTextureAssetController({
     copyTexture, cutTexture, pasteTexture, removeTexture, removeActiveLayer, removeTextureLayer, mergeTextureLayerDown,
     copyTextureLayer: layerCommands.copy, pasteTextureLayer: layerCommands.paste,
     binarizeTextureLayerAlpha: layerCommands.binarizeAlpha, canPasteTextureLayer: layerCommands.canPaste,
-    syncToneMappedPalettes, releaseTextureAssets, moveSelectionToLayer, openLayerPointsDialog
+    syncToneMappedPalettes, releaseTextureAssets, moveSelectionToLayer, openLayerPointsDialog, openTextureResizeDialog
   };
 }

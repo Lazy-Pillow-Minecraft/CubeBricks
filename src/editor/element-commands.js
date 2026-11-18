@@ -12,7 +12,7 @@ export function createElementCommands({
     return { parent, items: parent ? parent.children : state.project.outliner };
   }
 
-  function insertNewNodeUid(uidValue) {
+  function insertNewNodeUid(uidValue, { afterSelection = false } = {}) {
     const selectedIds = selectedNodeUids();
     const reference = state.project.getNode(state.selectedUid);
     if (!reference) {
@@ -23,7 +23,7 @@ export function createElementCommands({
     }
     // A single selected group is an insertion target. In a multi-selection it is
     // treated like any other row, so creation follows the last selected row.
-    if (selectedIds.length === 1 && reference.type === 'group') {
+    if (!afterSelection && selectedIds.length === 1 && reference.type === 'group') {
       reference.children.push(uidValue);
       state.collapsedGroups.delete(reference.uid);
       state.project.invalidateHierarchyIndex();
@@ -119,17 +119,19 @@ export function createElementCommands({
     toast(`已新增${dimension === 2 ? '二維' : '三維'}${variant === 'envelope' ? '包絡' : ''}貝塞爾元素`);
   }
 
-  function addGroup() {
+  // The toolbar keeps its existing selection-aware behavior. Explicit commands
+  // distinguish creating an empty sibling from wrapping even one selected row.
+  function addGroup({ wrapSelection = selectedNodeUids().length > 1, afterSelection = false } = {}) {
     if (state.mode === 'paint') return;
+    const selectedIds = topLevelSelectedUids().filter(uidValue => state.project.getNode(uidValue));
+    if (wrapSelection && !selectedIds.length) return;
     const previousRowPositions = captureOutlinerRowPositions();
-    snapshot('core.group.create');
+    snapshot(wrapSelection ? 'core.group.group' : 'core.group.create');
     const group = new Group({ name: allocateGroupName(state.project), unnamed: true, children: [],
       uvMode: state.project.uvMode });
-    const hadMultipleSelection = selectedNodeUids().length > 1;
-    const selectedIds = topLevelSelectedUids();
     state.project.groups.push(group);
     state.project.invalidateHierarchyIndex();
-    if (hadMultipleSelection && selectedIds.length) {
+    if (wrapSelection) {
       const sourceContainers = selectedIds.map(uidValue => nodeContainer(uidValue));
       const sharedContainer = sourceContainers.every(container => container.items === sourceContainers[0].items)
         ? sourceContainers[0]
@@ -163,7 +165,7 @@ export function createElementCommands({
       }
       state.collapsedGroups.delete(group.uid);
     } else {
-      insertNewNodeUid(group.uid);
+      insertNewNodeUid(group.uid, { afterSelection });
     }
     state.project.invalidateHierarchyIndex();
     alignNewNodeWithParent(group.uid);
@@ -173,6 +175,14 @@ export function createElementCommands({
     renderAll();
     animateOutlinerReorder(previousRowPositions);
     toast('已新增組');
+  }
+
+  function addEmptyGroup() {
+    return addGroup({ wrapSelection: false, afterSelection: true });
+  }
+
+  function groupSelected() {
+    return addGroup({ wrapSelection: true });
   }
 
   function deleteSelected(operationId = 'core.element.delete') {
@@ -318,6 +328,8 @@ export function createElementCommands({
     addLocator,
     addBezierElement,
     addGroup,
+    addEmptyGroup,
+    groupSelected,
     deleteSelected,
     captureSelectedElements,
     copySelected,

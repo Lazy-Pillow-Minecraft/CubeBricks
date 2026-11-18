@@ -25,6 +25,8 @@ The [first optimization results (2026-11-06)](docs/OPTIMIZATION_2026-11-06.en.md
 | `electron/` | Desktop process, files, and project journal; it does not directly depend on renderer DOM. |
 | `scripts/` | Checks, tests, preview server, and build helpers. |
 
+`src/editor/toolbox/` separates toolbar markup, interaction coordination, and model transforms. Scale drags recompute from an immutable starting snapshot and the current snap precision, avoiding accumulated rounding errors. Reflection reuses the model-baking geometry and UV transform; procedural objects store local handedness without flattening into Cubes. Registered operation IDs connect each action to existing undo. `src/screen/object-icons.js` shares type-to-icon mappings between creation menus and the scene hierarchy.
+
 ## Conventions for new code
 
 `common/core/format-hooks.js` supplies the empty default format interface shared by Shape and modifier definitions, plus bound object context, without importing registries or model code. `procedural-format.js` adapts Shape parameters and generated Cubes; `modifier-format.js` constrains modifiers using preceding results. Preview evaluates derived data and preserves live face identities when consuming quarter turns. `model/format-materialization.js` represents modded entity orientations with group rotations, while `model/formats/procedural-format-export.js` materializes Java group poses as legal Cube data. Subdivision edits compare against the adapted base, avoiding accidental storage of format compensation as user edits. See [optional format adaptation](SHAPE_PACKS.en.md#optional-format-adaptation).

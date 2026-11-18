@@ -1,4 +1,5 @@
 import { shapeRegistry } from './builtins.js';
+import { objectAssetMarkup, syncCreationIcons } from '../screen/object-icons.js';
 
 export function createShapePackLoader({ $, toast, renderAll }) {
   async function loadExternalShapePacks() {
@@ -31,7 +32,7 @@ export function createShapePackLoader({ $, toast, renderAll }) {
               icon.alt = '';
               icon.className = 'object-icon';
               button.append(icon);
-            } else button.innerHTML = '<svg class="object-icon" aria-hidden="true"><use href="#icon-shape"></use></svg>';
+            } else button.innerHTML = objectAssetMarkup('shape');
             const label = document.createElement('span');
             label.textContent = registered.label;
             button.append(label);
@@ -43,6 +44,7 @@ export function createShapePackLoader({ $, toast, renderAll }) {
         console.warn('Shape 包載入失敗', failures);
         toast(`${failures.length} 個 Shape 包項目未載入，詳見主控台`);
       }
+      syncCreationIcons(menu);
       renderAll();
     } catch (error) {
       console.warn('Shape 包掃描失敗', error);

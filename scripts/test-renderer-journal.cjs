@@ -8,6 +8,71 @@ const journalSource = fs.readFileSync(path.join(__dirname, '../src/project/journ
 const fileSource = fs.readFileSync(path.join(__dirname, '../src/project/file-controller.js'), 'utf8');
 const faceDropSource = fs.readFileSync(path.join(__dirname, '../src/texture/face-drop-controller.js'), 'utf8');
 
+test('a transient journal failure recovers all captured operations in order before history opens', async () => {
+  const snapshot = { sequence: null };
+  const tab = {
+    id: 'project_a', journalId: 'project_a', journalPending: 'core.texture.brush',
+    journalReady: Promise.resolve(), session: {
+      project: { historyLimit: null, serialize: () => JSON.stringify({ elements: [], groups: [] }) },
+      textureGroups: [], textureAssets: []
+    },
+    recentModelHistory: { trim() {}, push() { return snapshot; }, reset() {} }
+  };
+  const calls = [], toastMessages = [];
+  let available = false, requestNumber = 0, sequence = 1;
+  const context = vm.createContext({
+    Map, Promise, JSON, structuredClone,
+    crypto: { randomUUID: () => `request-${++requestNumber}` },
+    performanceMonitor: { enabled: false },
+    journalTimers: new Map(), PIXEL_HISTORY_OPS: new Set(['core.texture.brush']),
+    state: {}, projectTabsController: { activeId: tab.id }, projectTabById: () => tab,
+    requireOperation: id => id, configRegistry: { get: () => 20 }, ConfigKey: { HISTORY_LIMIT: 'historyLimit' },
+    serializableTextureAssets: async assets => assets,
+    serializeCbmodel: (_textures, model) => JSON.stringify(model),
+    operationDefinition: id => ({ label: id }), operationIndex: () => [],
+    syncActiveProjectTab() {}, scheduleProjectCover() {}, clearTimeout() {}, setTimeout() { return 1; },
+    CustomEvent: class { constructor(type) { this.type = type; } },
+    toast: message => toastMessages.push(message),
+    window: { dispatchEvent() {}, cubeBricksDesktop: {
+      commitProjectJournal: async payload => {
+        calls.push(payload.requestId);
+        if (!available) throw new Error('temporary disk failure');
+        return { changed: true, sequence: ++sequence };
+      },
+      projectHistoryGraph: async () => ({ current: sequence, nodes: [] })
+    } }
+  });
+  install(context, ['recoverFailedJournalWrite', 'flushProjectJournal', 'getProjectHistoryGraph']);
+  assert.equal(await context.flushProjectJournal(tab), null);
+  assert.equal(tab.journalFailedWrites.length, 1);
+  assert.equal(tab.journalPending, null, 'the captured operation owns recovery');
+  tab.journalPending = 'core.texture.brush';
+  assert.equal(await context.flushProjectJournal(tab), null);
+  assert.equal(tab.journalFailedWrites.length, 2);
+  available = true;
+  const graph = await context.getProjectHistoryGraph();
+  assert.equal(graph.current, 3);
+  assert.deepEqual(calls, ['request-1', 'request-1', 'request-1', 'request-1', 'request-1', 'request-2']);
+  assert.equal(tab.journalFailedWrites.length, 0);
+  assert.equal(snapshot.sequence, 3);
+  assert.ok(toastMessages.some(message => message.includes('temporary disk failure')));
+});
+
+test('failed paint work remains observable while subsequent gestures can continue', async () => {
+  const { trackPaintCommit, pendingPaintCommit, consumePaintCommitError } = await import('../src/paint/commit-order.js');
+  const project = {};
+  const error = new Error('paint failed');
+  const previousLog = console.error;
+  console.error = () => {};
+  try {
+    await assert.rejects(trackPaintCommit(project, Promise.reject(error)), /paint failed/);
+    await pendingPaintCommit(project);
+    assert.equal(consumePaintCommitError(project), error);
+    await trackPaintCommit(project, Promise.resolve());
+    assert.equal(consumePaintCommitError(project), null);
+  } finally { console.error = previousLog; }
+});
+
 function install(context, names) {
   context.CustomEvent ||= CustomEvent;
   if (context.window) context.window.dispatchEvent ||= () => {};
@@ -39,7 +104,7 @@ function setup() {
   const context = vm.createContext({
     structuredClone, Set, Map, Promise, JSON,
     palettesForCbmodel: rows => rows || [], paletteRows: [],
-    pendingPaintCommit: () => null,
+    pendingPaintCommit: () => null, consumePaintCommitError: () => null,
     finishActivePaintGesture() {},
     performanceMonitor: { enabled: false, record() {} },
     state, projectTabs: tabs, activeProjectTabId: 'a', suppressJournalRecording: false,
@@ -72,6 +137,31 @@ function setup() {
 }
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
+test('browser texture resize undo and redo restore pixels, dimensions and model UVs together', async () => {
+  const { captureResizeUvState, restoreResizeUvState } = await import('../src/texture/resize-uv.js');
+  const cube = { uid: 'cube', uvMode: 'face', faces: { north: { texture: 'texture', uv: [2, 2, 6, 6] } } };
+  const project = { getNode: uid => uid === cube.uid ? cube : null };
+  const oldUvs = captureResizeUvState(project, [{ uid: cube.uid }]);
+  cube.faces.north.uv = [4, 4, 12, 12];
+  const asset = { _uid: 'texture', source: 'large-pixels', uvWidth: 32, uvHeight: 32 };
+  let redraws = 0;
+  const context = vm.createContext({
+    structuredClone, Object, captureResizeUvState, restoreResizeUvState,
+    state: { project, textureAssets: [asset] }, textureCanvas: { width: 32, height: 32 },
+    renderTextureList() {}, activateProjectTexture() {}, rebuildTextureAtlas() {}, markDirty() {},
+    renderAll() { redraws++; }
+  });
+  install(context, ['restoreTexturePaintHistory']);
+  const undo = [{ uid: asset._uid, source: 'small-pixels', width: 16, height: 16, textureResizeUvs: oldUvs }], redo = [];
+  assert.equal(context.restoreTexturePaintHistory(undo, redo), true);
+  assert.deepEqual([asset.source, asset.uvWidth, asset.uvHeight], ['small-pixels', 16, 16]);
+  assert.deepEqual(cube.faces.north.uv, [2, 2, 6, 6]);
+  assert.equal(context.restoreTexturePaintHistory(redo, undo), true);
+  assert.deepEqual([asset.source, asset.uvWidth, asset.uvHeight], ['large-pixels', 32, 32]);
+  assert.deepEqual(cube.faces.north.uv, [4, 4, 12, 12]);
+  assert.equal(redraws, 2);
+});
+
 test('browser layer undo and redo preserve frame links alongside the layer identity graph', () => {
   const asset = {
     _uid: 'texture', source: 'new-pixels', layers: [{ uid: 'new-layer', source: 'new-pixels' }],
@@ -196,12 +286,57 @@ test('desktop snapshots do not clone a second full model history', () => {
     projectTabsController: { activeId: tab.id },
     projectTabById: () => tab,
     requireOperation: id => id,
+    claimNumericSnapshot: () => true,
     compactProjectHistorySnapshot: () => { throw new Error('unexpected full model clone'); }
   });
   install(context, ['snapshot']);
   context.snapshot('core.element.move');
   assert.equal(tab.journalPending, 'core.element.move');
   assert.equal(context.state.history.length, 0);
+});
+
+test('numeric scrubbing records one undo step even when the inspector replaces its input', async () => {
+  const { beginNumericEdit, endNumericEdit, claimNumericSnapshot } = await import('../src/common/core/numeric-edit-session.js');
+  const project = {}, tab = { id: 'numeric', journalPending: null };
+  let flushes = 0;
+  const context = vm.createContext({
+    state: { project }, window: { cubeBricksDesktop: { checkoutProjectJournal() {} } },
+    projectTabsController: { activeId: tab.id }, projectTabById: () => tab,
+    requireOperation: id => id, claimNumericSnapshot, flushProjectJournal: () => { flushes++; }
+  });
+  install(context, ['snapshot']);
+  const edit = beginNumericEdit(project);
+  try {
+    for (let index = 0; index < 20; index++) context.snapshot('core.element.vector.position');
+    assert.equal(tab.journalEditRevision, 1);
+    assert.equal(flushes, 0);
+  } finally { endNumericEdit(edit); }
+  context.snapshot('core.element.vector.position');
+  assert.equal(tab.journalEditRevision, 2, 'the next gesture owns a new snapshot');
+  assert.equal(flushes, 1, 'previous edit is captured before the new mutation');
+});
+
+test('autosave waits until a numeric scrub has finished', async () => {
+  const { beginNumericEdit, endNumericEdit, isNumericEditActive } = await import('../src/common/core/numeric-edit-session.js');
+  const project = {}, tab = { id: 'numeric', session: { project } };
+  let wake, flushes = 0;
+  const context = vm.createContext({
+    window: { cubeBricksDesktop: { commitProjectJournal() {} } }, state: { dragging: null },
+    projectTabsController: { activeId: tab.id }, journalTimers: new Map(),
+    clearTimeout() {}, setTimeout(callback) { wake = callback; return 1; },
+    performanceMonitor: { mark() {} }, pendingPaintCommit: () => null,
+    isNumericEditActive, getTexturePaintDrag: () => null, getTextureUvDrag: () => null,
+    referenceImages: { drag: null }, flushProjectJournal() { flushes++; }
+  });
+  install(context, ['scheduleProjectJournal']);
+  const edit = beginNumericEdit(project);
+  try {
+    context.scheduleProjectJournal(tab);
+    wake();
+    assert.equal(flushes, 0);
+  } finally { endNumericEdit(edit); }
+  wake();
+  assert.equal(flushes, 1);
 });
 
 test('same-tool paint gestures flush independently while a multi-face gesture stays atomic', () => {

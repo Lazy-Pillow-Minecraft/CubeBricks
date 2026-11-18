@@ -8,6 +8,20 @@ const { packZip, unpackZip } = require('../electron/zip-store.cjs');
 const { packArchive, unpackArchive, unpackArchiveWithProgress, isArchiveV2 } = require('../electron/archive-codec.cjs');
 const zlib = require('node:zlib');
 
+test('retrying a committed request after a lost reply does not create another operation', async t => {
+  const directory = await fs.mkdtemp(path.join(__dirname, '..', '.journal-request-retry-test-'));
+  t.after(async () => fs.rm(directory, { recursive: true, force: true }));
+  const journal = await new ProjectJournal(directory).initialize(model([]));
+  const next = model([{ uid: 'cube_retry', type: 'cube', position: [1, 2, 3] }]);
+  const first = await journal.commit(next, 'core.element.create', '建立 Cube', [], 'request-test-1');
+  const repeated = await journal.commit(next, 'core.element.create', '建立 Cube', [], 'request-test-1');
+  assert.equal(repeated.sequence, first.sequence);
+  assert.equal((await journal.historyGraph()).nodes.length, 2);
+  const reopened = await new ProjectJournal(directory).load();
+  assert.equal((await reopened.commit(next, 'core.element.create', '建立 Cube', [], 'request-test-1')).sequence, first.sequence);
+  assert.equal((await reopened.historyGraph()).nodes.length, 2);
+});
+
 function image(color) {
   const rgba = Buffer.alloc(16 * 16 * 4);
   for (let pixel = 0; pixel < 16 * 16; pixel++) {

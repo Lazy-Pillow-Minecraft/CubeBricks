@@ -7,10 +7,15 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 export function createColorPickerController({ state, inspector, hexToRgb, setPaintColor,
   renderPaintColorHistory, recordPaintColorHistory, renderInspector, setTool, addPaintSwatchToSelection }) {
+  const dockPickerResize = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
+    const surface = entries[0]?.target;
+    if (surface?.isConnected && surface.clientWidth && !pickerSession.popupRoot && !pickerSession.spaceRoot)
+      updatePaintColorPickerVisual(inspector);
+  }) : null;
   function renderTrianglePickerCanvas(surface) {
     const canvas = surface?.querySelector('.color-picker-triangle-field');
     if (!canvas || state.paintColorPickerMode !== 'triangle') return;
-    const rect = surface.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
     const width = Math.max(1, Math.round(rect.width));
     const height = Math.max(1, Math.round(rect.height));
     const renderKey = `${width}:${height}:${state.paintColorPickerHue.toFixed(6)}`;
@@ -22,7 +27,7 @@ export function createColorPickerController({ state, inspector, hexToRgb, setPai
     }
     const context = canvas.getContext('2d');
     const image = context.createImageData(width, height);
-    const geometry = trianglePickerGeometry({ width, height });
+    const geometry = trianglePickerGeometry(rect);
     const hueRgb = hsvToRgb(state.paintColorPickerHue, 1, 1);
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
       const weights = barycentric2d([x + .5, y + .5], geometry.hue, geometry.white, geometry.black);
@@ -58,7 +63,8 @@ export function createColorPickerController({ state, inspector, hexToRgb, setPai
       const hueWeight = saturation * value;
       const whiteWeight = (1 - saturation) * value;
       const blackWeight = 1 - value;
-      const width = surface.clientWidth || 1, height = surface.clientHeight || 1;
+      const rect = $('.color-picker-triangle-field', surface).getBoundingClientRect();
+      const width = rect.width || 1, height = rect.height || 1;
       const geometry = trianglePickerGeometry({ width, height });
       markerX = (geometry.hue[0] * hueWeight + geometry.white[0] * whiteWeight + geometry.black[0] * blackWeight) / width;
       markerY = (geometry.hue[1] * hueWeight + geometry.white[1] * whiteWeight + geometry.black[1] * blackWeight) / height;
@@ -73,7 +79,8 @@ export function createColorPickerController({ state, inspector, hexToRgb, setPai
     const ringMarker = $('.color-picker-ring-marker', root);
     if (ringMarker && state.paintColorPickerMode === 'triangle') {
       const angle = hue * Math.PI * 2;
-      const radius = Math.max(1, (surface.clientWidth || 1) / 2 - TRIANGLE_RING_WIDTH / 2 - 2);
+      const { width, height } = $('.color-picker-triangle-field', surface).getBoundingClientRect();
+      const radius = Math.max(1, Math.min(width, height) / 2 - TRIANGLE_RING_WIDTH / 2 - 2);
       ringMarker.style.left = `calc(50% + ${Math.sin(angle) * radius}px)`;
       ringMarker.style.top = `calc(50% - ${Math.cos(angle) * radius}px)`;
     }
@@ -101,13 +108,14 @@ export function createColorPickerController({ state, inspector, hexToRgb, setPai
       };
     }
     if (state.paintColorPickerMode === 'triangle') {
-      let local = [event.clientX - rect.left, event.clientY - rect.top];
-      const geometry = trianglePickerGeometry(rect);
+      const field = $('.color-picker-triangle-field', surface).getBoundingClientRect();
+      let local = [event.clientX - field.left, event.clientY - field.top];
+      const geometry = trianglePickerGeometry(field);
       let weights = barycentric2d(local, geometry.hue, geometry.white, geometry.black);
       const inside = weights && weights.every(weight => weight >= -1e-4);
       const zone = lockedZone || (inside ? 'triangle' : 'hue');
       if (zone === 'hue') {
-        const angle = Math.atan2(local[0] - rect.width / 2, rect.height / 2 - local[1]);
+        const angle = Math.atan2(local[0] - field.width / 2, field.height / 2 - local[1]);
         return { hue: (angle / (Math.PI * 2) + 1) % 1, saturation: currentSaturation, value: currentValue, zone: 'hue' };
       }
       if (!inside) {
@@ -204,7 +212,7 @@ export function createColorPickerController({ state, inspector, hexToRgb, setPai
       $('#inspectorMetaStrip').hidden = true;
     }
     const mode = ['square', 'circle', 'triangle'].includes(state.paintColorPickerMode) ? state.paintColorPickerMode : 'square';
-    root.innerHTML = `<div class="paint-color-picker">
+    root.innerHTML = `<div class="paint-color-picker${root === inspector ? ' dock-color-picker' : ''}">
     <nav class="color-picker-modes" aria-label="選色器形態">
       <button type="button" data-color-picker-mode="square" class="${mode === 'square' ? 'active' : ''}">方形</button>
       <button type="button" data-color-picker-mode="circle" class="${mode === 'circle' ? 'active' : ''}">圓形</button>
@@ -226,6 +234,10 @@ export function createColorPickerController({ state, inspector, hexToRgb, setPai
     <div class="color-picker-history"><span>歷史色</span><div class="color-picker-history-swatches" data-paint-color-history></div></div>
   </div>`;
     bindPaintColorPicker(root);
+    if (root === inspector && dockPickerResize) {
+      dockPickerResize.disconnect();
+      if (mode === 'triangle') dockPickerResize.observe($('[data-color-picker-surface]', root));
+    }
     renderPaintColorHistory();
   }
 

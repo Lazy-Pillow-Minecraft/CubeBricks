@@ -19,10 +19,28 @@ export function createKnifeController({ state, sceneCanvas, sceneRenderer, world
     return { uid: cube.uid, faceName: hit.faceName, localPoint, worldPoint: cubeLocalPointToWorld(cube, localPoint) };
   }
 
+  function getKnifeDirection(event) {
+    const start = state.knifeSelection;
+    const cube = start && state.project.getNode(start.uid);
+    const axes = start && getKnifeFaceAxes(start.faceName);
+    if (cube?.type !== 'cube' || !axes) return null;
+    const rect = sceneCanvas.getBoundingClientRect();
+    const ray = sceneRenderer.getScreenRay(event.clientX - rect.left, event.clientY - rect.top);
+    if (!ray) return null;
+
+    // The second click is a direction on the starting face's infinite plane.
+    // Ignore scene hits, grid snapping and face bounds, including in perspective.
+    const origin = worldPointToCubeLocal(cube, ray.origin);
+    const ahead = worldPointToCubeLocal(cube, ray.origin.map((value, axis) => value + ray.direction[axis]));
+    const direction = ahead.map((value, axis) => value - origin[axis]);
+    if (Math.abs(direction[axes.normal]) < 1e-8) return null;
+    const distance = (start.localPoint[axes.normal] - origin[axes.normal]) / direction[axes.normal];
+    const localPoint = origin.map((value, axis) => value + direction[axis] * distance);
+    return { uid: start.uid, faceName: start.faceName, localPoint };
+  }
+
   function getKnifePreviewAxis() {
-    if (!state.knifeSelection || !state.knifeHover
-      || state.knifeSelection.uid !== state.knifeHover.uid
-      || state.knifeSelection.faceName !== state.knifeHover.faceName) return null;
+    if (!state.knifeSelection || !state.knifeHover) return null;
     const cube = state.project.getNode(state.knifeSelection.uid);
     return chooseKnifeCutAxis(state.knifeSelection.localPoint, state.knifeHover.localPoint,
       state.knifeSelection.faceName, cube);
@@ -41,11 +59,7 @@ export function createKnifeController({ state, sceneCanvas, sceneRenderer, world
       shiftKey: Boolean(event.shiftKey),
       ctrlKey: Boolean(event.ctrlKey || event.metaKey)
     };
-    const candidate = getKnifeCandidate(event);
-    state.knifeHover = state.knifeSelection && candidate
-      && (candidate.uid !== state.knifeSelection.uid || candidate.faceName !== state.knifeSelection.faceName)
-      ? null
-      : candidate;
+    state.knifeHover = state.knifeSelection ? getKnifeDirection(event) : getKnifeCandidate(event);
     updateToolOptions();
     renderScene();
   }
@@ -120,30 +134,29 @@ export function createKnifeController({ state, sceneCanvas, sceneRenderer, world
   }
 
   function useKnifePoint(event) {
+    if (state.knifeSelection) {
+      const cube = state.project.getNode(state.knifeSelection.uid);
+      if (cube?.type !== 'cube') return cancelKnifeSelection(false);
+      state.knifeHover = getKnifeDirection(event);
+      const axis = getKnifePreviewAxis();
+      if (axis === null) return toast('這個吸附點無法建立有效切面');
+      completeKnifeCut(cube, axis, state.knifeSelection.localPoint[axis]);
+      return;
+    }
     const rect = sceneCanvas.getBoundingClientRect();
     const activeCurve = isBezierElement(selected()) ? selected() : null;
     const curveHit = sceneRenderer.pickCurveSegment(state.project,
       event.clientX - rect.left, event.clientY - rect.top, activeCurve?.uid || null);
     if (curveHit) return splitBezierAtSegment(state.project.getNode(curveHit.uid), curveHit.segmentIndex);
     const candidate = getKnifeCandidate(event);
-    if (!candidate) return toast(state.knifeSelection ? '第二點必須位於同一個 Cube 面上' : '刀具目前只能切割 Cube');
+    if (!candidate) return toast('刀具目前只能切割 Cube');
     const cube = state.project.getNode(candidate.uid);
-    if (!state.knifeSelection) {
-      if (cube.uid !== state.selectedUid) selectItem(cube.uid, { revealInOutliner: true });
-      state.knifeSelection = candidate;
-      state.knifeHover = candidate;
-      updateToolOptions();
-      renderScene();
-      toast('已選擇切割點；再選橫切或豎切方向');
-      return;
-    }
-    if (candidate.uid !== state.knifeSelection.uid || candidate.faceName !== state.knifeSelection.faceName) {
-      return toast('第二點必須位於同一個 Cube 面上');
-    }
+    if (cube.uid !== state.selectedUid) selectItem(cube.uid, { revealInOutliner: true });
+    state.knifeSelection = candidate;
     state.knifeHover = candidate;
-    const axis = getKnifePreviewAxis();
-    if (axis === null) return toast('這個吸附點無法建立有效切面');
-    completeKnifeCut(cube, axis, state.knifeSelection.localPoint[axis]);
+    updateToolOptions();
+    renderScene();
+    toast('已選擇切割點；再選橫切或豎切方向');
   }
 
   function cssLineColor(variable, fallback) {

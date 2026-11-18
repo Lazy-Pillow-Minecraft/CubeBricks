@@ -8,6 +8,7 @@ const bedrock = modelFormatRegistry.get(ModelFormatId.BEDROCK_ENTITY);
 assert.deepEqual(availableUvModes(java).map(mode => mode.value), ['face']);
 assert.deepEqual(availableUvModes(bedrock).map(mode => mode.value), ['box', 'face']);
 assert.equal(newProjectDefaults(java, 'zh-Hans').snap, 16);
+assert.equal(newProjectDefaults(java, 'zh-Hans').javaBlockBoundsEnabled, true);
 
 const configured = prepareNewProjectData(java, 'zh-Hans', {
   name: '  Test Block  ', textureWidth: 32, textureHeight: 64, snap: 8,
@@ -20,6 +21,7 @@ assert.deepEqual(project.textureSize, [32, 64]);
 assert.equal(project.snap.subdivisions, 8);
 assert.equal(project.uvMode, 'face');
 assert.equal(project.formatData.javaBlockVersion, '1.21.6-1.21.10');
+assert.equal(project.formatData.javaBlockBoundsEnabled, true);
 assert.equal(project.historyLimit, 25);
 assert.equal(project.formatData.projectDescription, 'A test project');
 assert.throws(() => prepareNewProjectData(java, 'zh-Hans', {
@@ -31,4 +33,9 @@ const bedrockProject = new CubeBricksProject(prepareNewProjectData(bedrock, 'zh-
 }));
 assert.equal(bedrockProject.uvMode, 'face');
 assert.equal(bedrockProject.snap.subdivisions, 32);
+const unrestrictedRegion = prepareNewProjectData(java, 'zh-Hans', {
+  name: 'Large Block', textureWidth: 16, textureHeight: 16, snap: 16, uvMode: 'face', javaBlockBoundsEnabled: false
+});
+assert.equal(unrestrictedRegion.formatData.javaBlockBoundsEnabled, false);
+assert.equal(new CubeBricksProject(unrestrictedRegion).formatData.javaBlockBoundsEnabled, false);
 console.log('New project options pass.');

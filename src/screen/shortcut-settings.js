@@ -1,5 +1,39 @@
 import { ConfigKey, configRegistry } from '../common/config/app-config.js';
-import { SHORTCUT_GROUPS, normalizeShortcutKey, resetAllShortcuts, resetShortcut, setShortcut, shortcutFor } from './shortcuts.js';
+import { SHORTCUT_GROUPS, shortcutEventKey, resetAllShortcuts, resetShortcut, setShortcut, shortcutFor } from './shortcuts.js';
+
+export function captureShortcutInput(input, event) {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (event.key === 'Enter') { input.blur(); return; }
+  if (event.key === 'Escape') {
+    input.value = '';
+    input.dataset.capturing = 'active';
+    setShortcut(input.dataset.shortcutInput, '');
+    input.blur();
+    return;
+  }
+  if (event.repeat) return;
+  const key = shortcutEventKey(event);
+  if (!key) return;
+  if (input.dataset.capturing === 'ready') {
+    input.value = '';
+    input.dataset.capturing = 'active';
+  }
+  const parts = input.value ? input.value.split(' + ') : [];
+  // Include modifiers already held before this field gained focus, including
+  // Ctrl / Shift + a side button. Ordinary keys remain an ordered sequence.
+  for (const [name, held] of [['Ctrl', event.ctrlKey], ['Shift', event.shiftKey], ['Alt', event.altKey], ['Meta', event.metaKey]]) {
+    if (held && !parts.includes(name)) parts.push(name);
+  }
+  if (!['Ctrl', 'Shift', 'Alt', 'Meta'].includes(key) || !parts.includes(key)) parts.push(key);
+  input.value = parts.join(' + ');
+}
+
+export function commitShortcutInput(input) {
+  if (input.dataset.capturing === 'active') setShortcut(input.dataset.shortcutInput, input.value);
+  input.dataset.capturing = '';
+  input.value = shortcutFor(input.dataset.shortcutInput);
+}
 
 export function bindShortcutSettings() {
   const root = document.getElementById('shortcutSettingsList');
@@ -41,25 +75,17 @@ export function bindShortcutSettings() {
   root.addEventListener('keydown', event => {
     const input = event.target.closest?.('[data-shortcut-input]');
     if (!input) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (event.key === 'Enter') { input.blur(); return; }
-    if (event.repeat) return;
-    if (input.dataset.capturing === 'ready') {
-      input.value = '';
-      input.dataset.capturing = 'active';
-    }
-    const key = normalizeShortcutKey(event.key);
-    const parts = input.value ? input.value.split(' + ') : [];
-    if (!['Ctrl', 'Shift', 'Alt', 'Meta'].includes(key) || !parts.includes(key)) parts.push(key);
-    input.value = parts.join(' + ');
+    captureShortcutInput(input, event);
   });
+  window.addEventListener('mousedown', event => {
+    if (!shortcutEventKey(event)) return;
+    const input = document.activeElement?.closest?.('[data-shortcut-input]');
+    if (input && root.contains(input)) captureShortcutInput(input, event);
+  }, { capture: true });
   root.addEventListener('focusout', event => {
     const input = event.target.closest?.('[data-shortcut-input]');
     if (!input) return;
-    if (input.dataset.capturing === 'active' && input.value) setShortcut(input.dataset.shortcutInput, input.value);
-    input.dataset.capturing = '';
-    input.value = shortcutFor(input.dataset.shortcutInput);
+    commitShortcutInput(input);
   });
   root.addEventListener('click', event => {
     const button = event.target.closest?.('[data-reset-shortcut]');

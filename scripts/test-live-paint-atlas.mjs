@@ -2,6 +2,32 @@ import assert from 'node:assert/strict';
 import { createTextureAtlasController } from '../src/texture/atlas-controller.js';
 import { createPaintStrokeController } from '../src/paint/stroke-controller.js';
 import { layerRasterCache } from '../src/common/core/texture-features.js';
+import { createPaintAlphaSnapshot, paintSnapshotAlpha, preservePaintAlpha, releasePaintAlphaSnapshot } from '../src/paint/alpha-snapshot.js';
+
+{
+  const reads = [];
+  let alpha = 255;
+  const canvas = {
+    width: 4096, height: 4096,
+    getContext: () => ({ getImageData(x, y, width, height) {
+      reads.push([x, y, width, height]);
+      return { data: new Uint8Array(width * height * 4).fill(alpha) };
+    } })
+  };
+  const stroke = createPaintAlphaSnapshot(canvas);
+  assert.equal(paintSnapshotAlpha(stroke, 8, 8), 255);
+  assert.equal(paintSnapshotAlpha(stroke, 9, 9), 255);
+  preservePaintAlpha(canvas, { x: 65, y: 5, width: 2, height: 2 });
+  alpha = 0;
+  assert.equal(paintSnapshotAlpha(stroke, 65, 5), 255, 'an overwrite preserves even a block the stroke has not hit yet');
+  assert.deepEqual(reads, [[0, 0, 32, 32], [64, 0, 32, 32]]);
+  releasePaintAlphaSnapshot(stroke);
+  preservePaintAlpha(canvas, { x: 128, y: 5, width: 2, height: 2 });
+  assert.equal(reads.length, 2);
+  const nextStroke = createPaintAlphaSnapshot(canvas);
+  assert.equal(paintSnapshotAlpha(nextStroke, 65, 5), 0);
+  releasePaintAlphaSnapshot(nextStroke);
+}
 
 class Canvas {
   constructor(width = 1, height = 1) {

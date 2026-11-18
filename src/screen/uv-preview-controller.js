@@ -21,7 +21,6 @@ export function createUvPreviewController({
   let uvPreviewDrag = null;
   let uvPreviewTextureDirty = true;
   let uvPreviewRenderDirty = true;
-  let uvPreviewPanelMetrics = null;
   const uvPreviewFaceLabelCanvas = document.createElement('canvas');
   let uvPreviewFaceLabelCacheKey = null;
   let uvPreviewFaceLabelFontRevision = 0;
@@ -127,38 +126,6 @@ export function createUvPreviewController({
       zoom: Math.max(.025, Math.min(20, 42 * Math.tan(Math.PI / 8) / (radius * 1.28)))
     };
     return cache.fit;
-  }
-
-  function syncUvPreviewPanelAspect(textureWidth, textureHeight) {
-    const panel = dockManagerProxy.current?.get('uvPreview');
-    if (!panel || panel.state.collapsed || panel.element.hidden) {
-      uvPreviewPanelMetrics = null;
-      return;
-    }
-    const width = Math.max(1, panel.element.getBoundingClientRect().width || panel.state.width);
-    const ratio = Math.max(.001, textureHeight / textureWidth);
-    const current = { width, ratio };
-    const previous = uvPreviewPanelMetrics;
-    uvPreviewPanelMetrics = current;
-    if (!previous) return;
-
-    const widthChanged = Math.abs(current.width - previous.width) >= .75;
-    const ratioChanged = Math.abs(current.ratio - previous.ratio) >= .0001;
-    if (!widthChanged && !ratioChanged) return;
-
-    // Keep manual vertical resizing intact. Only compensate for the amount by which
-    // a horizontal resize (or texture aspect change) changes the preview itself.
-    const previousPreviewHeight = Math.max(1, (previous.width - 16) * previous.ratio);
-    const currentPreviewHeight = Math.max(1, (current.width - 16) * current.ratio);
-    const heightDelta = currentPreviewHeight - previousPreviewHeight;
-    if (Math.abs(heightDelta) < .5) return;
-    const maximum = panel.state.dock === 'floating'
-      ? Math.max(180, window.innerHeight - panel.state.y)
-      : Math.max(180, window.innerHeight - 120);
-    const desired = Math.min(maximum, Math.max(180, panel.state.height + heightDelta));
-    if (Math.abs(panel.state.height - desired) < .5) return;
-    panel.state.height = desired;
-    dockManagerProxy.current.applyPanelState(panel);
   }
 
   function setUvPreviewPlaceholder(message, visible) {
@@ -458,7 +425,7 @@ export function createUvPreviewController({
     const textureWidth = Math.max(1, Number(state.project.textureSize?.[0]) || 1);
     const textureHeight = Math.max(1, Number(state.project.textureSize?.[1]) || 1);
     uvPreviewViewport.style.setProperty('--uv-preview-aspect', `${textureWidth} / ${textureHeight}`);
-    syncUvPreviewPanelAspect(textureWidth, textureHeight);
+    uvPreviewViewport.style.setProperty('--uv-preview-width-per-height', String(textureWidth / textureHeight));
     uvPreviewRenderer.render(cache.project, null, {
       projection: 'perspective',
       zoom: fit.zoom,
@@ -529,11 +496,10 @@ export function createUvPreviewController({
     get uvPreviewDrag() { return uvPreviewDrag; }, set uvPreviewDrag(value) { uvPreviewDrag = value; },
     get uvPreviewTextureDirty() { return uvPreviewTextureDirty; }, set uvPreviewTextureDirty(value) { uvPreviewTextureDirty = value; },
     get uvPreviewRenderDirty() { return uvPreviewRenderDirty; }, set uvPreviewRenderDirty(value) { uvPreviewRenderDirty = value; },
-    get uvPreviewPanelMetrics() { return uvPreviewPanelMetrics; }, set uvPreviewPanelMetrics(value) { uvPreviewPanelMetrics = value; },
     get uvPreviewFaceLabelFontRevision() { return uvPreviewFaceLabelFontRevision; }, set uvPreviewFaceLabelFontRevision(value) { uvPreviewFaceLabelFontRevision = value; },
     invalidateFaceLabelCache() { uvPreviewFaceLabelCacheKey = null; },
     uvPreviewIsActive, uvPreviewElements, getUvPreviewProject,
-    syncUvPreviewPanelAspect, effectiveFaceTextureReference, ensureCubeFaceRecord,
+    effectiveFaceTextureReference, ensureCubeFaceRecord,
     setCubeFaceCulled, selectedUvFaceData, updateUvFaceUi, editSelectedUvFace,
     renderUvPreview, stopUvPreviewAnimation, refreshUvPreview, invalidateUvPreviewGeometry
   };

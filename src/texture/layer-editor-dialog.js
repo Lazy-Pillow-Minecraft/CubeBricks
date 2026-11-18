@@ -92,7 +92,7 @@ export function createLayerEditorDialog({
     anchorPercent.disabled = !continuous || !settings?.anchorEnabled;
   }
 
-  function editTone(change) {
+  function editTone(change, commit = true) {
     const layer = currentLayer();
     if (!layer) return;
     const initial = layer.toneMap || paletteSnapshot(paletteRows.find(row => row.colors.length || row.colorSpaceGradient));
@@ -103,7 +103,7 @@ export function createLayerEditorDialog({
       ...change
     };
     onPropertyInput(layer, 'toneMap', next);
-    onPropertyCommit();
+    if (commit) onPropertyCommit();
     scheduleRender();
   }
 
@@ -173,6 +173,7 @@ export function createLayerEditorDialog({
   }
 
   for (const input of [range, value]) {
+    if (input.type === 'number') input.dataset.numericLive = 'input';
     input.addEventListener('input', () => editOpacity(input));
     input.addEventListener('change', () => editOpacity(input, true));
   }
@@ -204,12 +205,17 @@ export function createLayerEditorDialog({
   anchorColor.addEventListener('change', () => editTone({ anchorColorIndex: Number(anchorColor.value) }));
   for (const [control, field, low, high] of [
     [segments, 'segmentCount', 2, 256], [anchorPercent, 'anchorPercent', 0, 100], [anchorGray, 'anchorGray', 0, 100]
-  ]) control.addEventListener('change', () => {
-    const value = Math.max(low, Math.min(high, Number(control.value)));
-    if (!Number.isFinite(value)) return;
-    control.value = String(value);
-    editTone({ [field]: value });
-  });
+  ]) {
+    control.dataset.numericLive = 'input';
+    const apply = commit => {
+      const value = Math.max(low, Math.min(high, Number(control.value)));
+      if (!Number.isFinite(value)) return;
+      control.value = String(value);
+      editTone({ [field]: value }, commit);
+    };
+    control.addEventListener('input', () => apply(false));
+    control.addEventListener('change', () => apply(true));
+  }
   nameInput.addEventListener('change', () => {
     const layer = selectedLayerEntry(activeTextureAsset()) || activeLayer(activeTextureAsset());
     if (!layer) return;

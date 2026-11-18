@@ -2,6 +2,8 @@ import { getBlockbenchBoxUv } from '../common/core/geometry-utils.js';
 import { setPivotPreservingGeometry } from '../model.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { inverseRotateVector, quaternionFromAxisAngle, quaternionMultiply, quaternionFromEuler, eulerFromQuaternion } from '../utils/math/rotation.js';
+import { generatedSelectionFrame, sourceVector, sourcePoint as toSourcePoint } from '../common/core/modifier-selection.js';
+import { proceduralMirrorVector } from '../common/core/procedural-mirror.js';
 
 export function createTransformGeometry({
   state, CUBE_FACE_NAMES, isShapeElement, isBezierElement,
@@ -15,7 +17,7 @@ export function createTransformGeometry({
       setPivotPreservingGeometry(state.project, item, local);
     } else if (isBezierElement(item)) {
       const delta = local.map((value, axis) => value - item.origin[axis]);
-      const compensation = inverseRotateVector(delta, item.rotation || [0, 0, 0]);
+      const compensation = proceduralMirrorVector(item, inverseRotateVector(delta, item.rotation || [0, 0, 0]));
       item.origin = local;
       item.nodes.forEach(node => { node.position = node.position.map((value, axis) => value - compensation[axis]); });
     } else if (item.position) item.position = local;
@@ -97,7 +99,7 @@ export function createTransformGeometry({
     if (state.tool !== 'rotate' || !state.rotationVertexPick || !pointEntry?.point) return false;
     const item = state.project.getNode(pointEntry.targetUid);
     if (!item || !(['cube', 'group'].includes(item.type) || isShapeElement(item))) return false;
-    const nextPivot = worldPointToParentLocal(item, pointEntry.point);
+    const nextPivot = worldPointToParentLocal(item, toSourcePoint(generatedSelectionFrame(state, sceneRenderer), pointEntry.point));
     if (nextPivot.every((value, axis) => Math.abs(value - item.pivot[axis]) < 1e-8)) return false;
     snapshot('core.element.pivot');
     setPivotPreservingGeometry(state.project, item, nextPivot);
@@ -140,10 +142,11 @@ export function createTransformGeometry({
     if (!currentItem || !pointEntry) return;
     if (!state.vertexSnapSource) {
       if (pointEntry.targetOnly) return toast('交點只能作為目標點，請先選普通頂點或樞軸點');
-      if (pointEntry.generated) return toast('修改器結果只能作為目標捕捉點');
+      const frame = pointEntry.generated ? generatedSelectionFrame(state, sceneRenderer) : null;
+      if (pointEntry.generated && pointEntry.instanceKey !== frame?.key) return toast('修改器結果只能作為目標捕捉點');
       state.vertexSnapSource = {
         rootUid: currentItem.uid, uid: pointEntry.uid, pointType: pointEntry.pointType,
-        nodeIndex: pointEntry.nodeIndex, point: [...pointEntry.point]
+        nodeIndex: pointEntry.nodeIndex, point: [...pointEntry.point], generatedFrame: frame
       };
       updateToolOptions();
       renderScene();
@@ -157,24 +160,27 @@ export function createTransformGeometry({
     }
     if (state.vertexSnapMode === 'scale' && sourceItem.type !== 'cube') return toast('縮放捕捉目前只適用於 Cube');
     if (state.vertexSnapMode === 'rotate' && !sourceItem.rotation) return toast('這個物件不能旋轉捕捉');
+    const frame = state.vertexSnapSource.generatedFrame;
+    const sourceWorld = toSourcePoint(frame, state.vertexSnapSource.point);
+    const targetWorld = toSourcePoint(frame, pointEntry.point);
     snapshot('core.element.vertex_snap');
     if (state.vertexSnapMode === 'move') {
       if (state.vertexSnapSource.pointType === 'curveNode' && isBezierElement(sourceItem)) {
         const node = sourceItem.nodes[state.vertexSnapSource.nodeIndex];
-        const worldDelta = pointEntry.point.map((value, axis) => value - state.vertexSnapSource.point[axis]);
+        const worldDelta = sourceVector(frame, pointEntry.point.map((value, axis) => value - state.vertexSnapSource.point[axis]));
         let localDelta = worldVectorToParentLocal(sourceItem, worldDelta);
         localDelta = inverseRotateVector(localDelta, sourceItem.rotation || [0, 0, 0]);
         node.position = node.position.map((value, axis) => sourceItem.dimension === 2 && axis === 1 ? 0 : value + localDelta[axis]);
       } else if (state.vertexSnapSource.pointType === 'pivot' && (['cube', 'group'].includes(sourceItem.type) || isShapeElement(sourceItem))) {
-        setPivotPreservingGeometry(state.project, sourceItem, worldPointToParentLocal(sourceItem, pointEntry.point));
+        setPivotPreservingGeometry(state.project, sourceItem, worldPointToParentLocal(sourceItem, targetWorld));
       } else {
-        const worldDelta = pointEntry.point.map((value, axis) => value - state.vertexSnapSource.point[axis]);
+        const worldDelta = sourceVector(frame, pointEntry.point.map((value, axis) => value - state.vertexSnapSource.point[axis]));
         translateItemByLocalDelta(sourceItem, worldVectorToParentLocal(sourceItem, worldDelta));
       }
     } else if (state.vertexSnapMode === 'scale') {
       if (sourceItem.autoUv === false) freezeCubeUvs(sourceItem);
-      const sourcePoint = worldPointToCubeLocal(sourceItem, state.vertexSnapSource.point);
-      const targetPoint = worldPointToCubeLocal(sourceItem, pointEntry.point);
+      const sourcePoint = worldPointToCubeLocal(sourceItem, sourceWorld);
+      const targetPoint = worldPointToCubeLocal(sourceItem, targetWorld);
       const nextPosition = [...sourceItem.position], nextSize = [...sourceItem.size];
       for (let axis = 0; axis < 3; axis++) {
         const start = sourceItem.position[axis], end = start + sourceItem.size[axis];
@@ -191,8 +197,8 @@ export function createTransformGeometry({
       sourceItem.size = nextSize;
     } else {
       const pivot = sourceItem.pivot || sourceItem.origin || sourceItem.position;
-      const sourcePoint = worldPointToParentLocal(sourceItem, state.vertexSnapSource.point);
-      const targetPoint = worldPointToParentLocal(sourceItem, pointEntry.point);
+      const sourcePoint = worldPointToParentLocal(sourceItem, sourceWorld);
+      const targetPoint = worldPointToParentLocal(sourceItem, targetWorld);
       const from = sourcePoint.map((value, axis) => value - pivot[axis]);
       const to = targetPoint.map((value, axis) => value - pivot[axis]);
       const turn = Math.hypot(...from) > 1e-6 && Math.hypot(...to) > 1e-6

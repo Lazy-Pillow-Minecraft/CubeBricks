@@ -10,6 +10,7 @@ export function formatRules(project) {
   const version = normalizeJavaBlockVersion(project?.formatData?.javaBlockVersion);
   return {
     javaBlock, bedrockBlock, moddedEntity, version,
+    javaBlockBounds: javaBlock && project?.formatData?.javaBlockBoundsEnabled !== false,
     forceCullFaces: javaBlock,
     allowBoxUv: !javaBlock,
     allowFaceUv: !moddedEntity,
@@ -45,7 +46,7 @@ export function constrainCube(cube, rules) {
     // Java validates the unrotated from/to values, not the rotated corners.
     // Moving a diagonal cube because its visual AABB crosses this box would
     // reject otherwise valid Minecraft models.
-    for (let axis = 0; axis < 3; axis++) {
+    for (let axis = 0; rules.javaBlockBounds !== false && axis < 3; axis++) {
       const start = Number(cube.position?.[axis]);
       const size = Number(cube.size?.[axis]);
       if (!Number.isFinite(start) || !Number.isFinite(size)) continue;
@@ -265,7 +266,7 @@ export function restoreFormatGeometry(captured) {
 export function keepFormatEditWithinLimit(project, captured) {
   const rules = formatRules(project);
   const violation = rules.bedrockBlock ? bedrockSizeViolation(projectSizeBounds(project))
-    : rules.javaBlock ? javaBlockSizeViolation(project) : 0;
+    : rules.javaBlockBounds ? javaBlockSizeViolation(project) : 0;
   if (violation <= 1e-6) return true;
   const after = captureFormatGeometry(captured.map(([node]) => node));
   restoreFormatGeometry(captured);

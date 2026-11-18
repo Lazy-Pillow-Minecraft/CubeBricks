@@ -350,6 +350,8 @@ export function createProjectTabsController({ state, $, escapeHtml, escapeAttrib
     $('#projectInfoName').value = project.name || '';
     $('#projectInfoFormat').textContent = modelFormatRegistry.get(project.formatId)?.name || project.formatId;
     $('#projectInfoJavaVersionRow').hidden = project.formatId !== 'java_block_item';
+    $('#projectInfoJavaBoundsRow').hidden = project.formatId !== 'java_block_item';
+    $('#projectInfoJavaBoundsDisabled').checked = project.formatData?.javaBlockBoundsEnabled === false;
     $('#projectInfoJavaVersion').value = project.formatData?.javaBlockVersion || JavaBlockVersion.LEGACY;
     $('#projectInfoJavaVersionButton').textContent = $('#projectInfoJavaVersion').selectedOptions[0]?.textContent || '';
     $('#projectInfoJavaVersionMenu').hidden = true;
@@ -377,9 +379,11 @@ export function createProjectTabsController({ state, $, escapeHtml, escapeAttrib
     const project = tab.session.project, previousHistoryLimit = project.historyLimit;
     const description = $('#projectInfoDescription').value.trim();
     const javaVersion = $('#projectInfoJavaVersionRow').hidden ? null : $('#projectInfoJavaVersion').value;
+    const javaBoundsEnabled = javaVersion === null ? null : !$('#projectInfoJavaBoundsDisabled').checked;
     const modelChanged = name !== project.name || width !== (project.textureSize?.[0] || 16) || height !== (project.textureSize?.[1] || 16)
       || snap !== (project.snap?.subdivisions || state.settingsSnap) || description !== (project.formatData?.projectDescription || '')
-      || javaVersion !== null && javaVersion !== (project.formatData?.javaBlockVersion || JavaBlockVersion.LEGACY);
+      || javaVersion !== null && javaVersion !== (project.formatData?.javaBlockVersion || JavaBlockVersion.LEGACY)
+      || javaBoundsEnabled !== null && javaBoundsEnabled !== (project.formatData?.javaBlockBoundsEnabled !== false);
     const historyChanged = historyLimit !== previousHistoryLimit;
     if (modelChanged) {
       if (tab.journalPending) void flushProjectJournal(tab);
@@ -394,7 +398,7 @@ export function createProjectTabsController({ state, $, escapeHtml, escapeAttrib
       project.snap = { subdivisions: snap };
       project.formatData = {
         ...(project.formatData || {}), projectDescription: description,
-        ...(javaVersion === null ? {} : { javaBlockVersion: javaVersion })
+        ...(javaVersion === null ? {} : { javaBlockVersion: javaVersion, javaBlockBoundsEnabled: javaBoundsEnabled })
       };
       constrainProject(project);
       tab.displayName = null;

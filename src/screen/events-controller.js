@@ -1,5 +1,6 @@
 import { ConfigKey, configRegistry, TOOL_TRANSFORM_SPACE } from '../common/config/app-config.js';
 import { createListDragAutoScroll } from './list-drag-scroll.js';
+import { scheduleDropCleanup } from './drag-drop-cleanup.js';
 import { verticalDropTarget } from './vertical-drop.js';
 import { Cube, Group, Shape } from '../model.js';
 import { shapeRegistry } from '../shapes/builtins.js';
@@ -29,7 +30,7 @@ export function createEventBinder({
   addPaletteRow, renderPalette, enterAxisView, beginAxisWidgetDrag,
   moveAxisWidgetDrag, endAxisWidgetDrag, restore, cancelCameraFocus,
   deleteSelectedPaletteColor, refreshKnifeFromModifierEvent,
-  activateDock, addBezierElement, addCube, addGroup, addLocator, addShape,
+  activateDock, addBezierElement, addCube, addGroup, addEmptyGroup, groupSelected, addLocator, addShape,
   animateLockedHoverStrength, applyPreset,
   beginTemporaryEyedropper, bindContextMenus, bindTextureFaceDropSurface,
   cameraController, clamp, clearOutlinerDropState,
@@ -142,11 +143,22 @@ export function createEventBinder({
         while (rowIndex > 0 && rows[rowIndex].curveNode) rowIndex--;
         row = rows[rowIndex];
       }
+      const following = rows[picked.index + 1];
+      const afterLastChild = following?.groupEnd && !row.groupEnd && !row.group
+        && picked.entry.ancestors.at(-1)?.uid === following.groupUid
+        && picked.ratio >= .5;
+      if (afterLastChild) {
+        rowIndex = picked.index + 1;
+        row = following;
+      }
       const footer = outliner.querySelector(`.outliner-group-end[data-outliner-row-index="${rowIndex}"]`);
       if (row.groupEnd) {
-        const chain = [...row.ancestors, { uid: row.groupUid, depth: row.depth }];
-        const outside = chain.find(({ depth }) => clientX <= listBounds.left + 16 + depth * 13 + 4);
-        const destination = outside || chain.at(-1);
+        // The space above the closing line still belongs to the group.
+        // A nested footer can only exit its own group. Outer groups end later.
+        const aboveClosingLine = contentY - row.top < 7;
+        const contentX = clientX - listBounds.left + outliner.scrollLeft;
+        const outside = !aboveClosingLine && contentX <= 16 + row.depth * 13 + 4;
+        const destination = { uid: row.groupUid, depth: row.depth };
         const zone = outside ? 'after' : 'inside';
         if (footer) {
           footer.dataset.dropUid = destination.uid;
@@ -160,15 +172,15 @@ export function createEventBinder({
       const item = outliner.querySelector(`.outliner-item[data-outliner-row-index="${rowIndex}"]`);
       const node = row.node;
       const ratio = picked.entry === row ? picked.ratio : 1;
-      const zone = node?.type === 'group' && ratio > .27 && ratio < .73 ? 'inside' : ratio < .5 ? 'before' : 'after';
-      const groupLine = zone === 'inside' && node?.type === 'group'
+      const zone = ratio < .5 ? 'before' : row.group ? 'inside-first' : 'after';
+      const groupLine = zone === 'inside-first'
         ? { uid: node.uid, depth: row?.depth || 0 }
         : row?.ancestors.at(-1);
       if (groupLine) {
         item?.style.setProperty('--drop-line-x', `${16 + groupLine.depth * 13}px`);
         if (item) highlightOutlinerGroupLine(groupLine.uid, rowIndex, zone === 'before' ? 0 : 31);
       }
-      item?.classList.add(`drop-${zone}`);
+      item?.classList.add(zone === 'inside-first' ? 'drop-after' : `drop-${zone}`);
       if (item) item.dataset.dropZone = zone;
       return { uid: node.uid, zone };
     }
@@ -197,19 +209,8 @@ export function createEventBinder({
       outlinerDragScroll.stop();
       textureDragScroll.stop();
       paletteDragScroll.stop();
-      queueMicrotask(() => {
-        if (state.outlinerDragUids?.length) {
-          clearOutlinerDropState();
-          removeOutlinerDragGhost();
-          state.outlinerDragUids = null;
-        }
-        if (state.textureDrag) {
-          state.textureDrag = null;
-          clearTextureFaceDropTarget();
-          renderTextureList();
-        }
-        palette.draggedColor = null;
-      });
+      scheduleDropCleanup({ state, palette, clearOutlinerDropState,
+        removeOutlinerDragGhost, clearTextureFaceDropTarget, renderTextureList });
     }, true);
     document.addEventListener('dragend', () => {
       outlinerDragScroll.stop();
@@ -371,6 +372,7 @@ export function createEventBinder({
       configRegistry.set(ConfigKey.LANGUAGE, event.target.value, { source: 'appearance-dialog' });
     });
     $$('[data-config-key]').forEach(control => {
+      if (control.type === 'number') control.dataset.numericLive = 'input';
       control.addEventListener('change', () => setConfigFromControl(control));
       if (control.type === 'number') control.addEventListener('input', () => {
         // A partial history-limit number must not immediately delete undo records.
@@ -700,6 +702,7 @@ export function createEventBinder({
         if (!isBezierElement(curve)) return;
         sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
         state.selectedUid = curve.uid;
+        state.selectedGenerated = null;
         state.selectedUids = new Set([curve.uid]);
         state.selectionAnchorUid = curve.uid;
         state.selectedModifierUid = null;
@@ -944,7 +947,7 @@ export function createEventBinder({
       pasteTexture, updateTransformGizmo, setRenderModeMenu, setReferenceImageMenu,
       referenceImages, setReferenceImageEditing, exitSubdivisionEdit, clearPaintGradientSelection,
       copySelected, cutSelected, pasteElements, deleteSelectedPaletteColor, removeActiveLayer,
-      removeTexture, deleteSelected, setTool, addCube, cancelCameraFocus, renderScene,
+      removeTexture, deleteSelected, setTool, addCube, addEmptyGroup, groupSelected, cancelCameraFocus, renderScene,
       resetTextureView, focusSelectedTextureUvs, focusSceneOrigin, focusSelected,
       refreshKnifeFromModifierEvent
     });

@@ -7,6 +7,9 @@
   <title>CubeBricks</title>
   <link rel="icon" type="image/png" href="./assets/shortcut-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./screen/theme/blocks.css" />
+  <link rel="stylesheet" href="./screen/number-input/number-input.css" />
+  <link rel="stylesheet" href="./editor/toolbox/toolbox.css" />
 </head>
 <body data-editor-mode="edit">
   <div id="startupCover" aria-hidden="true" style="position:fixed;inset:0;z-index:2147483647;background:var(--bg,#11130f)"></div>
@@ -107,6 +110,7 @@
         <button class="tool" data-tool="vertexSnap" title="頂點捕捉" aria-label="頂點捕捉"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 183.19 158.67"><circle cx="26.74" cy="56.55" r="26.74"/><path d="M40.44,27.39c-1.29-9.15,34.51-34.36,67-25.55,23.87,6.47,43.2,30.55,38.83,40.85-3.77,8.89-27.14,12.09-32.4,4.89-.75-1.03-.8-1.81-1.26-3.27-3.13-9.81-14.12-15.05-15.91-15.9-16.32-7.78-40.82.17-46.81,4.02-.59.38-2.54,1.71-4.63,1.21-2.94-.71-4.61-4.7-4.83-6.24Z"/><path d="M133.67,89.17l-30.71-32.38c-3.57-3.76-1.57-9.97,3.52-10.95l47.18-9.1c5.09-.98,9.25,4.05,7.34,8.86l-16.47,41.48c-1.77,4.45-7.56,5.57-10.86,2.09Z"/><path d="M153.39,75.77l-7.78,19.59c-1.77,4.45-7.56,5.57-10.86,2.09l-16.33-17.21c-12.03,7.48-20.04,20.81-20.04,36.02,0,23.42,18.98,42.4,42.4,42.4s42.4-18.98,42.4-42.4c0-19.03-12.53-35.13-29.8-40.49Z"/></svg></button>
         <button class="tool" data-tool="knife" title="刀具切割" aria-label="刀具切割"><svg class="tool-icon" aria-hidden="true" viewBox="0 0 186.43 167.88"><rect x="108.09" y="-1.84" width="50.7" height="113.72" rx="9.86" ry="9.86" transform="translate(71.97 -75.57) rotate(42.39)"/><path d="M81.17,88.28c-3.74-3.41-9.53-3.15-12.94.59L0,163.62c25.67,9.52,66.11,3.06,104.54-19.13,6.34-3.66,12.34-7.59,17.95-11.71.89-3.22-.02-6.8-2.65-9.2l-38.68-35.3Z"/></svg></button>
         <button class="tool" data-tool="faceSelect" title="面選擇" aria-label="面選擇"><span>▱</span></button>
+        <button class="tool" data-tool="toolbox" title="ui.toolbox" aria-label="ui.toolbox" style="--ui-icon:url(assets/ui-icons/toolbox.svg)"></button>
         <button class="tool mode-only paint-tool" data-tool="brush" title="畫筆（B）" aria-label="畫筆"><span>◍</span></button>
         <button class="tool paint-shape-main paint-only-option" id="paintShapeButton" type="button" title="圖形繪製（目前：直線）" aria-label="圖形繪製"><span>╱</span></button>
         <button class="tool mode-only paint-tool" data-tool="fill" title="油漆桶（G）" aria-label="油漆桶"><span>◩</span></button>
@@ -116,6 +120,7 @@
       </div>
       <div class="toolbar-lane tool-options-lane" id="toolOptionsLane" aria-label="目前工具參數" hidden>
         <span class="lane-caption" id="toolContext">工具參數</span>
+        <div class="toolbox-options" id="toolboxOptions" hidden></div>
         <div class="toolbar-segment" id="transformSpaceControl" role="group" aria-label="變換坐標系">
           <button type="button" data-transform-space="global" title="全局坐標系">全局</button>
           <button type="button" data-transform-space="parent" title="父級坐標系">父級</button>
@@ -245,9 +250,9 @@
         </div>
         <div class="uv-face-actions" id="uvFaceActions" aria-label="選中面 UV 操作">
           <span id="uvSelectedFaceLabel">未選擇面</span>
-          <button type="button" data-uv-face-action="rotate" title="順時針旋轉 90°">↻ 90°</button>
-          <button type="button" data-uv-face-action="mirror-x" title="左右鏡像">↔</button>
-          <button type="button" data-uv-face-action="mirror-y" title="上下鏡像">↕</button>
+          <button type="button" data-uv-face-action="rotate" title="順時針旋轉 90°"><i class="ui-mask-icon toolbox-clockwise" style="--ui-icon:url(assets/ui-icons/rotate-ccw-90.svg)" aria-hidden="true"></i></button>
+          <button type="button" data-uv-face-action="mirror-x" title="左右鏡像"><i class="ui-mask-icon" style="--ui-icon:url(assets/ui-icons/symmetry-x.svg)" aria-hidden="true"></i></button>
+          <button type="button" data-uv-face-action="mirror-y" title="上下鏡像"><i class="ui-mask-icon" style="--ui-icon:url(assets/ui-icons/symmetry-y.svg)" aria-hidden="true"></i></button>
           <button type="button" data-uv-face-action="cull" title="剔除／恢復面">⊘</button>
         </div>
         <div class="uv-preview-options" aria-label="UV 預覽選項">
@@ -364,7 +369,6 @@
             <div class="panel-heading-actions"></div>
           </div>
           <div class="panel-control-strip palette-control-strip">
-            <span id="paletteSummary">3 行 · 每行獨立設定</span>
             <button class="add-palette-row" data-action="addPaletteRow">＋ 新增一行</button>
             <button type="button" class="palette-file-button" id="paletteImportButton" title="追加匯入 .cbcmap 色卡">匯入</button>
             <button type="button" class="palette-file-button" id="paletteExportButton" title="只導出目前選中的色卡為 .cbcmap；檔案不包含名稱">導出</button>
@@ -458,6 +462,7 @@
       <div class="project-info-grid">
         <label class="wide"><span>項目名稱<small>建立後仍可修改</small></span><input id="newModelProjectName" type="text" maxlength="128" value="untitled" required /></label>
         <div class="wide project-info-version-row" id="newModelJavaVersionRow" hidden><span>Java 方塊／物品版本<small>決定 Cube 的角度與旋轉軸限制</small></span><div class="project-info-version-picker"><button type="button" id="newModelJavaVersionButton" aria-haspopup="listbox" aria-expanded="false"></button><div id="newModelJavaVersionMenu" class="project-info-version-menu" role="listbox" hidden></div></div></div>
+        <label class="wide config-toggle-label" id="newModelJavaBoundsRow" hidden><span>ui.java-block-disable-region-limit<small>ui.java-block-region-limit-help</small></span><input id="newModelJavaBoundsDisabled" type="checkbox" /></label>
         <label class="wide" id="newModelUvFixedRow" hidden><span>UV 模式<small>此格式只支援逐面 UV</small></span><output>逐面 UV</output></label>
         <div class="wide project-info-version-row" id="newModelUvPickerRow"><span>UV 模式<small>新建 Cube 與 Shape 的預設展開方式</small></span><div class="project-info-version-picker"><button type="button" id="newModelUvButton" aria-haspopup="listbox" aria-expanded="false"></button><div id="newModelUvMenu" class="project-info-version-menu" role="listbox" hidden></div></div></div>
         <label><span>貼圖寬度<small>UV 坐標參考尺寸</small></span><input id="newModelTextureWidth" type="number" min="1" max="8192" step="1" required /></label>
@@ -478,6 +483,7 @@
         <label class="wide"><span>項目名稱<small>project.name</small></span><input id="projectInfoName" type="text" maxlength="128" required /></label>
         <label class="wide"><span>模型格式<small>project.formatId</small></span><output id="projectInfoFormat"></output></label>
         <div class="wide project-info-version-row" id="projectInfoJavaVersionRow" hidden><span>Java 方塊／物品版本<small>決定 Cube 旋轉限制</small></span><div class="project-info-version-picker"><select id="projectInfoJavaVersion" hidden><option value="1.9-1.21.5">1.9 – 1.21.5 · 22.5°／單軸</option><option value="1.21.6-1.21.10">1.21.6 – 1.21.10 · 自由角度／單軸</option><option value="1.21.11+">1.21.11+ · 無限制</option></select><button type="button" id="projectInfoJavaVersionButton" aria-haspopup="listbox" aria-expanded="false"></button><div id="projectInfoJavaVersionMenu" class="project-info-version-menu" role="listbox" hidden></div></div></div>
+        <label class="wide config-toggle-label" id="projectInfoJavaBoundsRow" hidden><span>ui.java-block-disable-region-limit<small>ui.java-block-region-limit-help</small></span><input id="projectInfoJavaBoundsDisabled" type="checkbox" /></label>
         <label><span>貼圖寬度<small>textureSize[0]</small></span><input id="projectInfoTextureWidth" type="number" min="1" step="1" required /></label>
         <label><span>貼圖高度<small>textureSize[1]</small></span><input id="projectInfoTextureHeight" type="number" min="1" step="1" required /></label>
         <label class="wide"><span>標準吸附精度<small>16 ÷ 精度 = 像素步長</small></span><input id="projectInfoSnap" type="number" min="0.0001" step="any" required /></label>
@@ -517,6 +523,7 @@
               <label class="config-select-label"><span>介面語言<small>application.language</small></span><select id="languageSelect" aria-label="介面語言"><option value="system">系統語言</option><option value="zh-Hant">繁體中文</option><option value="zh-Hans">简体中文</option><option value="en">English</option></select></label>
               <div class="player-reference-texture-setting text-only-setting"><div><strong>資源包</strong><small>字體、語言與 Shape 包共用管理視窗；包內容分開載入</small></div><div class="player-reference-texture-actions"><button type="button" id="openPacksButton">管理資源包</button></div></div>
               <label class="config-number-label"><span>預設操作歷史上限<small>application.history-limit · 0–10000 筆</small></span><input type="number" min="0" max="10000" step="1" data-config-key="application.history-limit" /></label>
+              <label class="config-toggle-label"><span>停靠卡片高度吸附<small>選色器與 UV 預覽隨寬度調整高度</small></span><input type="checkbox" data-config-key="application.dock-height-snap" /></label>
               <div class="player-reference-texture-setting text-only-setting workspace-directory-setting"><div><strong>工作空間目錄</strong><small>projects/、shapepacks/、languagepacks/、fontpacks/ 分開保存；僅安裝可信的 Shape JS 包</small><span id="projectWorkspaceDirectory">讀取中…</span></div><div class="player-reference-texture-actions"><button type="button" data-action="chooseProjectWorkspace">更改位置</button></div></div>
             </div>
           </section>
@@ -563,23 +570,20 @@
             </div>
           </section>
           <section class="settings-page" data-settings-panel="shortcuts">
-            <div class="settings-page-heading"><strong>快捷鍵</strong><span>點擊輸入框後按下鍵位；Enter 或失焦保存</span></div>
+            <div class="settings-page-heading"><strong>快捷鍵</strong><span>ui.shortcut-input-help</span></div>
             <div id="shortcutSettingsList" class="shortcut-settings-list"></div>
             <button type="button" id="resetAllShortcuts" class="shortcut-reset-all">重置全部快捷鍵</button>
           </section>
           <section class="settings-page" data-settings-panel="appearance">
             <div class="settings-page-heading"><strong>外觀</strong><span>顏色、圓角與介面縮放</span></div>
             <div class="theme-grid">
+              <label class="config-select-label"><span>明暗模式</span><select data-config-key="application.theme-mode"><option value="system">跟随系统</option><option value="light">明亮</option><option value="dark">深色</option></select></label>
               <label class="config-select-label"><span>介面字體<small>application.font</small></span><select id="fontSelect"><option value="system">系統字體</option></select></label>
-              <label>強調色<input type="color" data-theme-var="--accent" value="#b9f55a" /></label>
-              <label>背景色<input type="color" data-theme-var="--bg" value="#11130f" /></label>
-              <label>面板色<input type="color" data-theme-var="--panel" value="#1b1f18" /></label>
-              <label>視窗色<input type="color" data-theme-var="--viewport" value="#20251e" /></label>
-              <label>選中邊框<input type="color" data-theme-var="--selection-outline" value="#d8f59b" /></label>
               <label class="range-label">圓角 <output id="radiusOutput">10px</output><input type="range" min="0" max="22" value="10" data-theme-var="--radius" data-unit="px" /></label>
               <label class="range-label">介面縮放 <output id="scaleOutput">100%</output><input type="range" min="85" max="120" value="100" data-theme-var="--ui-scale" data-unit="%" /></label>
             </div>
-            <div class="preset-row"><button type="button" data-preset="moss">苔原</button><button type="button" data-preset="amber">琥珀</button><button type="button" data-preset="ember">熔岩</button><button type="button" data-preset="slate">深海</button></div>
+            <div class="preset-row"><button type="button" data-preset="moss">苔原</button><button type="button" data-preset="amber">琥珀</button><button type="button" data-preset="ember">熔岩</button><button type="button" data-preset="slate">深海</button><button type="button" data-preset="violet">紫晶</button><button type="button" data-preset="monochrome">黑白</button></div>
+            <div class="preset-row"><button type="button" data-preset="moss-blocks">苔原·色块</button><button type="button" data-preset="amber-blocks">琥珀·色块</button><button type="button" data-preset="ember-blocks">熔岩·色块</button><button type="button" data-preset="slate-blocks">深海·色块</button><button type="button" data-preset="violet-blocks">紫晶·色块</button><button type="button" data-preset="monochrome-blocks">黑白·色块</button></div>
           </section>
         </div>
       </div>
@@ -738,6 +742,23 @@
     </div></div>
   </dialog>
 
+  <dialog id="textureResizeDialog" class="theme-dialog texture-resize-dialog" aria-labelledby="textureResizeTitle">
+    <form id="textureResizeForm">
+      <div class="dialog-heading"><h2 id="textureResizeTitle">调整贴图尺寸</h2></div>
+      <div id="textureResizeName" class="texture-resize-name"></div>
+      <div class="layer-points-fields">
+        <label>宽度（px）<input id="textureResizeWidth" type="number" min="1" max="8192" step="1" required></label>
+        <label>高度（px）<input id="textureResizeHeight" type="number" min="1" max="8192" step="1" required></label>
+      </div>
+      <div class="texture-resize-modes">
+        <label><input type="radio" name="resizeMode" value="crop" checked><span>直接裁切</span></label>
+        <label><input type="radio" name="resizeMode" value="repeat"><span>重复</span></label>
+        <label><input type="radio" name="resizeMode" value="stretch"><span>拉伸</span></label>
+      </div>
+      <p id="textureResizeStatus" role="status"></p>
+      <div class="dialog-actions"><button type="button" id="textureResizeCancel">取消</button><button type="submit" id="textureResizeApply" class="primary-button">应用</button></div>
+    </form>
+  </dialog>
   <dialog id="layerPointsDialog" class="theme-dialog layer-points-dialog" aria-labelledby="layerPointsTitle">
     <form id="layerPointsForm">
       <div class="dialog-heading"><div><span class="eyebrow">RANDOM POINTS</span><h2 id="layerPointsTitle">生成隨機點</h2></div></div>

@@ -13,13 +13,15 @@ export const SHORTCUT_GROUPS = [
     ['focus', '聚焦選中', 'R'], ['focusReset', '回到預設視圖', 'Shift + R'],
     ['zoomReset', '重置視圖縮放', 'F'], ['previousTool', '上一個工具', 'ArrowLeft'],
     ['nextTool', '下一個工具', 'ArrowRight'], ['addCube', '新建 Cube', 'C'],
-    ['addShape', '新建 Shape', 'S'], ['temporaryEyedropper', '暫時取色／選頂點', 'Alt']
+    ['addShape', '新建 Shape', 'S'], ['addGroup', 'ui.create-empty-group', 'G'],
+    ['groupSelected', 'ui.group-selected-elements', 'Shift + G'],
+    ['temporaryEyedropper', '暫時取色／選頂點', 'Alt']
   ]],
   ['建模工具', [
     ['toolMove', '移動', '1'], ['toolResize', '縮放', '2'],
     ['toolRotate', '旋轉', '3'], ['toolPivot', '樞軸', '4'],
     ['toolVertexSnap', '頂點捕捉', '5'], ['toolKnife', '刀具', '6'],
-    ['toolFaceSelect', '面選擇', '7']
+    ['toolFaceSelect', '面選擇', '7'], ['toolToolbox', 'ui.toolbox', '']
   ]],
   ['繪畫工具', [
     ['paintBrush', '畫筆', 'B'], ['paintLine', '直線', 'L'],
@@ -39,12 +41,20 @@ const history = [];
 const pressedKeys = new Set();
 
 export function normalizeShortcutKey(key) {
+  if (typeof key !== 'string') return '';
   const names = { Control: 'Ctrl', Ctrl: 'Ctrl', Shift: 'Shift', Alt: 'Alt', Meta: 'Meta', Esc: 'Escape', ' ': 'Space' };
   return names[key] || (key.length === 1 ? key.toUpperCase() : key);
 }
 
+// Mouse button numbers are zero-based in DOM events; bindings use the familiar
+// Mouse4 / Mouse5 names for the back / forward side buttons.
+export function shortcutEventKey(event) {
+  if (typeof event.key === 'string') return normalizeShortcutKey(event.key);
+  return event.button === 3 ? 'Mouse4' : event.button === 4 ? 'Mouse5' : '';
+}
+
 export function shortcutFor(id) {
-  return currentShortcuts[id] || defaults[id] || '';
+  return currentShortcuts[id] ?? defaults[id] ?? '';
 }
 
 export function setShortcut(id, value) {
@@ -64,7 +74,7 @@ function matchesBinding(event, binding) {
   if (Boolean(event.ctrlKey) !== modifiers.has('Ctrl') || Boolean(event.shiftKey) !== modifiers.has('Shift')
     || Boolean(event.altKey) !== modifiers.has('Alt') || Boolean(event.metaKey) !== modifiers.has('Meta')) return false;
   const ordinary = parts.filter(part => !MODIFIERS.has(part));
-  const trigger = normalizeShortcutKey(event.key);
+  const trigger = shortcutEventKey(event);
   if (!ordinary.length) return parts.at(-1) === trigger;
   if (ordinary.at(-1) !== trigger) return false;
   if (ordinary.length === 1) return true;
@@ -87,7 +97,8 @@ export function shortcutMatches(event, id) {
 }
 
 export function shortcutTriggerReleased(event, id) {
-  return shortcutFor(id).split(' + ').at(-1) === normalizeShortcutKey(event.key);
+  const binding = shortcutFor(id);
+  return Boolean(binding) && binding.split(' + ').at(-1) === shortcutEventKey(event);
 }
 
 export function shortcutHeld(id) {
@@ -96,16 +107,23 @@ export function shortcutHeld(id) {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('keydown', event => {
-    if (event.repeat || event.isComposing || event.target?.closest?.('[data-shortcut-input]')) return;
-    const key = normalizeShortcutKey(event.key);
+  const rememberPress = event => {
+    if (event.repeat || event.isComposing || event.target?.closest?.('[data-shortcut-input]')
+      || globalThis.document?.activeElement?.closest?.('[data-shortcut-input]')) return;
+    const key = shortcutEventKey(event);
+    if (!key) return;
     pressedKeys.add(key);
     if (MODIFIERS.has(key)) return;
     const now = performance.now();
     while (history.length && now - history[0].at > 1000) history.shift();
     history.push({ key, at: now });
     if (history.length > 8) history.shift();
+  };
+  window.addEventListener('keydown', rememberPress, { capture: true });
+  window.addEventListener('keyup', event => pressedKeys.delete(shortcutEventKey(event)), { capture: true });
+  window.addEventListener('mousedown', event => {
+    if (shortcutEventKey(event)) rememberPress(event);
   }, { capture: true });
-  window.addEventListener('keyup', event => pressedKeys.delete(normalizeShortcutKey(event.key)), { capture: true });
+  window.addEventListener('mouseup', event => pressedKeys.delete(shortcutEventKey(event)), { capture: true });
   window.addEventListener('blur', () => { history.length = 0; pressedKeys.clear(); });
 }

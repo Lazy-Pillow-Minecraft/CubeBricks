@@ -42,6 +42,7 @@ async function application(root, options = {}) {
   });
   vm.runInContext(await fs.readFile(mainFile, 'utf8'), context, { filename: mainFile });
   const sender = {
+    session: { flushStorageData() { options.storageFlushes = (options.storageFlushes || 0) + 1; } },
     isDestroyed: () => false,
     once() {},
     removeListener() {},
@@ -61,6 +62,53 @@ async function application(root, options = {}) {
     release: () => vm.runInContext('journalOwnership.releaseAll()', context)
   };
 }
+
+test('appearance writes finish before closing and survive a new application instance', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.appearance-ipc-test-'));
+  const options = {};
+  const app = await application(root, options);
+  try {
+    assert.equal(await app.call('appearance:read'), null);
+    const write = app.call('appearance:write', { preset: 'violet-blocks', mode: 'dark' });
+    await app.call('app:confirm-close', {});
+    await write;
+    assert.equal(app.isClosed(), true);
+    assert.equal(options.storageFlushes, 1);
+    const reopened = await application(root);
+    const saved = await reopened.call('appearance:read');
+    assert.equal(saved.preset, 'violet-blocks');
+    assert.equal(saved.mode, 'dark');
+    await reopened.release();
+  } finally {
+    await app.release();
+    assert.equal(path.dirname(root), path.resolve(__dirname, '..'));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('dock layout writes finish on close and are restored by a fresh application instance', async () => {
+  const root = await fs.mkdtemp(path.join(__dirname, '..', '.dock-layout-ipc-test-'));
+  const app = await application(root);
+  try {
+    const layout = { version: 1, updatedAt: 123, zones: { left: true, right: false, bottom: true }, layout: {
+      texture: { dock: 'floating', order: 0, x: 430, y: 180, width: 360, height: 420, collapsed: false },
+      inspector: { dock: 'right', order: 0, x: 80, y: 110, width: 292, height: 340,
+        stackId: 'dock-stack-test', stackOrder: 1, stackActive: true }
+    } };
+    assert.equal(await app.call('dock-layout:read'), null);
+    const write = app.call('dock-layout:write', layout);
+    await app.call('app:confirm-close', {});
+    await write;
+    assert.equal(app.isClosed(), true);
+    const reopened = await application(root);
+    assert.deepEqual(await reopened.call('dock-layout:read'), layout);
+    await reopened.release();
+  } finally {
+    await app.release();
+    assert.equal(path.dirname(root), path.resolve(__dirname, '..'));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 test('native cursor position is returned in the focused window client coordinates', async () => {
   const root = await fs.mkdtemp(path.join(__dirname, '..', '.cursor-ipc-test-'));

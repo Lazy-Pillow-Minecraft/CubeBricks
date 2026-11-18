@@ -26,7 +26,7 @@ The history cap removes the oldest project-wide sequence numbers individually, p
 
 Set a project-specific history limit in Project Information, or leave it empty to use the application default. The limit is saved independently: changing it creates no history node, and undo, redo, or history checkout does not change it. Reducing the limit still performs the required cleanup of old records.
 
-Java Block/Item projects force back-face culling and per-face UVs. Their three version classes allow, respectively, 22.5° steps on one axis, arbitrary angles on one axis, or unrestricted rotation axes. The viewport guide marks the −16 to 32 `from/to` coordinate range; the ground reference grid shifts +8 on X/Z while the red and blue axes still start at the origin and extend farther. Animation mode is unavailable for this format, and Display Settings is currently only a placeholder. The Bedrock Block guide moves with the model to indicate its 30 px size constraint; a drag or numeric change that worsens an out-of-range model is rejected. The guides share the main ground-grid line color and depth behavior.
+Java Block/Item projects force back-face culling and per-face UVs. Their three version classes allow, respectively, 22.5° steps on one axis, arbitrary angles on one axis, or unrestricted rotation axes. The default viewport guide marks the −16 to 32 `from/to` coordinate range. **Disable region limits**, in project creation and Project Information, removes position/size constraints and hides that guide while retaining rotation-version and UV rules. Importing a bbmodel whose original coordinates exceed the range automatically disables region limits to preserve its geometry. The setting persists in cbmodel and exported bbmodel files. The ground reference grid shifts +8 on X/Z while the red and blue axes still start at the origin and extend farther. Animation mode is unavailable for this format, and Display Settings is currently only a placeholder. The Bedrock Block guide moves with the model to indicate its 30 px size constraint; a drag or numeric change that worsens an out-of-range model is rejected. The guides share the main ground-grid line color and depth behavior.
 
 For Java Cubes with a single-axis limit, whole 90° turns are folded into position, dimensions, and per-face UVs before constraining the remaining angle. Face culling, UV mirrors, and negative dimensions are preserved. Exported bbmodels store the selected version class in the root `java_block_version` property and restore it on import; this is separate from the bbmodel file version in `meta.format_version`.
 
@@ -35,6 +35,14 @@ Built-in Shapes and modifiers also follow format restrictions. Polygon columns a
 Restricted Java Shapes approximate the original form using rotated beams with the requested thickness, rather than bounding-box or voxel fills. Spatial curves add oriented segments only when angular error would otherwise break path coverage. Unrestricted versions do not add these fitting segments.
 
 Recent undo/redo restores the view from memory before completing ordered storage validation. Models, UVs, painting and layers share this cache, which keeps up to eight steps within its memory budget and the project's history limit. Older states are read from project history. Saving and closing still wait for required writes.
+
+All number fields share left/right step buttons inside the field, with the decrease button placed after any XYZ label. Click the value to type, or drag horizontally anywhere in the field to adjust in snapped steps. The cursor stays at its starting position until release, and a drag creates one undo step. Position, size and UV fields use project snapping; rotation uses angle snapping. You can change `Shift`, `Ctrl` or their combination during a drag. Counts, pixels and percentages use their own steps and limits.
+
+Hover a number field and scroll to adjust it without focusing it or scrolling its parent panel. Hover a dropdown and scroll to switch between available options, skipping disabled entries.
+
+Number fields keep the normal input cursor until horizontal dragging actually begins. Main-view move, resize, rotate and pivot feedback shows only the signed drag amount along the active handle, such as `+2 px` or `-15°`, for individual objects, multiple selections and groups alike.
+
+Theme, color scheme, corner radius and UI scale save automatically. The desktop app keeps an independent `appearance.json` in its application data folder and restores it on restart, while retaining compatibility with older appearance records.
 
 ## 2. Camera and selection
 
@@ -60,6 +68,10 @@ On first use, dragging the modeling viewport with the left or right button befor
 
 Use the controls above the scene hierarchy to create cubes, groups, locators, and shapes. A new cube is a 2×2×2 cube resting on the horizontal plane. An element created under a group starts relative to that group's pivot. The Shape menu contains prisms, polyhedra, and Bezier variants.
 
+In Edit mode, `G` creates an empty group immediately after the last selected item, including when multiple items are selected. `Shift+G` or **Group elements** in an element or group's context menu wraps the selection in a new group in place. A single element or group can also be wrapped.
+
+Shortcut fields in Settings accept keyboard keys and mouse side buttons (`Mouse4` / `Mouse5`), including combinations with `Ctrl`, `Shift`, and other modifiers. The first input after focusing replaces the previous binding. Press `Enter` or leave the field to save; `Esc` clears and disables that shortcut. Per-action and global resets restore defaults. In Paint mode, `G` remains the paint bucket.
+
 | Shortcut | Tool |
 | --- | --- |
 | `1` | Move |
@@ -70,13 +82,25 @@ Use the controls above the scene hierarchy to create cubes, groups, locators, an
 | `6` | Knife |
 | `7` | Face Select |
 
+The **Toolbox** in the Edit toolbar provides four categories, selected through its first dropdown:
+
+- **Uniform Scale**: drag the center cube upward to enlarge or downward to shrink. Snap the combined envelope dimensions, snap each element's dimensions separately, or disable snapping. The drag starts with a uniform factor; snapping rounds X/Y/Z independently, so the final proportions may differ slightly. It uses the current project grid and the configured `Shift`, `Ctrl`, and `Ctrl+Shift` precision. Changing modifiers during a drag takes effect immediately.
+- **Flip**: six buttons reflect across X/Y/Z, either around the global origin or around the selection pivot.
+- **Rotate**: twelve buttons turn +90° or −90° about X/Y/Z, around either the world origin or the selection pivot. Restricted Java Cubes fold whole quarter turns into dimensions and face UVs, changing the residual rotation axis when needed while preserving the existing tilt and appearance. Rotation rescale compensation also retains the actual dimensions.
+- **Center**: use the geometric center or pivot as the reference, then center one axis or all three at the origin.
+
+Axis-button icons use red, green, and blue for X/Y/Z. Toolbox operations retain group hierarchy, procedural Shape parameters, and face UVs, respect the current model format, and create one undo step per click or complete drag. The existing Scale tool retains its axis and plane handles; Toolbox Uniform Scale shows only the center handle. Assign a Toolbox shortcut in Settings if desired.
+
 - Gizmos respond to the left mouse button; the middle button remains reserved for camera control. Axis, plane, and center handles perform the corresponding dimensional transforms.
 - Move and Rotate can use local, parent, or global coordinates. Multiselection can apply transforms together or separately. Moving a pivot compensates object parameters so the visible geometry stays put. **Center Pivot** follows the Pivot X/Y/Z fields in Object Properties and places all selected pivots at the combined geometric center.
 - Cube, group, and Shape properties offer **Apply Position / Rotation** and separate **Restore** actions. Applying resets the corresponding displayed values to zero so later edits start there; restoring shows the current effective values again. Neither action changes the visible model. A group's Position moves its descendants, while Pivot changes compensate them. Exports contain the final pose without the editor's baseline metadata.
+- Element Copy nodes share their owner's parent coordinate system. Parent-group moves and rotations affect them; transforming the owner alone does not. Editing the parent's pivot while preserving geometry also preserves the nodes' world positions.
 - Hold `Alt` while rotating to show the selected object's vertices temporarily. Click one to move its pivot there. Vertex Snap can also show intersections; square-diamond intersection marks can be target points, not starting points.
 - `Ctrl+Z` undoes and `Ctrl+Shift+Z` redoes. With a text field focused, `Ctrl+Z` edits the text rather than undoing the project.
 - `←` and `→` cycle through the current mode's tools in toolbar order. In Edit mode, `C` creates a cube and `S` opens the Shape creation menu at the pointer.
-- Each project remembers the last tool used in each mode. Move, Rotate, and Move Pivot save their coordinate systems separately and default to local coordinates. Stacked docks remember their selected tabs.
+- After choosing a snapped Knife starting point on a cube face, the second click only chooses a horizontal or vertical cutting direction. It may land on another face, another object, or the background; the starting point determines the cube and cut position. Direction uses the starting face's extended plane, so the preview matches the final cut.
+- With **Ghost Modifier Results** off, click a generated virtual element to select and edit its source. The result keeps its inverted outline, while move, scale, rotation, and pivot handles follow the selected instance's position and orientation. Drags and exact angles are mapped back to the source, including reflected rotation directions. Right-click opens the source's menu. Copy nodes remain separately editable through their markers or hierarchy entries. Editing does not bake or create additional elements.
+- Each project remembers the last tool used in each mode. Move, Rotate, and Move Pivot save their coordinate systems separately and default to local coordinates. Dock layouts automatically save panel order, sidebar widths, panel heights, floating positions, collapsed states, tab groups, and their selected tabs. The desktop app also stores the layout in `dock-layout.json` in its application data directory, so it can restore the layout after restarting without relying on the browser cache.
 - `Ctrl+C` copies, `Ctrl+X` cuts, `Ctrl+V` pastes, and `Ctrl+D` duplicates in place. Depending on focus, these operate on eligible objects or textures.
 
 ## 4. UVs and texture templates
@@ -88,6 +112,8 @@ Use the controls above the scene hierarchy to create cubes, groups, locators, an
 5. **Preserve Layer Structure** is on by default. Each source texture's layers are remapped separately into the new UV layout, retaining groups, visibility, blend modes, and mask links. Multiple source textures become separate groups; faces with no texture go into a template base layer. Turn it off to output one flattened image. Box UVs default to off except where required by the model format.
 
 The four fields below the texture view show X/Y origin and width W/height H. For ordinary UVs, moving the origin translates the whole rectangle, and resizing preserves its mirror orientation. Mixed values in a multi-selection show `-`.
+
+The texture context menu's **Resize texture** offers Crop, Repeat, and Stretch. Stretch scales the UVs assigned to that texture along each axis and snaps their edges to physical pixel boundaries in the new image. Faces using other textures keep their UVs, including on the same cube. Shape UV edits are included; undo and redo restore pixels and UVs together. Exactly representable layouts keep box UVs; other layouts use per-face UVs where the format allows them. Formats requiring fixed box UVs reject incompatible ratios.
 
 Change texture mode at the top of the Layers panel. Mode and creation controls stay visible while scrolling. In **Tiled** mode, the fields specify X/Y starting offsets and the entire face's pixel width/height. The source image repeats intact: a 16px-wide image repeats twice across a face whose W is 32px. These parameters are separate from ordinary UVs. Switch back to **Default** to edit the original UV coordinates.
 

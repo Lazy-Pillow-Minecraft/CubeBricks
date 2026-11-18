@@ -202,6 +202,7 @@ export function evaluateModifierStack(project, owners, initialVariants = null, e
         ...(modifier.nodes || []).map((node, index) => ({ affine: copyNodeAffine(project, owner, node), name: `copy_${index + 1}`, nodeUid: node.uid }))];
         variants = variants.flatMap(variant => definitions.map(definition => ({
           affine: affineCompose(definition.affine, variant.affine),
+          selectionKey: `${variant.selectionKey || ''}/${modifier.uid}:${definition.nodeUid || 'source'}`,
           modifierUids: definition.name ? [...variant.modifierUids, modifier.uid] : [...variant.modifierUids],
           names: definition.name ? [...variant.names, definition.name] : [...variant.names],
           copyNodeUid: definition.nodeUid || variant.copyNodeUid,
@@ -213,10 +214,11 @@ export function evaluateModifierStack(project, owners, initialVariants = null, e
       if (modifier.type !== 'symmetry') continue;
       const frame = symmetryWorldFrame(project, owner, modifier);
       const definitions = symmetryInstanceDefinitions(owner, modifier, frame.matrix);
-      variants = variants.flatMap(variant => definitions.map(definition => {
+      variants = variants.flatMap(variant => definitions.map((definition, index) => {
         const operation = affineAround(definition.matrix, frame.center);
         return {
           affine: affineCompose(operation, variant.affine),
+          selectionKey: `${variant.selectionKey || ''}/${modifier.uid}:${index}`,
           modifierUids: [...variant.modifierUids, modifier.uid],
           names: [...variant.names, definition.name],
           copyNodeUid: variant.copyNodeUid, copyOwnerUid: variant.copyOwnerUid,
@@ -264,6 +266,7 @@ export function buildModifierRenderInstances(project) {
           copyNodeUid: variant.copyNodeUid, copyOwnerUid: variant.copyOwnerUid,
           copyModifierUid: variant.copyModifierUid,
           sourceUids: [],
+          selectionKeys: {},
           cubeIndices: {},
           matrix: variant.affine.matrix.map(row => [...row]),
           translation: [...variant.affine.translation],
@@ -286,6 +289,7 @@ export function buildModifierRenderInstances(project) {
         return true;
       }).map(source => source.index);
       if (!sources.length || include.length) {
+        (instance.selectionKeys[element.uid] ||= []).push(variant.selectionKey);
         const sourceUidSet = sourceUidsByInstance.get(instance);
         if (!sourceUidSet.has(element.uid)) {
           sourceUidSet.add(element.uid);

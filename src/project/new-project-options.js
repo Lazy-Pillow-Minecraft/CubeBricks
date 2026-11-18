@@ -19,6 +19,7 @@ export function newProjectDefaults(format, language) {
   return {
     name: 'untitled',
     javaBlockVersion: JavaBlockVersion.LEGACY,
+    javaBlockBoundsEnabled: true,
     uvMode: availableUvModes(format).some(mode => mode.value === data.uvMode)
       ? data.uvMode : availableUvModes(format)[0]?.value || data.uvMode,
     textureWidth: data.textureSize?.[0] || 16,
@@ -52,7 +53,8 @@ export function prepareNewProjectData(format, language, options) {
   data.formatData = { ...data.formatData, projectDescription: String(options.description || '').trim().slice(0, 1000) };
   if (format.id === ModelFormatId.JAVA_BLOCK_ITEM) {
     data.formatData = { ...data.formatData,
-      javaBlockVersion: normalizeJavaBlockVersion(options.javaBlockVersion) };
+      javaBlockVersion: normalizeJavaBlockVersion(options.javaBlockVersion),
+      javaBlockBoundsEnabled: options.javaBlockBoundsEnabled !== false };
   }
   return data;
 }

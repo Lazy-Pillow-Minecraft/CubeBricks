@@ -23,6 +23,7 @@ function historySignature(manifest) {
   if (!manifest?.format || !Number.isInteger(manifest.sequence)) return null;
   const record = structuredClone(manifest);
   delete record.timestamp;
+  delete record.requestId;
   // The UUID is the project's identity, not an edit in its transaction tree.
   if (record.information) {
     delete record.information.projectUuid;
@@ -526,15 +527,18 @@ class ProjectJournal {
     });
     return new Map(states);
   }
-  async commit(content, operationId, operationLabel = operationId, operationIndex = []) {
+  async commit(content, operationId, operationLabel = operationId, operationIndex = [], requestId = null) {
     await this.ensureReady();
-    try { return await this.commitTransaction(content, operationId, operationLabel, operationIndex); }
+    // A lost IPC reply must not turn a retry into a second history operation.
+    if (requestId && this.activeManifest?.requestId === requestId)
+      return { changed: true, sequence: this.activeManifest.sequence, globalSequence: this.activeManifest.globalSequence };
+    try { return await this.commitTransaction(content, operationId, operationLabel, operationIndex, requestId); }
     catch (error) {
       this.recoveryRequired = true;
       throw error;
     }
   }
-  async commitTransaction(content, operationId, operationLabel, operationIndex) {
+  async commitTransaction(content, operationId, operationLabel, operationIndex, requestId = null) {
     if (!/^[a-z][a-z0-9_.-]*$/.test(operationId)) throw new Error('操作 ID 不合法');
     const data = separate(content);
     data.information.projectUuid = this.projectUuid;
@@ -619,7 +623,7 @@ class ProjectJournal {
     });
     const manifest = {
       format: FORMAT, version: VERSION, sequence, globalSequence, parent: old.sequence,
-      operationId, operationLabel, timestamp: new Date().toISOString(),
+      operationId, operationLabel, ...(requestId ? { requestId } : {}), timestamp: new Date().toISOString(),
       information: data.information, elementOrder: data.elements.map(node => node.uid),
       groupOrder: data.groups.map(node => node.uid), textureIds, pointers, placements,
       nodeHashes, textureHashes, textureHashVersion: 2,
@@ -857,7 +861,7 @@ class ProjectJournal {
     }
     return { ...settings };
   }
-  async historyGraph() { return historyGraph(this, await historyRecords(this)); }
+  async historyGraph() { return historyGraph(this, await historyRecords(this, { tolerateDamaged: true })); }
   async setHistoryMark(sequence, mark) { return setHistoryMark(this, sequence, mark, writeJson); }
   async pruneHistoryBranch(sequence, { single = false } = {}) { return pruneHistoryBranch(this, sequence, { writeJson, readJson, textureDigest }, single); }
   async currentSnapshotEntries(currentContent = null) {

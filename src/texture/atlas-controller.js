@@ -5,6 +5,7 @@ import { boundPaintLayer } from '../paint/canvas-layer-binding.js';
 import { paintHistoryRegion, snapshotEditableTexture } from './source-snapshot.js';
 import { createLayerThumbnailUpdates } from './layer-thumbnail-controller.js';
 import { layerRasterRegions } from '../common/utils/layer-raster-regions.js';
+import { preservePaintAlpha } from '../paint/alpha-snapshot.js';
 
 export function createTextureAtlasController({
   state, $, textureCanvas, textureCtx, sceneRenderer, uvPreviewRenderer,
@@ -324,12 +325,14 @@ export function createTextureAtlasController({
           }
           : null;
         if (region?.width > 0 && region.height > 0) {
+          preservePaintAlpha(layerCanvas, region);
           const layerContext = layerCanvas.getContext('2d');
           layerContext.clearRect(region.x, region.y, region.width, region.height);
           layerContext.drawImage(source, region.x, region.y, region.width, region.height,
             region.x, region.y, region.width, region.height);
           layerRasterRegions.invalidate(layerCanvas, region);
           const patch = compositeLayers(asset, null, null, region);
+          preservePaintAlpha(cached.source, region);
           const compositeContext = cached.source.getContext('2d');
           compositeContext.clearRect(region.x, region.y, region.width, region.height);
           compositeContext.drawImage(patch, region.x, region.y);

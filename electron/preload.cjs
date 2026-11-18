@@ -5,6 +5,10 @@ const systemLanguages = process.argv.find(argument => argument.startsWith(langua
   ?.slice(languageArgument.length).split(',').filter(Boolean) || [];
 
 contextBridge.exposeInMainWorld('cubeBricksDesktop', {
+  loadAppearance: () => ipcRenderer.invoke('appearance:read'),
+  saveAppearance: value => ipcRenderer.invoke('appearance:write', value),
+  loadDockLayout: () => ipcRenderer.invoke('dock-layout:read'),
+  saveDockLayout: value => ipcRenderer.invoke('dock-layout:write', value),
   systemLanguages,
   setUiLanguage: language => ipcRenderer.invoke('app:ui-language', language),
   openProject: (filePath = null) => ipcRenderer.invoke('project:open', filePath ? { filePath } : {}),

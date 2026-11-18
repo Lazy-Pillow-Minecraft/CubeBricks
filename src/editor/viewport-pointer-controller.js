@@ -1,5 +1,26 @@
 import { PAINT_TOOLS } from './tool-registry.js';
 
+export function viewportGroupSelection(project, selection, hitUid) {
+  if (!hitUid) return null;
+  if (selection.size > 1) {
+    const chains = [...selection].map(uid => {
+      const chain = project.getGroupChain(uid);
+      const node = project.getNode(uid);
+      return node?.type === 'group' ? [...chain, node] : chain;
+    });
+    const common = chains[0].findLast((group, index) =>
+      chains.every(chain => chain[index]?.uid === group.uid));
+    if (common) return common.uid;
+  }
+  const chain = project.getGroupChain(hitUid);
+  if (selection.size === 1) {
+    const selectedUid = selection.values().next().value;
+    const index = chain.findIndex(group => group.uid === selectedUid);
+    if (index >= 0) return chain[index - 1]?.uid ?? null;
+  }
+  return chain.at(-1)?.uid ?? null;
+}
+
 export function createViewportPointerController({
   state, sceneCanvas, sceneRenderer, selectionMarquee, uvEditorController,
   getCurveWorldPlane, isBezierElement, isEffectivelyLocked,
@@ -13,6 +34,7 @@ export function createViewportPointerController({
     event.preventDefault();
     event.stopPropagation();
     sceneCanvas.setPointerCapture(event.pointerId);
+    state.selectedGenerated = null;
     state.selectedModifierUid = null;
     if (isBezierElement(curve)) state.selectedCurveNodeIndex = hit.index;
     const frame = sceneRenderer.getCameraFrame();
@@ -85,6 +107,10 @@ export function createViewportPointerController({
       updateUvFaceUi();
       return;
     }
+    if (state.tool === 'toolbox') {
+      startSelectionBox(event, x, y, suppressBlankDeselect, event.shiftKey && !event.ctrlKey && !event.metaKey);
+      return;
+    }
     const activeCurve = selected();
     const handleOwner = isBezierElement(activeCurve) || activeCurve?.type === 'node' ? activeCurve : null;
     const nodeHit = isBezierElement(activeCurve) && !isEffectivelyLocked(activeCurve.uid)
@@ -95,6 +121,7 @@ export function createViewportPointerController({
     const selectCurveNode = hit => {
       event.preventDefault();
       if (isEffectivelyLocked(hit.uid)) return;
+      state.selectedGenerated = null;
       if (hit.uid !== activeCurve?.uid) selectItem(hit.uid, { revealInOutliner: true });
       state.selectedModifierUid = null;
       state.selectedCurveNodeIndex = hit.index;
@@ -123,9 +150,14 @@ export function createViewportPointerController({
       }
       state.selectedCurveNodeIndex = null;
     }
+    const groupPress = event.shiftKey && !event.ctrlKey && !event.metaKey && ['edit', 'uv'].includes(state.mode);
+    startSelectionBox(event, x, y, suppressBlankDeselect, groupPress);
+  }
+
+  function startSelectionBox(event, x, y, suppressBlankDeselect, groupPress = false) {
     const selectionHit = sceneRenderer.pickDetailed(state.project, x, y, state.geometryOnly,
       { includeGenerated: !state.modifierResultGhost });
-    const hitUid = selectionHit?.generated ? null : selectionHit?.uid || null;
+    const hitUid = selectionHit?.uid || null;
     event.preventDefault();
     sceneCanvas.setPointerCapture(event.pointerId);
     state.dragging = {
@@ -134,7 +166,7 @@ export function createViewportPointerController({
       currentX: x, currentY: y, moved: false, hitUid,
       generatedHit: selectionHit?.generated ? selectionHit : null,
       selection: new Set(state.selectedUids),
-      mode: viewportSelectionMode(event), suppressBlankDeselect,
+      mode: viewportSelectionMode(event), suppressBlankDeselect, groupPress,
       blockbenchOrbit: state.blockbenchControls && !event.shiftKey,
       orbitYaw: state.yaw, orbitPitch: state.pitch
     };

@@ -13,7 +13,7 @@ export function createToolModeController({
   paintToolErasing, paintSetting, getKnifePreviewLabel,
   updateTransformSpaceButtons, updateRotationModeButtons,
   updateScaleHandleModeButtons, updateMultiTransformModeButtons,
-  getDockManager, finishPaintSelection, saveProjectTools
+  getDockManager, finishPaintSelection, saveProjectTools, refreshToolbox = () => {}
 }) {
   let temporaryPaintTool = null;
   let renderModeBeforePaint = null;
@@ -109,7 +109,14 @@ export function createToolModeController({
       state.paintGradientStart = state.paintColor;
     }
     if (state.tool === 'paintSelection' && tool !== 'paintSelection') finishPaintSelection?.();
+    const leavingNodeSelection = tool === 'toolbox'
+      && (state.selectedCurveNodeIndex !== null || state.selectedModifierUid !== null);
     state.tool = tool;
+    if (tool === 'toolbox') {
+      state.selectedCurveNodeIndex = null;
+      state.selectedModifierUid = null;
+      state.selectedModifierNodeUid = null;
+    }
     const spaceKey = TOOL_TRANSFORM_SPACE[tool];
     state.transformSpace = spaceKey ? configRegistry.get(spaceKey) : 'self';
     if (remember && state.toolsByMode[state.mode] !== tool) {
@@ -121,6 +128,7 @@ export function createToolModeController({
     $$('.tool').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
     $('#paintShapeButton').classList.toggle('active', ['line', 'rectangle', 'ellipse'].includes(tool));
     updateToolOptions();
+    if (render && leavingNodeSelection) { renderInspector(); renderOutliner(); }
     if (render) renderScene();
   }
 
@@ -164,7 +172,7 @@ export function createToolModeController({
     }
     const lane = $('#toolOptionsLane');
     const labels = {
-      move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', faceSelect: '面選擇',
+      move: '移動', resize: '縮放', rotate: '旋轉', pivot: '移動樞軸', vertexSnap: '頂點捕捉', knife: '刀具切割', toolbox: 'ui.toolbox', faceSelect: '面選擇',
       brush: '畫筆', paintSelection: '繪畫選區', line: '直線', rectangle: '矩形', ellipse: '橢圓', fill: '油漆桶', gradient: '漸變', eyedropper: '取色器'
     };
     const paintTool = PAINT_TOOLS.includes(state.tool);
@@ -181,6 +189,7 @@ export function createToolModeController({
     $('#paintSelectionModeButton').dataset.selectionShape = state.paintSelectionMode;
     $$('[data-paint-selection-mode]').forEach(button => button.classList.toggle('active', button.dataset.paintSelectionMode === state.paintSelectionMode));
     lane.hidden = state.mode === 'display' || !labels[state.tool];
+    refreshToolbox();
     $('#transformSpaceControl').hidden = !['move', 'rotate', 'pivot'].includes(state.tool);
     $('#rotationModeControl').hidden = state.tool !== 'rotate' || state.transformSpace !== 'self';
     $('#multiTransformModeControl').hidden = selectedTopLevelNodes().length < 2 || !['move', 'rotate'].includes(state.tool);
@@ -237,7 +246,8 @@ export function createToolModeController({
     $('#paintGradientEndControl').disabled = state.paintGradientPalette;
     $('#paintGradientStartAlpha').disabled = state.paintGradientPalette;
     $('#paintGradientEndAlpha').disabled = state.paintGradientPalette;
-    $('#snapButton').hidden = state.mode === 'display' || paintTool || state.tool === 'paintSelection';
+    $('#snapButton').hidden = state.mode === 'display' || paintTool || state.tool === 'paintSelection'
+      || state.tool === 'toolbox' && state.toolboxCategory !== 'scale';
     const knifePreview = getKnifePreviewLabel();
     $('#knifeStatus').textContent = knifePreview ? `預覽：${knifePreview}` : state.knifeSelection ? '選擇橫切或豎切' : '選擇切割點';
     if (!lane.hidden) $('#toolContext').textContent = labels[state.tool];

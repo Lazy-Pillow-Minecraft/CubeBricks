@@ -117,10 +117,16 @@ export function createTextureTemplateController({ state, $, CUBE_FACE_NAMES, get
       return true;
     }
     if (image && sourceUv) {
-      const left = Math.min(sourceUv[0], sourceUv[2]);
-      const top = Math.min(sourceUv[1], sourceUv[3]);
-      const sourceWidth = Math.abs(sourceUv[2] - sourceUv[0]);
-      const sourceHeight = Math.abs(sourceUv[3] - sourceUv[1]);
+      // Imported textures can have more physical pixels than their UV grid.
+      // Use each layer's raster dimensions when remapping its source pixels.
+      const rasterWidth = image.naturalWidth || image.width;
+      const rasterHeight = image.naturalHeight || image.height;
+      const pixelScaleU = rasterWidth / (sourceAsset?.uvWidth || rasterWidth);
+      const pixelScaleV = rasterHeight / (sourceAsset?.uvHeight || rasterHeight);
+      const left = Math.min(sourceUv[0], sourceUv[2]) * pixelScaleU;
+      const top = Math.min(sourceUv[1], sourceUv[3]) * pixelScaleV;
+      const sourceWidth = Math.abs(sourceUv[2] - sourceUv[0]) * pixelScaleU;
+      const sourceHeight = Math.abs(sourceUv[3] - sourceUv[1]) * pixelScaleV;
       if (sourceWidth > 0 && sourceHeight > 0) {
         ctx.drawImage(image, left, top, sourceWidth, sourceHeight, destination.x, destination.y, width, height);
         return true;

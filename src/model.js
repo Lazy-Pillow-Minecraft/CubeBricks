@@ -1,7 +1,7 @@
 import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './common/config/model-formats.js';
 import { modifierRegistry } from './common/config/modifiers.js';
 import { operatorRegistry } from './common/config/operators.js';
-import { formatRules, projectSizeBounds, bedrockLimitBox } from './common/core/format-constraints.js';
+import { formatRules, projectSizeBounds, bedrockLimitBox, javaBlockSizeIsValid } from './common/core/format-constraints.js';
 import { foldJavaCubeRotation } from './utils/math/cube-quarter-turn.js';
 import { bindFormatContext, invokeFormatHook } from './common/core/format-hooks.js';
 import { constrainProceduralCubes, proceduralShapeSupported, proceduralCubeWorld } from './common/core/procedural-format.js';
@@ -11,11 +11,13 @@ import { DODECAHEDRON_UNIT_FACES, TRUNCATED_ICOSAHEDRON_UNIT_FACES, regularPolyh
 import { bezierCubes } from './utils/shape/bezier-geometry.js';
 import { shapePackUtils } from './utils/index.js';
 import { loadAppliedTransform, translateAppliedPositionBaseline } from './common/core/applied-transform.js';
+import { translateSiblingCopyNodes } from './common/core/copy-node-transforms.js';
 import { materializeFormatCubeRotations } from './model/format-materialization.js';
 import { materializeJavaProceduralDocument } from './model/formats/procedural-format-export.js';
 import { booleanProperty, cloneData } from './model/value-normalization.js';
 import { importBlockbenchCubeUv } from './model/formats/blockbench-uv.js';
-import { getBlockbenchBoxUv } from './common/core/geometry-utils.js';
+import { captureBakeFrames, restoreBakeFrames } from './model/procedural-bake-frames.js';
+import { getBlockbenchBoxUv, rescaleRotationPoint } from './common/core/geometry-utils.js';
 import {
   affineCompose, affineIdentity, affineIsIdentity,
   affinePoint, applyGroupChainPoint, groupChainMatrix, inverseGroupChainPoint,
@@ -286,7 +288,7 @@ function applySubdivisionEdits(cubes, owner) {
       if (Array.isArray(delta)) cube[field] = cube[field].map((value, axis) => value + (Number(delta[axis]) || 0));
     }
     if (Number.isFinite(Number(edit.inflateDelta))) cube.inflate += Number(edit.inflateDelta);
-    for (const field of ['name', 'unnamed', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
+    for (const field of ['name', 'unnamed', 'uvMode', 'uvNormalized', 'uv', 'uvScale', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
       if (edit[field] !== undefined) cube[field] = cloneData(edit[field]);
     }
     return cube;
@@ -336,6 +338,7 @@ export class Shape {
     this.uid = data.uid || uid('shape');
     initializeNodeNaming(this, data, 'shape');
     this.shapeType = shapeType;
+    if (data.geometryMirrorX) this.geometryMirrorX = true;
     const defaults = shapeRegistry.get(shapeType)?.defaults || {};
     this.parameters = { ...defaults, ...(data.parameters || {}) };
     if (this.parameters.snapMode === 'cube') this.parameters.snapMode = 'edge';
@@ -384,9 +387,13 @@ export class Shape {
 
   toFormatBaseCubes(project = null) { return constrainProceduralCubes(this, this.toBaseCubes(project), project); }
 
+  // Subdivision patches use parameter-space coordinates, before handedness.
+  toSubdivisionSourceCube(cube) { return this.geometryMirrorX ? mirrorProceduralCubes([cube], this)[0] : cube; }
+
   toCubes(project = null) {
     const cubes = applySubdivisionEdits(this.toFormatBaseCubes(project), this);
-    return Object.keys(this.subdivisionEdits || {}).length ? constrainProceduralCubes(this, cubes, project) : cubes;
+    const result = Object.keys(this.subdivisionEdits || {}).length ? constrainProceduralCubes(this, cubes, project) : cubes;
+    return mirrorProceduralCubes(result, this);
   }
 }
 
@@ -520,6 +527,7 @@ export class BezierElement {
     initializeNodeNaming(this, data, this.type);
     this.dimension = dimension;
     this.variant = data.variant === 'envelope' ? 'envelope' : 'standard';
+    if (data.geometryMirrorX) this.geometryMirrorX = true;
     this.origin = vector3(data.origin);
     this.rotation = vector3(data.rotation, dimension === 2 && !data.nodes?.length ? [-90, 0, 0] : [0, 0, 0]);
     this.uvMode = data.uvMode || 'box';
@@ -719,9 +727,12 @@ export class BezierElement {
 
   toFormatBaseCubes(project = null) { return constrainProceduralCubes(this, this.toBaseCubes(), project); }
 
+  toSubdivisionSourceCube(cube) { return this.geometryMirrorX ? mirrorProceduralCubes([cube], this)[0] : cube; }
+
   toCubes(project = null) {
     const cubes = applySubdivisionEdits(this.toFormatBaseCubes(project), this);
-    return Object.keys(this.subdivisionEdits || {}).length ? constrainProceduralCubes(this, cubes, project) : cubes;
+    const result = Object.keys(this.subdivisionEdits || {}).length ? constrainProceduralCubes(this, cubes, project) : cubes;
+    return mirrorProceduralCubes(result, this);
   }
 }
 
@@ -778,7 +789,10 @@ function translateModifierAnchors(node, delta) {
 }
 
 export function translateNode(project, node, delta, preserveAppliedPosition = false) {
-  if (preserveAppliedPosition) translateAppliedPositionBaseline(node, delta);
+  if (preserveAppliedPosition) {
+    translateAppliedPositionBaseline(node, delta);
+    translateSiblingCopyNodes(node, delta);
+  }
   translateModifierAnchors(node, delta);
   if (node.type === 'cube') {
     node.position = node.position.map((value, axis) => value + delta[axis]);
@@ -1027,7 +1041,8 @@ export class CubeBricksProject {
   }
 
   getFormatDomain(evaluation = new Map()) {
-    if (formatRules(this).javaBlock) return { min: [-16, -16, -16], max: [32, 32, 32] };
+    const rules = formatRules(this);
+    if (rules.javaBlock) return rules.javaBlockBounds ? { min: [-16, -16, -16], max: [32, 32, 32] } : null;
     if (!evaluation.has('format-domain')) {
       const center = this.formatData.bedrockConstraintCenter;
       evaluation.set('format-domain', center ? { min: center.map(value => value - 15), max: center.map(value => value + 15) }
@@ -1276,6 +1291,7 @@ export function bakeProceduralShape(project, shapeUid, generatedCubes = null) {
   if (!proceduralShapeSupported(owner, project)) return null;
   const generated = generatedCubes || owner.toCubes(project);
   if (!generated.length) return null;
+  const attachedFrames = captureBakeFrames(project, owner);
   const parent = project.getParentGroup(owner.uid);
   const siblings = parent ? parent.children : project.outliner;
   const index = siblings.indexOf(owner.uid);
@@ -1341,6 +1357,7 @@ export function bakeProceduralShape(project, shapeUid, generatedCubes = null) {
       setGroupRotationPreservingGeometry(project, layer, nextRotation);
     });
   }
+  restoreBakeFrames(project, group, attachedFrames);
   const rules = formatRules(project);
   if (rules.moddedEntity || rules.javaBlock) nestedGroups.push(...materializeFormatCubeRotations(project, cubes, data => new Group(data), rules));
   return { group, cubes, nestedGroups };
@@ -1441,17 +1458,20 @@ export function importBlockbench(data) {
   };
   (data.outliner || elements.map(element => element.uid)).forEach(node => visit(node, outliner));
 
+  const formatId = resolveModelFormatId(data.meta?.model_format || 'free');
+  const formatData = structuredClone(data._cubebricksFormatData || {});
+  if (formatId === ModelFormatId.JAVA_BLOCK_ITEM) {
+    formatData.javaBlockVersion = normalizeJavaBlockVersion(data.java_block_version || formatData.javaBlockVersion);
+    // Inspect the original from/to coordinates before any format hooks or
+    // viewport fitting can alter imported geometry. Oversized models opt out.
+    formatData.javaBlockBoundsEnabled = booleanProperty(data.java_block_bounds ?? formatData.javaBlockBoundsEnabled, true)
+      && javaBlockSizeIsValid({ elements });
+  }
   return new CubeBricksProject({
     name: data.name || 'imported_model',
-    formatId: resolveModelFormatId(data.meta?.model_format || 'free'),
+    formatId,
     modelType: data.meta?.model_format || 'free',
-    formatData: {
-      ...structuredClone(data._cubebricksFormatData || {}),
-      ...(data.meta?.model_format === 'java_block' ? {
-        javaBlockVersion: normalizeJavaBlockVersion(
-          data.java_block_version || data._cubebricksFormatData?.javaBlockVersion)
-      } : {})
-    },
+    formatData,
     textureSize: data.resolution ? [data.resolution.width, data.resolution.height] : [64, 64],
     renderType: data.render_type,
     elements,
@@ -1540,7 +1560,7 @@ function symmetrySourceUids(project, owner) {
   return owner.type === 'group' ? project.getDescendantElementUids(owner.uid) : [owner.uid];
 }
 
-function bakedCubeFromWorld(source, affine, parentChain) {
+export function transformCubeFromWorld(source, affine, parentChain, preserveUid = false) {
   const { cube, offset, ownerRotation, ownerOrigin, chain } = source;
   const baseFrom = cube.position.map((value, axis) => value + offset[axis]);
   const baseTo = baseFrom.map((value, axis) => value + cube.size[axis]);
@@ -1556,28 +1576,50 @@ function bakedCubeFromWorld(source, affine, parentChain) {
   const parentMatrix = groupChainMatrix(parentChain);
   const localOrientation = matrixMultiply(matrixTranspose(parentMatrix),
     matrixMultiply(matrixMultiply(affine.matrix, worldOrientation), handednessFix));
-  const fromOffset = matrixVector(handednessFix, baseFrom.map((value, axis) => value - basePivot[axis]));
-  const toOffset = matrixVector(handednessFix, baseTo.map((value, axis) => value - basePivot[axis]));
+  const localRotation = matrixEuler(localOrientation);
+  // Rescale belongs to the original pose's local axes. Re-express its actual
+  // inflated extents before changing the pose, then undo the new pose's scale.
+  // Otherwise a quarter turn changes the dominant Euler axis and deforms it.
+  const signs = cube.size.map(value => value < 0 ? -1 : 1);
+  const rescaledInflate = cube.rescale ? Number(cube.inflate) || 0 : 0;
+  const originalFrom = cube.rescale ? baseFrom.map((value, axis) => value - signs[axis] * rescaledInflate) : baseFrom;
+  const originalTo = cube.rescale ? baseTo.map((value, axis) => value + signs[axis] * rescaledInflate) : baseTo;
+  const fromOffset = matrixVector(handednessFix, rescaleRotationPoint(originalFrom, basePivot, cube.rotation, cube.rescale)
+    .map((value, axis) => value - basePivot[axis]));
+  const toOffset = matrixVector(handednessFix, rescaleRotationPoint(originalTo, basePivot, cube.rotation, cube.rescale)
+    .map((value, axis) => value - basePivot[axis]));
+  const nextScale = rescaleRotationPoint([1, 1, 1], [0, 0, 0], localRotation, cube.rescale);
   // Reflection compensation changes the local X basis, not the Cube's signed
   // dimensions. Order endpoints using the original per-axis signs so baking
   // preserves negative geometry instead of normalizing it into a positive box.
   const from = localPivot.map((value, axis) => value + (cube.size[axis] < 0
-    ? Math.max(fromOffset[axis], toOffset[axis]) : Math.min(fromOffset[axis], toOffset[axis])));
+    ? Math.max(fromOffset[axis], toOffset[axis]) : Math.min(fromOffset[axis], toOffset[axis])) / nextScale[axis] + signs[axis] * rescaledInflate);
   const to = localPivot.map((value, axis) => value + (cube.size[axis] < 0
-    ? Math.min(fromOffset[axis], toOffset[axis]) : Math.max(fromOffset[axis], toOffset[axis])));
+    ? Math.min(fromOffset[axis], toOffset[axis]) : Math.max(fromOffset[axis], toOffset[axis])) / nextScale[axis] - signs[axis] * rescaledInflate);
   const faces = mirrored ? mirrorCubeFacesAcrossLocalX(cube.faces, cube.uvMode === 'face') : cloneData(cube.faces);
   return new Cube({
-    ...cloneData(cube), uid: undefined,
+    ...cloneData(cube), uid: preserveUid ? cube.uid : undefined,
     name: cube.name,
     position: from,
     size: to.map((value, axis) => value - from[axis]),
     pivot: localPivot,
-    rotation: matrixEuler(localOrientation),
+    rotation: localRotation,
     faces,
     mirrorUv: mirrored && cube.uvMode !== 'face' ? !Boolean(cube.mirrorUv) : cube.mirrorUv,
     modifiers: []
   });
 }
+
+// Keep procedural parameters and subdivision edits intact when changing
+// handedness. Reflection is evaluated after those edits and before owner pose.
+function mirrorProceduralCubes(cubes, owner) {
+  if (!owner.geometryMirrorX) return cubes;
+  const affine = { matrix: [[-1, 0, 0], [0, 1, 0], [0, 0, 1]], translation: [0, 0, 0] };
+  return cubes.map(cube => transformCubeFromWorld({ cube, offset: [0, 0, 0], ownerRotation: [0, 0, 0],
+    ownerOrigin: [0, 0, 0], chain: [] }, affine, [], true));
+}
+
+function bakedCubeFromWorld(...args) { return transformCubeFromWorld(...args); }
 
 function bakeNestedEnvelopeDescendants(project, owner) {
   const sourceUids = owner.type === 'group' ? project.getDescendantElementUids(owner.uid) : [owner.uid];
@@ -2198,7 +2240,10 @@ export function exportBlockbench(project, textureAssets = []) {
       box_uv: project.uvMode === 'box'
     },
     name: project.name,
-    ...(formatRules(project).javaBlock ? { java_block_version: blockbenchJavaVersion(project.formatData?.javaBlockVersion) } : {}),
+    ...(formatRules(project).javaBlock ? {
+      java_block_version: blockbenchJavaVersion(project.formatData?.javaBlockVersion),
+      java_block_bounds: project.formatData?.javaBlockBoundsEnabled !== false
+    } : {}),
     model_identifier: '',
     visible_box: [1, 1, 0],
     variable_placeholders: '',

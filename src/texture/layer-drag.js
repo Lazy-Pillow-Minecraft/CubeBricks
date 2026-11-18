@@ -57,8 +57,7 @@ export function createLayerDragBinder({
         guideY = targetRect.top + 7;
         guideDepth = destination.depth + (outside ? 0 : 1);
       } else {
-        const ratio = picked.ratio;
-        position = item.layer.type === 'group' && ratio > .27 && ratio < .73
+        position = item.layer.type === 'group' && picked.position === 'after' && y < targetRect.bottom
           ? 'inside' : picked.position;
         targetUid = item.layer.uid;
         groupLine = position === 'inside' ? { uid: targetUid, depth: item.depth } : item.ancestors.at(-1);

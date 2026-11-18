@@ -42,7 +42,7 @@ export function layoutProjectHistory(graph, radius = 440) {
     const point = {
       ...node, angle, radius: distance, x: Math.cos(angle) * distance, y: Math.sin(angle) * distance,
       tip: node.children.length === 0, current: node.sequence === graph.current,
-      canDelete: nodes.size > 1, canPrune: node.descendants < nodes.size
+      canDelete: !node.damaged && nodes.size > 1, canPrune: !node.damaged && node.descendants < nodes.size
     };
     points.push(point);
     byId.set(node.sequence, point);

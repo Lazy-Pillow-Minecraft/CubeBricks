@@ -93,7 +93,7 @@ export function createViewportInputBinder({
       }
       if (event.button !== 0) return;
       const curve = selected();
-      if (state.mode !== 'paint') {
+      if (state.mode !== 'paint' && state.tool !== 'toolbox') {
         const rect = sceneCanvas.getBoundingClientRect();
         const node = sceneRenderer.pickUnselectedCurveNode(state.project,
           event.clientX - rect.left, event.clientY - rect.top,
@@ -305,6 +305,7 @@ export function createViewportInputBinder({
     sceneCanvas.addEventListener('lostpointercapture', endPointerDrag);
     sceneCanvas.addEventListener('auxclick', event => { if (event.button === 1) event.preventDefault(); });
     window.addEventListener('wheel', event => {
+      if (event.defaultPrevented || event.target.closest?.('input[type="number"], select')) return;
       if (!shortcutHeld('temporaryEyedropper') || !palette.scrollSelectedPaletteColor(event.deltaY)) return;
       event.preventDefault();
       event.stopImmediatePropagation();

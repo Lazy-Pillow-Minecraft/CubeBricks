@@ -1,8 +1,13 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Windows.Forms;
+
+[assembly: AssemblyTitle("CubeBricks")]
+[assembly: AssemblyProduct("CubeBricks")]
+[assembly: AssemblyCompany("CubeBricks")]
 
 internal static class CubeBricksStart
 {
@@ -20,26 +25,71 @@ internal static class CubeBricksStart
 
         try
         {
+            string executable = electron;
+            try
+            {
+                using (var prepare = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "node.exe",
+                    Arguments = Quote(Path.Combine(root, "scripts", "start-desktop.cjs")) + " --prepare-runtime",
+                    WorkingDirectory = root,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true
+                }))
+                {
+                    string path = prepare.StandardOutput.ReadToEnd().Trim();
+                    prepare.WaitForExit();
+                    if (prepare.ExitCode == 0 && File.Exists(path)) executable = path;
+                }
+            }
+            catch (Exception)
+            {
+                // The dependency can still launch directly if branding setup is unavailable.
+            }
             var command = new StringBuilder(Quote(root));
             foreach (string argument in arguments)
             {
                 command.Append(' ').Append(Quote(argument));
             }
-            Process.Start(new ProcessStartInfo
+            if (executable != electron)
             {
-                FileName = electron,
-                Arguments = command.ToString(),
-                WorkingDirectory = root,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            });
+                try
+                {
+                    using (var startup = StartEditor(executable, command.ToString(), root))
+                    {
+                        if (!startup.WaitForExit(4000) || startup.ExitCode == 0) return;
+                    }
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // Retry the installed development runtime if Windows rejects the copy.
+                }
+            }
+            using (var startup = StartEditor(electron, command.ToString(), root))
+            {
+                if (startup.WaitForExit(4000) && startup.ExitCode != 0)
+                    throw new InvalidOperationException("Electron 在啟動時退出（" + startup.ExitCode + "）。");
+            }
         }
         catch (Exception error)
         {
             MessageBox.Show("CubeBricks 啟動失敗：\n" + error.Message, "CubeBricks",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private static Process StartEditor(string executable, string arguments, string root)
+    {
+        return Process.Start(new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = arguments,
+                WorkingDirectory = root,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
     }
 
     private static string Quote(string value)

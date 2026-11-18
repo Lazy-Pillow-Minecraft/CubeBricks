@@ -1,5 +1,6 @@
 import { modelFormatRegistry } from '../common/config/model-formats.js';
 import { shapeRegistry } from '../shapes/builtins.js';
+import { objectAssetMarkup } from './object-icons.js';
 
 export function createOutlinerViewController({
   state, $, outliner, LOCATOR_ICON_SHAPES, selected, selectedElementUids,
@@ -10,6 +11,8 @@ export function createOutlinerViewController({
   const GROUP_END_HEIGHT = 16;
   const END_PADDING = ITEM_HEIGHT * 3;
   const treeLineX = depth => 16 + depth * 13;
+  const cardLeft = depth => depth === 0 ? 4 : treeLineX(depth - 1) + 2 + 4;
+  const groupLineSelection = uid => state.selectedUids.has(uid) ? ' is-selected-group-line' : '';
   function rowAtOffset(rows, offset) {
     let low = 0, high = rows.length;
     while (low < high) {
@@ -20,8 +23,8 @@ export function createOutlinerViewController({
     return low;
   }
   function treeLines(ancestors, ownGroup = null, ending = false) {
-    return ancestors.map(({ uid, depth }) => `<span class="outliner-tree-line" data-group-line-uid="${uid}" style="left:${treeLineX(depth)}px"></span>`).join('')
-      + (ownGroup === null ? '' : `<span class="outliner-tree-line ${ending ? 'ends-here' : 'starts-here'}" data-group-line-uid="${ownGroup.uid}" style="left:${treeLineX(ownGroup.depth)}px"></span>`);
+    return ancestors.map(({ uid, depth }) => `<span class="outliner-tree-line${groupLineSelection(uid)}" data-group-line-uid="${uid}" style="left:${treeLineX(depth)}px"></span>`).join('')
+      + (ownGroup === null ? '' : `<span class="outliner-tree-line ${ending ? 'ends-here' : 'starts-here'}${groupLineSelection(ownGroup.uid)}" data-group-line-uid="${ownGroup.uid}" style="left:${treeLineX(ownGroup.depth)}px"></span>`);
   }
   function updateSelectionLabels() {
     const item = selected();
@@ -34,7 +37,7 @@ export function createOutlinerViewController({
     $('#selectionType').textContent = state.selectedGenerated ? 'modifier_result' : modifierAnchorSelected ? 'modifier_anchor'
       : curveNodeSelected ? 'curve_node' : item?.type || format?.name || 'Scene';
     $('#selectionName').textContent = state.selectedGenerated
-      ? `${state.project.getNode(state.selectedGenerated.uid)?.name || '生成物'} · 唯讀`
+      ? item?.name || state.project.getNode(state.selectedGenerated.uid)?.name || '生成物'
       : modifierAnchorSelected ? (copyNodeIndex >= 0 ? `拷貝節點 ${copyNodeIndex + 1}` : '對稱軸點')
         : curveNodeSelected ? `節點 ${state.selectedCurveNodeIndex + 1}`
           : state.selectedUids.size > 1 ? `已選 ${state.selectedUids.size} 項` : item?.name || state.project.name;
@@ -127,19 +130,18 @@ export function createOutlinerViewController({
       nodeIndex,
       groupEnd,
       copyEnd,
-      copyOwnerUid,
       groupUid,
       ancestors
     }, localIndex) => {
       if (copyEnd) return `<div class="outliner-group-end copy-node-end" data-outliner-row-index="${start + localIndex}" style="--group-line-x:${treeLineX(depth)}px">
-      ${treeLines(ancestors)}<span class="outliner-tree-line ends-here" style="left:${treeLineX(depth)}px"></span><span class="outliner-group-end-branch"></span>
+      ${treeLines(ancestors)}<span class="outliner-tree-line copy-node-rail ends-here" style="left:${treeLineX(depth)}px"></span><span class="outliner-group-end-branch"></span>
     </div>`;
       if (groupEnd) return `<div class="outliner-group-end" data-outliner-row-index="${start + localIndex}" data-group-end="${groupUid}" style="--group-line-x:${treeLineX(depth)}px" title="點擊線框選中組；拖到線右側放入組內，左側放到外層">
-      ${treeLines(ancestors, { uid: groupUid, depth }, true)}<span class="outliner-group-end-branch" data-group-line-uid="${groupUid}"></span>
+      ${treeLines(ancestors, { uid: groupUid, depth }, true)}<span class="outliner-group-end-branch${groupLineSelection(groupUid)}" data-group-line-uid="${groupUid}"></span>
     </div>`;
       if (curveNode) {
         const active = state.selectedUid === curveOwner.uid && state.selectedCurveNodeIndex === nodeIndex;
-        return `<button class="outliner-item curve-node-row ${active ? 'active' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${curveOwner.uid}" data-curve-node-index="${nodeIndex}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-indent:${5 + depth * 13}px">
+        return `<button class="outliner-item curve-node-row ${active ? 'active' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${curveOwner.uid}" data-curve-node-index="${nodeIndex}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-card-left:${cardLeft(depth)}px">
         ${treeLines(ancestors)}
         <span></span><span class="kind curve-node-kind">◆</span><span class="item-name">節點 ${nodeIndex + 1}</span><span></span>
       </button>`;
@@ -147,18 +149,18 @@ export function createOutlinerViewController({
       if (copyNode) {
         const active = state.selectedUid === copyOwner.uid && state.selectedModifierUid === copyModifier.uid
           && state.selectedModifierNodeUid === node.uid;
-        return `<button class="outliner-item curve-node-row ${active ? 'active' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${copyOwner.uid}" data-copy-node-uid="${node.uid}" data-copy-modifier-uid="${copyModifier.uid}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-indent:${5 + depth * 13}px">
-        ${treeLines(ancestors)}<span class="outliner-tree-line" style="left:${treeLineX(depth - 1)}px"></span>
+        return `<button class="outliner-item curve-node-row ${active ? 'active' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${copyOwner.uid}" data-copy-node-uid="${node.uid}" data-copy-modifier-uid="${copyModifier.uid}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-card-left:${cardLeft(depth)}px">
+        ${treeLines(ancestors)}<span class="outliner-tree-line copy-node-rail" style="left:${treeLineX(depth - 1)}px"></span>
         <span></span><span class="kind curve-node-kind">◆</span><span class="item-name">拷貝節點 ${nodeIndex + 1}</span><span></span>
       </button>`;
       }
-      return `<button class="outliner-item ${state.mode === 'paint' ? 'paint-flags' : state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''} ${state.outlinerDragUids?.includes(node.uid) ? 'is-dragging' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${node.uid}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-indent:${5 + depth * 13}px">
+      return `<button class="outliner-item ${state.mode === 'paint' ? 'paint-flags' : state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''} ${state.outlinerDragUids?.includes(node.uid) ? 'is-dragging' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${node.uid}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-card-left:${cardLeft(depth)}px">
       ${treeLines(ancestors, node.type === 'group' ? { uid: node.uid, depth } : null)}
       ${container ? `<span class="outliner-disclosure-hit" data-disclosure="${node.uid}" title="${collapsed ? '展開' : '折疊'}" draggable="false">${openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure')}</span>`
           : hasCopyNodes ? `<span class="outliner-disclosure-hit" data-copy-disclosure="${node.uid}" title="${state.collapsedCopyNodes.has(node.uid) ? '展開拷貝節點' : '折疊拷貝節點'}" draggable="false">${openIconMarkup(state.collapsedCopyNodes.has(node.uid) ? 'right' : 'down', 'outliner-disclosure')}</span>`
             : '<span class="outliner-disclosure-spacer"></span>'}
       <span class="kind">${outlinerKindMarkup(node)}</span>
-      <span class="item-name">${escapeHtml(node.name)}</span>${hasCopyNodes && container ? `<span class="outliner-copy-disclosure" data-copy-disclosure="${node.uid}" title="${state.collapsedCopyNodes.has(node.uid) ? '展開拷貝節點' : '折疊拷貝節點'}">${state.collapsedCopyNodes.has(node.uid) ? '▸' : '▾'}</span>` : ''}${outlinerStateMarkup(node)}
+      <span class="outliner-name-slot"><span class="item-name">${escapeHtml(node.name)}</span>${hasCopyNodes && container ? `<span class="outliner-copy-disclosure" data-copy-disclosure="${node.uid}" title="${state.collapsedCopyNodes.has(node.uid) ? '展開拷貝節點' : '折疊拷貝節點'}">${openIconMarkup(state.collapsedCopyNodes.has(node.uid) ? 'right' : 'down', 'outliner-disclosure')}</span>` : ''}</span>${outlinerStateMarkup(node)}
     </button>`;
     }).join('');
   }
@@ -214,13 +216,14 @@ export function createOutlinerViewController({
 
   function outlinerKindMarkup(node) {
     if (node.type === 'node') return '<span class="outliner-curve-kind" aria-hidden="true">●</span>';
-    if (node.type === 'bezier2d' || node.type === 'bezier3d') return `<span class="outliner-curve-kind" aria-hidden="true">⌁${node.type === 'bezier2d' ? '²' : '³'}</span>`;
+    if (node.type === 'bezier2d' || node.type === 'bezier3d') return objectAssetMarkup(node.type, node.variant, 'outliner-kind-icon object-icon');
     if (isShapeElement(node)) {
       const icon = shapeRegistry.get(node.shapeType)?.icon;
       return icon?.startsWith('data:image/')
         ? `<img class="outliner-kind-icon object-icon" alt="" src="${escapeAttribute(icon)}" />`
-        : `<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-${icon || 'shape'}"></use></svg>`;
+        : objectAssetMarkup(node.shapeType, null, 'outliner-kind-icon object-icon', icon);
     }
+    if (node.type === 'cube') return objectAssetMarkup('cube', null, 'outliner-kind-icon object-icon');
     if (node.type !== 'locator') return `<svg class="outliner-kind-icon object-icon" aria-hidden="true"><use href="#icon-${node.type}"></use></svg>`;
     return `<svg class="outliner-kind-icon" aria-hidden="true" viewBox="0 0 197.49 189.08">${LOCATOR_ICON_SHAPES}</svg>`;
   }

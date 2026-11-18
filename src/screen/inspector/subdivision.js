@@ -16,6 +16,7 @@ export function createSubdivisionController({
   function subdivisionPatch(owner, cube, index) {
     const base = (owner.toFormatBaseCubes?.(state.project) || owner.toBaseCubes?.())[index];
     if (!base) return null;
+    cube = owner.toSubdivisionSourceCube?.(cube) || cube;
     const patch = {};
     for (const field of ['position', 'size', 'pivot', 'rotation']) {
       const delta = cube[field].map((value, axis) => Number(value) - Number(base[field][axis]));
@@ -23,7 +24,7 @@ export function createSubdivisionController({
     }
     const inflateDelta = Number(cube.inflate || 0) - Number(base.inflate || 0);
     if (Math.abs(inflateDelta) > 1e-8) patch.inflateDelta = inflateDelta;
-    for (const field of ['name', 'unnamed', 'uvMode', 'uvNormalized', 'uv', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
+    for (const field of ['name', 'unnamed', 'uvMode', 'uvNormalized', 'uv', 'uvScale', 'mirrorUv', 'faces', 'autoUv', 'exported', 'locked', 'shade', 'visible', 'color']) {
       if (JSON.stringify(cube[field]) !== JSON.stringify(base[field])) patch[field] = structuredClone(cube[field]);
     }
     return Object.keys(patch).length ? patch : null;

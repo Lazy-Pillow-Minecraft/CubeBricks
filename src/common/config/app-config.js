@@ -14,8 +14,10 @@ export const AppLanguage = Object.freeze({
 export const ConfigKey = Object.freeze({
   LANGUAGE: 'application.language',
   FONT: 'application.font',
+  THEME_MODE: 'application.theme-mode',
   SHORTCUTS: 'application.shortcuts',
   HISTORY_LIMIT: 'application.history-limit',
+  DOCK_HEIGHT_SNAP: 'application.dock-height-snap',
   SEPARATE_UV_MODE: 'editor.separate-uv-mode',
   BLOCKBENCH_CONTROLS: 'editor.blockbench-controls',
   SNAP: 'editor.snap-subdivisions',
@@ -163,6 +165,11 @@ configRegistry.register({
 
 configRegistry.registerMany([
   {
+    id: ConfigKey.THEME_MODE, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'system',
+    options: [{ value: 'system', label: '跟随系统' }, { value: 'light', label: '明亮' }, { value: 'dark', label: '深色' }],
+    description: 'Use the system, light or dark color scheme for the selected theme.'
+  },
+  {
     id: ConfigKey.SHORTCUTS, type: ConfigType.OBJECT, scope: ConfigScope.APPLICATION,
     defaultValue: {}, validate: value => Object.values(value).every(entry => typeof entry === 'string' && entry.length < 160),
     description: 'User-defined keyboard shortcuts; omitted actions use built-in bindings.'
@@ -189,6 +196,13 @@ configRegistry.registerMany([
     id: ConfigKey.HISTORY_LIMIT, type: ConfigType.NUMBER, scope: ConfigScope.APPLICATION, defaultValue: 200,
     validate: value => Number.isInteger(value) && value >= 0 && value <= 10000,
     description: 'Default maximum number of persisted undo operations per project.'
+  },
+  {
+    id: ConfigKey.DOCK_HEIGHT_SNAP,
+    type: ConfigType.BOOLEAN,
+    scope: ConfigScope.APPLICATION,
+    defaultValue: true,
+    description: 'Fit supported side dock panels to their contents and lock their adjacent height handles.'
   },
   {
     id: ConfigKey.SEPARATE_UV_MODE,

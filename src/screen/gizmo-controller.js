@@ -2,6 +2,7 @@ import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { findVertexSnapIntersections } from '../common/core/vertex-intersections.js';
 import { syncSvgMarkup } from '../utils/dom/svg-markup.js';
 import { shapeRegistry } from '../shapes/builtins.js';
+import { generatedSelectionFrame, generatedPoint, generatedVector, sourcePoint, sourceVector } from '../common/core/modifier-selection.js';
 
 export function createGizmoController({
   state, $, sceneCanvas, sceneRenderer, selected, isBezierElement,
@@ -528,8 +529,12 @@ export function createGizmoController({
       gizmo.innerHTML = '';
       return;
     }
+    const frame = generatedSelectionFrame(state, sceneRenderer);
     const vertices = sceneRenderer.getWorldVertices(state.project, target.uid)
-      .map(entry => ({ ...entry, targetUid: target.uid, projected: projectViewportPoint(entry.point) }))
+      .map(entry => {
+        const point = generatedPoint(frame, entry.point);
+        return { ...entry, point, targetUid: target.uid, projected: projectViewportPoint(point) };
+      })
       .filter(entry => !entry.projected.behind && entry.projected.x >= -13 && entry.projected.y >= -13
         && entry.projected.x <= width + 13 && entry.projected.y <= height + 13)
       .sort((left, right) => right.projected.depth - left.projected.depth);
@@ -568,6 +573,26 @@ export function createGizmoController({
     }
     const rect = cachedCanvasRect || sceneCanvas.getBoundingClientRect();
     const width = rect.width, height = rect.height;
+    if (state.tool === 'toolbox') {
+      if (state.toolboxCategory !== 'scale' || isEffectivelyLocked(item.uid)) {
+        gizmo.setAttribute('hidden', '');
+        state.gizmoAxes = null;
+        return;
+      }
+      const context = getSelectionTransformContext(), frame = generatedSelectionFrame(state, sceneRenderer);
+      const origin = generatedPoint(frame, sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center || getTransformPivot(item));
+      const axes = getSelectionTransformAxes(context, item).map(axis => generatedVector(frame, axis));
+      const projected = projectViewportPoint(origin), camera = sceneRenderer.getCameraFrame();
+      const sample = projectViewportPoint(addScaled3(origin, camera.right, 1));
+      const worldPerPixel = 1 / Math.max(.0001, Math.hypot(sample.x - projected.x, sample.y - projected.y));
+      state.gizmoOrigin = origin;
+      state.gizmoCenter = { x: projected.x, y: projected.y };
+      state.gizmoAxes = [];
+      gizmo.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      syncSvgMarkup(gizmo, centerCubeMarkup(origin, axes, worldPerPixel, { axisKey: 'uniform', kind: 'toolbox-scale' }));
+      gizmo.removeAttribute('hidden');
+      return;
+    }
     const curveOverlay = curveEditorOverlayMarkup(item);
     const symmetryEntry = selectedMirrorGuideGroup();
     const modifierAnchorContext = activeModifierAnchorContext();
@@ -634,21 +659,25 @@ export function createGizmoController({
     const modifierFrame = modifierAnchorContext
       ? mirrorControllerWorldFrame(modifierAnchorContext.owner, modifierAnchorContext.modifier)
       : null;
-    const pivot = modifierFrame?.origin || (curveNodeContext
+    const generatedFrame = !modifierAnchorContext && !curveNodeContext ? generatedSelectionFrame(state, sceneRenderer) : null;
+    const sourcePivot = modifierFrame?.origin || (curveNodeContext
       ? sceneRenderer.getCurveNodeWorldPoints(state.project, item.uid)[curveNodeContext.index]?.point
       : selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item));
-    const geometryCenter = modifierAnchorContext || curveNodeContext ? pivot : selectionContext.multiple
-      ? selectionContext.center || pivot
+    const pivot = generatedPoint(generatedFrame, sourcePivot);
+    const sourceCenter = modifierAnchorContext || curveNodeContext ? sourcePivot : selectionContext.multiple
+      ? selectionContext.center || sourcePivot
       : sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center
       || sceneRenderer.getGeometryCenter(state.project, item.uid)
-      || pivot;
+      || sourcePivot;
+    const geometryCenter = generatedPoint(generatedFrame, sourceCenter);
     const gizmoOrigin = modifierAnchorContext || curveNodeContext || item.type === 'node' || ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
     const center = projectViewportPoint(gizmoOrigin);
     state.gizmoCenter = { x: center.x, y: center.y };
     state.gizmoOrigin = [...gizmoOrigin];
-    const axes = modifierAnchorContext ? getModifierAnchorTransformAxes(modifierAnchorContext)
+    const sourceAxes = modifierAnchorContext ? getModifierAnchorTransformAxes(modifierAnchorContext)
       : curveNodeContext ? getCurveNodeTransformAxes(curveNodeContext)
         : getSelectionTransformAxes(selectionContext, item);
+    const axes = sourceAxes.map(axis => generatedVector(generatedFrame, axis));
     const classes = ['x', 'y', 'z'];
     const cameraFrame = sceneRenderer.getCameraFrame();
     const pixelSample = projectViewportPoint(addScaled3(gizmoOrigin, cameraFrame.right, 1));
@@ -665,7 +694,8 @@ export function createGizmoController({
       if (state.tool === 'resize' && state.scaleHandleMode === 'bounds') {
         let extent;
         if (selectionContext.multiple || item.type === 'group') {
-          extent = sceneRenderer.getSelectionProjectionExtent(state.project, state.selectedUids, gizmoOrigin, axis) ?? 0;
+          extent = sceneRenderer.getSelectionProjectionExtent(state.project, state.selectedUids,
+            sourcePoint(generatedFrame, gizmoOrigin), sourceVector(generatedFrame, axis)) ?? 0;
         } else extent = item.type === 'cube'
           ? Math.abs(item.size[index]) / 2
           : shapeRegistry.get(item.shapeType)?.dimensionKeys

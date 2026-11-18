@@ -118,9 +118,10 @@ export function createProjectFileController({
     const data = decodeNativeJson(JSON.parse(content.replace(/^\uFEFF/, '')), filePath);
     // A journal already contains native snapshots, regardless of the original
     // imported filename recorded in saved_state.
-    const project = !journalId && (filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format)
+    const isBlockbench = !journalId && (filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format);
+    const project = isBlockbench
       ? importBlockbench(data) : new CubeBricksProject(data);
-    if (data._cubebricksFormatData) project.formatData = { ...project.formatData, ...data._cubebricksFormatData };
+    if (data._cubebricksFormatData && !isBlockbench) project.formatData = { ...project.formatData, ...data._cubebricksFormatData };
     const savedPath = filePath.toLowerCase().endsWith('.cbmodel') ? filePath : null;
     const embeddedTextures = (data.textures || []).filter(texture => typeof texture.source === 'string' && texture.source.startsWith('data:image/')).map(texture => ({
       uuid: texture.uuid, id: texture.id, name: texture.name || 'embedded_texture.png', source: texture.source,

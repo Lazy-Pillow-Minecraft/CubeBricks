@@ -1,3 +1,4 @@
+import { createThemeController } from './theme/controller.js';
 import { ConfigKey, applyLanguage, getLanguageLabel, translateUiText, TOOL_TRANSFORM_SPACE } from '../common/config/app-config.js';
 
 export function createSettingsController({
@@ -7,130 +8,9 @@ export function createSettingsController({
   toolSupportsMode, setTool, updateSnapButton, updatePlayerReferenceTexture,
   clearSelection, updateProjectionControls, animateLockedHoverStrength, updateToolOptions
 }) {
-  const themePresets = {
-    moss: {
-      '--accent': '#b9f55a',
-      '--selection-outline': '#d8f59b',
-      '--bg': '#11130f',
-      '--panel': '#1b1f18',
-      '--viewport': '#20251e',
-      '--panel-2': '#22271f',
-      '--panel-3': '#292f25',
-      '--text': '#e9eee3',
-      '--muted': '#8f9b86',
-      '--subtle': '#5f6959',
-      '--line': 'rgba(226, 239, 213, .1)',
-      '--line-strong': 'rgba(226, 239, 213, .18)',
-      '--danger': '#ff7d68',
-      '--accent-contrast': '#17200e',
-      '--surface-tint': '#2b3327',
-      '--dialog-tint': '#38432e',
-      '--viewport-glow': '#53604d'
-    },
-    amber: {
-      '--accent': '#e6a20d',
-      '--selection-outline': '#fff0c8',
-      '--bg': '#140904',
-      '--panel': '#1c0d06',
-      '--viewport': '#21120b',
-      '--panel-2': '#241108',
-      '--panel-3': '#2d160b',
-      '--text': '#fff4d8',
-      '--muted': '#c7a77a',
-      '--subtle': '#765738',
-      '--line': 'rgba(255, 224, 171, .11)',
-      '--line-strong': 'rgba(255, 224, 171, .2)',
-      '--danger': '#ff765f',
-      '--accent-contrast': '#261306',
-      '--surface-tint': '#3a1c0b',
-      '--dialog-tint': '#4a260e',
-      '--viewport-glow': '#5a3518'
-    },
-    ember: {
-      '--accent': '#ff9d57',
-      '--selection-outline': '#ffd0a6',
-      '--bg': '#160f0e',
-      '--panel': '#241917',
-      '--viewport': '#291d1b',
-      '--panel-2': '#2d201d',
-      '--panel-3': '#362623',
-      '--text': '#f3e7e0',
-      '--muted': '#aa8d82',
-      '--subtle': '#755d55',
-      '--line': 'rgba(255, 220, 202, .1)',
-      '--line-strong': 'rgba(255, 220, 202, .18)',
-      '--danger': '#ff7565',
-      '--accent-contrast': '#27110b',
-      '--surface-tint': '#3c2420',
-      '--dialog-tint': '#4a2d27',
-      '--viewport-glow': '#5a3931'
-    },
-    slate: {
-      '--accent': '#65d7e8',
-      '--selection-outline': '#a7f0fa',
-      '--bg': '#0d1115',
-      '--panel': '#171e24',
-      '--viewport': '#1b242b',
-      '--panel-2': '#1d2830',
-      '--panel-3': '#25323b',
-      '--text': '#e4eef2',
-      '--muted': '#8b9da7',
-      '--subtle': '#5c6c75',
-      '--line': 'rgba(211, 237, 245, .1)',
-      '--line-strong': 'rgba(211, 237, 245, .18)',
-      '--danger': '#ff7d68',
-      '--accent-contrast': '#092126',
-      '--surface-tint': '#263640',
-      '--dialog-tint': '#304550',
-      '--viewport-glow': '#405965'
-    }
-  };
-
-  const themeVariableKeys = [...new Set(Object.values(themePresets).flatMap(preset => Object.keys(preset)))];
-
-  function setThemeVar(key, value, persist = true) {
-    document.documentElement.style.setProperty(key, value);
-    if (key === '--accent') document.documentElement.style.setProperty('--accent-rgb', hexToRgb(value).join(', '));
-    if (key === '--selection-outline') sceneRenderer.setSelectionOutline(value);
-    if (key === '--radius') $('#radiusOutput').textContent = value;
-    if (key === '--ui-scale') {
-      const scale = Math.max(1, Number.parseFloat(value) || 100) / 100;
-      document.documentElement.style.fontSize = `${21 * scale}px`;
-      $('#scaleOutput').textContent = value;
-    }
-    if (persist) saveTheme();
-    renderScene();
-  }
-
-  function saveTheme() {
-    const computed = getComputedStyle(document.documentElement);
-    const theme = Object.fromEntries(themeVariableKeys.map(key => [key, computed.getPropertyValue(key).trim()]));
-    $$('[data-theme-var]').forEach(input => theme[input.dataset.themeVar] = input.dataset.unit ? `${input.value}${input.dataset.unit}` : input.value);
-    localStorage.setItem('cubebricks.theme', JSON.stringify(theme));
-  }
-
-  function loadTheme() {
-    const raw = localStorage.getItem('cubebricks.theme');
-    if (!raw) return;
-    try {
-      const theme = JSON.parse(raw);
-      Object.entries(theme).forEach(([key, value]) => {
-        setThemeVar(key, value, false);
-        const input = $(`[data-theme-var="${key}"]`);
-        if (input) input.value = String(value).replace(input.dataset.unit || '', '');
-      });
-    } catch { localStorage.removeItem('cubebricks.theme'); }
-  }
-
-  function applyPreset(name) {
-    Object.entries(themePresets[name]).forEach(([key, value]) => {
-      const input = $(`[data-theme-var="${key}"]`);
-      if (input) input.value = value;
-      setThemeVar(key, value, false);
-    });
-    saveTheme();
-    toast('外觀已套用');
-  }
+  const { setThemeVar, saveTheme, loadTheme, applyPreset } = createThemeController({
+    $, $$, sceneRenderer, hexToRgb, renderScene, toast, configRegistry
+  });
 
   function initializeConfigRegistry() {
     configRegistry.list().forEach(definition => applyRegisteredConfig(definition.id, configRegistry.get(definition.id), false));

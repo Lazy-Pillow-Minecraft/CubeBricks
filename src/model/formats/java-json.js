@@ -66,7 +66,7 @@ export function importJavaJson(data, name, references = []) {
 
 export function exportJavaJson(bb, locations, formatData = {}) {
   const version = normalizeJavaBlockVersion(formatData.javaBlockVersion || bb.java_block_version);
-  const rules = formatRules({ formatId: 'java_block_item', formatData: { javaBlockVersion: version } });
+  const rules = formatRules({ formatId: 'java_block_item', formatData: { ...formatData, javaBlockVersion: version } });
   const data = { ...(structuredClone(formatData.nativeJson) || {}), textures: {}, elements: [] };
   locations.forEach((location, index) => { data.textures[String(index)] = location.resource; });
   const particle = bb.textures.findIndex(texture => texture.particle);

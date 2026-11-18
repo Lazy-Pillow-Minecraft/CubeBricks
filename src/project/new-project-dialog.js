@@ -70,7 +70,8 @@ export function createNewProjectDialog({ $, language, createProject, toast }) {
         snap: $('#newModelSnap').value,
         historyLimit: $('#newModelHistoryLimit').value,
         description: $('#newModelDescription').value,
-        uvMode, javaBlockVersion: javaVersion
+        uvMode, javaBlockVersion: javaVersion,
+        javaBlockBoundsEnabled: !$('#newModelJavaBoundsDisabled').checked
       });
       createProject(format, data);
       dialog.close();
@@ -92,6 +93,8 @@ export function createNewProjectDialog({ $, language, createProject, toast }) {
     $('#newModelDescription').value = defaults.description || '';
     const javaBlock = format.id === ModelFormatId.JAVA_BLOCK_ITEM;
     $('#newModelJavaVersionRow').hidden = !javaBlock;
+    $('#newModelJavaBoundsRow').hidden = !javaBlock;
+    $('#newModelJavaBoundsDisabled').checked = !defaults.javaBlockBoundsEnabled;
     if (javaBlock) picker($('#newModelJavaVersionButton'), $('#newModelJavaVersionMenu'),
       JAVA_BLOCK_VERSIONS, javaVersion, value => { javaVersion = value; });
     const modes = availableUvModes(format);

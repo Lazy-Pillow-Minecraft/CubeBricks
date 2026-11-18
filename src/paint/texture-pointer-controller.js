@@ -291,7 +291,9 @@ export function createTexturePaintPointerController({
     if (preview.hasPointerCapture?.(event.pointerId)) preview.releasePointerCapture(event.pointerId);
     drag.ended = true;
     if (drag.tool === 'fill') {
-      trackPaintCommit(drag.project, drag.queue.then(() => finishTextureBucketStroke(drag.history)).catch(error => toast(error.message)));
+      const work = drag.queue.then(() => finishTextureBucketStroke(drag.history));
+      void work.catch(error => toast(error.message));
+      trackPaintCommit(drag.project, work);
       return true;
     }
     // A lost capture ends at the last received sample. Keeping that partial

@@ -9,7 +9,7 @@ import { paintSymmetryRelationCache } from '../../paint/symmetry-relations.js';
 export function createInspectorStackPanels({
   state, $, $$, sceneRenderer, round, openIconMarkup, escapeHtml,
   schedulePaintSymmetryBuild, snapshot, markDirty, renderInspector, renderScene,
-  updateSelectionLabels, toast, renderAll, setTool, syncInspectorValues, setMode
+  updateSelectionLabels, toast, renderAll, renderOutliner, setTool, syncInspectorValues, setMode
 }) {
   function modifierVectorField(label, modifier, property, values) {
     return `<div class="vector-field modifier-vector-field"><span>${label}</span><div class="axis-inputs">${['X', 'Y', 'Z'].map((axis, index) =>
@@ -145,8 +145,10 @@ export function createInspectorStackPanels({
       state.selectedModifierUid = modifier.uid;
       state.selectedModifierNodeUid = modifier.type === 'element_copy' ? modifier.nodes[0]?.uid || null : null;
       state.selectedCurveNodeIndex = null;
+      if (modifier.type === 'element_copy') state.collapsedCopyNodes.delete(item.uid);
       sceneRenderer.invalidateMirrorGeometry();
       markDirty();
+      if (modifier.type === 'element_copy') renderOutliner();
       renderInspector();
       renderScene();
       updateSelectionLabels();
@@ -164,11 +166,13 @@ export function createInspectorStackPanels({
       if (!modifier.enabled && state.selectedModifierUid === modifier.uid) state.selectedModifierUid = null;
       sceneRenderer.invalidateMirrorGeometry();
       markDirty();
+      if (modifier.type === 'element_copy') renderOutliner();
       renderInspector();
       renderScene();
       updateSelectionLabels();
     }));
     $$('[data-modifier-remove]', inspector).forEach(button => button.addEventListener('click', () => {
+      const removed = modifierByUid(button.dataset.modifierRemove);
       snapshot(`modifier.${item.modifiers?.find(modifier => modifier.uid === button.dataset.modifierRemove)?.type || 'symmetry'}.remove`);
       item.modifiers = (item.modifiers || []).filter(modifier => modifier.uid !== button.dataset.modifierRemove);
       if (state.selectedModifierUid === button.dataset.modifierRemove) {
@@ -178,6 +182,7 @@ export function createInspectorStackPanels({
       state.collapsedModifiers.delete(button.dataset.modifierRemove);
       sceneRenderer.invalidateMirrorGeometry();
       markDirty();
+      if (removed?.type === 'element_copy') renderOutliner();
       renderInspector();
       renderScene();
       updateSelectionLabels();
@@ -223,10 +228,13 @@ export function createInspectorStackPanels({
         rotation: [...(source?.rotation || displayedTransformVector(item, 'rotation'))]
       };
       modifier.nodes.push(node);
+      state.collapsedCopyNodes.delete(item.uid);
       state.selectedModifierUid = modifier.uid;
       state.selectedModifierNodeUid = node.uid;
+      state.selectedCurveNodeIndex = null;
       sceneRenderer.invalidateMirrorGeometry();
       markDirty();
+      renderOutliner();
       renderInspector();
       renderScene();
       updateSelectionLabels();
@@ -240,6 +248,7 @@ export function createInspectorStackPanels({
         state.selectedModifierNodeUid = modifier.nodes[0]?.uid || null;
       sceneRenderer.invalidateMirrorGeometry();
       markDirty();
+      renderOutliner();
       renderInspector();
       renderScene();
       updateSelectionLabels();
@@ -263,6 +272,7 @@ export function createInspectorStackPanels({
       [item.modifiers[index], item.modifiers[target]] = [item.modifiers[target], item.modifiers[index]];
       sceneRenderer.invalidateMirrorGeometry();
       markDirty();
+      if ([item.modifiers[index], item.modifiers[target]].some(modifier => modifier.type === 'element_copy')) renderOutliner();
       renderInspector();
       renderScene();
     }));
@@ -276,6 +286,7 @@ export function createInspectorStackPanels({
       renderScene();
     }));
     $$('[data-modifier-field]', inspector).forEach(input => {
+      if (input.type === 'number') input.dataset.numericLive = 'input';
       let snapshotTaken = false;
       const apply = () => {
         const modifier = modifierByUid(input.dataset.modifierUid);
@@ -307,6 +318,7 @@ export function createInspectorStackPanels({
       }
     });
     $$('[data-modifier-vector]', inspector).forEach(input => {
+      input.dataset.numericLive = 'input';
       let snapshotTaken = false;
       const apply = () => {
         const modifier = modifierByUid(input.dataset.modifierUid);
@@ -413,6 +425,7 @@ export function createInspectorStackPanels({
       renderScene();
     }));
     $$('[data-operator-field]', inspector).forEach(input => {
+      if (input.type === 'number') input.dataset.numericLive = 'input';
       let snapshotTaken = false;
       const apply = () => {
         const operator = operatorByUid(input.dataset.operatorUid);
@@ -437,6 +450,7 @@ export function createInspectorStackPanels({
       }
     });
     $$('[data-operator-vector]', inspector).forEach(input => {
+      input.dataset.numericLive = 'input';
       let snapshotTaken = false;
       const apply = () => {
         const operator = operatorByUid(input.dataset.operatorUid);

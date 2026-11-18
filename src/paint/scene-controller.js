@@ -10,6 +10,8 @@ import { createPaintFaceProjection } from './face-projection.js';
 import { eyedropperCanvas, opaqueTextureColor } from './eyedropper.js';
 import { bindPaintCanvas } from './canvas-layer-binding.js';
 import { beginPaintGesture, isLatestPaintGesture, pendingPaintCommit, trackPaintCommit } from './commit-order.js';
+import { performanceMonitor } from '../utils/performance-monitor.js';
+import { createPaintAlphaSnapshot, paintSnapshotAlpha, releasePaintAlphaSnapshot } from './alpha-snapshot.js';
 
 export function sceneBrushHitKey(hit) {
   return hit?.faceName ? `${hit.uid}::${hit.cubeUid || hit.uid}::${hit.cubeIndex ?? ''}`
@@ -35,7 +37,7 @@ export function createScenePaintController({
   queuePaintedTextureSync, syncPaintedTextureNow, discardPaintedTextureSync, drawPaintSegment,
   drawPaintShape, drawScreenPaintPixel, flushScreenPaintSurface, resetScreenPaintPreview,
   paintFaceDepthNeighbors, applyTextureBucket, finishTextureBucketStroke,
-  loadTextureAssetImage, paintHitAlphaCache, animationRasterCache,
+  loadTextureAssetImage, animationRasterCache,
   renderTextureList, renderScene, toast, setPaintColor, updateToolOptions,
   activateProjectTexture, sampleReferenceImage, capturePaintStyle = () => null,
   scheduleSceneRender = renderScene
@@ -105,7 +107,9 @@ export function createScenePaintController({
   async function paintCanvasForAsset(asset) {
     if (asset?.animation?.enabled && !activeLayer(asset)) return null;
     if (asset.layers?.length) {
+      const start = performanceMonitor.enabled ? performance.now() : null;
       await prepareLayers(asset);
+      if (start !== null) performanceMonitor.record('paint.prepareLayers', performance.now() - start);
       const layer = activeLayer(asset), raster = layerRasterCache.get(layer?.uid)?.canvas;
       if (!raster) return null;
       const result = cloneCanvas(raster);
@@ -123,24 +127,20 @@ export function createScenePaintController({
     const raster = animationRasterCache.get(target.asset._uid)?.canvas
       || (layer && layerRasterCache.get(layer.uid)?.canvas);
     if (!raster) return true;
-    const snapshot = drag?.paintHitAlphaSnapshots || paintHitAlphaCache;
-    let cached = snapshot.get(target.asset._uid);
-    if (!cached || (!drag && cached.canvas !== raster)) {
-      cached = { canvas: raster, pixels: raster.getContext('2d').getImageData(0, 0, raster.width, raster.height).data };
-      snapshot.set(target.asset._uid, cached);
-    }
-    const point = facePaintUvPoint(hit, target, cached.canvas);
+    const snapshots = drag?.paintHitAlphaSnapshots;
+    let snapshot = snapshots?.get(target.asset._uid);
+    const canvas = snapshot?.canvas || raster;
+    const point = facePaintUvPoint(hit, target, canvas);
     if (!point) return true;
-    return cached.pixels[(point[1] * cached.canvas.width + point[0]) * 4 + 3] !== 0;
-  }
-
-  function paintHitAlphaSnapshot() {
-    return new Map([...paintHitAlphaCache].filter(([uid, cached]) => {
-      const asset = state.textureAssets.find(entry => entry._uid === uid);
-      const layer = activeLayer(asset);
-      return cached.canvas === (animationRasterCache.get(uid)?.canvas
-        || (layer && layerRasterCache.get(layer.uid)?.canvas));
-    }));
+    if (snapshots && !snapshot) {
+      snapshot = createPaintAlphaSnapshot(canvas);
+      snapshots.set(target.asset._uid, snapshot);
+    }
+    const start = performanceMonitor.enabled ? performance.now() : null;
+    const alpha = snapshot ? paintSnapshotAlpha(snapshot, ...point)
+      : canvas.getContext('2d').getImageData(point[0], point[1], 1, 1).data[3];
+    if (start !== null) performanceMonitor.record('paint.hitAlphaReadback', performance.now() - start);
+    return alpha !== 0;
   }
 
   function scenePaintHit(clientX, clientY, drag = null) {
@@ -627,7 +627,7 @@ export function createScenePaintController({
       queue: pendingPaintCommit(state.project) || Promise.resolve(),
       assetSurfaces: new Map(), assetSurfacePromises: new Map(), historyAssets: new Set(),
       touchedSurfaces: new Set(), paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
-      historyGroup: crypto.randomUUID(), paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
+      historyGroup: crypto.randomUUID(), paintHitAlphaSnapshots: new Map(),
       holisticStroke: true
     };
     drag.screenStartEndpoint = screenPointerEndpoint(drag, event.clientX, event.clientY, start);
@@ -742,7 +742,11 @@ export function createScenePaintController({
   function finishScenePaintDrag(drag) {
     if (!drag || drag.finished) return;
     drag.finished = true;
-    const work = finishScenePaintWork(drag).catch(error => toast(error.message));
+    const work = finishScenePaintWork(drag).finally(() => {
+      for (const snapshot of drag.paintHitAlphaSnapshots?.values() || []) releasePaintAlphaSnapshot(snapshot);
+      drag.paintHitAlphaSnapshots?.clear();
+    });
+    void work.catch(error => toast(error.message));
     return trackPaintCommit(drag.project, work);
   }
 
@@ -1026,7 +1030,7 @@ export function createScenePaintController({
         paintSymmetryCaches: new Map(), paintSymmetryOperatorScopes: null,
         historyGroup: crypto.randomUUID(), last: null, lastFaceKey: null,
         lastByFace: new Map(),
-        paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
+        paintHitAlphaSnapshots: new Map(),
         holisticStroke: true, lastPointerSample: { x: event.clientX, y: event.clientY, hit },
         ready: true, ended: false, canceled: false, finished: false
       };
@@ -1063,7 +1067,7 @@ export function createScenePaintController({
       historyGroup: crypto.randomUUID(),
       canvas: null, context: null, last: null, ready: false, ended: false, canceled: false, finished: false,
       holisticStroke: true,
-      paintHitAlphaSnapshots: paintHitAlphaSnapshot(),
+      paintHitAlphaSnapshots: new Map(),
       historyAssets: new Set([target.asset._uid]), touchedSurfaces: new Set()
     };
     drag.rootDrag = drag;

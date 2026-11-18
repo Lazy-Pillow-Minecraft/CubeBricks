@@ -36,7 +36,16 @@ function frameQuaternion(frames) {
 // and UV basis. This is an oriented box, not its axis-aligned bounding box.
 export function proceduralCubeWorld(owner, cube, project = null) {
   const offset = owner.origin || [0, 0, 0], frames = outerFrames(owner, project);
-  if (cube.rescale && frames.some(frame => frame.rotation.some(value => Math.abs(value) > 1e-7))) {
+  const rotation = eulerFromQuaternion(quaternionMultiply(frameQuaternion(frames), quaternionFromEuler(cube.rotation || [0, 0, 0])));
+  let materializeRescale = false;
+  if (cube.rescale) {
+    const nextScale = rescaleRotationPoint([1, 1, 1], [0, 0, 0], rotation, true);
+    materializeRescale = frames.some(frame => frame.rotation.some(value => Math.abs(value) > 1e-7))
+      || rescaleRotationPoint([1, 1, 1], [0, 0, 0], cube.rotation, true).some((value, axis) => Math.abs(value - nextScale[axis]) > 1e-7);
+  }
+  // Even an identity outer frame can canonicalize an Euler pose onto different
+  // axes. Materialize only when needed, preserving native rescale otherwise.
+  if (materializeRescale) {
     const sign = cube.size.map(value => value < 0 ? -1 : 1), inflate = Number(cube.inflate) || 0;
     const from = rescaleRotationPoint(cube.position.map((value, axis) => value - sign[axis] * inflate), cube.pivot, cube.rotation, true);
     const to = rescaleRotationPoint(cube.position.map((value, axis) => value + cube.size[axis] + sign[axis] * inflate), cube.pivot, cube.rotation, true);
@@ -57,7 +66,7 @@ export function proceduralCubeWorld(owner, cube, project = null) {
   return {
     ...structuredClone(cube), pivot,
     position: pivot.map((value, axis) => value + cube.position[axis] + offset[axis] - basePivot[axis]),
-    rotation: eulerFromQuaternion(quaternionMultiply(frameQuaternion(frames), quaternionFromEuler(cube.rotation || [0, 0, 0])))
+    rotation
   };
 }
 export function proceduralCubeLocal(owner, world, project = null) {

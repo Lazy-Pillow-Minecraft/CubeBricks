@@ -3,10 +3,12 @@ import { activeLayer, compositeLayers, layerRasterCache } from '../common/core/t
 import { requireOperation } from '../common/core/operation-registry.js';
 import { PAINT_TOOLS, PAINT_SHAPE_TOOLS } from '../editor/tool-registry.js';
 import { paintSelectionAllows } from './selection-controller.js';
-import { bindPaintCanvas, boundPaintLayer, releasePaintCanvas, rememberEditablePaintSource } from './canvas-layer-binding.js';
+import { bindPaintCanvas, boundPaintLayer, editablePaintSourceMatches, releasePaintCanvas, rememberEditablePaintSource } from './canvas-layer-binding.js';
 import { historyImageFingerprint, noteCanvasHistoryImage } from '../project/history-fingerprint.js';
 import { rememberDecodedRaster } from '../utils/image/raster-cache.js';
 import { rememberPaintHistoryRegion } from '../texture/source-snapshot.js';
+import { performanceMonitor } from '../utils/performance-monitor.js';
+import { preservePaintAlpha } from './alpha-snapshot.js';
 
 export function createPaintStrokeController({
   state, $, $$, textureCanvas, textureCtx, uvEditorController,
@@ -16,7 +18,7 @@ export function createPaintStrokeController({
   textureAssetForReference, getTextureAtlasEntries, paintCanvasForAsset, syncRendererTextureAsset,
   scheduleSceneRender,
   updateTexturePreviewFrame, noteJournalOperation, markDirty, toast,
-  renderScene, invalidateAllRenderGeometry, paintHitAlphaCache, animationRasterCache, livePaintTextureSources
+  renderScene, invalidateAllRenderGeometry, animationRasterCache, livePaintTextureSources
 }) {
   const paintBrushOffsetCache = new Map();
   const PAINT_FACE_LAYOUTS = Object.freeze({
@@ -205,6 +207,10 @@ export function createPaintStrokeController({
     for (const tile of base.strokeDirtyTiles) {
       const region = tile.dirty;
       if (!region) continue;
+      preservePaintAlpha(base.canvas, {
+        x: tile.x + region.minX, y: tile.y + region.minY,
+        width: region.maxX - region.minX + 1, height: region.maxY - region.minY + 1
+      });
       base.context.putImageData(tile.image, tile.x, tile.y,
         region.minX, region.minY, region.maxX - region.minX + 1, region.maxY - region.minY + 1);
       tile.dirty = null;
@@ -506,6 +512,7 @@ export function createPaintStrokeController({
         tile.coverage.fill(0);
         tile.dirty = null;
         tile.applied = false;
+        preservePaintAlpha(surface.canvas, tile);
         surface.context.putImageData(tile.image, tile.x, tile.y);
       }
       surface.strokeDirty = null;
@@ -824,18 +831,20 @@ export function createPaintStrokeController({
     // edit. Keeping a second paint-only undo stack gives the two histories
     // incompatible ordering when the user switches tools or modes.
     if (window.cubeBricksDesktop?.checkoutProjectJournal) return;
-    state.paintHistory.push({
+    const entry = {
       uid: asset._uid,
       source: asset.source || canvas.toDataURL('image/png'),
       layers: asset.layers ? structuredClone(asset.layers) : null,
       activeLayerUid: asset.activeLayerUid || null,
       animation: asset.animation ? structuredClone(asset.animation) : null,
-      width: canvas.width,
-      height: canvas.height,
+      width: asset.uvWidth || canvas.width,
+      height: asset.uvHeight || canvas.height,
       group
-    });
+    };
+    state.paintHistory.push(entry);
     if (state.paintHistory.length > 60) state.paintHistory.shift();
     state.paintFuture.length = 0;
+    return entry;
   }
 
   function paintPixelWitness(surface) {
@@ -853,13 +862,15 @@ export function createPaintStrokeController({
   }
 
   function commitPaintedTextureAsset(asset, canvas, surface = null) {
+    const profile = performanceMonitor.enabled;
+    const startedAt = profile ? performance.now() : 0;
     if (!asset || !canvas || state.textureAssets && !state.textureAssets.includes(asset)) {
       releasePaintCanvas(canvas);
       return;
     }
     if (asset.animation?.enabled && !boundPaintLayer(asset, canvas) && !activeLayer(asset)) return;
-    paintHitAlphaCache.delete(asset._uid);
     const layer = boundPaintLayer(asset, canvas) || activeLayer(asset);
+    const editableMatches = editablePaintSourceMatches(asset, textureCanvas, layer);
     const previous = layer ? layer.source : asset.source;
     const witness = surface ? paintPixelWitness(surface) : null;
     if (witness && !witness.changed) {
@@ -867,13 +878,28 @@ export function createPaintStrokeController({
       return;
     }
     const editedSource = canvas.toDataURL('image/png');
+    const encodedAt = profile ? performance.now() : 0;
     const live = livePaintTextureSources?.get(asset._uid);
     const oldCompositeSource = asset.source;
     const canReuseComposite = surface && live?.editableSource === canvas
       && live.savedSource === asset.source && live.layerUid === layer?.uid;
     if (layer) layer.source = editedSource;
-    const composite = canReuseComposite ? live.source : layer ? compositeLayers(asset, canvas, null, null, null, layer.uid) : canvas;
-    asset.source = layer ? composite.toDataURL('image/png') : editedSource;
+    // A sole, fully visible normal layer already is the final image. Avoid
+    // PNG-encoding the entire texture a second time. Keep the owned composite
+    // and layer cache: the editable canvas gets reused by later strokes.
+    const directLayer = layer && asset.layers?.length === 1 && asset.layers[0] === layer
+      && !asset.animation?.enabled && layer.visible !== false && Number(layer.opacity ?? 100) === 100
+      && (!layer.blendMode || layer.blendMode === 'normal') && !layer.maskLayerUid;
+    const composite = canReuseComposite ? live.source
+      : layer ? compositeLayers(asset, canvas, null, null, null, layer.uid) : canvas;
+    const compositedAt = profile ? performance.now() : 0;
+    asset.source = directLayer || !layer ? editedSource : composite.toDataURL('image/png');
+    if (profile) {
+      const sourceReadyAt = performance.now();
+      performanceMonitor.record('paint.commitLayerPng', encodedAt - startedAt);
+      performanceMonitor.record('paint.commitComposite', compositedAt - encodedAt);
+      performanceMonitor.record('paint.commitCompositePng', sourceReadyAt - compositedAt);
+    }
     if (window.cubeBricksDesktop?.checkoutProjectJournal) {
       noteCanvasHistoryImage(previous, editedSource, witness || {});
       rememberDecodedRaster(asset.source, composite);
@@ -890,12 +916,22 @@ export function createPaintStrokeController({
     asset.kind = 'PNG';
     const isEditableAsset = asset._uid === state.activeTextureUid && (!layer || activeLayer(asset)?.uid === layer.uid);
     if (isEditableAsset && canvas !== textureCanvas) {
+      const dirty = surface?.strokeAppliedBounds;
+      const copyPatch = editableMatches && dirty
+        && textureCanvas.width === canvas.width && textureCanvas.height === canvas.height;
       if (textureCanvas.width !== canvas.width) textureCanvas.width = canvas.width;
       if (textureCanvas.height !== canvas.height) textureCanvas.height = canvas.height;
       textureCtx.imageSmoothingEnabled = false;
-      textureCtx.clearRect(0, 0, canvas.width, canvas.height);
-      textureCtx.drawImage(canvas, 0, 0);
-      updateTexturePreviewFrame(asset.uvWidth, asset.uvHeight);
+      if (copyPatch) {
+        const { minX, minY, maxX, maxY } = dirty;
+        const width = maxX - minX + 1, height = maxY - minY + 1;
+        textureCtx.clearRect(minX, minY, width, height);
+        textureCtx.drawImage(canvas, minX, minY, width, height, minX, minY, width, height);
+      } else {
+        textureCtx.clearRect(0, 0, canvas.width, canvas.height);
+        textureCtx.drawImage(canvas, 0, 0);
+        updateTexturePreviewFrame(asset.uvWidth, asset.uvHeight);
+      }
     }
     if (isEditableAsset) rememberEditablePaintSource(asset, textureCanvas, layer);
     if (canReuseComposite) {
@@ -917,6 +953,7 @@ export function createPaintStrokeController({
     if (thumbnail) thumbnail.style.backgroundImage = `url("${asset.source}")`;
     markDirty();
     releasePaintCanvas(canvas);
+    if (profile) performanceMonitor.record('paint.commitTotal', performance.now() - startedAt);
   }
 
   function replayTexturePaintPoints(drag) {

@@ -1,6 +1,6 @@
+import { DockLayoutStorage } from './docks/layout-storage.js';
+
 const DOCKS = new Set(['left', 'right', 'bottom', 'floating']);
-const STORAGE_KEY = 'cubebricks.dock-layout.v1';
-const ZONE_STORAGE_KEY = 'cubebricks.dock-zones.v1';
 const MIN_WIDTH = 180;
 const MIN_HEIGHT = 90;
 const OPEN_ICON_MARKUP = '<svg class="open-icon" aria-hidden="true"><use href="#icon-open"></use></svg>';
@@ -11,6 +11,7 @@ export class DockPanelObject {
     this.index = definition.index;
     this.modes = Object.freeze([...(definition.modes || [])]);
     this.hotspotFocus = Boolean(definition.hotspotFocus);
+    this.heightSnap = definition.heightSnap;
     this.defaultState = Object.freeze({
       dock: definition.defaultDock,
       order: definition.defaultOrder || 0,
@@ -34,12 +35,17 @@ export class DockPanelObject {
 }
 
 export class DockManager {
-  constructor({ root, definitions, onLayoutChange = () => {}, onInteraction = () => {} }) {
+  constructor({ root, definitions, heightSnapping = true, onLayoutChange = () => {}, onInteraction = () => {}, onStorageError = () => {} }) {
     this.root = root;
     this.onLayoutChange = onLayoutChange;
     this.onInteraction = onInteraction;
+    this.heightSnapping = heightSnapping;
+    this.definitions = definitions;
+    this.layoutStorage = new DockLayoutStorage();
+    this.layoutRevision = 0;
+    this.onStorageError = onStorageError;
     this.zones = new Map([...root.querySelectorAll('[data-dock-zone]')].map(zone => [zone.dataset.dockZone, zone]));
-    this.zoneState = { left: false, right: false, bottom: false, ...readSavedZones() };
+    this.zoneState = { left: false, right: false, bottom: false, ...this.layoutStorage.initial.zones };
     this.panels = new Map();
     this.mode = 'edit';
     this.previewZone = null;
@@ -49,7 +55,7 @@ export class DockManager {
     this.placeholder.className = 'dock-drop-placeholder';
     this.placeholder.hidden = true;
     document.body.append(this.placeholder);
-    const saved = readSavedLayout();
+    const saved = this.layoutStorage.initial.layout;
 
     for (const [dock, zone] of this.zones) this.installZoneControl(dock, zone);
 
@@ -61,8 +67,29 @@ export class DockManager {
       this.installPanelControls(panel);
     });
 
+    this.addDefaultStacks(saved);
+    this.restoreLayout();
+    this.ready = this.restoreStoredLayout();
+    if (typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(() => this.refreshHeightSnaps());
+      for (const dock of ['left', 'right']) {
+        const zone = this.zones.get(dock);
+        if (zone) observer.observe(zone);
+      }
+      for (const panel of this.panels.values()) {
+        if (panel.heightSnap) observer.observe(panel.element);
+      }
+    }
+    window.addEventListener('resize', () => {
+      this.clampFloatingPanels();
+      this.refreshZones();
+      this.onLayoutChange();
+    });
+  }
+
+  addDefaultStacks(saved) {
     // New panels join the receiving panel's saved position and tab group.
-    for (const definition of definitions) {
+    for (const definition of this.definitions) {
       if (!definition.defaultStackWith || saved[definition.id]) continue;
       const panel = this.get(definition.id), target = this.get(definition.defaultStackWith);
       if (!panel || !target) continue;
@@ -75,15 +102,28 @@ export class DockManager {
       panel.state.stackId = stackId;
       panel.state.stackOrder = Math.max(...this.stackMembers(stackId).map(member => member.state.stackOrder)) + 1;
       panel.state.stackActive = false;
+      panel.state.order = target.state.order;
       for (const key of ['dock', 'x', 'y', 'width', 'height', 'collapsed']) panel.state[key] = target.state[key];
     }
+  }
 
-    this.restoreLayout();
-    window.addEventListener('resize', () => {
-      this.clampFloatingPanels();
-      this.refreshZones();
-      this.onLayoutChange();
-    });
+  async restoreStoredLayout() {
+    if (!this.layoutStorage.hasDesktop) return;
+    const revision = this.layoutRevision;
+    try {
+      const { snapshot, needsBackup } = await this.layoutStorage.load();
+      if (this.layoutRevision !== revision) return;
+      for (const panel of this.panels.values()) {
+        panel.state = normalizeState({ ...panel.defaultState, ...snapshot.layout[panel.id] }, panel.defaultState);
+      }
+      this.zoneState = { left: false, right: false, bottom: false, ...snapshot.zones };
+      this.addDefaultStacks(snapshot.layout);
+      this.restoreLayout();
+      if (needsBackup) await this.persist();
+      else {
+        try { this.layoutStorage.cache(snapshot); } catch { /* The desktop file remains authoritative. */ }
+      }
+    } catch (error) { console.warn('CubeBricks dock layout restore failed:', error); }
   }
 
   getIndex() {
@@ -156,11 +196,33 @@ export class DockManager {
   }
 
   restoreLayout() {
-    const docked = [...this.panels.values()].filter(panel => panel.state.dock !== 'floating')
-      .sort((a, b) => a.state.dock.localeCompare(b.state.dock) || a.state.order - b.state.order
-        || a.state.stackOrder - b.state.stackOrder || a.index - b.index);
-    docked.forEach(panel => this.placeInZone(panel, panel.state.dock));
-    [...this.panels.values()].filter(panel => panel.state.dock === 'floating').forEach(panel => this.placeFloating(panel));
+    const units = new Map();
+    for (const panel of this.panels.values()) {
+      const id = panel.state.stackId || `panel:${panel.id}`;
+      if (!units.has(id)) units.set(id, []);
+      units.get(id).push(panel);
+    }
+    const ordered = [...units.values()].map(members => {
+      members.sort((a, b) => a.state.stackOrder - b.state.stackOrder || a.index - b.index);
+      const anchor = members.find(panel => panel.state.stackActive) || members[0];
+      this.copyStackGeometry(anchor, members);
+      return { members, dock: anchor.state.dock, order: Math.min(...members.map(panel => panel.state.order)) };
+    }).sort((a, b) => a.dock.localeCompare(b.dock) || a.order - b.order || a.members[0].index - b.members[0].index);
+    // Reparent everything as one batch. Interactive placement renumbers other
+    // panels and inherits widths, corrupting saved states not restored yet.
+    for (const { members, dock } of ordered) for (const panel of members) {
+      const parent = dock === 'floating' ? document.body : this.zones.get(dock);
+      parent?.append(panel.element);
+      this.applyPanelState(panel);
+    }
+    for (const dock of this.zones.keys()) {
+      this.renumberZone(dock);
+      if (this.isSideDock(dock)) {
+        const width = this.zonePanels(dock)[0]?.state.width;
+        if (width) this.setZoneWidth(dock, width);
+      }
+    }
+    this.clampFloatingPanels();
     this.setMode(this.mode);
   }
 
@@ -452,6 +514,7 @@ export class DockManager {
       if (!active && Math.hypot(dx, dy) < 5) return;
       if (!active) {
         active = true;
+        this.layoutRevision++;
         this.onInteraction(true);
         if (fromTab) this.leaveStack(panel);
         else if (moving.length > 1) this.copyStackGeometry(panel, moving);
@@ -587,9 +650,10 @@ export class DockManager {
   }
 
   startResize(event, panel, edge) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || (edge === 'bottom' && panel.element.classList.contains('is-height-seam-locked'))) return;
     event.preventDefault();
     event.stopPropagation();
+    this.layoutRevision++;
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     const rect = panel.element.getBoundingClientRect();
@@ -661,6 +725,49 @@ export class DockManager {
     document.documentElement.style.setProperty('--left-panel-width', `${left.length ? (this.zoneState.left ? 18 : sharedWidth(left)) : 0}px`);
     document.documentElement.style.setProperty('--right-panel-width', `${right.length ? (this.zoneState.right ? 18 : sharedWidth(right)) : 0}px`);
     document.documentElement.style.setProperty('--bottom-panel-height', `${bottom.length ? (this.zoneState.bottom ? 18 : bottomHeight) : 0}px`);
+    this.refreshHeightSnaps();
+  }
+
+  setHeightSnapping(enabled) {
+    this.heightSnapping = enabled;
+    this.refreshZones();
+    this.onLayoutChange();
+  }
+
+  refreshHeightSnaps() {
+    const snapped = new Set(), locked = new Set(), bottomAligned = new Set();
+    for (const dock of ['left', 'right']) {
+      const zone = this.zones.get(dock);
+      if (!zone) continue;
+      const panels = this.zonePanels(dock)
+        .filter(panel => !panel.element.hidden && !panel.element.classList.contains('is-stack-inactive'));
+      const fitting = this.heightSnapping && !this.zoneState[dock]
+        ? panels.filter(panel => !panel.state.collapsed && panel.heightSnap
+          && (!panel.heightSnap.modes || panel.heightSnap.modes.includes(this.mode))) : [];
+      zone.classList.toggle('has-height-snapping', fitting.length > 0);
+      if (!fitting.length) continue;
+
+      const reserved = panels.reduce((height, panel) => {
+        if (fitting.includes(panel)) return height;
+        return height + (panel.state.collapsed ? this.headerHeight(panel) : MIN_HEIGHT);
+      }, 0);
+      const maximum = Math.max(0, (zone.clientHeight - reserved) / fitting.length);
+      for (const panel of fitting) {
+        const index = panels.indexOf(panel);
+        snapped.add(panel);
+        locked.add(panel);
+        if (index > 0) locked.add(panels[index - 1]);
+        if (index > 0 && index === panels.length - 1) bottomAligned.add(panel);
+        const chrome = panel.heightSnap.chromeHeight(panel) ?? this.headerHeight(panel);
+        panel.element.style.setProperty('--dock-snap-height', `${maximum}px`);
+        panel.element.style.setProperty('--dock-snap-visual-height', `${Math.max(1, maximum - chrome)}px`);
+      }
+    }
+    for (const panel of this.panels.values()) {
+      panel.element.classList.toggle('is-height-snapped', snapped.has(panel));
+      panel.element.classList.toggle('is-height-seam-locked', locked.has(panel));
+      panel.element.classList.toggle('is-height-snap-bottom', bottomAligned.has(panel));
+    }
   }
 
   clampFloatingPanels() {
@@ -673,27 +780,12 @@ export class DockManager {
   }
 
   persist() {
+    this.layoutRevision++;
     const layout = Object.fromEntries([...this.panels].map(([id, panel]) => [id, panel.serialize()]));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
-    localStorage.setItem(ZONE_STORAGE_KEY, JSON.stringify(this.zoneState));
-  }
-}
-
-function readSavedLayout() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
-  catch {
-    localStorage.removeItem(STORAGE_KEY);
-    return {};
-  }
-}
-
-function readSavedZones() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(ZONE_STORAGE_KEY) || '{}');
-    return Object.fromEntries(['left', 'right', 'bottom'].map(dock => [dock, Boolean(saved[dock])]));
-  } catch {
-    localStorage.removeItem(ZONE_STORAGE_KEY);
-    return {};
+    return this.layoutStorage.save(layout, { ...this.zoneState }).catch(error => {
+      console.warn('CubeBricks dock layout save failed:', error);
+      this.onStorageError(error);
+    });
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { applyGroupTransforms, getEffectiveInflate, hasAssignedFaceTexture, isCubeFaceCulled, rescaleRotationPoint, rotatePoint, UV_PREVIEW_CULLED_UV } from '../common/core/geometry-utils.js';
 import { constrainElementCube } from '../common/core/procedural-format.js';
+import { proceduralMirrorPoint } from '../common/core/procedural-mirror.js';
 import { tiledFaceReference, tiledFaceRegions } from '../common/core/texture-features.js';
 import { FACE_TRIANGLE_SLOTS, pushVertex } from './vertex-data.js';
 import { createAtlasFaceUvs, getFaceUv, textureLayoutEntry } from './face-uv.js';
@@ -208,7 +209,7 @@ function locatorGeometry(locator, groupChain) {
 }
 
 export function nodeLocalPoint(element, point) {
-  const translated = point.map((value, axis) => value + element.origin[axis]);
+  const translated = proceduralMirrorPoint(element, point).map((value, axis) => value + element.origin[axis]);
   return rotatePoint(translated, element.origin, element.rotation || [0, 0, 0]);
 }
 

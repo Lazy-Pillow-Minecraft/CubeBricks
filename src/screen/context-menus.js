@@ -3,6 +3,7 @@ import { paintSymmetryRelationCache } from '../paint/symmetry-relations.js';
 import { ConfigKey } from '../common/config/app-config.js';
 import { insetControlRatio } from './color-picker/math.js';
 import { shortcutFor } from './shortcuts.js';
+import { generatedSelection } from '../common/core/modifier-selection.js';
 
 export function createContextMenuController({
   state, $, outliner, inspector, sceneCanvas, sceneRenderer, inspectorController,
@@ -18,10 +19,10 @@ export function createContextMenuController({
   renderTexture, rebuildTextureAtlas, noteJournalOperation,
   setMode, deleteSelectedPaletteColor, insertPaletteGradientNode,
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
-  setNodeVisibility, setNodeFlag, renderOutliner, addGroup,
+  setNodeVisibility, setNodeFlag, renderOutliner, groupSelected,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown, saveTexture,
-  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer, openLayerPointsDialog
+  copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer, openLayerPointsDialog, openTextureResizeDialog
 }) {
   let contextMenuSource = null;
   const contextMenuHome = $('#contextMenu').parentNode;
@@ -65,7 +66,7 @@ export function createContextMenuController({
     input.addEventListener('blur', () => finish(true), { once: true });
   }
 
-  function showContextMenu(event, { title = '', source = null, items = [] } = {}) {
+  function showContextMenu(event, { title = '', source = null, items = [], icons = true } = {}) {
     event.preventDefault();
     event.stopPropagation();
     closeContextMenu();
@@ -86,7 +87,7 @@ export function createContextMenuController({
       button.disabled = Boolean(item.disabled);
       if (item.title) button.title = item.title;
       if (item.danger) button.classList.add('danger');
-      button.innerHTML = `${item.icon ? `<span>${item.icon}</span>` : ''}<span>${escapeHtml(item.label)}</span>`;
+      button.innerHTML = `${icons && item.icon ? `<span>${item.icon}</span>` : ''}<span>${escapeHtml(item.label)}</span>`;
       if (item.children?.length) {
         const wrapper = document.createElement('div');
         wrapper.className = 'context-menu-submenu';
@@ -137,7 +138,7 @@ export function createContextMenuController({
       const visible = node.visible !== false;
       const locked = node.locked === true;
       showContextMenu(event, {
-        title: selectedNodes.length > 1 ? `已選 ${selectedNodes.length} 項` : node.name, source, items: [
+        title: selectedNodes.length > 1 ? `已選 ${selectedNodes.length} 項` : node.name, source, icons: false, items: [
           { icon: '⌖', label: '聚焦此物件', action: focusSelected },
           {
             icon: visible ? '○' : '◉', label: visible ? '隱藏選中項' : '顯示選中項', action: () => {
@@ -164,6 +165,7 @@ export function createContextMenuController({
     const allVisible = selectedNodes.every(entry => entry.visible);
     showContextMenu(event, {
       title: selectedNodes.length > 1 ? `已選 ${selectedNodes.length} 項` : node.name,
+      icons: false,
       source,
       items: [
         { icon: '⌖', label: '聚焦此物件', action: focusSelected },
@@ -183,7 +185,7 @@ export function createContextMenuController({
             renderOutliner();
           }
         }] : []),
-        ...(selectedNodes.length > 1 ? [{ icon: '▰', label: '將選中項建立為組', action: addGroup }] : []),
+        { icon: '▰', label: 'ui.group-selected-elements', action: groupSelected },
         ...(isProceduralShape(node) && state.mode !== 'paint' ? [{
           icon: inspectorController.subdivisionSession?.ownerUid === node.uid ? '◆' : '◇',
           label: inspectorController.subdivisionSession?.ownerUid === node.uid ? '完成細分編輯' : '進入細分編輯',
@@ -309,7 +311,7 @@ export function createContextMenuController({
           getDockManager()?.expand('outliner');
           selectItem(hit.uid, { revealInOutliner: true });
         } else {
-          showContextMenu(event, { title: selected()?.name || state.project.name, items: viewportBackgroundItems(true) });
+          showContextMenu(event, { title: selected()?.name || state.project.name, icons: false, items: viewportBackgroundItems(true) });
         }
         return;
       }
@@ -331,17 +333,14 @@ export function createContextMenuController({
       const rect = sceneCanvas.getBoundingClientRect();
       const hit = sceneRenderer.pickDetailed(state.project, event.clientX - rect.left, event.clientY - rect.top,
         state.geometryOnly, { includeGenerated: !state.modifierResultGhost });
-      if (hit?.generated) {
-        showContextMenu(event, {
-          title: '修改器結果 · 唯讀', items: [
-            { icon: '⌖', label: '選擇來源物件', action: () => selectItem(hit.uid, { revealInOutliner: true }) }
-          ]
-        });
-        return;
-      }
       const hitUid = hit?.uid;
       if (hitUid) {
-        showElementContextMenu(event, hitUid);
+        const selectedGroup = state.project.getGroupChain(hitUid).findLast(group => state.selectedUids.has(group.uid));
+        const targetUid = selectedGroup?.uid ?? hitUid;
+        if (hit.generated) selectItem(targetUid, {
+          revealInOutliner: true, preserveSelection: true, generated: generatedSelection(hit, targetUid)
+        });
+        showElementContextMenu(event, targetUid);
         return;
       }
       const activeCurve = selected();
@@ -353,6 +352,7 @@ export function createContextMenuController({
       }
       showContextMenu(event, {
         title: selected()?.name || state.project.name,
+        icons: false,
         items: viewportBackgroundItems()
       });
     });
@@ -361,7 +361,7 @@ export function createContextMenuController({
         const row = event.target.closest('.outliner-item');
         if (row) showElementContextMenu(event, row.dataset.uid, row);
         else showContextMenu(event, {
-          title: state.project.name, source: outliner, items: [
+          title: state.project.name, source: outliner, icons: false, items: [
             { icon: '⌖', label: '聚焦選中物件', action: focusSelected }
           ]
         });
@@ -370,7 +370,7 @@ export function createContextMenuController({
       const item = event.target.closest('.outliner-item');
       if (!item) {
         showContextMenu(event, {
-          title: state.project.name, source: outliner, items: [
+          title: state.project.name, source: outliner, icons: false, items: [
             { icon: '▣', label: `貼上　${shortcutFor('paste')}`, action: () => pasteElements() },
             ...(selectedNodeUids().length ? [{ icon: '⧉', label: `複製元素　${shortcutFor('duplicate')}`, action: () => pasteElements({ inPlace: true }) }] : [])
           ]
@@ -453,6 +453,7 @@ export function createContextMenuController({
           title: asset?.name || '貼圖', source: item, items: [
             { icon: '▣', label: '保存贴图', action: () => saveTexture(asset) },
             { icon: '▣', label: '贴图另存为', action: () => saveTexture(asset, { saveAs: true }) },
+            { icon: '▣', label: '调整贴图尺寸', action: () => openTextureResizeDialog(asset) },
             { separator: true },
             { icon: '◉', label: '設為目前貼圖', action: () => setActiveTextureItem(item) },
             { icon: '▣', label: '複製貼圖', action: () => copyTexture(asset) },

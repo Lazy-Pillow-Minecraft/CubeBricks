@@ -87,7 +87,7 @@ export function constrainSymmetryFormat(modifier, context) {
       }
     }
   }
-  if (geometry && !fitSymmetryCenter(modifier, context, geometry) && rules.bedrockBlock) {
+  if (geometry?.domain && !fitSymmetryCenter(modifier, context, geometry) && rules.bedrockBlock) {
     constrainQuarterSymmetry(modifier, context);
     fitSymmetryCenter(modifier, context, geometry);
   }
@@ -136,7 +136,7 @@ export function constrainCopyFormat(modifier, context) {
       limits.max = limits.max.map((value, axis) => value - centerDelta[axis]);
     }
     node.rotation = cleanEuler(quaternionMultiply(inverse(parent), quaternionMultiply(delta, frame)));
-    if (geometry) {
+    if (geometry?.domain) {
       let center = pointInParent(node.position, owner, project);
       center = center.map((value, axis) => clamp(value, geometry.domain.min[axis] - limits.min[axis], geometry.domain.max[axis] - limits.max[axis]));
       node.position = pointInParent(center, owner, project, true).map(value => Math.round(value * 1e8) / 1e8);

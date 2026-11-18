@@ -84,7 +84,7 @@ export function createSelectionController({
     refreshSelectionUi();
   }
 
-  function selectItem(uid, { revealInOutliner = false, toggle = false, range = false } = {}) {
+  function selectItem(uid, { revealInOutliner = false, toggle = false, range = false, generated = null, preserveSelection = false } = {}) {
     const requestedNode = state.project.getNode(uid);
     if (!requestedNode) return;
     if (inspectorController.subdivisionSession && requestedNode.subdivisionOwnerUid !== inspectorController.subdivisionSession.ownerUid) {
@@ -94,7 +94,9 @@ export function createSelectionController({
     const previousSelectedUid = state.selectedUid;
     state.selectedGenerated = null;
     sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
-    if (range && state.selectionAnchorUid) {
+    if (preserveSelection && state.selectedUids.has(uid)) {
+      // Opening a result's context menu keeps the existing source selection.
+    } else if (range && state.selectionAnchorUid) {
       const rows = state.outlinerRows || [];
       const start = rows.findIndex(row => row.node?.uid === state.selectionAnchorUid);
       const end = rows.findIndex(row => row.node?.uid === uid);
@@ -116,6 +118,10 @@ export function createSelectionController({
       state.selectionAnchorUid = uid;
     }
     state.selectedUid = state.selectedUids.has(uid) ? uid : [...state.selectedUids].at(-1) || null;
+    if (generated && state.selectedUids.has(uid)) {
+      state.selectedGenerated = generated;
+      state.selectedCurveNodeIndex = null;
+    }
     state.selectedModifierUid = null;
     if (state.selectedUid !== previousSelectedUid) {
       state.selectedCurveNodeIndex = null;

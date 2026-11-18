@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const { writeHistoryTextureRoot, sweepHistoryTextureRoots } = require('./journal-history-storage.cjs');
 const { pruneHistoryMarks } = require('./history-marks.cjs');
 
-async function historyRecords(journal) {
+async function historyRecords(journal, { tolerateDamaged = false } = {}) {
   await journal.ensureReady();
   const pendingNames = [...(journal.historyImport?.remaining || [])];
   const names = new Set((await fs.readdir(journal.file('transactions'))).filter(name => /^\d+\.json$/.test(name)));
@@ -10,7 +10,27 @@ async function historyRecords(journal) {
   const sequences = [...names].map(name => Number(name.slice(0, -5)))
     .filter(sequence => sequence <= journal.state.lastCommitted && !journal.historyPruned.has(sequence)).sort((a, b) => a - b);
   const records = [];
-  for (let index = 0; index < sequences.length; index += 16)records.push(...await Promise.all(sequences.slice(index, index + 16).map(sequence => journal.manifest(sequence))));
+  for (let index = 0; index < sequences.length; index += 16) {
+    const batch = sequences.slice(index, index + 16);
+    if (!tolerateDamaged) {
+      records.push(...await Promise.all(batch.map(sequence => journal.manifest(sequence))));
+      continue;
+    }
+    const settled = await Promise.allSettled(batch.map(sequence => journal.manifest(sequence)));
+    for (let offset = 0; offset < batch.length; offset++) {
+      const entry = settled[offset], sequence = batch[offset];
+      if (entry.status === 'fulfilled') {
+        records.push(entry.value);
+        continue;
+      }
+      if (sequence === journal.state.activeHead) throw entry.reason;
+      // Keep the damaged file untouched. Recover its parent when possible so
+      // healthy descendants remain visible in the history graph.
+      const raw = await journal.readRecord(`transactions/${sequence}.json`).catch(() => null);
+      const parent = Number.isInteger(raw?.parent) && raw.parent > 0 && raw.parent < sequence ? raw.parent : null;
+      records.push({ sequence, parent, damaged: true, operationId: 'core.history.corrupt', operationLabel: '記錄損壞' });
+    }
+  }
   return records;
 }
 
@@ -18,7 +38,8 @@ function historyGraph(journal, records) {
   return {
     current: journal.state.activeHead, nodes: records.map(record => ({
       sequence: record.sequence, parent: record.parent, detached: record.historyParent != null, operationId: record.operationId,
-      label: record.operationLabel || record.operationId, timestamp: record.timestamp || '', mark: journal.historyMarks[record.sequence] || null
+      label: record.operationLabel || record.operationId, timestamp: record.timestamp || '',
+      damaged: record.damaged === true, mark: journal.historyMarks[record.sequence] || null
     }))
   };
 }

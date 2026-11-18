@@ -7,6 +7,7 @@ import { facesRemainDepthSorted, sortFacesByDepth } from './face-order.js';
 import { OrderedFaceMesh } from './ordered-face-mesh.js';
 export { buildFaceBvh, refitFaceBvh, queryFaceBvh } from './face-bvh.js';
 import { buildModifierRenderInstances } from '../model.js';
+import { findGeneratedInstance } from '../common/core/modifier-selection.js';
 import { formatRules, projectSizeBounds, bedrockLimitBox, javaBlockSizeIsValid } from '../common/core/format-constraints.js';
 import { buildPaintExplodeOffsets, applyPaintExplodeOffsets } from './paint-explode.js';
 import { SELECTION_STRIPE_SIZE, SELECTION_STRIPE_PIXELS, selectionStripePhase } from '../utils/selection-stripes.js';
@@ -1564,7 +1565,7 @@ export class WebGLSceneRenderer {
   drawFormatLimitGuide(project, camera, viewProjection) {
     if (camera.mode === 'paint' || camera.geometryOnly) return;
     const rules = formatRules(project);
-    if (!rules.javaBlock && !rules.bedrockBlock) return;
+    if (!rules.javaBlockBounds && !rules.bedrockBlock) return;
     const revision = `${this.geometryRevision}:${this.selectionRevision}:${this.mirrorRevision}`;
     if (this.formatLimitGuideCache?.project !== project || this.formatLimitGuideCache.revision !== revision) {
       const box = rules.javaBlock
@@ -1578,21 +1579,32 @@ export class WebGLSceneRenderer {
       { depthWrite: true, cull: false, renderMode: 0 });
   }
 
+  getGeneratedSelectionInstance(selection) {
+    if (this.lastCameraInput?.modifierResultGhost) return null;
+    return findGeneratedInstance(this.mirrorCache?.instances, selection);
+  }
+
   drawGeneratedSelection(selection, viewProjection) {
     if (!selection || this.lastCameraInput?.modifierResultGhost) return;
-    const instance = this.mirrorCache?.instances.find(entry => entry.key === selection.instanceKey);
+    const instance = this.getGeneratedSelectionInstance(selection);
     if (!instance || !instance.sourceUids.includes(selection.uid)) return;
     const inverted = this.selectionOutline.map(value => 1 - value);
-    const allowed = instance.cubeIndices?.[selection.uid];
-    for (const cache of [this.staticCache, this.selectedCache]) {
-      const ranges = allowed && cache?.cubeEdgeRanges?.get(selection.uid)
-        ? allowed.map(index => cache.cubeEdgeRanges.get(selection.uid)[index]).filter(Boolean)
-        : [cache?.edgeRanges?.get(selection.uid)];
-      const buffer = cache === this.staticCache ? this.staticWireBuffer : this.selectedWireBuffer;
-      for (const range of ranges) if (range?.count) this.drawBuffer(buffer, range.count, this.gl.LINES, viewProjection, {
-        first: range.start, modelTransform: instance.transform, depthWrite: false,
-        cull: false, renderMode: 0, colorOverride: [...inverted, 1]
-      });
+    const project = this.mirrorCache.project;
+    const target = project.getNode(selection.targetUid || selection.uid);
+    const sourceUids = target?.type === 'group' ? project.getDescendantElementUids(target.uid) : [selection.uid];
+    for (const uid of sourceUids) {
+      if (!instance.sourceUids.includes(uid)) continue;
+      const allowed = instance.cubeIndices?.[uid];
+      for (const cache of [this.staticCache, this.selectedCache]) {
+        const ranges = allowed && cache?.cubeEdgeRanges?.get(uid)
+          ? allowed.map(index => cache.cubeEdgeRanges.get(uid)[index]).filter(Boolean)
+          : [cache?.edgeRanges?.get(uid)];
+        const buffer = cache === this.staticCache ? this.staticWireBuffer : this.selectedWireBuffer;
+        for (const range of ranges) if (range?.count) this.drawBuffer(buffer, range.count, this.gl.LINES, viewProjection, {
+          first: range.start, modelTransform: instance.transform, depthWrite: false,
+          cull: false, renderMode: 0, colorOverride: [...inverted, 1]
+        });
+      }
     }
   }
 
@@ -2112,6 +2124,7 @@ export class WebGLSceneRenderer {
               closest = {
                 uid: face.uid, cubeUid: face.cubeUid || face.uid, cubeIndex: face.cubeIndex ?? null,
                 cube: face.cube || null, distance, faceName: face.faceName, generated: true, instanceKey: instance.key,
+                variantKey: instance.selectionKeys?.[face.uid]?.[0],
                 copyNodeUid: instance.copyNodeUid, copyOwnerUid: instance.copyOwnerUid,
                 copyModifierUid: instance.copyModifierUid,
                 facePoints: face.quad.map(point => this.paintExplodeInstancePoint(instance, face.uid, point)),
