@@ -259,7 +259,7 @@ test('toolbox shows exactly one center scale handle and hides it for instant-act
   }
 });
 
-test('inverted outline remains limited to the selected virtual branch and respects deduplicated cube ranges', () => {
+test('hue-flipped outline remains limited to the selected virtual branch and respects deduplicated cube ranges', () => {
   const f = fixture('axes');
   const draws = [];
   Object.assign(f.renderer, {
@@ -272,7 +272,7 @@ test('inverted outline remains limited to the selected virtual branch and respec
   f.renderer.drawGeneratedSelection(f.state.selectedGenerated, []);
   assert.equal(draws.length, 1);
   assert.equal(draws[0][1], 12);
-  near(draws[0][4].colorOverride, [.8, .6, .3, 1], 'outline keeps inverted theme colors');
+  near(draws[0][4].colorOverride, [.7, .5, .2, 1], 'outline flips only hue and preserves saturation and brightness');
   f.renderer.lastCameraInput.modifierResultGhost = true;
   f.renderer.drawGeneratedSelection(f.state.selectedGenerated, []);
   assert.equal(draws.length, 1);

@@ -1,7 +1,7 @@
 import { captureFormatGeometry, constrainNode, formatRules, keepFormatEditWithinLimit } from '../../common/core/format-constraints.js';
 import { generatedSelectionFrame, generatedPoint, sourcePoint, sourceVector } from '../../common/core/modifier-selection.js';
 import { affineAround, affineCompose, affineInverse, matrixIdentity, rotationMatrix } from '../../model/transform-math.js';
-import { boundsOfPoints, captureToolboxSelection, restoreToolboxSelection, scaleToolboxSelection, transformToolboxSelection } from './model-transforms.js';
+import { boundsOfPoints, captureToolboxSelection, compensateToolboxRotation, restoreToolboxSelection, scaleToolboxSelection, transformToolboxSelection } from './model-transforms.js';
 import { toolboxMarkup } from './view.js';
 import { ConfigKey, configRegistry } from '../../common/config/app-config.js';
 import { renameFlippedNodes } from '../../model.js';
@@ -95,6 +95,8 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
       const rotation = [0, 0, 0]; rotation[axis] = Number(options.angle) < 0 ? -90 : 90;
       operation = affineAround(rotationMatrix(rotation), options.base === 'origin' ? [0, 0, 0] : pivot);
       operationId = 'core.toolbox.rotate';
+    } else if (action === 'compensate' && ['x', 'y', 'z', 'xy', 'xz', 'yz', 'all'].includes(options.axis)) {
+      operationId = 'core.toolbox.compensate';
     } else if (action === 'center') {
       const center = state.toolboxCenterBase === 'pivot' ? pivot : displayBounds(capture, frame)?.center || pivot;
       operation = { matrix: matrixIdentity(), translation: center.map((value, index) => options.axis === 'all' || index === axis ? -value : 0) };
@@ -102,7 +104,8 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
     } else return false;
     const before = captureFormatGeometry(capture.entries.map(entry => entry.node));
     snapshot(operationId);
-    transformToolboxSelection(state.project, capture, conjugate(operation, frame));
+    if (action === 'compensate') compensateToolboxRotation(state.project, capture, options.axis, frame);
+    else transformToolboxSelection(state.project, capture, conjugate(operation, frame));
     const accepted = constrain(capture, before);
     if (accepted && action === 'flip' && state.toolboxRenameDirections !== false)
       renameFlippedNodes(state.project, capture.entries.map(entry => entry.node), options.axis);

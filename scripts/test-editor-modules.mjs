@@ -30,14 +30,16 @@ assert.equal(state.transformSpace, 'self', 'new sessions default to local transf
 {
   const project = new CubeBricksProject({ elements: [], groups: [], outliner: [] });
   const creationState = { mode: 'edit', project, selectedUid: null, selectedUids: new Set(), collapsedGroups: new Set() };
+  let themeColor = '#9061c9';
   const commands = createElementCommands({
     state: creationState,
     selectedNodeUids: () => [...creationState.selectedUids], topLevelSelectedUids: () => [...creationState.selectedUids],
     snapshot() {}, markDirty() {}, renderAll() {}, toast() {}, captureOutlinerRowPositions() { return []; },
-    animateOutlinerReorder() {}, inspectorController: {}
+    animateOutlinerReorder() {}, inspectorController: {}, getDefaultCubeColor: () => themeColor
   });
   commands.addCube();
   const groundCube = project.getNode(creationState.selectedUid);
+  assert.equal(groundCube.color, '#9061c9', 'new Cube display color comes from the current theme');
   assert.deepEqual([groundCube.position, groundCube.size, groundCube.pivot],
     [[-1, 0, -1], [2, 2, 2], [0, 0, 0]], 'new cubes sit on the ground with a ground-level pivot');
   const parent = new Group({ pivot: [9, 5, -2], children: [] });
@@ -46,8 +48,11 @@ assert.equal(state.transformSpace, 'self', 'new sessions default to local transf
   project.invalidateHierarchyIndex();
   creationState.selectedUid = parent.uid;
   creationState.selectedUids = new Set([parent.uid]);
+  themeColor = '#65d7e8';
   commands.addCube();
   const child = project.getNode(creationState.selectedUid);
+  assert.equal(child.color, '#65d7e8', 'the next Cube uses the newly selected theme');
+  assert.equal(groundCube.color, '#9061c9', 'changing themes does not rewrite existing Cube colors');
   assert.deepEqual([child.position, child.pivot], [[8, 5, -3], [9, 5, -2]],
     'new cubes inside a group share its pivot without sinking below their local ground');
 }

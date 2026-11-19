@@ -2,7 +2,7 @@ import { transformCubeFromWorld } from '../../model.js';
 import { shapeRegistry } from '../../shapes/builtins.js';
 import { sourceCubeEntries, sourceWorldVertices } from '../../model/modifier-evaluation.js';
 import { captureBakeFrames, restoreBakeFrames } from '../../model/procedural-bake-frames.js';
-import { affinePoint, applyGroupChainPoint, groupChainMatrix, inverseGroupChainPoint,
+import { affineAround, affineCompose, affineInverse, affinePoint, applyGroupChainPoint, groupChainMatrix, inverseGroupChainPoint,
   matrixDeterminant, matrixEuler, matrixIdentity, matrixMultiply, matrixTranspose, rotationMatrix } from '../../model/transform-math.js';
 
 const clone = value => structuredClone(value);
@@ -58,6 +58,26 @@ export function restoreToolboxSelection(capture) {
   for (const { node, data } of capture.entries) {
     for (const key of Object.keys(node)) if (!Object.hasOwn(data, key)) delete node[key];
     Object.assign(node, clone(data));
+  }
+}
+
+// Compensate each selected root around its own pivot. Descendants follow the
+// root rigidly, rather than independently losing their relative rotations.
+// For a selected modifier result, solve in that displayed instance's frame
+// and map the operation back to its source, just like the other tools.
+export function compensateToolboxRotation(project, capture, axes, frame = null) {
+  for (const uid of capture.roots) {
+    const node = project.getNode(uid);
+    if (!node) continue;
+    const branch = captureToolboxSelection(project, [node]), entry = branch.entries[0];
+    const handedness = frame && matrixDeterminant(frame.matrix) < 0 ? MIRROR_X : matrixIdentity();
+    const displayed = frame ? matrixMultiply(matrixMultiply(frame.matrix, entry.worldRotation), handedness) : entry.worldRotation;
+    const desiredEuler = matrixEuler(displayed).map((angle, index) => axes === 'all' || axes.includes('xyz'[index]) ? 0 : angle);
+    const delta = matrixMultiply(rotationMatrix(desiredEuler), matrixTranspose(displayed));
+    const pivot = frame ? affinePoint(frame, entry.worldPivot) : entry.worldPivot;
+    const operation = affineAround(delta, pivot);
+    transformToolboxSelection(project, branch, frame
+      ? affineCompose(affineInverse(frame), affineCompose(operation, frame)) : operation);
   }
 }
 
@@ -201,7 +221,11 @@ export function transformToolboxSelection(project, capture, affine) {
     if (node.type === 'cube') {
       // Edit the captured source pose, not a format-adapted render copy whose
       // quarter turns or rescale may already have been consumed.
-      const result = transformCubeFromWorld({ ...entry.sources[0], cube: data }, affine, parentChain, true);
+      // Parent inflation is applied before rotation rescale in the renderer.
+      // Include it while solving the new raw extents, without storing the
+      // inherited amount in the Cube's own inflation property.
+      const cube = data.rescale ? { ...data, inflate: (Number(data.inflate) || 0) + entry.sources[0].groupInflate } : data;
+      const result = transformCubeFromWorld({ ...entry.sources[0], cube }, affine, parentChain, true);
       for (const key of ['position', 'size', 'pivot', 'rotation', 'faces', 'mirrorUv']) node[key] = result[key];
     } else {
       const pivot = inverseGroupChainPoint(affinePoint(affine, entry.worldPivot), parentChain);

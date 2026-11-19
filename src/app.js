@@ -334,7 +334,8 @@ function topLevelSelectedUids(...args) { return selectionController.topLevelSele
 const elementCommands = createElementCommands({
   state, selectedNodeUids, topLevelSelectedUids, snapshot, markDirty,
   renderAll, toast, captureOutlinerRowPositions, animateOutlinerReorder,
-  inspectorController
+  inspectorController,
+  getDefaultCubeColor: () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
 });
 function nodeContainer(...args) { return elementCommands.nodeContainer(...args); }
 function insertNewNodeUid(...args) { return elementCommands.insertNewNodeUid(...args); }
@@ -346,6 +347,7 @@ function addBezierElement(...args) { return elementCommands.addBezierElement(...
 function addGroup(...args) { return elementCommands.addGroup(...args); }
 function addEmptyGroup(...args) { return elementCommands.addEmptyGroup(...args); }
 function groupSelected(...args) { return elementCommands.groupSelected(...args); }
+function dissolveGroup(...args) { return elementCommands.dissolveGroup(...args); }
 function deleteSelected(...args) { return elementCommands.deleteSelected(...args); }
 function captureSelectedElements(...args) { return elementCommands.captureSelectedElements(...args); }
 function copySelected(...args) { return elementCommands.copySelected(...args); }
@@ -806,7 +808,7 @@ const contextMenuController = createContextMenuController({
   renderTexture, rebuildTextureAtlas, noteJournalOperation,
   setMode, deleteSelectedPaletteColor, insertPaletteGradientNode,
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
-  setNodeVisibility, setNodeFlag, renderOutliner, groupSelected,
+  setNodeVisibility, setNodeFlag, renderOutliner, groupSelected, dissolveGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown,
   copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer, openLayerPointsDialog, openTextureResizeDialog,

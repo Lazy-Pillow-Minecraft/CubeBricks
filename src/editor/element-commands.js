@@ -1,11 +1,12 @@
 import { Cube, Shape, Locator, NodeElement, BezierElement, Group, allocateGroupName, refreshAutomaticNodeName } from '../model.js';
 import { shapeRegistry } from '../shapes/builtins.js';
 import { formatRules } from '../common/core/format-constraints.js';
+import { dissolveGroupInPlace } from './group-dissolve.js';
 
 export function createElementCommands({
   state, selectedNodeUids, topLevelSelectedUids, snapshot, markDirty,
   renderAll, toast, captureOutlinerRowPositions, animateOutlinerReorder,
-  inspectorController
+  inspectorController, getDefaultCubeColor = () => null
 }) {
   function nodeContainer(uidValue) {
     const parent = state.project.getParentGroup(uidValue);
@@ -62,7 +63,7 @@ export function createElementCommands({
     if (state.mode === 'paint') return;
     snapshot('core.cube.create');
     const cube = new Cube({ position: [-1, 0, -1], size: [2, 2, 2], pivot: [0, 0, 0],
-      uvMode: state.project.uvMode, color: '#a7d352' });
+      uvMode: state.project.uvMode, color: getDefaultCubeColor() });
     state.project.elements.push(cube);
     insertNewNodeUid(cube.uid);
     alignNewNodeWithParent(cube.uid);
@@ -183,6 +184,27 @@ export function createElementCommands({
 
   function groupSelected() {
     return addGroup({ wrapSelection: true });
+  }
+
+  function dissolveGroup(uidValue = state.selectedUid, { compensateRotation = true } = {}) {
+    if (state.mode !== 'edit' || state.project.getNode(uidValue)?.type !== 'group') return false;
+    const previousRowPositions = captureOutlinerRowPositions();
+    if (compensateRotation) snapshot('core.group.dissolve');
+    else snapshot('core.group.dissolve_no_rotation');
+    const result = dissolveGroupInPlace(state.project, uidValue, { compensateRotation });
+    if (!result) return false;
+    state.collapsedGroups.delete(uidValue);
+    state.selectedUids = new Set(result.children);
+    state.selectedUid = result.children.at(-1) || result.parentUid;
+    if (!result.children.length && result.parentUid) state.selectedUids.add(result.parentUid);
+    state.selectionAnchorUid = state.selectedUid;
+    state.selectedGenerated = null;
+    state.selectedCurveNodeIndex = null;
+    state.selectedModifierUid = null;
+    state.selectedModifierNodeUid = null;
+    state.selectedUvFaces = new Set();
+    markDirty(); renderAll(); animateOutlinerReorder(previousRowPositions);
+    return true;
   }
 
   function deleteSelected(operationId = 'core.element.delete') {
@@ -330,6 +352,7 @@ export function createElementCommands({
     addGroup,
     addEmptyGroup,
     groupSelected,
+    dissolveGroup,
     deleteSelected,
     captureSelectedElements,
     copySelected,

@@ -19,7 +19,7 @@ export function createContextMenuController({
   renderTexture, rebuildTextureAtlas, noteJournalOperation,
   setMode, deleteSelectedPaletteColor, insertPaletteGradientNode,
   renderPalette, ensureColorSpaceCurve, openColorSpaceCurveEditor, addPaletteRow,
-  setNodeVisibility, setNodeFlag, renderOutliner, groupSelected,
+  setNodeVisibility, setNodeFlag, renderOutliner, groupSelected, dissolveGroup,
   copySelected, cutSelected, deleteSelected, openIconMarkup, escapeHtml,
   copyTexture, cutTexture, pasteTexture, removeTexture, removeTextureLayer, mergeTextureLayerDown, saveTexture,
   copyTextureLayer, pasteTextureLayer, binarizeTextureLayerAlpha, canPasteTextureLayer, openLayerPointsDialog, openTextureResizeDialog
@@ -103,6 +103,11 @@ export function createContextMenuController({
         wrapper.addEventListener('pointerleave', () => { panel.hidden = true; });
         button.addEventListener('click', event => {
           event.stopPropagation();
+          if (item.action) {
+            closeContextMenu();
+            item.action();
+            return;
+          }
           panel.hidden ? open() : panel.hidden = true;
         });
         wrapper.append(button, panel);
@@ -186,6 +191,10 @@ export function createContextMenuController({
           }
         }] : []),
         { icon: '▰', label: 'ui.group-selected-elements', action: groupSelected },
+        ...(node.type === 'group' ? [{ label: 'ui.dissolve-group', action: () => dissolveGroup(node.uid), children: [
+          { label: 'ui.dissolve-group-normal', action: () => dissolveGroup(node.uid) },
+          { label: 'ui.dissolve-group-without-rotation', action: () => dissolveGroup(node.uid, { compensateRotation: false }) }
+        ] }] : []),
         ...(isProceduralShape(node) && state.mode !== 'paint' ? [{
           icon: inspectorController.subdivisionSession?.ownerUid === node.uid ? '◆' : '◇',
           label: inspectorController.subdivisionSession?.ownerUid === node.uid ? '完成細分編輯' : '進入細分編輯',

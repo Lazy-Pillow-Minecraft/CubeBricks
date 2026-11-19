@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Cube, Shape, BezierElement, Group, CubeBricksProject, addModifier, buildModifierRenderInstances, exportBlockbench, importBlockbench } from '../src/model.js';
 import { sourceCubeEntries, sourceWorldVertices } from '../src/model/modifier-evaluation.js';
-import { affineAround, affinePoint, matrixIdentity, rotationMatrix } from '../src/model/transform-math.js';
-import { boundsOfPoints, captureToolboxSelection, restoreToolboxSelection, scaleToolboxSelection, transformToolboxSelection } from '../src/editor/toolbox/model-transforms.js';
+import { affineAround, affinePoint, applyGroupChainPoint, groupChainMatrix, matrixEuler, matrixIdentity, matrixMultiply, matrixTranspose, rotationMatrix } from '../src/model/transform-math.js';
+import { boundsOfPoints, captureToolboxSelection, compensateToolboxRotation, restoreToolboxSelection, scaleToolboxSelection, transformToolboxSelection } from '../src/editor/toolbox/model-transforms.js';
+import { toolboxMarkup } from '../src/editor/toolbox/view.js';
 import { createToolboxController } from '../src/editor/toolbox/controller.js';
 import { createSnapController } from '../src/editor/snap-controller.js';
 import { objectIconAsset, objectAssetMarkup, syncCreationIcons } from '../src/screen/object-icons.js';
@@ -22,6 +23,58 @@ const vertices = (project, nodes = project.elements) => nodes.flatMap(node => no
   : sourceCubeEntries(project, node).flatMap(sourceWorldVertices));
 const clone = value => JSON.parse(JSON.stringify(value));
 const noop = () => {};
+
+test('all seven compensation buttons follow the quarter turns and use the requested single/plane axis colors', () => {
+  const markup = toolboxMarkup();
+  assert.equal((markup.match(/data-toolbox-action="compensate"/g) || []).length, 7);
+  assert.deepEqual([...markup.matchAll(/data-toolbox-action="compensate" data-axis="([^"]+)"/g)].map(match => match[1]), ['x', 'y', 'z', 'yz', 'xz', 'xy', 'all']);
+  assert.ok(markup.indexOf('data-toolbox-action="compensate"') > markup.lastIndexOf('data-toolbox-action="rotate"'));
+  for (const [axes, color] of [['x', 'x'], ['y', 'y'], ['z', 'z'], ['xy', 'z'], ['xz', 'y'], ['yz', 'x']])
+    assert.match(markup, new RegExp(`data-toolbox-action="compensate" data-axis="${axes}"[^>]*><i class="ui-mask-icon axis-${color} `));
+});
+
+for (const type of ['cube', 'shape', 'bezier3d', 'group']) test(`${type}: compensation clears requested world axes through rotated parents and keeps each pivot fixed`, () => {
+  for (const axes of ['x', 'y', 'z', 'xy', 'xz', 'yz', 'all']) {
+    const element = type === 'shape' ? new Shape({ uid: 'item', origin: [3, 4, 5], pivot: [1, 3, 2], rotation: [23, 31, -17] })
+      : type === 'bezier3d' ? new BezierElement({ uid: 'item', origin: [3, 4, 5], rotation: [23, 31, -17] }, 3)
+        : new Cube({ uid: 'item', position: [2, -1, 4], size: [-2, 3, 5], pivot: [1, 3, 2], rotation: [23, 31, -17] });
+    const inner = new Group({ uid: 'inner', pivot: [3, -2, 5], rotation: [-19, 27, 41], children: ['item'] });
+    const outer = new Group({ uid: 'outer', pivot: [-4, 2, 1], rotation: [32, -21, 11], children: ['inner'] });
+    const project = new CubeBricksProject({ formatId: 'bedrock_entity', elements: [element], groups: [outer, inner], outliner: ['outer'] });
+    const target = project.getNode(type === 'group' ? 'inner' : 'item');
+    const capture = captureToolboxSelection(project, [target]), entry = capture.entries[0], before = vertices(project);
+    const expected = rotationMatrix(matrixEuler(entry.worldRotation).map((value, axis) => axes === 'all' || axes.includes('xyz'[axis]) ? 0 : value));
+    const delta = affineAround(matrixMultiply(expected, matrixTranspose(entry.worldRotation)), entry.worldPivot);
+    const faces = clone(project.getNode('item').faces || {});
+    compensateToolboxRotation(project, capture, axes);
+    near(groupChainMatrix([...project.getGroupChain(target.uid), target]).flat(), expected.flat(), `${axes} final world pose`);
+    near(applyGroupChainPoint(target.pivot || target.origin || target.position, project.getGroupChain(target.uid)), entry.worldPivot, 'pivot stays fixed');
+    assert.deepEqual(keys(vertices(project)), keys(before.map(point => affinePoint(delta, point))), 'the complete branch moves rigidly');
+    assert.deepEqual(project.getNode('item').faces || {}, faces, 'compensation keeps UV data');
+    restoreToolboxSelection(capture);
+    assert.deepEqual(keys(vertices(project)), keys(before), 'undo baseline restores geometry');
+  }
+});
+
+test('compensation of a reflected modifier result solves the displayed axes and maps back to the source', () => {
+  const project = new CubeBricksProject({ formatId: 'bedrock_entity', elements: [new Cube({ uid: 'item', rotation: [24, 31, 12] })] });
+  const node = project.getNode('item'), capture = captureToolboxSelection(project, [node]);
+  const frame = { matrix: [[-1, 0, 0], [0, 1, 0], [0, 0, 1]], translation: [8, 0, 0] };
+  compensateToolboxRotation(project, capture, 'all', frame);
+  near(matrixMultiply(matrixMultiply(frame.matrix, rotationMatrix(node.rotation)), frame.matrix).flat(), matrixIdentity().flat());
+});
+
+test('multi-selection compensation aligns each root independently and records one undo operation', () => {
+  const project = new CubeBricksProject({ formatId: 'bedrock_entity', elements: [new Cube({ uid: 'a', rotation: [15, 23, 34] }), new Cube({ uid: 'b', rotation: [-25, 8, 39] })] });
+  const snapshots = [];
+  const controller = createToolboxController({ state: { project, mode: 'edit' }, sceneRenderer: {}, selectedTopLevelNodes: () => project.elements,
+    isEffectivelyLocked: () => false, snapshot: id => snapshots.push({ id, data: project.serialize() }),
+    markDirty: noop, renderAll: noop, invalidateSelectionRenderGeometry: noop });
+  controller.applyAction('compensate', { axis: 'all' });
+  project.elements.forEach(node => near(node.rotation, [0, 0, 0]));
+  assert.equal(snapshots.length, 1); assert.equal(snapshots[0].id, 'core.toolbox.compensate');
+  assert.deepEqual(new CubeBricksProject(JSON.parse(snapshots[0].data)).elements[0].rotation, [15, 23, 34]);
+});
 
 const faceSlots = { south: [7, 6, 4, 5], north: [2, 3, 1, 0], east: [6, 2, 5, 1], west: [3, 7, 0, 4], up: [3, 2, 7, 6], down: [4, 5, 0, 1] };
 function surfaceSignature(cube, transform = null) {

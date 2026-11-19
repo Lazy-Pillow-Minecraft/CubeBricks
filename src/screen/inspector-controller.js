@@ -26,7 +26,7 @@ export function createInspectorController({
     isProceduralShape, subdivisionOwner, subdivisionPatch,
     syncSubdivisionEdits, enterSubdivisionEdit, exitSubdivisionEdit, discardSubdivisionEdits
   } = subdivision;
-  const { modifierVectorField, modifierPanelMarkup, operatorPanelMarkup, bindStackPanels } = createInspectorStackPanels({
+  const { modifierVectorField, modifierPanelMarkup, operatorPanelMarkup, bindStackPanels, prepareStackRender } = createInspectorStackPanels({
     state, $, $$, sceneRenderer, round, openIconMarkup, escapeHtml,
     schedulePaintSymmetryBuild, snapshot, markDirty, renderInspector, renderScene,
     updateSelectionLabels, toast, renderAll, renderOutliner, setTool, syncInspectorValues, setMode
@@ -97,6 +97,7 @@ export function createInspectorController({
   }
 
   function renderInspector() {
+    if (!prepareStackRender(selected())) return;
     if (state.mode === 'paint') {
       renderPaintColorPicker();
       renderPaintOperatorInspector();
@@ -122,8 +123,10 @@ export function createInspectorController({
       <div class="field-section">
         ${modifierVectorField('位置', selectedCopyModifier, `nodes.${selectedCopyNode.uid}.position`, selectedCopyNode.position)}
         ${modifierVectorField('旋轉', selectedCopyModifier, `nodes.${selectedCopyNode.uid}.rotation`, selectedCopyNode.rotation)}
-        <button type="button" data-copy-node-add="${selectedCopyModifier.uid}">＋ 新增節點</button>
-        <button type="button" class="danger" data-copy-node-remove="${selectedCopyNode.uid}" data-modifier-uid="${selectedCopyModifier.uid}">刪除節點</button>
+        <div class="inspector-action-buttons">
+          <button type="button" data-copy-node-add="${selectedCopyModifier.uid}">＋ 新增節點</button>
+          <button type="button" class="danger" data-copy-node-remove="${selectedCopyNode.uid}" data-modifier-uid="${selectedCopyModifier.uid}">刪除節點</button>
+        </div>
       </div>`;
       bindInspector();
       return;

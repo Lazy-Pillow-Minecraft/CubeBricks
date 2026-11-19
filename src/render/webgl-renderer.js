@@ -1588,7 +1588,10 @@ export class WebGLSceneRenderer {
     if (!selection || this.lastCameraInput?.modifierResultGhost) return;
     const instance = this.getGeneratedSelectionInstance(selection);
     if (!instance || !instance.sourceUids.includes(selection.uid)) return;
-    const inverted = this.selectionOutline.map(value => 1 - value);
+    // A 180° hue shift preserves the original RGB extrema (and therefore
+    // HSV saturation/value and HSL saturation/lightness), including grays.
+    const channelSum = Math.max(...this.selectionOutline) + Math.min(...this.selectionOutline);
+    const hueFlipped = this.selectionOutline.map(value => channelSum - value);
     const project = this.mirrorCache.project;
     const target = project.getNode(selection.targetUid || selection.uid);
     const sourceUids = target?.type === 'group' ? project.getDescendantElementUids(target.uid) : [selection.uid];
@@ -1602,7 +1605,7 @@ export class WebGLSceneRenderer {
         const buffer = cache === this.staticCache ? this.staticWireBuffer : this.selectedWireBuffer;
         for (const range of ranges) if (range?.count) this.drawBuffer(buffer, range.count, this.gl.LINES, viewProjection, {
           first: range.start, modelTransform: instance.transform, depthWrite: false,
-          cull: false, renderMode: 0, colorOverride: [...inverted, 1]
+          cull: false, renderMode: 0, colorOverride: [...hueFlipped, 1]
         });
       }
     }

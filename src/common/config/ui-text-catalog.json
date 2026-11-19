@@ -2,6 +2,58 @@
   "generatedBy": "node scripts/extract-ui-text.mjs",
   "entries": [
     {
+      "key": "ui.drag-stack-to-reorder", "zhHant": "拖動排序", "zhHans": "拖动排序", "en": "Drag to reorder",
+      "dynamic": false, "englishMissing": false, "locations": ["src/screen/inspector/stack-panels.js"]
+    },
+    {
+      "key": "ui.dissolve-group-normal", "zhHant": "正常解析", "zhHans": "正常解析", "en": "Dissolve normally",
+      "dynamic": false, "englishMissing": false, "locations": ["src/screen/context-menus.js"]
+    },
+    {
+      "key": "ui.dissolve-group-without-rotation", "zhHant": "不補償旋轉", "zhHans": "不补偿旋转", "en": "Without rotation compensation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/screen/context-menus.js"]
+    },
+    {
+      "key": "ui.dissolve-group-without-rotation-operation", "zhHant": "解析組：不補償旋轉", "zhHans": "解析组：不补偿旋转", "en": "Dissolve group without rotation compensation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/common/core/operation-registry.js"]
+    },
+    {
+      "key": "ui.toolbox-compensate", "zhHant": "旋轉補償", "zhHans": "旋转补偿", "en": "Rotation compensation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/editor/toolbox/view.js", "src/common/core/operation-registry.js"]
+    },
+    {
+      "key": "ui.toolbox-compensate-x", "zhHant": "X 軸補償：場景 X 軸旋轉歸零", "zhHans": "X 轴补偿：场景 X 轴旋转归零", "en": "Compensate X: zero world X rotation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/editor/toolbox/view.js"]
+    },
+    {
+      "key": "ui.toolbox-compensate-y", "zhHant": "Y 軸補償：場景 Y 軸旋轉歸零", "zhHans": "Y 轴补偿：场景 Y 轴旋转归零", "en": "Compensate Y: zero world Y rotation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/editor/toolbox/view.js"]
+    },
+    {
+      "key": "ui.toolbox-compensate-z", "zhHant": "Z 軸補償：場景 Z 軸旋轉歸零", "zhHans": "Z 轴补偿：场景 Z 轴旋转归零", "en": "Compensate Z: zero world Z rotation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/editor/toolbox/view.js"]
+    },
+    {
+      "key": "ui.toolbox-compensate-xy", "zhHant": "XY 軸補償：場景 X、Y 軸旋轉歸零", "zhHans": "XY 轴补偿：场景 X、Y 轴旋转归零", "en": "Compensate XY: zero world X and Y rotation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/editor/toolbox/view.js"]
+    },
+    {
+      "key": "ui.toolbox-compensate-xz", "zhHant": "XZ 軸補償：場景 X、Z 軸旋轉歸零", "zhHans": "XZ 轴补偿：场景 X、Z 轴旋转归零", "en": "Compensate XZ: zero world X and Z rotation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/editor/toolbox/view.js"]
+    },
+    {
+      "key": "ui.toolbox-compensate-yz", "zhHant": "YZ 軸補償：場景 Y、Z 軸旋轉歸零", "zhHans": "YZ 轴补偿：场景 Y、Z 轴旋转归零", "en": "Compensate YZ: zero world Y and Z rotation",
+      "dynamic": false, "englishMissing": false, "locations": ["src/editor/toolbox/view.js"]
+    },
+    {
+      "key": "ui.toolbox-compensate-all", "zhHant": "全局補償：對齊世界座標系", "zhHans": "全局补偿：对齐世界坐标系", "en": "Global compensation: align to world axes",
+      "dynamic": false, "englishMissing": false, "locations": ["src/editor/toolbox/view.js"]
+    },
+    {
+      "key": "ui.dissolve-group", "zhHant": "解析組", "zhHans": "解析组", "en": "Dissolve group",
+      "dynamic": false, "englishMissing": false, "locations": ["src/screen/context-menus.js", "src/common/core/operation-registry.js"]
+    },
+    {
       "key": "ui.lock-reference-images",
       "zhHant": "鎖定參考圖",
       "zhHans": "锁定参考图",

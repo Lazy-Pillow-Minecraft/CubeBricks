@@ -4,6 +4,7 @@ import { formatRules } from '../../common/core/format-constraints.js';
 import { modifierRegistry } from '../../common/config/modifiers.js';
 import { operatorRegistry } from '../../common/config/operators.js';
 import { paintSymmetryRelationCache } from '../../paint/symmetry-relations.js';
+import { createStackCardDragController } from './stack-drag.js';
 
 // Markup and input handlers share the modifier and operator registries.
 export function createInspectorStackPanels({
@@ -11,6 +12,24 @@ export function createInspectorStackPanels({
   schedulePaintSymmetryBuild, snapshot, markDirty, renderInspector, renderScene,
   updateSelectionLabels, toast, renderAll, renderOutliner, setTool, syncInspectorValues, setMode
 }) {
+  const stackDrag = createStackCardDragController({ state, onRefresh: renderInspector, onReorder(owner, kind, uid, index) {
+    const entries = kind === 'modifier' ? owner.modifiers : owner.operators;
+    const from = entries?.findIndex(entry => entry.uid === uid) ?? -1;
+    if (from < 0 || index === from || index < 0 || index >= entries.length) return;
+    const entry = entries[from];
+    snapshot(`${kind}.${entry.type}.move`);
+    entries.splice(from, 1); entries.splice(index, 0, entry);
+    if (kind === 'modifier') {
+      sceneRenderer.invalidateMirrorGeometry();
+    } else {
+      paintSymmetryRelationCache.delete(entry.uid);
+    }
+    markDirty();
+    if (kind === 'modifier' && entries.some(modifier => modifier.type === 'element_copy')) renderOutliner();
+    if (kind === 'operator' && entry.enabled) schedulePaintSymmetryBuild(owner, entry);
+    renderInspector(); renderScene();
+    return true;
+  } });
   function modifierVectorField(label, modifier, property, values) {
     return `<div class="vector-field modifier-vector-field"><span>${label}</span><div class="axis-inputs">${['X', 'Y', 'Z'].map((axis, index) =>
       `<label><b>${axis}</b><input type="number" step="0.1" data-modifier-vector="${property}" data-modifier-uid="${modifier.uid}" data-axis="${index}" value="${round(values[index])}" /></label>`).join('')}</div></div>`;
@@ -54,17 +73,16 @@ export function createInspectorStackPanels({
     const modifiers = owner.modifiers || [];
     const available = modifierRegistry.listFor(owner.type, formatRules(state.project)).filter(definition =>
       definition.allowMultiple !== false || !modifiers.some(modifier => modifier.type === definition.id));
-    const cards = modifiers.map((modifier, index) => {
+    const cards = modifiers.map(modifier => {
       const definition = modifierRegistry.get(modifier.type);
       const collapsed = state.collapsedModifiers.has(modifier.uid);
       return `<section class="modifier-card ${modifier.enabled ? '' : 'disabled'}" data-modifier-card="${modifier.uid}">
       <div class="modifier-card-heading">
+        <button type="button" class="modifier-drag-handle" data-stack-drag="modifier" data-stack-uid="${modifier.uid}" title="ui.drag-stack-to-reorder" aria-label="ui.drag-stack-to-reorder">⠿</button>
         <button type="button" class="modifier-collapse" data-modifier-collapse="${modifier.uid}" title="展開或折疊">${openIconMarkup(collapsed ? 'right' : 'down')}</button>
         <label class="switch" title="啟用修改器"><input type="checkbox" data-modifier-enabled="${modifier.uid}" ${modifier.enabled ? 'checked' : ''}/><i></i></label>
         <strong>${escapeHtml(definition?.label || modifier.type)}</strong>
         <button type="button" data-modifier-bake="${modifier.uid}" title="只烘焙這個修改器" ${modifier.enabled ? '' : 'disabled'}>烘焙</button>
-        <button type="button" data-modifier-move="up" data-modifier-uid="${modifier.uid}" ${index === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" data-modifier-move="down" data-modifier-uid="${modifier.uid}" ${index === modifiers.length - 1 ? 'disabled' : ''}>↓</button>
         <button type="button" class="danger" data-modifier-remove="${modifier.uid}">×</button>
       </div>
       ${collapsed ? '' : modifier.type === 'symmetry' ? symmetryModifierMarkup(owner, modifier)
@@ -108,7 +126,7 @@ export function createInspectorStackPanels({
     const operators = owner.operators || [];
     const available = operatorRegistry.listFor(owner.type).filter(definition =>
       definition.allowMultiple !== false || !operators.some(operator => operator.type === definition.id));
-    const cards = operators.map((operator, index) => {
+    const cards = operators.map(operator => {
       if (operator.enabled && operator.type === 'paint_symmetry' && !paintSymmetryRelationCache.has(operator.uid)) {
         schedulePaintSymmetryBuild(owner, operator);
       }
@@ -116,11 +134,10 @@ export function createInspectorStackPanels({
       const collapsed = state.collapsedOperators.has(operator.uid);
       return `<section class="modifier-card ${operator.enabled ? '' : 'disabled'}" data-operator-card="${operator.uid}">
       <div class="modifier-card-heading">
+        <button type="button" class="modifier-drag-handle" data-stack-drag="operator" data-stack-uid="${operator.uid}" title="ui.drag-stack-to-reorder" aria-label="ui.drag-stack-to-reorder">⠿</button>
         <button type="button" class="modifier-collapse" data-operator-collapse="${operator.uid}" title="展開或折疊">${openIconMarkup(collapsed ? 'right' : 'down')}</button>
         <label class="switch" title="啟用操作器"><input type="checkbox" data-operator-enabled="${operator.uid}" ${operator.enabled ? 'checked' : ''}/><i></i></label>
         <strong>${escapeHtml(definition?.label || operator.type)}</strong>
-        <button type="button" data-operator-move="up" data-operator-uid="${operator.uid}" ${index === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" data-operator-move="down" data-operator-uid="${operator.uid}" ${index === operators.length - 1 ? 'disabled' : ''}>↓</button>
         <button type="button" class="danger" data-operator-remove="${operator.uid}">×</button>
       </div>
       ${collapsed ? '' : operator.type === 'paint_symmetry' ? paintSymmetryOperatorMarkup(operator) : ''}
@@ -135,6 +152,7 @@ export function createInspectorStackPanels({
 
 
   function bindStackPanels(inspector, item) {
+    stackDrag.bind(inspector, item);
     const modifierByUid = uidValue => item.modifiers?.find(modifier => modifier.uid === uidValue);
     $('[data-action="addModifier"]', inspector)?.addEventListener('click', () => {
       const type = $('[data-modifier-add-type]', inspector)?.value;
@@ -263,18 +281,6 @@ export function createInspectorStackPanels({
         renderScene();
         updateSelectionLabels();
       }
-    }));
-    $$('[data-modifier-move]', inspector).forEach(button => button.addEventListener('click', () => {
-      const index = item.modifiers?.findIndex(modifier => modifier.uid === button.dataset.modifierUid) ?? -1;
-      const target = index + (button.dataset.modifierMove === 'up' ? -1 : 1);
-      if (index < 0 || target < 0 || target >= item.modifiers.length) return;
-      snapshot(`modifier.${item.modifiers[index].type}.move`);
-      [item.modifiers[index], item.modifiers[target]] = [item.modifiers[target], item.modifiers[index]];
-      sceneRenderer.invalidateMirrorGeometry();
-      markDirty();
-      if ([item.modifiers[index], item.modifiers[target]].some(modifier => modifier.type === 'element_copy')) renderOutliner();
-      renderInspector();
-      renderScene();
     }));
     $$('[data-modifier-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
       const modifier = modifierByUid(toggle.dataset.modifierUid);
@@ -407,15 +413,6 @@ export function createInspectorStackPanels({
       renderInspector();
       renderScene();
     }));
-    $$('[data-operator-move]', inspector).forEach(button => button.addEventListener('click', () => {
-      const index = item.operators?.findIndex(operator => operator.uid === button.dataset.operatorUid) ?? -1;
-      const target = index + (button.dataset.operatorMove === 'up' ? -1 : 1);
-      if (index < 0 || target < 0 || target >= item.operators.length) return;
-      snapshot(`operator.${item.operators[index].type}.move`);
-      [item.operators[index], item.operators[target]] = [item.operators[target], item.operators[index]];
-      invalidatePaintOperator(item.operators[target]);
-      renderInspector();
-    }));
     $$('[data-operator-axis]', inspector).forEach(toggle => toggle.addEventListener('change', () => {
       const operator = operatorByUid(toggle.dataset.operatorUid);
       if (!operator) return;
@@ -474,5 +471,6 @@ export function createInspectorStackPanels({
     });
   }
 
-  return { modifierVectorField, modifierPanelMarkup, operatorPanelMarkup, bindStackPanels };
+  return { modifierVectorField, modifierPanelMarkup, operatorPanelMarkup, bindStackPanels,
+    cancelStackDrag: stackDrag.cancel, prepareStackRender: stackDrag.prepareRender };
 }

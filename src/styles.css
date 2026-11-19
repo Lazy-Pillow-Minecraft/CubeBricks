@@ -5321,13 +5321,13 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
   font-size: .62rem;
 }
 .pivot-center-field-button:hover { background: rgba(var(--accent-rgb), .18); }
-.applied-transform-actions {
+:is(.applied-transform-actions, .inspector-action-buttons) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
   margin-top: 9px;
 }
-.applied-transform-actions button {
+:is(.applied-transform-actions, .inspector-action-buttons) button {
   min-height: 27px;
   padding: 3px 6px;
   border: 1px solid var(--line-strong);
@@ -5336,13 +5336,17 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
   color: var(--text);
   font-size: .62rem;
 }
-.applied-transform-actions button:hover:not(:disabled) {
+:is(.applied-transform-actions, .inspector-action-buttons) button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
 }
-.applied-transform-actions button:disabled {
+:is(.applied-transform-actions, .inspector-action-buttons) button:disabled {
   opacity: .42;
   cursor: default;
+}
+.inspector-action-buttons button.danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 .vector-field.scalar-field .number-wrap input { padding-left: 6px; }
 .number-wrap { position: relative; }
@@ -5446,6 +5450,7 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
   box-shadow: inset 2px 0 #9b69ff;
 }
 .modifier-page {
+  position: relative;
   display: grid;
   gap: 7px;
 }
@@ -5487,7 +5492,7 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 .modifier-card-heading {
   min-height: 34px;
   display: grid;
-  grid-template-columns: 24px 30px minmax(0,1fr) 38px 24px 24px 24px;
+  grid-template-columns: 18px 24px 30px minmax(0,1fr) 38px 24px;
   align-items: center;
   gap: 2px;
   padding: 3px 5px;
@@ -5514,6 +5519,35 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
 }
 .modifier-card-heading button:disabled { opacity: .22; }
 .modifier-card-heading button.danger:hover { color: var(--danger); }
+[data-operator-card] > .modifier-card-heading { grid-template-columns: 18px 24px 30px minmax(0,1fr) 24px; }
+.modifier-card-heading .modifier-drag-handle {
+  padding: 0;
+  font-size: 15px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.modifier-drag-handle:active,.inspector.is-stack-dragging { cursor: grabbing; }
+.modifier-card.is-stack-dragging { opacity: .3; }
+.modifier-card.modifier-stack-drag-ghost {
+  position: fixed;
+  z-index: 9999;
+  margin: 0;
+  opacity: 1;
+  background: var(--panel-2);
+  box-shadow: 0 8px 24px rgba(0,0,0,.4), 0 0 0 1px var(--accent);
+  pointer-events: none;
+}
+.modifier-stack-drop-guide {
+  position: absolute;
+  z-index: 1;
+  left: 2px;
+  right: 2px;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.modifier-stack-drop-guide[hidden] { display: none; }
 .modifier-collapse .open-icon {
   width: 12px;
   height: 12px;

@@ -221,6 +221,7 @@ export function bindNumberInputs({ getSnapStep, getAngleSnapStep, getProject,
   }, true);
 
   on(win, 'wheel', event => {
+    if (event.target.closest?.('.is-drag-scrolling')) return;
     const target = event.target.closest?.(`${NUMBER}, select`);
     if (!usable(target) || !event.deltaY) return;
     consume(event);
