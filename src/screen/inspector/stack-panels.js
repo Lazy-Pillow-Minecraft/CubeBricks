@@ -27,7 +27,7 @@ export function createInspectorStackPanels({
     </select></div>
     ${modifier.mode === 'axes' ? `<div class="option-row group-mirror-axes"><span>啟用軸</span>
       ${['x', 'y', 'z'].map(axis => `<label class="axis-${axis}"><input type="checkbox" data-modifier-axis="${axis}" data-modifier-uid="${modifier.uid}" ${modifier.axes[axis] ? 'checked' : ''}/><b>${axis.toUpperCase()}</b></label>`).join('')}
-    </div>` : ''}
+    </div><div class="option-row" title="ui.modifier-strip-direction-names-help"><span>ui.modifier-strip-direction-names</span><label class="switch"><input type="checkbox" data-modifier-field="stripDirectionalNames" data-modifier-uid="${modifier.uid}" ${modifier.stripDirectionalNames !== false ? 'checked' : ''}/><i></i></label></div>` : ''}
     ${radial ? `
       <div class="option-row"><span>${modifier.mode === 'mandala' ? '對稱軸數量' : '複製數量'}</span><div class="number-wrap" style="width:68px"><input type="number" min="1" max="256" step="1" data-modifier-field="copies" data-modifier-uid="${modifier.uid}" value="${modifier.copies}" /></div></div>
       <div class="option-row"><span>角度分布</span><select data-modifier-field="distribution" data-modifier-uid="${modifier.uid}"><option value="full" ${modifier.distribution === 'full' ? 'selected' : ''}>360° 均分</option><option value="range" ${modifier.distribution === 'range' ? 'selected' : ''}>限制範圍</option></select></div>

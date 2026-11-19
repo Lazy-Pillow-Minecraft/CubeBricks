@@ -11,6 +11,7 @@ import { createExternalFileDropHandler } from '../project/file-drop.js';
 import { bindProjectTabEvents } from '../project/tab-events.js';
 import { bindUvPreviewEvents } from './uv-preview-events.js';
 import { bindTextureCreateDialogEvents } from '../texture/create-dialog-events.js';
+import { createPaintSizeWheelHandler } from '../paint/size-wheel.js';
 
 export function createEventBinder({
   state, $, $$, viewport, sceneCanvas, sceneRenderer, uvPreviewCanvas,
@@ -63,11 +64,13 @@ export function createEventBinder({
   updateMultiTransformModeButtons, updateRenderModeControl,
   updateRotationModeButtons, updateScaleHandleModeButtons,
   updateSelectionLabels, updateTextureCreateDialog,
-  updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
+  updateTextureStageTransform, updateTextureBrushCursor, updateToolOptions, useVertexSnapPoint,
   updateTransformGizmo, movePivotToRotationVertex,
   uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView, handlePixelShortcut
 }) {
   let externalDropQueue = Promise.resolve();
+  const handlePaintSizeWheel = createPaintSizeWheelHandler({ state, sceneCanvas,
+    texturePreview: $('#texturePreview'), sizeInput: $('#paintBrushSize'), updateToolOptions, updateTextureBrushCursor });
   const bindViewportInput = createViewportInputBinder({
     state, $, $$, viewport, sceneCanvas, sceneRenderer, cameraController, palette,
     enterAxisView, beginAxisWidgetDrag, moveAxisWidgetDrag, endAxisWidgetDrag,
@@ -77,7 +80,7 @@ export function createEventBinder({
     startTransformDrag, updateGizmoDepthHover, onPointerMove, restore, markDirty,
     openPreciseRotationInput, endPointerDrag, toast, onPointerDown, onScenePointerMove,
     scheduleLockedHover, clearLockedHoverCapture, animateLockedHoverStrength,
-    cancelCameraFocus, scheduleSceneRender, refreshUvPreview
+    cancelCameraFocus, scheduleSceneRender, refreshUvPreview, handlePaintSizeWheel
   });
 
   const handleExternalFiles = createExternalFileDropHandler({
@@ -591,6 +594,7 @@ export function createEventBinder({
       const action = button.dataset.referenceAction;
       if (action === 'import') beginReferenceImageImport();
       if (action === 'clipboard') addReferenceImageFromClipboard();
+      if (action === 'lock') referenceImages.setReferenceImagesLocked(!referenceImages.locked);
       if (action === 'edit') {
         setReferenceImageEditing(!referenceImages.editing);
         setReferenceImageMenu(false);

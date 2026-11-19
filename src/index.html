@@ -279,6 +279,7 @@
                 <div class="reference-image-list" id="referenceImageList"></div>
                 <button type="button" data-reference-action="import">＋ 導入參考圖</button>
                 <button type="button" data-reference-action="clipboard">▣ 從剪切板添加參考圖</button>
+                <button type="button" class="reference-image-lock" data-reference-action="lock" aria-pressed="false"><svg class="outliner-state-icon" aria-hidden="true"><use href="#icon-unlocked"></use></svg><span>鎖定參考圖</span></button>
                 <button type="button" data-reference-action="edit">調整位置與尺寸</button>
                 <button type="button" data-reference-action="reset">重置位置與尺寸</button>
                 <button type="button" class="danger" data-reference-action="remove">移除選中參考圖</button>
@@ -580,7 +581,7 @@
               <label class="config-select-label"><span>明暗模式</span><select data-config-key="application.theme-mode"><option value="system">跟随系统</option><option value="light">明亮</option><option value="dark">深色</option></select></label>
               <label class="config-select-label"><span>介面字體<small>application.font</small></span><select id="fontSelect"><option value="system">系統字體</option></select></label>
               <label class="range-label">圓角 <output id="radiusOutput">10px</output><input type="range" min="0" max="22" value="10" data-theme-var="--radius" data-unit="px" /></label>
-              <label class="range-label">介面縮放 <output id="scaleOutput">100%</output><input type="range" min="85" max="120" value="100" data-theme-var="--ui-scale" data-unit="%" /></label>
+              <label class="range-label">介面縮放 <output id="scaleOutput">100%</output><input type="range" min="50" max="120" value="100" data-theme-var="--ui-scale" data-unit="%" /></label>
             </div>
             <div class="preset-row"><button type="button" data-preset="moss">苔原</button><button type="button" data-preset="amber">琥珀</button><button type="button" data-preset="ember">熔岩</button><button type="button" data-preset="slate">深海</button><button type="button" data-preset="violet">紫晶</button><button type="button" data-preset="monochrome">黑白</button></div>
             <div class="preset-row"><button type="button" data-preset="moss-blocks">苔原·色块</button><button type="button" data-preset="amber-blocks">琥珀·色块</button><button type="button" data-preset="ember-blocks">熔岩·色块</button><button type="button" data-preset="slate-blocks">深海·色块</button><button type="button" data-preset="violet-blocks">紫晶·色块</button><button type="button" data-preset="monochrome-blocks">黑白·色块</button></div>

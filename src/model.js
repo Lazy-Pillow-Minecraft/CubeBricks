@@ -18,6 +18,7 @@ import { booleanProperty, cloneData } from './model/value-normalization.js';
 import { importBlockbenchCubeUv } from './model/formats/blockbench-uv.js';
 import { captureBakeFrames, restoreBakeFrames } from './model/procedural-bake-frames.js';
 import { getBlockbenchBoxUv, rescaleRotationPoint } from './common/core/geometry-utils.js';
+import { axisDirectionPrefix, flipDirectionalName, withDirectionPrefix } from './common/core/directional-names.js';
 import {
   affineCompose, affineIdentity, affineIsIdentity,
   affinePoint, applyGroupChainPoint, groupChainMatrix, inverseGroupChainPoint,
@@ -76,6 +77,37 @@ export function allocateGroupName(project, sourceName = 'group_1', { duplicate =
   let candidate = numbers.reduce((minimum, number) => number < minimum ? number : minimum);
   while (used.has(String(candidate))) candidate++;
   return `${source.prefix}${candidate}`;
+}
+
+function deduplicateGroupNames(project, groups) {
+  if (!groups.length) return;
+  // Reserve every free destination before assigning suffixes. Thus an ordinary
+  // left/right name exchange does not collide, and a duplicate cannot steal a
+  // different group's intended name in this same operation.
+  const changed = new Set(groups.map(group => group.uid));
+  const scope = { groups: project.groups.filter(group => !changed.has(group.uid)) };
+  const reserved = new Set(scope.groups.map(group => group.name)), duplicates = [];
+  for (const group of groups) {
+    if (reserved.has(group.name)) duplicates.push(group);
+    else reserved.add(group.name);
+  }
+  for (const group of duplicates) {
+    group.name = allocateGroupName(scope, group.name, { reservedNames: [...reserved] });
+    reserved.add(group.name);
+  }
+}
+
+export function renameFlippedNodes(project, nodes, axis) {
+  const renamedGroups = [];
+  for (const node of new Set(nodes)) {
+    const name = flipDirectionalName(node.name, axis);
+    if (name === node.name) continue;
+    node.name = name;
+    if (node.type === 'group') renamedGroups.push(node);
+  }
+  deduplicateGroupNames(project, renamedGroups);
+  for (const group of renamedGroups) for (const childUid of group.children)
+    refreshAutomaticNodeName(project, project.getNode(childUid));
 }
 
 function copyNameOrdinal(name, copyIndex) {
@@ -885,6 +917,7 @@ export class CubeBricksProject {
     this.historyLimit = Number.isInteger(data.historyLimit) && data.historyLimit >= 0 && data.historyLimit <= 10000
       ? data.historyLimit : null;
     this.referenceImages = normalizeReferenceImages(data.referenceImages);
+    this.referenceImagesLocked = data.referenceImagesLocked === true;
     // Palette cards owned by this project travel with its native model file.
     // Global cards are added only when an export actually references them.
     this.palettes = Array.isArray(data.palettes) ? structuredClone(data.palettes.slice(0, 256))
@@ -1811,6 +1844,7 @@ function bakeModifierResult(project, owner, modifierUid) {
         && occupied.has(vertexKey)) continue;
       if (occupied) occupied.add(vertexKey);
       const cube = bakedCubeFromWorld(source, variant.affine, parentChain);
+      if (modifier.mode === 'axes') cube.name = variant.names.at(-1) || owner.name;
       const worldOrientation = matrixMultiply(groupChainMatrix(parentChain), rotationMatrix(cube.rotation));
       cube.modifiers = remaining.map((entry, index) => {
         if (entry.type === 'element_copy') return {
@@ -1916,9 +1950,8 @@ function bakeModifierResult(project, owner, modifierUid) {
     const affine = selectedVariant.affine;
     const branchName = selectedVariant.names.at(-1) || `${owner.name}_${instanceIndex + 1}`;
     const descendantName = name => {
-      const ownerSuffix = `_${owner.name}`;
-      if (modifier.mode === 'axes' && branchName.endsWith(ownerSuffix))
-        return `${branchName.slice(0, -ownerSuffix.length)}_${name}`;
+      if (modifier.mode === 'axes') return withDirectionPrefix(name,
+        axisDirectionPrefix(modifier.axes, instanceIndex), modifier.stripDirectionalNames !== false);
       const ownerPrefix = `${owner.name}_`;
       if (branchName.startsWith(ownerPrefix)) return `${name}_${branchName.slice(ownerPrefix.length)}`;
       return name;
@@ -2018,6 +2051,7 @@ function bakeModifierResult(project, owner, modifierUid) {
   project.removeNode(owner.uid);
   project.elements.push(...generatedElements);
   project.groups.push(bakedRoot, ...instanceGroups, ...generatedGroups);
+  if (modifier.mode === 'axes') deduplicateGroupNames(project, [bakedRoot, ...instanceGroups, ...generatedGroups]);
   const targetContainer = parent ? parent.children : project.outliner;
   targetContainer.splice(Math.min(insertionIndex, targetContainer.length), 0, bakedRoot.uid);
   project.invalidateHierarchyIndex();

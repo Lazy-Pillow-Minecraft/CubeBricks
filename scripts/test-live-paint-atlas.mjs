@@ -210,6 +210,43 @@ try {
   assert.equal(uploads.length, 2, 'releasing a stroke uploads only its final image');
   callbacks[1]();
   assert.equal(uploads.length, 2, 'a cancelled live patch cannot overwrite the committed image');
+
+  // Both the ray-hit filter and pixel writer must share the same block-based
+  // alpha snapshot, whichever one sees this asset first during the stroke.
+  for (const hitFirst of [false, true]) for (const erase of [false, true]) {
+    const raster = new Canvas(128, 128), editable = new Canvas(128, 128), reads = [];
+    raster.pixels.set([20, 30, 40, 255], (1 * 128 + 1) * 4);
+    editable.pixels.set([20, 30, 40, 255], (1 * 128 + 1) * 4);
+    const read = raster.context.getImageData;
+    raster.context.getImageData = (x, y, width, height) => { reads.push([x, y, width, height]); return read(x, y, width, height); };
+    editable.context.save = () => {}; editable.context.restore = () => {};
+    const alphaAsset = { _uid: 'alpha-stroke' }, snapshots = new Map();
+    if (hitFirst) snapshots.set(alphaAsset._uid, createPaintAlphaSnapshot(raster));
+    const root = { holisticStroke: true, paintHitAlphaSnapshots: snapshots, historyAssets: new Set([alphaAsset._uid]),
+      touchedSurfaces: new Set(), paintStyle: { size: 1, opacity: 1, color: '#ff0000', shape: 'square', ignoreTransparent: true, erase, depth: 0 } };
+    const alphaStroke = createPaintStrokeController({ state: { paintIgnoreTransparent: true, paintColor: '#ff0000', paintBrushDepth: 0 },
+      animationRasterCache: new Map([[alphaAsset._uid, { canvas: raster }]]), clamp: (value, min, max) => Math.max(min, Math.min(max, value)),
+      paintSetting: () => ({ size: 1 }), paintToolOpacity: () => 1, paintToolErasing: () => erase });
+    const surface = { asset: alphaAsset, canvas: editable, context: editable.context, rootDrag: root, tool: 'brush' };
+    alphaStroke.drawPaintSegment(surface, [1, 1], [2, 1], false);
+    assert.equal(pixel(editable, 1, 1)[3], erase ? 0 : 255);
+    assert.equal(pixel(editable, 2, 1)[3], 0, 'originally transparent pixels stay untouched');
+    const snapshot = snapshots.get(alphaAsset._uid);
+    assert.ok(snapshot.blocks instanceof Map, 'the writer creates the same snapshot type as ray hits');
+    preservePaintAlpha(raster, { x: 1, y: 1, width: 1, height: 1 });
+    raster.pixels[(1 * 128 + 1) * 4 + 3] = 0;
+    assert.equal(paintSnapshotAlpha(snapshot, 1, 1), 255, 'an erased front pixel still intercepts this stroke instead of hitting the layer behind');
+    alphaStroke.drawPaintSegment(surface, [1, 1], [1, 1], false);
+    assert.ok(reads.every(([, , width, height]) => width <= 32 && height <= 32), 'visibility never reads back the full texture');
+    alphaStroke.finishTexturePaintDrag({ canvas: editable, paintHitAlphaSnapshots: snapshots });
+    assert.equal(snapshots.size, 0, '2D strokes release their alpha snapshots on completion');
+    const readsAfterFinish = reads.length;
+    preservePaintAlpha(raster, { x: 80, y: 80, width: 1, height: 1 });
+    assert.equal(reads.length, readsAfterFinish);
+    const next = createPaintAlphaSnapshot(raster);
+    assert.equal(paintSnapshotAlpha(next, 1, 1), 0, 'a new stroke can see through the newly erased pixel');
+    releasePaintAlphaSnapshot(next);
+  }
   console.log('Live paint atlas tests passed.');
 } finally {
   if (savedDocument === undefined) delete globalThis.document;

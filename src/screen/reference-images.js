@@ -1,3 +1,5 @@
+import { translateUiText } from '../common/config/app-config.js';
+
 export function createReferenceImageController({ state, $, $$, escapeHtml, viewport, sceneRenderer,
   referenceImageInput, referenceImageLayer, referenceImageHint, snapshot, markDirty, toast,
   setPaintColor, updateToolOptions }) {
@@ -61,7 +63,8 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
     const key = referenceViewKey();
     const records = referenceImagesForView(key);
     const record = currentReferenceImage(key);
-    const renderKey = JSON.stringify([key, record?.uid, referenceImageEditing,
+    const locked = state.project.referenceImagesLocked === true;
+    const renderKey = JSON.stringify([key, record?.uid, referenceImageEditing, locked,
       records.map(entry => [entry.uid, entry.name])]);
     if (referenceControlsProject === state.project && referenceControlsKey === renderKey) return;
     referenceControlsProject = state.project;
@@ -76,9 +79,23 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
     control.classList.toggle('active', records.length > 0);
     control.classList.toggle('editing', referenceImageEditing && Boolean(record));
     $$('[data-reference-action="edit"], [data-reference-action="reset"], [data-reference-action="remove"]')
-      .forEach(button => { button.disabled = !record; });
+      .forEach(button => { button.disabled = !record || locked && button.dataset.referenceAction !== 'remove'; });
     const editButton = $('[data-reference-action="edit"]');
     if (editButton) editButton.textContent = referenceImageEditing ? '結束調整' : '調整位置與尺寸';
+    const lockButton = $('[data-reference-action="lock"]');
+    lockButton.setAttribute('aria-pressed', String(locked));
+    lockButton.classList.toggle('active', locked);
+    lockButton.querySelector('use').setAttribute('href', locked ? '#icon-locked' : '#icon-unlocked');
+    lockButton.querySelector('span').textContent = translateUiText(locked ? 'ui.unlock-reference-images' : 'ui.lock-reference-images');
+  }
+
+  function setReferenceTransform(element, a, b, c, d, x, y) {
+    element.style.transform = `matrix(${a},${b},${c},${d},${x},${y})`;
+    // CSS filters are applied before the image's uniform screen transform.
+    // Compensate for both image scale and axis-view camera zoom: one CSS px
+    // of glow stays one screen px, including reflected negative-axis views.
+    const screenScale = Math.max(.000001, Math.hypot(a, b));
+    element.style.setProperty('--reference-glow-radius', `${1 / screenScale}px`);
   }
 
   function applyReferenceImageTransform(element, record, key) {
@@ -86,7 +103,7 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
       const scale = record.scale;
       const x = viewport.clientWidth / 2 + record.offset[0] - record.naturalWidth * scale / 2;
       const y = viewport.clientHeight / 2 + record.offset[1] - record.naturalHeight * scale / 2;
-      element.style.transform = `matrix(${scale},0,0,${scale},${x},${y})`;
+      setReferenceTransform(element, scale, 0, 0, scale, x, y);
       return;
     }
     const basis = axisReferenceBasis(key);
@@ -104,20 +121,24 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
     const d = -(vertical.y - base.y) * record.scale;
     const x = center.x - a * record.naturalWidth / 2 - c * record.naturalHeight / 2;
     const y = center.y - b * record.naturalWidth / 2 - d * record.naturalHeight / 2;
-    element.style.transform = `matrix(${a},${b},${c},${d},${x},${y})`;
+    setReferenceTransform(element, a, b, c, d, x, y);
   }
 
   function updateReferenceImageLayer() {
+    if (state.project.referenceImagesLocked && referenceImageEditing) {
+      referenceImageEditing = false;
+      if (referenceImageDrag) endReferenceImageDrag(referenceImageDrag);
+    }
     const key = referenceViewKey();
     const records = referenceImagesForView(key);
     const selected = currentReferenceImage(key);
-    const emptyKey = records.length ? null : `empty:${key}:${referenceImageEditing}:${selected?.uid || ''}`;
+    const emptyKey = records.length ? null : `empty:${key}:${referenceImageEditing}:${state.project.referenceImagesLocked}:${selected?.uid || ''}`;
     if (emptyKey && referenceLayerProject === state.project && referenceLayerKey === emptyKey
       && referenceImageLayer.hidden) return;
     // General-view references are screen anchored. Camera orbit and pan do not
     // alter their transform, so avoid touching every image DOM node each frame.
     const generalKey = records.length && key === 'general' ? JSON.stringify([
-      viewport.clientWidth, viewport.clientHeight, referenceImageEditing, selected?.uid,
+      viewport.clientWidth, viewport.clientHeight, referenceImageEditing, state.project.referenceImagesLocked, selected?.uid,
       records.map(record => [record.uid, record.naturalWidth,
       record.naturalHeight, record.scale, record.offset])
     ]) : null;
@@ -215,9 +236,19 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
   }
 
   function setReferenceImageEditing(value) {
-    referenceImageEditing = Boolean(value && currentReferenceImage());
-    referenceImageDrag = null;
+    referenceImageEditing = Boolean(value && !state.project.referenceImagesLocked && currentReferenceImage());
+    if (referenceImageDrag) endReferenceImageDrag(referenceImageDrag);
     referenceImageLayer.classList.remove('dragging');
+    updateReferenceImageLayer();
+    return referenceImageEditing;
+  }
+
+  function setReferenceImagesLocked(value) {
+    const locked = Boolean(value);
+    if (locked === (state.project.referenceImagesLocked === true)) return;
+    snapshot('core.reference.lock');
+    state.project.referenceImagesLocked = locked;
+    markDirty();
     updateReferenceImageLayer();
   }
 
@@ -236,7 +267,7 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
 
   function resetReferenceImage() {
     const record = currentReferenceImage();
-    if (!record) return;
+    if (!record || state.project.referenceImagesLocked) return;
     snapshot('core.reference.reset');
     record.offset = [0, 0];
     record.scale = referenceDefaultScale(record);
@@ -308,7 +339,7 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
     snapshot('core.reference.add');
     referenceImagesForView(key).push(...records);
     state.referenceImageSelection[key] = records.at(-1).uid;
-    referenceImageEditing = key === referenceViewKey();
+    referenceImageEditing = key === referenceViewKey() && !state.project.referenceImagesLocked;
     markDirty();
     updateReferenceImageLayer();
   }
@@ -373,7 +404,7 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
       }
       return;
     }
-    if (!referenceImageEditing || ![0, 1].includes(event.button)) return;
+    if (!referenceImageEditing || state.project.referenceImagesLocked || ![0, 1].includes(event.button)) return;
     const image = referenceImageAt(event.clientX, event.clientY);
     if (!image) {
       if (event.button === 0) {
@@ -404,7 +435,7 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
 
   function moveReferenceImageDrag(event) {
     const drag = referenceImageDrag;
-    if (!drag || drag.pointerId !== event.pointerId || drag.key !== referenceViewKey()) return;
+    if (!drag || state.project.referenceImagesLocked || drag.pointerId !== event.pointerId || drag.key !== referenceViewKey()) return;
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
     if (!drag.snapshotTaken && Math.hypot(dx, dy) < .5) return;
@@ -437,7 +468,7 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
   }
 
   function scaleReferenceImage(event) {
-    if (!referenceImageEditing) return;
+    if (!referenceImageEditing || state.project.referenceImagesLocked) return;
     const record = currentReferenceImage();
     if (!record) return;
     event.preventDefault();
@@ -449,7 +480,7 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
   }
   function resetInteraction() {
     referenceImageEditing = false;
-    referenceImageDrag = null;
+    if (referenceImageDrag) endReferenceImageDrag(referenceImageDrag);
   }
 
   function selectReference(uid) {
@@ -459,11 +490,12 @@ export function createReferenceImageController({ state, $, $$, escapeHtml, viewp
   }
 
   return {
-    get editing() { return referenceImageEditing; }, get drag() { return referenceImageDrag; },
+    get editing() { return referenceImageEditing && !state.project.referenceImagesLocked; }, get drag() { return referenceImageDrag; },
+    get locked() { return state.project.referenceImagesLocked === true; },
     get importViewKey() { return referenceImportViewKey; }, resetInteraction, selectReference,
     referenceViewKey, referenceImagesForView, referenceImageAt, updateReferenceImageLayer, sampleReferenceImage, setReferenceImageEditing, setReferenceImageMenu,
     beginReferenceImageImport, addReferenceImageFromClipboard, resetReferenceImage, removeReferenceImage, loadReferenceImageFiles,
-    reorderReferenceImage,
+    reorderReferenceImage, setReferenceImagesLocked,
     beginReferenceImageDrag, moveReferenceImageDrag, endReferenceImageDrag, scaleReferenceImage
   };
 }

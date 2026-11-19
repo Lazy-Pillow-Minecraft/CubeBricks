@@ -18,6 +18,7 @@ modifierRegistry.register({
     rangeEnd: 180,
     wrapParent: true,
     ignoreDuplicateCubes: true,
+    stripDirectionalNames: true,
     anchor: { position: [0, 0, 0], rotation: [0, 0, 0] }
   })
 });

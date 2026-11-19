@@ -25,6 +25,7 @@ export const ConfigKey = Object.freeze({
   MOVE_SPACE: 'editor.move-space',
   ROTATE_SPACE: 'editor.rotate-space',
   PIVOT_SPACE: 'editor.pivot-space',
+  TOOLBOX_FLIP_NAMES: 'editor.toolbox-flip-names',
   PAINT_EXPLODE_GAP: 'paint.explode-gap',
   PAINT_SCREEN_HEIGHT: 'paint.screen-height',
   PAINT_SELECTION_SAMPLING: 'paint.selection-sampling',
@@ -187,6 +188,10 @@ configRegistry.registerMany([
     options: [{ value: 'global', label: '全局' }, { value: 'parent', label: '父級' }, { value: 'self', label: '自身' }],
     description: 'Coordinate system for this transform tool.'
   })),
+  {
+    id: ConfigKey.TOOLBOX_FLIP_NAMES, type: ConfigType.BOOLEAN, scope: ConfigScope.APPLICATION, defaultValue: true,
+    description: 'Swap axis direction names when flipping elements with the toolbox.'
+  },
   {
     id: ConfigKey.PAINT_SELECTION_SAMPLING, type: ConfigType.ENUM, scope: ConfigScope.APPLICATION, defaultValue: 'nearest',
     options: [{ value: 'nearest', label: '最近鄰' }, { value: 'smooth', label: '平滑' }],

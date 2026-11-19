@@ -889,7 +889,7 @@ const eventBinder = createEventBinder({
   updateMultiTransformModeButtons, updateRenderModeControl,
   updateRotationModeButtons, updateScaleHandleModeButtons,
   updateSelectionLabels, updateTextureCreateDialog,
-  updateTextureStageTransform, updateToolOptions, useVertexSnapPoint,
+  updateTextureStageTransform, updateTextureBrushCursor, updateToolOptions, useVertexSnapPoint,
   updateTransformGizmo, movePivotToRotationVertex,
   uvFaceKey, uvPreviewElements, uvPreviewIsActive, wheelTextureView,
   handlePixelShortcut: paintSelectionController.handleShortcut

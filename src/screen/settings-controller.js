@@ -66,6 +66,10 @@ export function createSettingsController({
       state.transformSpace = value;
       updateToolOptions();
     }
+    if (id === ConfigKey.TOOLBOX_FLIP_NAMES) {
+      state.toolboxRenameDirections = value;
+      updateToolOptions();
+    }
     if (id === ConfigKey.SNAP) {
       state.settingsSnap = value;
       updateSnapButton();

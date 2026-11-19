@@ -2551,6 +2551,15 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
   opacity: .35;
   cursor: default;
 }
+.reference-image-menu .reference-image-lock {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.reference-image-menu .reference-image-lock.active {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb),.13);
+}
 .reference-image-menu button.danger:hover:not(:disabled) {
   color: var(--danger);
   background: rgba(255,125,104,.08);
@@ -2674,7 +2683,7 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
   pointer-events: auto;
   cursor: grab;
 }
-.reference-image-layer.editing img.selected { filter: drop-shadow(0 0 1px rgba(var(--accent-rgb),.85)); }
+.reference-image-layer.editing img.selected { filter: drop-shadow(0 0 var(--reference-glow-radius, 1px) rgba(var(--accent-rgb),.85)); }
 .reference-image-layer > span {
   position: absolute;
   left: 50%;

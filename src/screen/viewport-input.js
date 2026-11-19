@@ -12,7 +12,7 @@ export function createViewportInputBinder({
   startTransformDrag, updateGizmoDepthHover, onPointerMove, restore, markDirty,
   openPreciseRotationInput, endPointerDrag, toast, onPointerDown, onScenePointerMove,
   scheduleLockedHover, clearLockedHoverCapture, animateLockedHoverStrength,
-  cancelCameraFocus, scheduleSceneRender, refreshUvPreview
+  cancelCameraFocus, scheduleSceneRender, refreshUvPreview, handlePaintSizeWheel = () => false
 }) {
   let recentRotationPress = null;
   let pendingRotationPress = null;
@@ -306,9 +306,12 @@ export function createViewportInputBinder({
     sceneCanvas.addEventListener('auxclick', event => { if (event.button === 1) event.preventDefault(); });
     window.addEventListener('wheel', event => {
       if (event.defaultPrevented || event.target.closest?.('input[type="number"], select')) return;
-      if (!shortcutHeld('temporaryEyedropper') || !palette.scrollSelectedPaletteColor(event.deltaY)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      if (shortcutHeld('temporaryEyedropper', event) && palette.scrollSelectedPaletteColor(event.deltaY || event.deltaX)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      handlePaintSizeWheel(event);
     }, { capture: true, passive: false });
     sceneCanvas.addEventListener('wheel', event => {
       event.preventDefault();

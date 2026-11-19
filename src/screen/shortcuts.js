@@ -27,7 +27,7 @@ export const SHORTCUT_GROUPS = [
     ['paintBrush', '畫筆', 'B'], ['paintLine', '直線', 'L'],
     ['paintRectangle', '矩形', 'M'], ['paintEllipse', '橢圓', 'O'],
     ['paintFill', '油漆桶', 'G'], ['paintGradient', '漸變', 'J'],
-    ['paintEyedropper', '取色器', 'I']
+    ['paintEyedropper', '取色器', 'I'], ['brushSizeWheel', 'ui.brush-size-wheel', 'Shift']
   ]]
 ];
 
@@ -101,9 +101,10 @@ export function shortcutTriggerReleased(event, id) {
   return Boolean(binding) && binding.split(' + ').at(-1) === shortcutEventKey(event);
 }
 
-export function shortcutHeld(id) {
+export function shortcutHeld(id, event = null) {
   const keys = shortcutFor(id).split(' + ').filter(Boolean);
-  return keys.length > 0 && keys.every(key => pressedKeys.has(key));
+  const flags = { Ctrl: 'ctrlKey', Shift: 'shiftKey', Alt: 'altKey', Meta: 'metaKey' };
+  return keys.length > 0 && keys.every(key => event && flags[key] ? Boolean(event[flags[key]]) : pressedKeys.has(key));
 }
 
 if (typeof window !== 'undefined') {

@@ -95,6 +95,7 @@ const coreOperations = {
   'core.reference.move': '移動參考圖',
   'core.reference.scale': '縮放參考圖',
   'core.reference.reorder': '調整參考圖層級',
+  'core.reference.lock': '切換參考圖鎖定',
   'core.uv.move': '移動 UV',
   'core.uv.resize': '縮放 UV',
   'core.uv.assign': '分配 UV',

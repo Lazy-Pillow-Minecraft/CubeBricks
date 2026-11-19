@@ -64,6 +64,8 @@ The hierarchy and main viewport share object selection. The list supports multis
 
 On first use, dragging the modeling viewport with the left or right button before using the middle button shows a one-time reminder that Blockbench-style controls are available in Settings.
 
+**Lock reference images**, in the top-right reference menu, protects all references in the current project. Double-clicking the background, using the edit command, and importing an image cannot enter adjustment mode while locked. Unlock to adjust again. The lock is saved with the project and supports undo; color sampling remains available. The selected reference's theme-colored edge glow keeps a fixed screen width regardless of source resolution, image scale, or axis-view zoom.
+
 ## 3. Modeling and transforms
 
 Use the controls above the scene hierarchy to create cubes, groups, locators, and shapes. A new cube is a 2×2×2 cube resting on the horizontal plane. An element created under a group starts relative to that group's pivot. The Shape menu contains prisms, polyhedra, and Bezier variants.
@@ -85,11 +87,13 @@ Shortcut fields in Settings accept keyboard keys and mouse side buttons (`Mouse4
 The **Toolbox** in the Edit toolbar provides four categories, selected through its first dropdown:
 
 - **Uniform Scale**: drag the center cube upward to enlarge or downward to shrink. Snap the combined envelope dimensions, snap each element's dimensions separately, or disable snapping. The drag starts with a uniform factor; snapping rounds X/Y/Z independently, so the final proportions may differ slightly. It uses the current project grid and the configured `Shift`, `Ctrl`, and `Ctrl+Shift` precision. Changing modifiers during a drag takes effect immediately.
-- **Flip**: six buttons reflect across X/Y/Z, either around the global origin or around the selection pivot.
+- **Flip**: six buttons reflect across X/Y/Z, either around the global origin or around the selection pivot. **Swap direction names** is on by default: it swaps `left/right`, `up/down`, or `front/before` for the flipped axis, matching case-insensitively and retaining the original case style. It recognizes separate words, delimiters, numbers, and camel-case parts, such as `LEFT_arm → RIGHT_arm` and `LeftArm → RightArm`, without changing ordinary words such as `group` or `backup`. Group collisions fill gaps in the project-wide numbering; automatically named children follow the final group name. Naming and geometry share one undo step. Disable the toggle to flip geometry alone; the preference survives restarting.
 - **Rotate**: twelve buttons turn +90° or −90° about X/Y/Z, around either the world origin or the selection pivot. Restricted Java Cubes fold whole quarter turns into dimensions and face UVs, changing the residual rotation axis when needed while preserving the existing tilt and appearance. Rotation rescale compensation also retains the actual dimensions.
 - **Center**: use the geometric center or pivot as the reference, then center one axis or all three at the origin.
 
 Axis-button icons use red, green, and blue for X/Y/Z. Toolbox operations retain group hierarchy, procedural Shape parameters, and face UVs, respect the current model format, and create one undo step per click or complete drag. The existing Scale tool retains its axis and plane handles; Toolbox Uniform Scale shows only the center handle. Assign a Toolbox shortcut in Settings if desired.
+
+XYZ symmetry modifiers enable **Remove existing direction words** by default. Baking and export strip existing direction parts before assigning the current prefix: `LeftArm → right_Arm / left_Arm`. Disabling it retains the original text: `right_LeftArm / left_LeftArm`. Each modifier saves its own option; it also applies to subgroups and standalone Cubes. Groups with colliding generated names receive numeric suffixes. Radial and mandala numbering is unchanged, and groups merged by overlap deduplication retain their original names.
 
 - Gizmos respond to the left mouse button; the middle button remains reserved for camera control. Axis, plane, and center handles perform the corresponding dimensional transforms.
 - Move and Rotate can use local, parent, or global coordinates. Multiselection can apply transforms together or separately. Moving a pivot compensates object parameters so the visible geometry stays put. **Center Pivot** follows the Pivot X/Y/Z fields in Object Properties and places all selected pivots at the combined geometric center.
@@ -165,6 +169,7 @@ Switch to **Paint** in the top bar. Brush, Shape Drawing, Fill, Gradient, Eyedro
 - With the texture panel focused and a selection or floating pixels active, `Ctrl+X / C / V / D` cut, copy, paste, or duplicate pixels in place. Paste is also available in the texture view immediately after cutting. In Paint mode, `Delete` removes floating pixels and protects model elements.
 - In the texture view, the bucket's Face and Element modes fill the current layer. The two matching-color modes still support the single-face restriction.
 - Hold `Ctrl` while painting in the 3D viewport to use screen-space coordinates for the brush, line, rectangle, ellipse, bucket, and gradient. Erase mode works the same way. Set the virtual screen height in **Settings → Viewport**; its width follows the viewport aspect ratio. The next stroke returns to normal painting after releasing `Ctrl`.
+- Hold `Shift` and scroll over the 2D texture or 3D viewport to adjust brush size: up increases it, down decreases it. Shape-tool thickness is adjusted independently, including in erase mode. Sizes stay within 1–64; the 2D cursor updates immediately, and the gesture does not zoom or pan the view. Rebind or disable **Adjust brush size with wheel** in shortcut settings. The `Alt` palette wheel retains priority.
 - To use Paint Symmetry, first attach it on the element's or group's **Operators** property page, then edit its axis in the main viewport. It mirrors paint input without making new model geometry. Paint mode still allows visibility/lock changes in the hierarchy, but geometry changes require Edit mode.
 
 ## 6. Layers, palettes, and windows

@@ -11,6 +11,7 @@
 .toolbox-action:hover:not(:disabled) { background:rgba(var(--accent-rgb),.12); border-color:var(--accent); color:var(--text); }
 .toolbox-action:disabled, .uv-face-actions button:disabled { opacity:1; cursor:not-allowed; }
 .toolbox-caption { color:var(--muted); font-size:.62rem; padding-left:4px; white-space:nowrap; }
+.toolbox-check { display:flex; align-items:center; gap:4px; padding-left:6px; color:var(--text); font-size:.62rem; white-space:nowrap; cursor:pointer; }
 .toolbox-clockwise { transform:scaleX(-1); }
 .pivot-center-field-button { display:grid; place-items:center; flex:0 0 27px; width:27px; min-width:27px; height:27px; padding:0; }
 .uv-face-actions button { color:var(--muted); }

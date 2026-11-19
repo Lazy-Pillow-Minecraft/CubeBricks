@@ -430,7 +430,7 @@ export function createContextMenuController({
           event.preventDefault();
           exitSubdivisionEdit();
         }
-        else if (referenceImages.referenceImagesForView().length) {
+        else if (!referenceImages.locked && referenceImages.referenceImagesForView().length) {
           event.preventDefault();
           referenceImages.setReferenceImageEditing(true);
           referenceImages.setReferenceImageMenu(false);

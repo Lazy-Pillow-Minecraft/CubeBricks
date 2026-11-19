@@ -3,6 +3,8 @@ import { generatedSelectionFrame, generatedPoint, sourcePoint, sourceVector } fr
 import { affineAround, affineCompose, affineInverse, matrixIdentity, rotationMatrix } from '../../model/transform-math.js';
 import { boundsOfPoints, captureToolboxSelection, restoreToolboxSelection, scaleToolboxSelection, transformToolboxSelection } from './model-transforms.js';
 import { toolboxMarkup } from './view.js';
+import { ConfigKey, configRegistry } from '../../common/config/app-config.js';
+import { renameFlippedNodes } from '../../model.js';
 
 export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, selectedTopLevelNodes,
   isEffectivelyLocked, getSnapStep, snapshot, markDirty, renderAll, renderScene,
@@ -30,11 +32,17 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
     }
     container.querySelectorAll('[data-toolbox-category]').forEach(group => { group.hidden = group.dataset.toolboxCategory !== state.toolboxCategory; });
     container.querySelectorAll('[data-toolbox-choice]').forEach(button => button.classList.toggle('active', values[button.dataset.toolboxChoice] === button.dataset.value));
+    container.querySelector('[data-toolbox-rename-directions]').checked = state.toolboxRenameDirections !== false;
     const disabled = !roots().length;
     container.querySelectorAll('[data-toolbox-action]').forEach(button => { button.disabled = disabled; });
   }
   function bind() {
     root().innerHTML = toolboxMarkup();
+    root().addEventListener('change', event => {
+      if (!event.target.matches('[data-toolbox-rename-directions]')) return;
+      state.toolboxRenameDirections = event.target.checked;
+      configRegistry.set(ConfigKey.TOOLBOX_FLIP_NAMES, event.target.checked, { source: 'toolbox' });
+    });
     root().addEventListener('click', event => {
       const choice = event.target.closest('[data-toolbox-choice]');
       if (choice) {
@@ -70,7 +78,8 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
   function constrain(capture, before) {
     const rules = formatRules(state.project);
     for (const entry of capture.entries) constrainNode(entry.node, rules);
-    if (!keepFormatEditWithinLimit(state.project, before)) restoreToolboxSelection(capture);
+    if (!keepFormatEditWithinLimit(state.project, before)) { restoreToolboxSelection(capture); return false; }
+    return true;
   }
   function applyAction(action, options = {}) {
     if (state.mode !== 'edit' || !roots().length) return false;
@@ -94,7 +103,9 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
     const before = captureFormatGeometry(capture.entries.map(entry => entry.node));
     snapshot(operationId);
     transformToolboxSelection(state.project, capture, conjugate(operation, frame));
-    constrain(capture, before);
+    const accepted = constrain(capture, before);
+    if (accepted && action === 'flip' && state.toolboxRenameDirections !== false)
+      renameFlippedNodes(state.project, capture.entries.map(entry => entry.node), options.axis);
     invalidateSelectionRenderGeometry(); markDirty(); renderAll();
     return true;
   }

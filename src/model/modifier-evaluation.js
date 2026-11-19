@@ -6,6 +6,7 @@ import { invokeFormatHook } from '../common/core/format-hooks.js';
 import { constrainElementCube } from '../common/core/procedural-format.js';
 import { CubeOverlapIndex } from './cube-overlap-index.js';
 import { cloneData } from './value-normalization.js';
+import { axisDirectionPrefix, withDirectionPrefix } from '../common/core/directional-names.js';
 import {
   affineAround, affineCompose, affineIdentity, affineInverse, affineIsIdentity,
   affineKey, affinePoint, applyGroupChainPoint, groupChainMatrix, inverseGroupChainPoint,
@@ -37,11 +38,9 @@ export function symmetryInstanceDefinitions(owner, modifier, frameMatrix) {
         return;
       }
       const diagonal = [signs.x || 1, signs.y || 1, signs.z || 1];
-      const labels = [];
-      if (modifier.axes.x) labels.push(diagonal[0] < 0 ? 'left' : 'right');
-      if (modifier.axes.y) labels.push(diagonal[1] < 0 ? 'down' : 'up');
-      if (modifier.axes.z) labels.push(diagonal[2] < 0 ? 'before' : 'front');
-      definitions.push({ matrix: worldMatrix([[diagonal[0], 0, 0], [0, diagonal[1], 0], [0, 0, diagonal[2]]]), name: `${labels.join('_')}_${owner.name}` });
+      const prefix = axisDirectionPrefix(modifier.axes, definitions.length);
+      definitions.push({ matrix: worldMatrix([[diagonal[0], 0, 0], [0, diagonal[1], 0], [0, 0, diagonal[2]]]),
+        name: withDirectionPrefix(owner.name, prefix, modifier.stripDirectionalNames !== false) });
     };
     visit(0, {});
     return definitions;

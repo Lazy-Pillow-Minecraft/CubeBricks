@@ -8,7 +8,7 @@ import { historyImageFingerprint, noteCanvasHistoryImage } from '../project/hist
 import { rememberDecodedRaster } from '../utils/image/raster-cache.js';
 import { rememberPaintHistoryRegion } from '../texture/source-snapshot.js';
 import { performanceMonitor } from '../utils/performance-monitor.js';
-import { preservePaintAlpha } from './alpha-snapshot.js';
+import { createPaintAlphaSnapshot, paintSnapshotAlpha, preservePaintAlpha, releasePaintAlphaSnapshot } from './alpha-snapshot.js';
 
 export function createPaintStrokeController({
   state, $, $$, textureCanvas, textureCtx, uvEditorController,
@@ -291,15 +291,12 @@ export function createPaintStrokeController({
       const raster = animationRasterCache?.get(surface.asset?._uid)?.canvas
         || (surface.asset?.layers?.length ? compositeLayers(surface.asset) : surface.canvas);
       if (!raster) return true;
-      cached = {
-        canvas: raster,
-        pixels: raster.getContext('2d').getImageData(0, 0, raster.width, raster.height).data
-      };
+      cached = createPaintAlphaSnapshot(raster);
       snapshot.set(surface.asset._uid, cached);
     }
     const width = cached.canvas.width, height = cached.canvas.height;
     if (x < 0 || y < 0 || x >= width || y >= height) return false;
-    return cached.pixels[(y * width + x) * 4 + 3] !== 0;
+    return paintSnapshotAlpha(cached, x, y) !== 0;
   }
 
   function drawPaintPixel(surface, x, y, coverage, tool, opacity) {
@@ -971,9 +968,14 @@ export function createPaintStrokeController({
     const surfaces = drag.touchedSurfaces?.size ? [...drag.touchedSurfaces] : [];
     // Committing uploads the final composited texture. A queued live patch for
     // the same assets would upload twice and could race behind that final image.
-    syncPaintedTextureNow();
-    for (const surface of surfaces) commitPaintedTextureAsset(surface.asset, surface.canvas, surface);
-    releasePaintCanvas(drag.canvas);
+    try {
+      syncPaintedTextureNow();
+      for (const surface of surfaces) commitPaintedTextureAsset(surface.asset, surface.canvas, surface);
+    } finally {
+      for (const snapshot of drag.paintHitAlphaSnapshots?.values() || []) releasePaintAlphaSnapshot(snapshot);
+      drag.paintHitAlphaSnapshots?.clear();
+      releasePaintCanvas(drag.canvas);
+    }
   }
   return {
     capturePaintStyle,

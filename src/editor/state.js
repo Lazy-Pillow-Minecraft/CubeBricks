@@ -20,6 +20,7 @@ export const state = {
   toolboxCategory: 'scale',
   toolboxSnap: 'bounds',
   toolboxCenterBase: 'geometry',
+  toolboxRenameDirections: configRegistry.get(ConfigKey.TOOLBOX_FLIP_NAMES),
   toolsByMode: {},
   filePath: null,
   dirty: false,
