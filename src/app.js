@@ -227,6 +227,7 @@ const { createTextureTemplate, registerGeneratedTexture } = createTextureTemplat
 const playerReferenceTextureInput = $('#playerReferenceTextureInput');
 const playerReferenceProject = createPlayerReferenceProject();
 let dockManager = null;
+let timelineController = null;
 let shapePacksReady = Promise.resolve();
 
 
@@ -391,6 +392,7 @@ function refreshUvPreview(...args) { return uvPreviewController.refreshUvPreview
 function invalidateUvPreviewGeometry(...args) { return uvPreviewController.invalidateUvPreviewGeometry(...args); }
 
 const sceneController = createSceneController({
+  prepareAnimationScene: () => timelineController?.prepareScene(),
   state, $, $$, sceneCanvas, sceneRenderer, inspectorController,
   uvPreviewController, LOCATOR_ICON_SHAPES, getSelectionExpansion,
   getTransformPivot, updateTransformGizmo, refreshUvPreview,
@@ -713,6 +715,7 @@ function openLayerPointsDialog(...args) { return textureAssetController.openLaye
 function openTextureResizeDialog(...args) { return textureAssetController.openTextureResizeDialog(...args); }
 
 const toolboxController = createToolboxController({ state, $, sceneCanvas, sceneRenderer, selectedTopLevelNodes,
+  getAnimationController: () => timelineController,
   isEffectivelyLocked, getSnapStep, snapshot, markDirty, renderAll, renderScene,
   invalidateSelectionRenderGeometry, updateToolOptions, discardSubdivisionEdits });
 
@@ -745,7 +748,9 @@ const projectFileController = createProjectFileController({
   state, fileInput, projectTabsController, journalController,
   getShapePacksReady: () => shapePacksReady, activateProjectTab, addProjectTab, markDirty,
   discardProjectTabJournal, renderProjectTabs, projectTabById,
-  flushProjectJournal, toast, textureFileController, paletteRows
+  flushProjectJournal, toast, textureFileController, paletteRows,
+  importAnimations: data => timelineController.importDocument(data),
+  exportAnimations: () => timelineController.exportAnimations()
 });
 function openProject(...args) { return projectFileController.openProject(...args); }
 function serializableTextureAssets(...args) { return projectFileController.serializableTextureAssets(...args); }
@@ -898,7 +903,9 @@ const eventBinder = createEventBinder({
 });
 function bindEvents(...args) { return eventBinder.bindEvents(...args); }
 
-const timelineController = createTimelineController({ state, $ });
+timelineController = createTimelineController({ state, $, sceneCanvas, sceneRenderer, snapshot, markDirty, renderScene,
+  refreshTools: () => toolboxController.refresh(),
+  selectItem, clearSelectionTransformContext, escapeHtml, toast, snapValue, getAngleSnapStep, setMode });
 function playTimeline(...args) { return timelineController.playTimeline(...args); }
 function stopTimeline(...args) { return timelineController.stopTimeline(...args); }
 function updateTimelineUI(...args) { return timelineController.updateTimelineUI(...args); }
@@ -956,6 +963,7 @@ function rotationMatrixAroundAxis(...args) { return transformTargets.rotationMat
 function applyTargetRotation(...args) { return transformTargets.applyTargetRotation(...args); }
 
 const transformInteraction = createTransformInteraction({
+  getAnimationController: () => timelineController,
   state, $, sceneCanvas, sceneRenderer, viewport, preciseRotationInput, selectionMarquee,
   activeCurveNodeContext, activeModifierAnchorContext, applyTargetRotation,
   applyViewportBoxSelection, bakeCurveNodeTangent, captureGroupMembers,

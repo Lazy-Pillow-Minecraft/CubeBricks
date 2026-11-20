@@ -1,8 +1,12 @@
 const fs = require('node:fs/promises');
 
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
+const modes = new Set(['edit', 'uv', 'paint', 'animate', 'display']);
 function validLayout(value) {
   return value?.version === 1 && object(value.layout) && object(value.zones)
+    && (value.corners === undefined || (object(value.corners)
+      && Object.entries(value.corners).every(([mode, sides]) => modes.has(mode) && object(sides)
+        && Object.entries(sides).every(([side, enabled]) => ['left', 'right'].includes(side) && typeof enabled === 'boolean'))))
     && Object.keys(value.layout).length <= 128
     && Object.entries(value.layout).every(([id, state]) => /^[a-z][a-zA-Z0-9]*$/.test(id) && object(state)
       && ['left', 'right', 'bottom', 'floating'].includes(state.dock)

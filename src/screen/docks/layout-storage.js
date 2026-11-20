@@ -1,6 +1,7 @@
 const LAYOUT_KEY = 'cubebricks.dock-layout.v1';
 const ZONES_KEY = 'cubebricks.dock-zones.v1';
 const TIME_KEY = 'cubebricks.dock-layout-updated.v1';
+const CORNERS_KEY = 'cubebricks.dock-corners.v1';
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const timestamp = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
 
@@ -19,7 +20,10 @@ export class DockLayoutStorage {
     this.desktop = desktop;
     let updatedAt = 0;
     try { updatedAt = timestamp(storage?.getItem(TIME_KEY)); } catch { /* Try the desktop copy. */ }
-    this.initial = { version: 1, layout: readJson(storage, LAYOUT_KEY), zones: readJson(storage, ZONES_KEY), updatedAt };
+    this.initial = {
+      version: 1, layout: readJson(storage, LAYOUT_KEY), zones: readJson(storage, ZONES_KEY),
+      corners: readJson(storage, CORNERS_KEY), updatedAt
+    };
     this.updatedAt = updatedAt;
   }
 
@@ -39,12 +43,13 @@ export class DockLayoutStorage {
     if (!this.storage) throw new Error('Dock layout storage is unavailable');
     this.storage.setItem(LAYOUT_KEY, JSON.stringify(snapshot.layout));
     this.storage.setItem(ZONES_KEY, JSON.stringify(snapshot.zones));
+    this.storage.setItem(CORNERS_KEY, JSON.stringify(snapshot.corners || {}));
     this.storage.setItem(TIME_KEY, String(snapshot.updatedAt));
   }
 
-  save(layout, zones) {
+  save(layout, zones, corners = {}) {
     this.updatedAt = Math.max(Date.now(), this.updatedAt + 1);
-    const snapshot = { version: 1, layout, zones, updatedAt: this.updatedAt };
+    const snapshot = { version: 1, layout, zones, corners, updatedAt: this.updatedAt };
     let localError = null;
     try { this.cache(snapshot); } catch (error) { localError = error; }
     if (this.desktop?.saveDockLayout) return this.desktop.saveDockLayout(snapshot);

@@ -673,6 +673,7 @@ export function createEventBinder({
     // The virtualized hierarchy owns its own pointer and scroll interactions.
     $('#outlinerSearch').addEventListener('input', renderOutliner);
     $('#outlinerDetailsToggle').addEventListener('change', event => {
+      if (state.mode === 'animate') return;
       state.outlinerDetailed = event.target.checked;
       state.outlinerWindowStart = -1;
       renderOutlinerWindow();
@@ -743,13 +744,15 @@ export function createEventBinder({
         const node = state.project.getNode(flag.dataset.nodeUid);
         const key = flag.dataset.nodeToggle;
         if (state.mode === 'paint' && key !== 'visible' && key !== 'locked') return;
+        if (state.mode === 'animate' && key !== 'visible') return;
         const current = key === 'autoUv' ? nodeAutoUvEnabled(node)
           : key === 'uvNormalized' ? nodeUvNormalizedEnabled(node)
             : key === 'locked' ? node.locked === true
               : node[key] !== false;
-        const targets = state.selectedUids.has(node.uid) && state.selectedUids.size > 1
+        let targets = state.selectedUids.has(node.uid) && state.selectedUids.size > 1
           ? inspectorBatchNodes()
           : [node];
+        if (state.mode === 'animate') targets = targets.filter(target => target.type === 'group');
         snapshot(`core.element.field.${key.toLowerCase()}`);
         for (const target of targets) setNodeFlag(target, key, !current);
         markDirty();
@@ -782,7 +785,8 @@ export function createEventBinder({
       if (!drag || (event?.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
       outlinerPointerDrag = null;
       if (!drag.active) return;
-      const destination = commit ? updateOutlinerDropTarget(event.clientY, event.clientX) : null;
+      const destination = commit && state.mode !== 'animate' && state.mode !== 'paint'
+        ? updateOutlinerDropTarget(event.clientY, event.clientX) : null;
       outlinerDragScroll.stop();
       clearOutlinerDropState();
       removeOutlinerDragGhost();
@@ -792,7 +796,7 @@ export function createEventBinder({
       if (destination) moveSelectedNodes(destination.uid, destination.zone);
     };
     outliner.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || state.mode === 'paint'
+      if (event.button !== 0 || state.mode === 'paint' || state.mode === 'animate'
         || event.target.closest('[data-disclosure], [data-copy-disclosure], [data-node-toggle], [data-group-line-uid]')) return;
       const item = event.target.closest('.outliner-item');
       if (!item || item.dataset.curveNodeIndex !== undefined || item.dataset.copyNodeUid !== undefined) return;
@@ -804,6 +808,7 @@ export function createEventBinder({
     document.addEventListener('pointermove', event => {
       const drag = outlinerPointerDrag;
       if (!drag || event.pointerId !== drag.pointerId) return;
+      if (state.mode === 'animate' || state.mode === 'paint') return finishOutlinerPointerDrag(event);
       if (!drag.active) {
         if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) return;
         const item = outliner.querySelector(`.outliner-item[data-uid="${CSS.escape(drag.uid)}"]`);

@@ -28,7 +28,8 @@ bindWorkspaceShortcuts({
   setTool(tool) { calls.push(tool); state.tool = tool; },
   beginTemporaryEyedropper() { sampling = true; return true; },
   endTemporaryEyedropper() { const wasSampling = sampling; sampling = false; return wasSampling; },
-  undo() { calls.push('undo'); }
+  undo() { calls.push('undo'); },
+  selectAllElements(options) { calls.push(options.groupsOnly ? 'select-groups' : 'select-elements'); }
 });
 function fire(type, values = {}) {
   const event = {
@@ -84,4 +85,19 @@ assert.equal(sampling, false, 'releasing the side button restores the original t
 assert.equal(shortcutHeld('temporaryEyedropper'), false);
 assert.equal(release.defaultPrevented, true, 'side-button release suppresses browser history navigation');
 assert.equal(fire('auxclick', { button: 4 }).defaultPrevented, true);
+state.mode = 'animate';
+document.activeElement = outliner;
+const beforeIndexActions = calls.length;
+for (const values of [
+  { key: 'Delete' }, { key: 'c', ctrlKey: true }, { key: 'x', ctrlKey: true },
+  { key: 'v', ctrlKey: true }, { key: 'd', ctrlKey: true }, { key: 'c' }, { key: 's' }
+]) {
+  assert.equal(fire('keydown', { target: outliner, ...values }).defaultPrevented, true);
+}
+assert.equal(calls.length, beforeIndexActions, 'animation hierarchy shortcuts cannot edit the model');
+fire('keydown', { target: outliner, key: 'a', ctrlKey: true });
+assert.equal(calls.at(-1), 'select-groups', 'animation hierarchy selects groups rather than hidden elements');
+state.mode = 'edit';
+fire('keydown', { target: outliner, key: 'a', ctrlKey: true });
+assert.equal(calls.at(-1), 'select-elements', 'normal hierarchy selection stays unchanged');
 console.log('Group shortcuts, mode and focus guards, mouse-side-button dispatch and temporary tools passed.');

@@ -1,7 +1,7 @@
 import { bindDialogDrag } from '../utils/dom/dialog-drag.js';
 import { nativeExportKind } from '../model/formats/native-json.js';
 
-export function chooseProjectExport(formatId) {
+export function chooseProjectExport(formatId, { hasAnimations = false } = {}) {
   const native = nativeExportKind(formatId);
   return new Promise(resolve => {
     const dialog = document.createElement('dialog');
@@ -10,6 +10,7 @@ export function chooseProjectExport(formatId) {
       <div class="export-format-options">
         <button value="cbmodel"><strong>CubeBricks · .cbmodel</strong><small>保留可编辑工程、贴图和可选历史</small></button>
         <button value="bbmodel"><strong>Blockbench · .bbmodel</strong><small>烘焙程序化对象和贴图，内嵌图片</small></button>
+        ${hasAnimations ? '<button value="animation"><strong>ui.animation-native-export</strong><small>ui.animation-native-export-detail</small></button>' : ''}
         ${native ? `<button value="${native}"><strong>${native === 'java' ? 'Java · .java' : 'JSON · .json'}</strong><small>${native === 'java' ? '导出模组实体模型层，原样文件可导回' : '先保存贴图，再导出原生模型文件'}</small></button>` : ''}
       </div></form>`;
     document.body.append(dialog);
@@ -17,7 +18,7 @@ export function chooseProjectExport(formatId) {
     dialog.addEventListener('close', () => {
       const value = dialog.returnValue;
       dialog.remove();
-      resolve(['cbmodel', 'bbmodel', 'json', 'java'].includes(value) ? value : null);
+      resolve(['cbmodel', 'bbmodel', 'json', 'java', 'animation'].includes(value) ? value : null);
     }, { once: true });
     dialog.showModal();
   });

@@ -32,7 +32,7 @@ export function createTransformInteraction({
   translateCapturedTarget, translateModifierAnchorsFromSnapshot,
   translationMatrix, updatePaintGradientHover, updateSelectionMarquee,
   viewportSelectionMode, worldPointToCurveLocal, worldPointToParentLocal,
-  updateKnifeHover, schedulePaintSymmetryBuild, currentProjection, toolbox
+  updateKnifeHover, schedulePaintSymmetryBuild, currentProjection, toolbox, getAnimationController = () => null
 }) {
   let transformUpdateFrame = null;
   const shapeDimensionKeys = item => shapeRegistry.get(item?.shapeType)?.dimensionKeys;
@@ -65,6 +65,8 @@ export function createTransformInteraction({
     axisKey = axisIndex === null ? 'free' : String(axisIndex), axisIndices = axisIndex === null ? [] : [axisIndex], axisSigns = [sign]) {
     if (event.button !== 0) return;
     if (state.mode === 'paint') return;
+    if (state.mode === 'animate' && state.tool !== 'pivot') return getAnimationController()?.startTransform(
+      event, axisIndex, captureTarget, kind, sign, handleElement, axisKey, axisIndices);
     if (state.tool === 'toolbox') return toolbox?.startScale(event, captureTarget, handleElement);
     const modifierAnchorContext = activeModifierAnchorContext();
     const baseSelectionContext = getSelectionTransformContext();
@@ -236,6 +238,7 @@ export function createTransformInteraction({
   }
 
   function openPreciseRotationInput(event, handle) {
+    if (state.mode === 'animate') return getAnimationController()?.openPreciseRotation?.(event, handle);
     dismissPreciseRotationInput();
     if (!handle || !handle.dataset.kind?.startsWith('rotate')) return;
     const gizmo = $('#transformGizmo');
@@ -344,6 +347,7 @@ export function createTransformInteraction({
   }
 
   function onPointerMove(event) {
+    if (state.dragging?.type === 'animation-transform') return getAnimationController()?.moveTransform(event);
     if (state.dragging?.type === 'toolbox-scale') return toolbox?.moveScale(event);
     if (state.dragging?.type === 'texture-paint-3d') {
       event.preventDefault?.();
@@ -590,6 +594,7 @@ export function createTransformInteraction({
 
   function endPointerDrag(event) {
     if (!state.dragging) return;
+    if (state.dragging.type === 'animation-transform') return getAnimationController()?.endTransform(event);
     if (state.dragging.type === 'toolbox-scale') return toolbox?.finishScale(event);
     const finishedDrag = state.dragging;
     if (finishedDrag.groupPress && event.type === 'pointerup') onPointerMove(event);

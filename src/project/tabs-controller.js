@@ -9,7 +9,7 @@ export const PROJECT_SESSION_KEYS = Object.freeze([
   'project', 'selectedUid', 'selectedUids', 'selectedGenerated', 'selectionAnchorUid', 'selectedCurveNodeIndex', 'selectedModifierUid', 'filePath', 'dirty', 'history', 'future',
   'knifeSelection', 'knifeHover', 'knifePointer', 'vertexSnapSource', 'zoom', 'panX', 'panY', 'yaw', 'pitch',
   'target', 'axisView', 'axisViewSign', 'axisViewCameras', 'generalCamera', 'referenceImageSelection', 'referenceImageSources', 'collapsedGroups', 'textureAssets', 'textureGroups', 'activeTextureUid', 'paintHistory', 'paintFuture', 'timelineFrame',
-  'selectedUvFaces', 'textureView', 'paintSelection', 'toolsByMode'
+  'selectedUvFaces', 'textureView', 'paintSelection', 'toolsByMode', 'activeAnimationUid', 'selectedAnimationKeys'
 ]);
 
 export function createProjectTabsController({ state, $, escapeHtml, escapeAttribute, projectTabsNode,
@@ -96,6 +96,8 @@ export function createProjectTabsController({ state, $, escapeHtml, escapeAttrib
       selectedUvFaces: new Set(),
       textureView: { zoom: 1, panX: 0, panY: 0 },
       timelineFrame: 0,
+      activeAnimationUid: project.animations[0]?.uid || null,
+      selectedAnimationKeys: [],
       toolsByMode: {}
     };
   }

@@ -74,7 +74,7 @@
 :root[data-theme-style="blocks"] :is(
   .texture-item:hover, .texture-layer-row:hover, .texture-frame-row:hover,
   .project-tab:hover, .settings-nav button:hover, .preset-row button:hover,
-  .context-menu button:hover, .context-menu button:focus-visible, .tool:hover
+  .context-menu button:hover, .context-menu button:focus-visible, .tool:hover, .dock-corner-toggle:hover
 ) {
   background: var(--block-hover);
   color: var(--text);

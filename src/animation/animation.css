@@ -1,0 +1,60 @@
+.animation-list, .animation-frame-properties { flex: 1; min-height: 0; overflow: auto; padding: 5px 8px; }
+.animation-list-row { display: flex; gap: 3px; border-radius: 4px; margin-bottom: 3px; }
+.animation-list-row > button:first-child { flex: 1; text-align: left; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.animation-list-row button { padding: 6px; color: var(--muted); font-size: .68rem; }
+.animation-list-row.active, .animation-list-row:hover { background: rgba(var(--accent-rgb), .12); }
+.animation-list-row.active button { color: var(--text); }
+.animation-settings { display: grid; gap: 7px; padding: 8px; font-size: .65rem; }
+.animation-settings label { display: grid; grid-template-columns: 1fr minmax(60px, 1fr); align-items: center; gap: 5px; }
+.animation-settings input { min-width: 0; width: 100%; }
+.animation-settings select, .animation-settings select::picker(select) { appearance: base-select; }
+.animation-settings select { min-width: 0; width: 100%; height: 27px; padding: 2px 7px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; font: inherit; align-items: center; cursor: pointer; }
+.animation-settings select::picker-icon { color: var(--accent); }
+.animation-settings select:open { border-color: var(--accent); }
+.animation-settings select::picker(select) { padding: 4px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: 6px; box-shadow: 0 8px 22px rgb(0 0 0 / .35); }
+.animation-settings option { padding: 7px 8px; border-radius: 4px; font-size: .65rem; cursor: pointer; }
+.animation-settings option:hover, .animation-settings option:checked, .animation-settings option:focus { color: var(--accent); background: rgba(var(--accent-rgb), .13); outline: none; }
+.animation-settings option::checkmark { display: none; }
+.animation-settings input, .animation-vector-row input { height: 27px; padding: 2px 4px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; font-size: .65rem; }
+.animation-empty { color: var(--muted); font-size: .65rem; padding: 5px; }
+.animation-group-properties { padding: 5px 0 9px; border-bottom: 1px solid var(--line); }
+.animation-group-properties > strong { display: block; margin-bottom: 7px; font-size: .72rem; }
+.animation-vector-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 20px; align-items: center; gap: 3px; margin-top: 5px; font-size: .6rem; }
+.animation-vector-row .axis-inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
+.animation-vector-row .axis-inputs label { display: flex; align-items: center; min-width: 0; }
+.animation-vector-row input { min-width: 0; width: 100%; }
+.animation-vector-row input::placeholder { color: var(--muted); opacity: 1; }
+.animation-vector-row label > span { font-size: .55rem; }
+[data-panel="timeline"] > .panel-heading { position: relative; }
+.animation-playback { position: absolute; left: 50%; transform: translateX(-50%); display: flex !important; align-items: center; gap: 4px; }
+.animation-playback button { display: grid; place-items: center; }
+.animation-playback .ui-mask-icon { width: 18px; height: 18px; mask: var(--ui-icon) center / contain no-repeat; }
+#animationStart, #animationEnd { --ui-icon: url("../assets/ui-icons/animation-start.svg"); }
+#animationEnd .ui-mask-icon { transform: scaleX(-1); }
+#animationPlay { --ui-icon: url("../assets/ui-icons/play.svg"); }
+#animationPlay[data-playing="true"] { --ui-icon: url("../assets/ui-icons/pause.svg"); }
+#animationFrameLabel { position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%); min-width: 35px; font-size: .65rem; font-variant-numeric: tabular-nums; }
+.animation-timeline { overflow: auto; --checker-dark: color-mix(in srgb, var(--viewport) 70%, #000); --checker-light: color-mix(in srgb, var(--viewport) 84%, #000); }
+.animation-timeline-content { position: relative; display: grid; grid-template-columns: 180px var(--animation-track-width); min-height: 100%; width: max-content; background: conic-gradient(var(--checker-dark) 25%, var(--checker-light) 0 50%, var(--checker-dark) 0 75%, var(--checker-light) 0) 0 0 / 24px 24px; }
+.animation-bone-column { position: sticky; left: 0; z-index: 6; min-width: 0; border-right: 2px solid var(--line-strong); background: var(--panel); }
+.animation-track-column { position: relative; min-width: 0; }
+.animation-timeline-row, .animation-bone-label { height: 32px; }
+.animation-bone-label { display: block; width: 100%; padding: 7px 9px; color: var(--muted); text-align: left; font-size: .66rem; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.animation-bone-label.active { color: var(--accent); background: var(--panel-2); }
+.animation-bone-header { position: sticky; top: 0; z-index: 4; height: 26px; border-bottom: 1px solid var(--line-strong); background: var(--panel); }
+.animation-track { position: relative; cursor: default; }
+.animation-timeline-row::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--line-strong); pointer-events: none; }
+.animation-ruler { position: sticky; top: 0; z-index: 4; height: 26px; min-height: 26px; border-block: 1px solid var(--line-strong); background: var(--panel-2); }
+.animation-track.animation-ruler::after { content: ''; position: absolute; top: -1px; left: calc(var(--animation-playhead) + .5px); width: 14px; height: 8px; transform: translateX(-50%); background: var(--accent); clip-path: polygon(0 0, 100% 0, 50% 100%); pointer-events: none; z-index: 3; }
+.animation-ruler-ticks { pointer-events: none; }
+.animation-ruler-ticks > span { position: absolute; top: 0; font-size: .58rem; padding-left: 3px; border-left: 1px solid var(--line-strong); height: 100%; }
+.animation-ruler-ticks > i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.animation-ruler-after-end, .animation-end-marker { display: none; position: absolute; left: var(--animation-end); pointer-events: none; }
+.has-animation > .animation-ruler-after-end { display: block; top: 0; bottom: 0; right: 0; z-index: 1; background: rgb(0 0 0 / .38); }
+.has-animation > .animation-end-marker { display: block; top: -1px; bottom: -1px; width: 8px; z-index: 2; transform: translateX(calc(-100% + 1px)); border: solid var(--accent); border-width: 2px 2px 2px 0; }
+.animation-key { position: absolute; top: 8px; left: calc(var(--animation-time-origin) + var(--animation-key-frame) * var(--animation-frame-width)); width: 15px; height: 15px; padding: 0; transform: translateX(-50%); color: var(--muted); background: currentColor; mask: url("../assets/ui-icons/keyframe.svg") center / contain no-repeat; cursor: grab; }
+.animation-key.active, .animation-key:hover { color: var(--accent); }
+.animation-timeline.is-key-dragging, .animation-timeline.is-key-dragging * { cursor: grabbing !important; }
+.animation-timeline.is-end-dragging, .animation-timeline.is-end-dragging * { cursor: ew-resize !important; }
+.animation-key.is-dragging { color: var(--accent); z-index: 3; }
+.animation-playhead { position: absolute; top: 0; bottom: 0; left: var(--animation-playhead); width: 1px; background: var(--accent); pointer-events: none; z-index: 5; }

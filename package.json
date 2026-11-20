@@ -1,6 +1,6 @@
 {
   "name": "cubebricks",
-  "version": "0.2.2-beta",
+  "version": "0.2.3-beta",
   "description": "A modular Minecraft modelling workspace built around cubes and procedural shapes.",
   "author": "CubeBricks",
   "productName": "CubeBricks",
@@ -12,6 +12,7 @@
     "preview": "node scripts/preview-server.cjs",
     "dev": "node scripts/start-desktop.cjs",
     "check": "node scripts/check-sources.mjs",
+    "test:animation": "node scripts/test-animation.mjs && node scripts/test-animation-assets.mjs && node --test scripts/test-animation-storage.cjs && node scripts/test-animation-browser.cjs",
     "i18n:extract": "node scripts/extract-ui-text.mjs",
     "test:color-space": "node scripts/test-color-space-gradient.mjs && node scripts/test-color-map-file.mjs && node scripts/test-palette-drag.mjs",
     "test:layer-tone-map": "node scripts/test-layer-tone-map.mjs && node scripts/test-layer-mask.mjs && node scripts/test-layer-region.mjs && node scripts/test-layer-clipboard.mjs",

@@ -135,5 +135,7 @@ export const state = {
   uvPreviewPitch: Math.PI / 7,
   timelinePlaying: false,
   timelineFrame: 0,
+  activeAnimationUid: null,
+  selectedAnimationKeys: [],
   layoutResizing: false
 };

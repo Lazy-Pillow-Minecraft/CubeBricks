@@ -51,12 +51,21 @@ export function createToolModeController({
     }
     const previousMode = state.mode;
     state.mode = mode;
+    if (mode === 'animate') {
+      state.selectedUids = new Set([...state.selectedUids].map(uid => state.project.getNode(uid)?.type === 'group'
+        ? uid : state.project.getGroupChain(uid).at(-1)?.uid).filter(Boolean));
+      state.selectedUid = [...state.selectedUids].at(-1) || null;
+      state.selectedCurveNodeIndex = null; state.selectedModifierUid = null; state.selectedGenerated = null;
+    }
     $('#displaySettingsPlaceholder').hidden = mode !== 'display';
-    $('#animationEditorPlaceholder').hidden = mode !== 'animate';
     $('#paintShapeMenu').hidden = true;
     $('#paintShapeModeButton').setAttribute('aria-expanded', 'false');
     $('#paintSelectionModeMenu').hidden = true;
     $('#paintSelectionModeButton').setAttribute('aria-expanded', 'false');
+    if (mode === 'animate') {
+      $('#shapeCreateMenu').hidden = true;
+      $('[data-action="toggleShapeCreate"]').setAttribute('aria-expanded', 'false');
+    }
     updateRenderModeControl();
     renderOutliner();
     document.body.dataset.editorMode = mode;
@@ -76,7 +85,7 @@ export function createToolModeController({
     if (mode === 'animate') activateDock('timeline', { expand: false });
     renderInspector();
     renderScene();
-    toast({ edit: '編輯模式', uv: 'UV 編輯模式', paint: '繪畫模式', animate: '動畫編輯（開發中）', display: '顯示設置（開發中）' }[mode]);
+    toast({ edit: '編輯模式', uv: 'UV 編輯模式', paint: '繪畫模式', animate: '動畫編輯', display: '顯示設置（開發中）' }[mode]);
   }
 
   function updateToolVisibility() {
@@ -299,7 +308,7 @@ export function createToolModeController({
   function activateDock(name, { expand = true } = {}) {
     $$('.dock-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.dock === name));
     $$('[data-dock-view]').forEach(view => view.classList.toggle('active', view.dataset.dockView === name));
-    if (expand) getDockManager()?.expand('bottom');
+    if (expand) getDockManager()?.expand(name === 'palette' ? 'bottom' : name);
   }
 
   return {

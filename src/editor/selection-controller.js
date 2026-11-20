@@ -66,9 +66,9 @@ export function createSelectionController({
     refreshSelectionUi();
   }
 
-  function selectAllElements() {
+  function selectAllElements({ groupsOnly = false } = {}) {
     const ownerUid = inspectorController.subdivisionSession?.ownerUid;
-    const uids = state.project.elements
+    const uids = groupsOnly || state.mode === 'animate' ? state.project.groups.map(group => group.uid) : state.project.elements
       .filter(element => ownerUid ? element.subdivisionOwnerUid === ownerUid : !element.subdivisionOwnerUid)
       .map(element => element.uid);
     if (!uids.length) return;
@@ -85,6 +85,10 @@ export function createSelectionController({
   }
 
   function selectItem(uid, { revealInOutliner = false, toggle = false, range = false, generated = null, preserveSelection = false } = {}) {
+    if (state.mode === 'animate') {
+      if (state.project.getNode(uid)?.type !== 'group') uid = state.project.getGroupChain(uid).at(-1)?.uid;
+      generated = null;
+    }
     const requestedNode = state.project.getNode(uid);
     if (!requestedNode) return;
     if (inspectorController.subdivisionSession && requestedNode.subdivisionOwnerUid !== inspectorController.subdivisionSession.ownerUid) {

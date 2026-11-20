@@ -96,8 +96,12 @@ export const VERTEX_SHADER = `
     gl_Position = uViewProjection * uModelTransform * vec4(aPosition, 1.0);
     vFragDepth = 1.0 + gl_Position.w;
     float normalLength = length(aNormal);
+    mat3 modelBasis = mat3(uModelTransform);
+    vec3 normalCofactor = cross(modelBasis[1], modelBasis[2]) * aNormal.x
+      + cross(modelBasis[2], modelBasis[0]) * aNormal.y + cross(modelBasis[0], modelBasis[1]) * aNormal.z;
+    float handedness = dot(modelBasis[0], cross(modelBasis[1], modelBasis[2])) < 0.0 ? -1.0 : 1.0;
     vec3 transformedNormal = normalLength > 0.1
-      ? normalize((uModelTransform * vec4(aNormal, 0.0)).xyz)
+      ? normalize(normalCofactor * handedness)
       : vec3(0.0);
     float diffuse = 1.0;
     if (uPreviewShade == 1 && normalLength > 0.1) {

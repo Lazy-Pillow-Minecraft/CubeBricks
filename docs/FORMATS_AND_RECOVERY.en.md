@@ -10,6 +10,7 @@
 | `.bbmodel` | Blockbench interchange. Export expands shapes and modifiers into compatible cubes and groups; native procedural shape parameters are not preserved as shapes in this format. |
 | `.json` | Native Java Block/Item models and Bedrock geometry only. Coordinates, bones, rotations, and UVs follow their format; external textures are saved first. |
 | `.java` | A Mojang-mapped modded entity model layer with integrity metadata; only unchanged files produced by CubeBricks can be reimported. |
+| `.animation.json` | Bedrock bone animation attached to the current model. Export the current clip or all clips using actual exported bone names. Untouched native fields, events, and unmatched bones are retained; dynamic content is not fully previewed. Controllers and in-game wiring are separate. |
 | `.png` / `.png.mcmeta` | Independently saved composite images; animation uses a vertical frame strip and companion metadata. |
 | `.cbtextures.json` | A native model's companion relative texture-path/material index. It is not a model format and must not be opened as a model on its own. |
 | `.cbcmap` | Portable JSON for one palette's colors, gradient spacing, and color-space curve. It does not contain the palette's local name or ID. |

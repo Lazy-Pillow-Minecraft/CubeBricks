@@ -70,6 +70,10 @@ export function createViewportPointerController({
     }
     const suppressBlankDeselect = Boolean(uvEditorController.focusedDockHotspot);
     if (uvEditorController.focusedDockHotspot) setDockHotspotFocus(null);
+    if (state.mode === 'animate') {
+      startSelectionBox(event, x, y, suppressBlankDeselect, event.shiftKey && !event.ctrlKey && !event.metaKey);
+      return;
+    }
     if (state.tool === 'knife') {
       event.preventDefault();
       useKnifePoint(event);
@@ -193,6 +197,8 @@ export function createViewportPointerController({
   }
 
   function applyViewportBoxSelection(hitUids, drag) {
+    if (state.mode === 'animate') hitUids = [...new Set(hitUids.map(uid => state.project.getNode(uid)?.type === 'group'
+      ? uid : state.project.getGroupChain(uid).at(-1)?.uid).filter(Boolean))];
     sceneRenderer.commitSelectionGeometry(state.project, state.selectedUids);
     const next = drag.mode === 'replace' ? new Set() : new Set(drag.selection);
     if (drag.mode === 'remove') {

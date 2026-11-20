@@ -93,7 +93,7 @@ export function createViewportInputBinder({
       }
       if (event.button !== 0) return;
       const curve = selected();
-      if (state.mode !== 'paint' && state.tool !== 'toolbox') {
+      if (state.mode !== 'paint' && state.mode !== 'animate' && state.tool !== 'toolbox') {
         const rect = sceneCanvas.getBoundingClientRect();
         const node = sceneRenderer.pickUnselectedCurveNode(state.project,
           event.clientX - rect.left, event.clientY - rect.top,

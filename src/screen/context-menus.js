@@ -87,7 +87,12 @@ export function createContextMenuController({
       button.disabled = Boolean(item.disabled);
       if (item.title) button.title = item.title;
       if (item.danger) button.classList.add('danger');
-      button.innerHTML = `${icons && item.icon ? `<span>${item.icon}</span>` : ''}<span>${escapeHtml(item.label)}</span>`;
+      // Keep adapted SVG icons and the familiar add/remove marks. Legacy
+      // character pictograms should not appear as decorative menu icons.
+      const icon = icons ? String(item.icon || '').trim() : '';
+      const showIcon = /^[+＋xX×✕✖]$/.test(icon) || /<svg(?:\s|>)/i.test(icon)
+        || /<(?:img|span|i)\b[^>]*\.svg\b/i.test(icon);
+      button.innerHTML = `${showIcon ? `<span>${icon}</span>` : ''}<span>${escapeHtml(item.label)}</span>`;
       if (item.children?.length) {
         const wrapper = document.createElement('div');
         wrapper.className = 'context-menu-submenu';
@@ -134,12 +139,17 @@ export function createContextMenuController({
     if (index >= 0 && state.textureAssets[index]._uid !== state.activeTextureUid) activateProjectTexture(index);
   }
 
-  function showElementContextMenu(event, uidValue, source = null) {
+  function showElementContextMenu(event, uidValue, source = null, { visibilityOnly = false } = {}) {
+    if (state.mode === 'animate') {
+      visibilityOnly = true;
+      if (state.project.getNode(uidValue)?.type !== 'group') uidValue = state.project.getGroupChain(uidValue).at(-1)?.uid;
+    }
     if (!state.project.getNode(uidValue)) return;
     if (!state.selectedUids.has(uidValue)) selectItem(uidValue);
     const node = state.project.getNode(uidValue);
-    if (state.mode === 'paint') {
-      const selectedNodes = selectedNodeUids().map(id => state.project.getNode(id)).filter(Boolean);
+    if (state.mode === 'paint' || visibilityOnly) {
+      const selectedNodes = selectedNodeUids().map(id => state.project.getNode(id))
+        .filter(node => node && (!visibilityOnly || node.type === 'group'));
       const visible = node.visible !== false;
       const locked = node.locked === true;
       showContextMenu(event, {
@@ -153,7 +163,7 @@ export function createContextMenuController({
               renderAll();
             }
           },
-          {
+          ...(!visibilityOnly ? [{
             icon: locked ? '◇' : '◆', label: locked ? '解鎖選中項' : '鎖定選中項', action: () => {
               snapshot('core.element.field.locked');
               selectedNodes.forEach(entry => setNodeFlag(entry, 'locked', !locked));
@@ -161,7 +171,7 @@ export function createContextMenuController({
               markDirty();
               renderAll();
             }
-          }
+          }] : [])
         ]
       });
       return;
@@ -366,9 +376,9 @@ export function createContextMenuController({
       });
     });
     outliner.addEventListener('contextmenu', event => {
-      if (state.mode === 'paint') {
+      if (state.mode === 'paint' || state.mode === 'animate') {
         const row = event.target.closest('.outliner-item');
-        if (row) showElementContextMenu(event, row.dataset.uid, row);
+        if (row) showElementContextMenu(event, row.dataset.uid, row, { visibilityOnly: state.mode === 'animate' });
         else showContextMenu(event, {
           title: state.project.name, source: outliner, icons: false, items: [
             { icon: '⌖', label: '聚焦選中物件', action: focusSelected }
@@ -418,7 +428,7 @@ export function createContextMenuController({
       showElementContextMenu(event, uidValue, source);
     });
     outliner.addEventListener('dblclick', event => {
-      if (state.mode === 'paint') return;
+      if (state.mode === 'paint' || state.mode === 'animate') return;
       const row = event.target.closest('.outliner-item');
       if (row?.dataset.curveNodeIndex !== undefined) return;
       const node = row && state.project.getNode(row.dataset.uid);
@@ -446,7 +456,7 @@ export function createContextMenuController({
         }
         return;
       }
-      if (state.mode === 'paint') return;
+      if (state.mode === 'paint' || state.mode === 'animate') return;
       const node = uidValue && state.project.getNode(uidValue);
       if (!isProceduralShape(node)) return;
       event.preventDefault();

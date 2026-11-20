@@ -1,6 +1,7 @@
 import { modelFormatRegistry } from '../common/config/model-formats.js';
 import { shapeRegistry } from '../shapes/builtins.js';
 import { objectAssetMarkup } from './object-icons.js';
+import { animationOutlinerRows } from './outliner/animation-tree.js';
 
 export function createOutlinerViewController({
   state, $, outliner, LOCATOR_ICON_SHAPES, selected, selectedElementUids,
@@ -50,6 +51,8 @@ export function createOutlinerViewController({
   }
 
   function renderOutliner() {
+    const animation = state.mode === 'animate';
+    $('.outliner-create-actions')?.querySelectorAll?.('button').forEach(button => { button.disabled = animation; });
     const filter = $('#outlinerSearch').value.trim().toLowerCase();
     const matchCache = new Map();
     const matches = uidValue => {
@@ -64,7 +67,7 @@ export function createOutlinerViewController({
       matchCache.set(uidValue, matched);
       return matched;
     };
-    const rows = [];
+    const rows = animation ? animationOutlinerRows(state.project, state.collapsedGroups, filter, ITEM_HEIGHT, GROUP_END_HEIGHT) : [];
     const collectNode = (uidValue, depth = 0, ancestors = []) => {
       const node = state.project.getNode(uidValue);
       if (!node || !matches(uidValue)) return;
@@ -90,7 +93,7 @@ export function createOutlinerViewController({
         rows.push({ copyEnd: true, copyOwnerUid: node.uid, depth, ancestors, height: GROUP_END_HEIGHT });
       }
     };
-    state.project.outliner.forEach(uidValue => collectNode(uidValue));
+    if (!animation) state.project.outliner.forEach(uidValue => collectNode(uidValue));
     let totalHeight = 0;
     for (const row of rows) {
       row.top = totalHeight;
@@ -131,6 +134,8 @@ export function createOutlinerViewController({
       groupEnd,
       copyEnd,
       groupUid,
+      animationGroup,
+      hasLocator,
       ancestors
     }, localIndex) => {
       if (copyEnd) return `<div class="outliner-group-end copy-node-end" data-outliner-row-index="${start + localIndex}" style="--group-line-x:${treeLineX(depth)}px">
@@ -154,12 +159,12 @@ export function createOutlinerViewController({
         <span></span><span class="kind curve-node-kind">◆</span><span class="item-name">拷貝節點 ${nodeIndex + 1}</span><span></span>
       </button>`;
       }
-      return `<button class="outliner-item ${state.mode === 'paint' ? 'paint-flags' : state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''} ${state.outlinerDragUids?.includes(node.uid) ? 'is-dragging' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${node.uid}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-card-left:${cardLeft(depth)}px">
-      ${treeLines(ancestors, node.type === 'group' ? { uid: node.uid, depth } : null)}
+      return `<button class="outliner-item ${animationGroup ? `animation-group${hasLocator ? ' has-locator' : ''}` : state.mode === 'paint' ? 'paint-flags' : state.outlinerDetailed ? 'has-details' : ''} ${state.selectedUids.has(node.uid) && state.selectedCurveNodeIndex === null ? 'active' : ''} ${state.outlinerDragUids?.includes(node.uid) ? 'is-dragging' : ''}" data-outliner-row-index="${start + localIndex}" data-uid="${node.uid}" draggable="false" style="padding-left:${5 + depth * 13}px;--item-card-left:${cardLeft(depth)}px">
+      ${treeLines(ancestors, node.type === 'group' && (!animationGroup || container) ? { uid: node.uid, depth } : null)}
       ${container ? `<span class="outliner-disclosure-hit" data-disclosure="${node.uid}" title="${collapsed ? '展開' : '折疊'}" draggable="false">${openIconMarkup(collapsed ? 'right' : 'down', 'outliner-disclosure')}</span>`
           : hasCopyNodes ? `<span class="outliner-disclosure-hit" data-copy-disclosure="${node.uid}" title="${state.collapsedCopyNodes.has(node.uid) ? '展開拷貝節點' : '折疊拷貝節點'}" draggable="false">${openIconMarkup(state.collapsedCopyNodes.has(node.uid) ? 'right' : 'down', 'outliner-disclosure')}</span>`
             : '<span class="outliner-disclosure-spacer"></span>'}
-      <span class="kind">${outlinerKindMarkup(node)}</span>
+      <span class="kind${animationGroup ? ' outliner-animation-kind' : ''}">${outlinerKindMarkup(node)}${hasLocator ? `<span class="outliner-locator-hint" title="ui.group-has-locator">${outlinerKindMarkup({ type: 'locator' })}</span>` : ''}</span>
       <span class="outliner-name-slot"><span class="item-name">${escapeHtml(node.name)}</span>${hasCopyNodes && container ? `<span class="outliner-copy-disclosure" data-copy-disclosure="${node.uid}" title="${state.collapsedCopyNodes.has(node.uid) ? '展開拷貝節點' : '折疊拷貝節點'}">${openIconMarkup(state.collapsedCopyNodes.has(node.uid) ? 'right' : 'down', 'outliner-disclosure')}</span>` : ''}</span>${outlinerStateMarkup(node)}
     </button>`;
     }).join('');
@@ -201,6 +206,7 @@ export function createOutlinerViewController({
 
   function outlinerStateMarkup(node) {
     const visible = outlinerFlag(node, 'visible', node.visible !== false, 'icon-show', 'icon-unshow', '可見', '隱藏');
+    if (state.mode === 'animate') return visible;
     if (state.mode === 'paint') return outlinerFlag(node, 'locked', node.locked === true,
       'icon-locked', 'icon-unlocked', '鎖定', '解鎖') + visible;
     if (!state.outlinerDetailed) return visible;

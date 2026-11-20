@@ -509,6 +509,14 @@ handleIpc('project:open', async (event, options = {}) => {
   }
   const rawContent = bytes.toString('utf8');
   let content = rawContent;
+  if (/\.json$/i.test(filePath)) {
+    const asset = JSON.parse(rawContent.replace(/^\uFEFF/, ''));
+    if (asset.animations && typeof asset.animations === 'object' && !Array.isArray(asset.animations)
+      && !asset.meta?.model_format && !Array.isArray(asset.elements)) {
+      report(1, 'ui.animation-import');
+      return { filePath, content: rawContent, textureAssets: [], animationAsset: true };
+    }
+  }
   if (/\.(json|java)$/i.test(filePath)) {
     const parsed = await readNativeModel(rawContent, filePath, {
       async chooseGeometry(names) {
@@ -825,7 +833,7 @@ handleIpc('project:save', async (event, payload) => {
 handleIpc('project:export', async (event, payload) => {
   const preferred = ['cbmodel', 'bbmodel', 'json', 'java'].includes(payload.extension) ? payload.extension : 'bbmodel';
   const picked = payload.filePath ? { canceled: false, filePath: payload.filePath } : await saveFileDialog(event, {
-    title: 'ui.export-model-dialog',
+    title: payload.assetType === 'animation' ? 'ui.animation-export' : 'ui.export-model-dialog',
     defaultPath: `${payload.name || 'untitled'}.${preferred}`,
     filters: ['json', 'java'].includes(preferred) ? [{ name: preferred.toUpperCase(), extensions: [preferred] }] : [
       ...(preferred === 'cbmodel' ? [{ name: 'ui.cubebricks-model-filter', extensions: ['cbmodel'] }, { name: 'ui.blockbench-model-filter', extensions: ['bbmodel'] }]

@@ -1,4 +1,6 @@
 import { ModelFormatId, modelFormatRegistry, resolveModelFormatId } from './common/config/model-formats.js';
+import { normalizeAnimations } from './animation/model.js';
+import { importBlockbenchAnimations, exportBlockbenchAnimations } from './animation/blockbench.js';
 import { modifierRegistry } from './common/config/modifiers.js';
 import { operatorRegistry } from './common/config/operators.js';
 import { formatRules, projectSizeBounds, bedrockLimitBox, javaBlockSizeIsValid } from './common/core/format-constraints.js';
@@ -914,6 +916,7 @@ export class CubeBricksProject {
     const snapSubdivisions = Number(data.snap?.subdivisions ?? data.snapSubdivisions ?? format?.snap?.subdivisions);
     this.snap = { subdivisions: Number.isFinite(snapSubdivisions) && snapSubdivisions > 0 ? snapSubdivisions : null };
     this.formatData = structuredClone(data.formatData || {});
+    this.animations = normalizeAnimations(data.animations);
     this.historyLimit = Number.isInteger(data.historyLimit) && data.historyLimit >= 0 && data.historyLimit <= 10000
       ? data.historyLimit : null;
     this.referenceImages = normalizeReferenceImages(data.referenceImages);
@@ -1507,6 +1510,7 @@ export function importBlockbench(data) {
     formatData,
     textureSize: data.resolution ? [data.resolution.width, data.resolution.height] : [64, 64],
     renderType: data.render_type,
+    animations: importBlockbenchAnimations(data.animations, groups, data.name),
     elements,
     groups,
     outliner,
@@ -2286,6 +2290,7 @@ export function exportBlockbench(project, textureAssets = []) {
     unhandled_root_fields: {},
     resolution: { width: project.textureSize[0], height: project.textureSize[1] },
     render_type: project.renderType,
+    ...(project.animations.length ? { animations: exportBlockbenchAnimations(project.animations, project.groups) } : {}),
     elements,
     outliner: project.outliner.flatMap(uidValue => {
       const node = visit(uidValue);

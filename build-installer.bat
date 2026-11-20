@@ -45,10 +45,12 @@ echo [2/4] Checking source files...
 call npm run check
 if errorlevel 1 goto :failed
 
-echo [3/4] Running model and render tests...
+echo [3/4] Running model, render and animation tests...
 call npm run test:model
 if errorlevel 1 goto :failed
 call npm run test:render
+if errorlevel 1 goto :failed
+call npm run test:animation
 if errorlevel 1 goto :failed
 
 echo [4/4] Building the Windows installer...

@@ -52,11 +52,18 @@ export function bindWorkspaceShortcuts({
     if (target instanceof Element
       && (target.closest('input, select, textarea, [contenteditable]') || target.isContentEditable)) return;
     if (state.mode === 'display') return;
+    const animationHierarchy = state.mode === 'animate'
+      && (outliner.contains(target) || outliner.contains(document.activeElement));
     if (shortcutMatches(event, 'selectAll')
       && target instanceof Element
       && (viewport.contains(target) || outliner.contains(target))) {
       event.preventDefault();
-      selectAllElements();
+      selectAllElements({ groupsOnly: animationHierarchy });
+      return;
+    }
+    if (animationHierarchy && ['copy', 'cut', 'paste', 'duplicate', 'delete', 'addCube', 'addShape', 'addGroup', 'groupSelected']
+      .some(id => shortcutMatches(event, id))) {
+      event.preventDefault();
       return;
     }
     const focus = document.activeElement;

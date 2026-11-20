@@ -1,4 +1,5 @@
 import { DIRECTIONS, vector, newId, fileStem, mirrorPosition, mirrorRotation, bbDocument, importedTexture, cubeUv, faceVisible, textureIndex, exportedHierarchy, cleanVector } from './native-common.js';
+import { bedrockBoneNames } from './bedrock-bones.js';
 
 export function importBedrockJson(data, name, references = [], formatId = 'bedrock_entity') {
   const legacy = Object.keys(data).find(key => key.startsWith('geometry.') && data[key]?.bones);
@@ -100,18 +101,12 @@ export function exportBedrockJson(bb, locations, formatData = {}) {
     identifier: formatData.nativeGeometryDescription?.identifier || `geometry.${fileStem(bb.name).replace(/[^a-zA-Z0-9_.-]/g, '_')}`,
     texture_width: bb.resolution.width, texture_height: bb.resolution.height
   };
-  const geometry = { description, bones: [] }, groups = new Map(), usedNames = new Set();
-  const uniqueName = value => {
-    const base = String(value || 'bone').replace(/[^a-zA-Z0-9_.-]/g, '_');
-    let name = base, n = 2;
-    while (usedNames.has(name)) name = `${base}_${n++}`;
-    usedNames.add(name);
-    return name;
-  };
+  const geometry = { description, bones: [] }, groups = new Map();
+  const { names, rootName } = bedrockBoneNames(bb);
   let root = null, hasFaceRotation = false;
   const rootBone = () => {
     if (!root) {
-      root = { name: uniqueName('root'), pivot: [0, 0, 0] };
+      root = { name: rootName || 'root', pivot: [0, 0, 0] };
       geometry.bones.unshift(root);
     }
     return root;
@@ -119,7 +114,7 @@ export function exportBedrockJson(bb, locations, formatData = {}) {
   exportedHierarchy(bb, (node, parents) => {
     const parent = parents.at(-1), parentBone = parent ? groups.get(parent.uuid) : null;
     if (Array.isArray(node.children)) {
-      const bone = { name: uniqueName(node.name), pivot: mirrorPosition(node.origin) };
+      const bone = { name: names.get(node.uuid), pivot: mirrorPosition(node.origin) };
       if (parentBone) bone.parent = parentBone.name;
       if (vector(node.rotation).some(n => n)) bone.rotation = mirrorRotation(node.rotation);
       groups.set(node.uuid, bone);

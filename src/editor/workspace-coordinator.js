@@ -113,7 +113,7 @@ export function createWorkspaceCoordinator({
     const modeButton = document.querySelector('.mode-tab[data-mode="animate"], .mode-tab[data-mode="display"]');
     if (modeButton && modeButton.dataset.mode !== (javaBlock ? 'display' : 'animate')) {
       modeButton.dataset.mode = javaBlock ? 'display' : 'animate';
-      modeButton.innerHTML = javaBlock ? '<span>▣</span> 顯示設置' : '<span>⌁</span> 動畫';
+      modeButton.innerHTML = javaBlock ? '<span>▣</span> 顯示設置' : '<span class="ui-mask-icon" aria-hidden="true"></span> 動畫';
     }
     $('#cullFaces').closest('.cull-toggle').hidden = javaBlock;
     if (skinProject && state.mode !== 'paint') setMode('paint');

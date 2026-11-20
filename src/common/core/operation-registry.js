@@ -34,6 +34,14 @@ export function requireOperation(id) {
 }
 
 const coreOperations = {
+  'core.animation.create': '新建動畫',
+  'core.animation.import': '導入動畫',
+  'core.animation.remove': '刪除動畫',
+  'core.animation.information': '修改動畫信息',
+  'core.animation.key': '修改動畫關鍵幀',
+  'core.animation.key_remove': '刪除動畫關鍵幀',
+  'core.animation.key_move': '移動動畫關鍵幀',
+  'core.animation.end_frame': '設置動畫結束幀',
   'core.project.create': '建立項目',
   'core.project.import': '導入項目',
   'core.project.information': '修改項目信息',

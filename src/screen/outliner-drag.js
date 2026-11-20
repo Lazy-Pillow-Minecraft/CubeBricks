@@ -63,6 +63,7 @@ export function createOutlinerDragController({
   }
 
   function moveSelectedNodes(targetUid = null, zone = 'after') {
+    if (state.mode === 'animate') return;
     const moving = topLevelSelectedUids();
     if (!moving.length) return;
     const movingSet = new Set(moving);

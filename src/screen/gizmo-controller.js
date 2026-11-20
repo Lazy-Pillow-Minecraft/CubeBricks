@@ -580,7 +580,8 @@ export function createGizmoController({
         return;
       }
       const context = getSelectionTransformContext(), frame = generatedSelectionFrame(state, sceneRenderer);
-      const origin = generatedPoint(frame, sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center || getTransformPivot(item));
+      const origin = generatedPoint(frame, state.mode === 'animate' ? getTransformPivot(item)
+        : sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center || getTransformPivot(item));
       const axes = getSelectionTransformAxes(context, item).map(axis => generatedVector(frame, axis));
       const projected = projectViewportPoint(origin), camera = sceneRenderer.getCameraFrame();
       const sample = projectViewportPoint(addScaled3(origin, camera.right, 1));
@@ -664,13 +665,13 @@ export function createGizmoController({
       ? sceneRenderer.getCurveNodeWorldPoints(state.project, item.uid)[curveNodeContext.index]?.point
       : selectionContext.multiple ? selectionContext.pivot : getTransformPivot(item));
     const pivot = generatedPoint(generatedFrame, sourcePivot);
-    const sourceCenter = modifierAnchorContext || curveNodeContext ? sourcePivot : selectionContext.multiple
+    const sourceCenter = state.mode === 'animate' || modifierAnchorContext || curveNodeContext ? sourcePivot : selectionContext.multiple
       ? selectionContext.center || sourcePivot
       : sceneRenderer.getSelectionBounds(state.project, state.selectedUids)?.center
       || sceneRenderer.getGeometryCenter(state.project, item.uid)
       || sourcePivot;
     const geometryCenter = generatedPoint(generatedFrame, sourceCenter);
-    const gizmoOrigin = modifierAnchorContext || curveNodeContext || item.type === 'node' || ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
+    const gizmoOrigin = state.mode === 'animate' || modifierAnchorContext || curveNodeContext || item.type === 'node' || ['rotate', 'pivot'].includes(state.tool) ? pivot : geometryCenter;
     const center = projectViewportPoint(gizmoOrigin);
     state.gizmoCenter = { x: center.x, y: center.y };
     state.gizmoOrigin = [...gizmoOrigin];

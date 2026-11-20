@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DockManager, DockPanelObject } from '../src/screen/dock-manager.js';
 import { DockLayoutStorage } from '../src/screen/docks/layout-storage.js';
+import { DockCornerLayout, normalizeDockCorners } from '../src/screen/docks/corner-layout.js';
 
 const LAYOUT_KEY = 'cubebricks.dock-layout.v1';
 const ZONES_KEY = 'cubebricks.dock-zones.v1';
@@ -52,6 +53,10 @@ function harness(saved = {}, { definitions, storage, mode = 'edit' } = {}) {
     zones: new Map(['left', 'right', 'bottom'].map(dock => [dock, new Element()])),
     panels: new Map(), layoutRevision: 0, onLayoutChange() {}, onStorageError(error) { throw error; },
     layoutStorage: storage || new DockLayoutStorage({ storage: memoryStorage(), desktop: null })
+  });
+  manager.cornerLayout = new DockCornerLayout({
+    root: manager.root, saved: manager.layoutStorage.initial.corners,
+    onChange: () => manager.persist()
   });
   for (const definition of definitions) {
     const panel = new DockPanelObject(definition, new Element({ panel: definition.id }), saved[definition.id]);
@@ -167,4 +172,68 @@ test('mode fallback keeps the saved active tab and new default-stacked panels fo
   assert.equal(manager.get('host').element.classList.contains('is-stack-inactive'), false);
   manager.setMode('paint');
   assert.equal(manager.get('paint').element.classList.contains('is-stack-inactive'), false);
+});
+
+test('each mode keeps independent left and right corner choices, including through a desktop reload', async () => {
+  let file;
+  const desktop = { loadDockLayout: async () => clone(file), saveDockLayout: async value => { file = clone(value); } };
+  const storage = new DockLayoutStorage({ storage: memoryStorage(), desktop });
+  const manager = harness({}, { storage });
+  assert.deepEqual(manager.cornerLayout.current, { left: false, right: false });
+  manager.cornerLayout.toggle('left');
+  manager.setMode('animate');
+  assert.deepEqual(manager.cornerLayout.current, { left: true, right: true });
+  manager.cornerLayout.toggle('right');
+  manager.setMode('paint');
+  assert.deepEqual(manager.cornerLayout.current, { left: false, right: false });
+  manager.cornerLayout.toggle('right');
+  await manager.persist();
+
+  // Start with no browser storage: the desktop backup must retain all modes.
+  const reopened = harness({}, { storage: new DockLayoutStorage({ storage: memoryStorage(), desktop }) });
+  await reopened.restoreStoredLayout();
+  assert.deepEqual(reopened.cornerLayout.current, { left: true, right: false });
+  reopened.setMode('animate');
+  assert.deepEqual(reopened.cornerLayout.current, { left: true, right: false });
+  reopened.setMode('paint');
+  assert.deepEqual(reopened.cornerLayout.current, { left: false, right: true });
+  reopened.setMode('edit');
+  assert.deepEqual(reopened.cornerLayout.current, { left: true, right: false });
+  assert.equal(reopened.root.dataset.dockBottomLeft, 'true');
+  assert.equal(reopened.root.dataset.dockBottomRight, 'false');
+});
+
+test('legacy layouts keep mode defaults and malformed corner preferences cannot affect the grid', () => {
+  const storage = new DockLayoutStorage({ storage: memoryStorage({
+    'cubebricks.dock-corners.v1': JSON.stringify({ animate: { left: false }, edit: { right: 'yes' }, unknown: { left: true } })
+  }), desktop: null });
+  const manager = harness({}, { storage, mode: 'animate' });
+  assert.deepEqual(manager.cornerLayout.current, { left: false, right: true });
+  manager.setMode('edit');
+  assert.deepEqual(manager.cornerLayout.current, { left: false, right: false });
+  assert.deepEqual(normalizeDockCorners(null), {});
+  assert.deepEqual(manager.cornerLayout.serialize(), { animate: { left: false } });
+  manager.cornerLayout.toggle('invalid');
+  assert.deepEqual(manager.cornerLayout.serialize(), { animate: { left: false } });
+});
+
+test('dock drag targets follow the container that owns each bottom corner', () => {
+  const manager = harness();
+  const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
+  manager.root.getBoundingClientRect = () => rect(0, 0, 1200, 700);
+  document.elementsFromPoint = () => [];
+  for (const panel of manager.panels.values()) panel.element.hidden = true;
+  manager.zones.get('left').getBoundingClientRect = () => rect(0, 0, 240, manager.cornerLayout.current.left ? 500 : 700);
+  manager.zones.get('right').getBoundingClientRect = () => rect(900, 0, 1200, manager.cornerLayout.current.right ? 500 : 700);
+  manager.zones.get('bottom').getBoundingClientRect = () => rect(
+    manager.cornerLayout.current.left ? 0 : 240, 500, manager.cornerLayout.current.right ? 1200 : 900, 700
+  );
+  for (const left of [false, true]) for (const right of [false, true]) {
+    manager.cornerLayout.restore({ edit: { left, right } });
+    assert.equal(manager.findDockCandidate(50, 620, []).dock, left ? 'bottom' : 'left');
+    assert.equal(manager.findDockCandidate(1150, 620, []).dock, right ? 'bottom' : 'right');
+    assert.equal(manager.findDockCandidate(600, 620, []).dock, 'bottom');
+    assert.equal(manager.findDockCandidate(50, 150, []).dock, 'left');
+    assert.equal(manager.findDockCandidate(1150, 150, []).dock, 'right');
+  }
 });

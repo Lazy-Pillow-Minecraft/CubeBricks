@@ -12,6 +12,7 @@ import { formatRules, projectSizeBounds, bedrockLimitBox, javaBlockSizeIsValid }
 import { buildPaintExplodeOffsets, applyPaintExplodeOffsets } from './paint-explode.js';
 import { SELECTION_STRIPE_SIZE, SELECTION_STRIPE_PIXELS, selectionStripePhase } from '../utils/selection-stripes.js';
 import { performanceMonitor } from '../utils/performance-monitor.js';
+import { AnimationMeshCache } from '../animation/mesh-cache.js';
 import { projectCullsBackfaces, faceAcceptsInteraction, faceAcceptsCameraInteraction } from './face-culling.js';
 import { applyGroupTransforms, rotatePoint } from '../common/core/geometry-utils.js';
 import { RenderPass, MinecraftRenderType, getMinecraftRenderType, getSurfaceRenderMode } from './render-types.js';
@@ -562,6 +563,7 @@ export class WebGLSceneRenderer {
 
   // Geometry cache and incremental updates for selection, edits and undo.
   invalidateGeometry() {
+    this.animationMeshes?.invalidate();
     if (this.staticCache && !this.cubeTransitionSource) this.cubeTransitionSource = this.staticCache;
     this.geometryRevision += 1;
     this.selectionRevision += 1;
@@ -587,6 +589,7 @@ export class WebGLSceneRenderer {
   }
 
   invalidateSelectionGeometry(geometryChanged = true) {
+    if (geometryChanged) this.animationMeshes?.invalidate();
     if (geometryChanged) {
       this.selectedGeometryDirty = true;
       this.mirrorCache?.rangeCache?.clear();
@@ -1682,11 +1685,33 @@ export class WebGLSceneRenderer {
 
   render(project, selectedUid, camera) {
     const query = this.beginGpuProfile();
-    try { return this.renderFrame(project, selectedUid, camera); }
+    try {
+      const result = this.renderFrame(project, selectedUid, camera);
+      if (!camera.dragging && camera.mode === 'edit' && project.groups.length && this.staticCache && !this.selectedGeometryDirty) {
+        this.animationMeshes ||= new AnimationMeshCache(this);
+        this.animationMeshes.onReady = () => this.onAnimationMeshReady?.();
+        this.animationMeshes.ensure(project, this.staticCache, this.mirrorCache?.instances || []);
+      }
+      return result;
+    }
     finally { this.endGpuProfile(query); }
   }
 
   renderFrame(project, selectedUid, camera) {
+    if (camera.mode === 'animate') {
+      this.animationMeshes ||= new AnimationMeshCache(this);
+      this.animationMeshes.onReady = () => this.onAnimationMeshReady?.();
+      if (this.staticCache?.project === project) this.animationMeshes.ensure(project, this.staticCache, this.mirrorCache?.instances || []);
+      if (!this.animationMeshes.ready(project, this.staticCache)) {
+        const poses = project.groups.map(group => [group, group._animationPose]);
+        poses.forEach(([group]) => { delete group._animationPose; });
+        try { this.renderFrame(project, null, { ...camera, mode: 'animation-rest', selectedUids: new Set() }); }
+        finally { poses.forEach(([group, pose]) => { if (pose) Object.defineProperty(group, '_animationPose', { value: pose, configurable: true, writable: true }); }); }
+        this.animationMeshes.ensure(project, this.staticCache, this.mirrorCache?.instances || []);
+        this.lastCameraInput = { ...camera };
+        return;
+      }
+    }
     const { gl, canvas } = this;
     this.captureModelOnly = camera.captureModelOnly === true;
     this.previewShade = camera.previewShade !== false;
@@ -1732,6 +1757,26 @@ export class WebGLSceneRenderer {
     this.lastViewport = { width, height };
     this.lastCameraState = cameraState;
     this.lastCameraInput = { ...camera };
+
+    if (camera.mode === 'animate' && this.animationMeshes?.ready(project, this.staticCache)) {
+      this.lastOwnerPoints = new Map(); this.lastHelperPoints = [];
+      const animationCamera = camera.captureModelOnly ? { ...camera, selectedUids: EMPTY_FACE_SELECTION } : camera;
+      if (!camera.captureModelOnly) { this.drawGrid(project, camera, viewProjection); this.drawPlayerReference(camera, viewProjection); }
+      this.animationMeshes.draw(animationCamera, viewProjection);
+      if (camera.modifierResultGhost && this.animationMeshes.instances?.length) {
+        this.ensureLockedLayerTarget(renderWidth, renderHeight);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.lockedFramebuffer);
+        gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.colorMask(false, false, false, false);
+        this.animationMeshes.draw({ ...animationCamera, selectedUids: EMPTY_FACE_SELECTION }, viewProjection, { baseOnly: true });
+        gl.colorMask(true, true, true, true); gl.clear(gl.COLOR_BUFFER_BIT);
+        this.animationMeshes.draw({ ...animationCamera, selectedUids: EMPTY_FACE_SELECTION, modifierResultGhost: false }, viewProjection, { generatedOnly: true });
+        this.compositeLockedLayer({ lockedDefaultAlpha: 75, lockedHoverFade: false },
+          useMippedAntialias ? this.postFramebuffer : null, renderWidth, renderHeight);
+      }
+      if (useMippedAntialias) this.presentAntialiased(pixelWidth, pixelHeight, renderWidth, renderHeight);
+      return;
+    }
 
     const selection = camera.selectedUids?.size ? camera.selectedUids : selectedUid;
     const paintExplode = camera.mode === 'paint' && camera.paintExplode === true;
@@ -2006,6 +2051,8 @@ export class WebGLSceneRenderer {
   }
 
   selectInScreenRect(project, screenRect, geometryOnly = false) {
+    if (this.lastCameraInput?.mode === 'animate' && this.animationMeshes?.ready(project, this.staticCache))
+      return this.animationMeshes.selectRect(screenRect, this.lastViewProjection, this.lastViewport);
     if (!this.lastCameraState || !this.lastViewProjection) return [];
     const rect = normalizeScreenRect(screenRect);
     const selected = new Set();
@@ -2044,6 +2091,7 @@ export class WebGLSceneRenderer {
     { includeLocked = false, lockedOnly = false, candidateUids = null, includeGenerated = false } = {}) {
     if (!this.lastCameraState || !this.lastCameraInput) return null;
     const ray = screenRay(screenX, screenY, this.lastViewport, this.lastCameraState, this.lastCameraInput);
+    if (this.lastCameraInput.mode === 'animate' && this.animationMeshes?.ready(project, this.staticCache)) return this.animationMeshes.pick(ray);
     let closest = null;
     let closestDistance = Infinity;
     let locatorHit = null;
@@ -2263,6 +2311,7 @@ export class WebGLSceneRenderer {
   }
 
   getWorldVertices(project, uid) {
+    if (this.lastCameraInput?.mode === 'animate' && this.animationMeshes?.ready(project, this.staticCache)) return this.animationMeshes.vertices(uid);
     const node = project.getNode(uid);
     if (!node) return [];
     if (node.type === 'node') {
@@ -2465,6 +2514,10 @@ export class WebGLSceneRenderer {
   }
 
   getSelectionBounds(project, selection) {
+    if (this.lastCameraInput?.mode === 'animate' && this.animationMeshes?.ready(project, this.staticCache)) {
+      const bounds = geometryBounds([...normalizeSelectedNodeUids(selection)].flatMap(uid => this.animationMeshes.vertices(uid).map(entry => entry.point)));
+      return bounds ? { ...bounds, center: bounds.min.map((value, axis) => (value + bounds.max[axis]) / 2) } : null;
+    }
     const descriptor = this.getSelectionDescriptor(project, selection);
     if (this.selectedCache?.project !== project
       || this.selectedCache.selectedKey !== descriptor.selectedKey) return null;
@@ -2476,6 +2529,8 @@ export class WebGLSceneRenderer {
   }
 
   getSelectionProjectionExtent(project, selection, origin, axis) {
+    if (this.lastCameraInput?.mode === 'animate' && this.animationMeshes?.ready(project, this.staticCache))
+      return this.animationMeshes.projectionExtent(normalizeSelectedNodeUids(selection), origin, axis);
     const descriptor = this.getSelectionDescriptor(project, selection);
     if (this.selectedCache?.project !== project
       || this.selectedCache.selectedKey !== descriptor.selectedKey) return null;
@@ -2517,6 +2572,10 @@ export class WebGLSceneRenderer {
   }
 
   getGeometryCenter(project, uid) {
+    if (this.lastCameraInput?.mode === 'animate' && this.animationMeshes?.ready(project, this.staticCache)) {
+      const bounds = geometryBounds(this.animationMeshes.vertices(uid).map(entry => entry.point));
+      return bounds?.min.map((value, axis) => (value + bounds.max[axis]) / 2) || null;
+    }
     const node = project.getNode(uid);
     if (!node) return null;
     const uids = node.type === 'group' ? project.getDescendantElementUids(uid) : [uid];

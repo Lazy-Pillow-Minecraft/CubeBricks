@@ -1,3 +1,5 @@
+import { animationGroupPoint } from '../../animation/model.js';
+
 const DEG = Math.PI / 180;
 export const UV_PREVIEW_CULLED_UV = -2000000;
 
@@ -42,7 +44,8 @@ export function rescaleRotationPoint(point, pivot, rotation, enabled) {
 export function applyGroupTransforms(point, groupChain = []) {
   let transformed = [...point];
   for (const group of [...groupChain].reverse())
-    transformed = rotatePoint(transformed, group.pivot, group.rotation || [0, 0, 0]);
+    transformed = group._animationPose ? animationGroupPoint(transformed, group)
+      : rotatePoint(transformed, group.pivot, group.rotation || [0, 0, 0]);
   return transformed;
 }
 

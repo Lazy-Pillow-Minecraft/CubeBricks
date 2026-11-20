@@ -23,7 +23,7 @@ import { verticalDropTarget } from '../src/screen/vertical-drop.js';
 import { activeLayer, compositeLayers, createLayerGroup, insertLayerNearSelection, layerDisplayRows, layerEntryRaster, layerRasterCache, layerTreeItems, moveLayerEntry, normalizeTextureLayers, reorderLayerStack } from '../src/common/core/texture-features.js';
 import { blendLayerImageData, blendLayerRgb, LAYER_BLEND_MODES } from '../src/common/core/layer-blend.js';
 import { selectionAffectsModifierResults } from '../src/editor/workspace-coordinator.js';
-import { Cube, Group, CubeBricksProject, addModifier } from '../src/model.js';
+import { Cube, Group, Locator, CubeBricksProject, addModifier } from '../src/model.js';
 
 assert.equal(state.mode, 'edit');
 assert.equal(state.transformSpace, 'self', 'new sessions default to local transform axes');
@@ -166,7 +166,14 @@ assert.equal(selectionAffectsModifierResults(modifierProject, [child.uid]), fals
   'disabled parent modifiers do not force a result rebuild');
 assert.ok(TOOL_REGISTRY.brush.modes.includes('paint'));
 assert.equal(DOCK_PANEL_DEFINITIONS.find(panel => panel.id === 'texture').defaultDock, 'left');
-assert.deepEqual(dockPanelRegistry.list().map(panel => panel.id), ['texture', 'uvPreview', 'inspector', 'outliner', 'bottom', 'layers', 'paintOperators']);
+assert.deepEqual(dockPanelRegistry.list().map(panel => panel.id), ['texture', 'uvPreview', 'inspector', 'outliner', 'bottom', 'layers', 'paintOperators', 'timeline', 'animationManager', 'frameProperties']);
+assert.equal(dockPanelRegistry.get('timeline').defaultDock, 'bottom');
+assert.deepEqual(dockPanelRegistry.get('timeline').modes, ['animate']);
+assert.deepEqual(dockPanelRegistry.list().filter(panel => panel.modes.includes('animate')).map(panel => panel.id),
+  ['outliner', 'timeline', 'animationManager', 'frameProperties']);
+assert.equal(dockPanelRegistry.get('animationManager').defaultDock, 'left');
+assert.equal(dockPanelRegistry.get('frameProperties').defaultDock, 'left');
+assert.ok(dockPanelRegistry.get('animationManager').defaultOrder < dockPanelRegistry.get('frameProperties').defaultOrder);
 assert.equal(dockPanelRegistry.get('layers').defaultStackWith, 'outliner');
 assert.equal(dockPanelRegistry.get('paintOperators').defaultStackWith, 'inspector');
 assert.deepEqual(dockPanelRegistry.get('paintOperators').modes, ['paint']);
@@ -176,13 +183,14 @@ const outerGroup = new Group({ uid: 'outliner-outer', children: [innerGroup.uid]
 const outlinerProject = new CubeBricksProject({ elements: [outlinerCube], groups: [innerGroup, outerGroup], outliner: [outerGroup.uid] });
 const virtualWindow = { style: {}, innerHTML: '' };
 const outlinerView = { scrollTop: 0, clientHeight: 300, innerHTML: '' };
+const outlinerSearch = { value: '' };
 const outlinerState = {
   project: outlinerProject, selectedUids: new Set(), selectedCurveNodeIndex: null,
   collapsedGroups: new Set(), collapsedCopyNodes: new Set(), mode: 'edit', outlinerDetailed: false
 };
 const outlinerController = createOutlinerViewController({
   state: outlinerState,
-  $: selector => selector === '#outlinerSearch' ? { value: '' } : virtualWindow,
+  $: selector => selector === '#outlinerSearch' ? outlinerSearch : virtualWindow,
   outliner: outlinerView, LOCATOR_ICON_SHAPES: '', selected: () => null,
   selectedElementUids: () => [], isBezierElement: () => false, isShapeElement: () => false,
   escapeHtml: String, escapeAttribute: String
@@ -215,6 +223,41 @@ outlinerController.renderOutliner();
 assert.doesNotMatch(virtualWindow.innerHTML, /data-copy-node-uid="outliner-copy-node"/);
 assert.match(virtualWindow.innerHTML, /data-uid="outliner-cube"/,
   'collapsing copy nodes leaves ordinary group children visible');
+const boneLocator = new Locator({ uid: 'bone-locator' });
+outlinerProject.elements.push(boneLocator);
+outlinerProject.getNode(innerGroup.uid).children.push(boneLocator.uid);
+outlinerProject.invalidateHierarchyIndex();
+outlinerState.collapsedGroups.add(innerGroup.uid);
+const hierarchyBeforeAnimation = JSON.stringify({ elements: outlinerProject.elements, groups: outlinerProject.groups, outliner: outlinerProject.outliner });
+outlinerState.mode = 'animate';
+outlinerState.outlinerDetailed = true;
+outlinerController.renderOutliner();
+assert.deepEqual(outlinerState.outlinerRows.map(row => row.node?.uid || row.groupUid),
+  [outerGroup.uid, innerGroup.uid, outerGroup.uid], 'animation stops at groups and has no leaf footer');
+assert.match(virtualWindow.innerHTML, /data-disclosure="outliner-outer"/);
+assert.doesNotMatch(virtualWindow.innerHTML, /data-disclosure="outliner-inner"|data-group-line-uid="outliner-inner"/,
+  'leaf groups have neither their own fold button nor their own branch line');
+assert.doesNotMatch(virtualWindow.innerHTML, /data-copy-disclosure|data-copy-node-uid|data-uid="outliner-cube"|data-uid="bone-locator"/);
+assert.equal((virtualWindow.innerHTML.match(/outliner-locator-hint/g) || []).length, 1,
+  'the locator badge belongs to its immediate group, not to every ancestor');
+assert.deepEqual([...virtualWindow.innerHTML.matchAll(/data-node-toggle="([^"]+)"/g)].map(match => match[1]), ['visible', 'visible']);
+outlinerSearch.value = innerGroup.uid;
+outlinerController.renderOutliner();
+assert.deepEqual(outlinerState.outlinerRows.filter(row => row.node).map(row => row.node.uid), [outerGroup.uid, innerGroup.uid],
+  'group searches retain the ancestor path');
+outlinerSearch.value = outlinerCube.uid;
+outlinerController.renderOutliner();
+assert.equal(outlinerState.outlinerRows.length, 0, 'hidden elements are not animation search results');
+assert.equal(JSON.stringify({ elements: outlinerProject.elements, groups: outlinerProject.groups, outliner: outlinerProject.outliner }),
+  hierarchyBeforeAnimation, 'projecting the animation index never changes the model');
+outlinerSearch.value = '';
+outlinerState.mode = 'edit';
+outlinerState.collapsedGroups.delete(innerGroup.uid);
+outlinerController.renderOutliner();
+assert.match(virtualWindow.innerHTML, /data-uid="outliner-cube"/);
+assert.match(virtualWindow.innerHTML, /data-uid="bone-locator"/);
+assert.match(virtualWindow.innerHTML, /data-node-toggle="locked"/);
+assert.doesNotMatch(virtualWindow.innerHTML, /outliner-locator-hint/);
 const localDockRegistry = new DockPanelRegistry();
 localDockRegistry.register({
   id: 'sample', index: 2, modes: ['edit'], defaultDock: 'right',

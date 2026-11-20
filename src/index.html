@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="./screen/theme/blocks.css" />
   <link rel="stylesheet" href="./screen/number-input/number-input.css" />
   <link rel="stylesheet" href="./editor/toolbox/toolbox.css" />
+  <link rel="stylesheet" href="./screen/docks/corner-layout.css" />
+  <link rel="stylesheet" href="./screen/outliner/animation-tree.css" />
+  <link rel="stylesheet" href="./animation/animation.css" />
 </head>
 <body data-editor-mode="edit">
   <div id="startupCover" aria-hidden="true" style="position:fixed;inset:0;z-index:2147483647;background:var(--bg,#11130f)"></div>
@@ -191,13 +194,30 @@
           <button class="mode-tab active" data-mode="edit"><span class="ui-mask-icon" aria-hidden="true"></span> 編輯</button>
           <button class="mode-tab" data-mode="uv" id="uvModeTab" hidden><span>▱</span> UV</button>
           <button class="mode-tab" data-mode="paint"><span class="ui-mask-icon" aria-hidden="true"></span> 繪畫</button>
-          <button class="mode-tab" data-mode="animate"><span>⌁</span> 動畫</button>
+          <button class="mode-tab" data-mode="animate"><span class="ui-mask-icon" aria-hidden="true"></span> 動畫</button>
         </div>
       </div>
     </nav>
 
     <main class="workspace">
       <aside class="dock-zone dock-zone-left" data-dock-zone="left" aria-label="左側停靠區">
+      <section class="dock-panel panel-section" data-panel="animationManager" hidden>
+        <div class="panel-heading panel-drag-handle">
+          <strong>ui.animation-manager</strong>
+          <div class="panel-heading-actions"></div>
+        </div>
+        <div class="panel-control-strip"><button type="button" id="animationCreate">＋ <span>ui.animation-create</span></button><button type="button" id="animationImport">ui.animation-import</button><button type="button" id="animationExport">ui.animation-export</button></div>
+        <input type="file" id="animationImportInput" accept=".json,application/json" multiple hidden />
+        <div class="animation-list" id="animationList"></div>
+        <div class="animation-settings" id="animationSettings"></div>
+      </section>
+      <section class="dock-panel panel-section" data-panel="frameProperties" hidden>
+        <div class="panel-heading panel-drag-handle">
+          <strong>ui.frame-properties</strong>
+          <div class="panel-heading-actions"></div>
+        </div>
+        <div class="animation-frame-properties" id="animationFrameProperties"></div>
+      </section>
       <section class="dock-panel texture-panel" data-panel="texture">
         <div class="panel-heading texture-heading panel-drag-handle">
           <strong>貼圖</strong>
@@ -278,7 +298,7 @@
                 <span id="referenceImageName">尚未導入</span>
                 <div class="reference-image-list" id="referenceImageList"></div>
                 <button type="button" data-reference-action="import">＋ 導入參考圖</button>
-                <button type="button" data-reference-action="clipboard">▣ 從剪切板添加參考圖</button>
+                <button type="button" data-reference-action="clipboard">從剪切板添加參考圖</button>
                 <button type="button" class="reference-image-lock" data-reference-action="lock" aria-pressed="false"><svg class="outliner-state-icon" aria-hidden="true"><use href="#icon-unlocked"></use></svg><span>鎖定參考圖</span></button>
                 <button type="button" data-reference-action="edit">調整位置與尺寸</button>
                 <button type="button" data-reference-action="reset">重置位置與尺寸</button>
@@ -303,7 +323,6 @@
           </div>
           <canvas id="sceneCanvas" tabindex="0"></canvas>
           <div class="display-settings-placeholder" id="displaySettingsPlaceholder" hidden>顯示設置 · 即將推出</div>
-          <div class="display-settings-placeholder" id="animationEditorPlaceholder" hidden>動畫編輯 · 即將推出</div>
           <svg class="paint-selection-gesture" id="paintSelectionGesture" aria-hidden="true" hidden></svg>
           <div class="selection-marquee" id="selectionMarquee" aria-hidden="true" hidden></div>
           <svg class="paint-gradient-overlay" id="paintGradientOverlay" aria-label="漸變預覽" aria-hidden="true" hidden></svg>
@@ -363,7 +382,22 @@
           <div class="scene-fps" id="sceneFps" translate="no">— FPS</div>
           <div class="selection-badge"><span id="selectionType">Cube</span><strong id="selectionName">body</strong></div>
         </div>
-        <aside class="dock-zone dock-zone-bottom" data-dock-zone="bottom" aria-label="底部停靠區">
+      </section>
+      <!-- All dock zones share the workspace grid so either bottom corner can expand. -->
+      <aside class="dock-zone dock-zone-bottom" data-dock-zone="bottom" aria-label="底部停靠區">
+        <section class="dock-panel panel-section keyframe-placeholder" data-panel="timeline">
+          <div class="panel-heading panel-drag-handle">
+            <strong>關鍵幀</strong>
+            <div class="animation-playback">
+              <button type="button" id="animationStart" data-animation-transport title="ui.animation-start"><span class="ui-mask-icon"></span></button>
+              <button type="button" id="animationPlay" data-animation-transport aria-pressed="false" title="ui.animation-play"><span class="ui-mask-icon"></span></button>
+              <button type="button" id="animationEnd" data-animation-transport title="ui.animation-end"><span class="ui-mask-icon"></span></button>
+              <span id="animationFrameLabel">0</span>
+            </div>
+            <div class="panel-heading-actions"></div>
+          </div>
+          <div class="keyframe-placeholder-content animation-timeline" id="animationTimeline" tabindex="0"></div>
+        </section>
         <section class="dock-panel bottom-dock" id="bottomDock" data-panel="bottom">
           <div class="panel-heading panel-drag-handle">
             <strong>色卡</strong>
@@ -380,8 +414,7 @@
             <div class="palette-rows" id="paletteRows" tabindex="0" aria-label="色卡，選中色塊後可按 Delete 刪除"></div>
           </div>
         </section>
-        </aside>
-      </section>
+      </aside>
 
       <aside class="dock-zone dock-zone-right" data-dock-zone="right" aria-label="右側停靠區">
         <section class="dock-panel panel-section inspector-section" data-panel="inspector">
@@ -404,6 +437,7 @@
             <strong>場景層級</strong>
             <div class="panel-heading-actions"></div>
           </div>
+          <div class="outliner-toolbar">
           <div class="panel-control-strip outliner-create-actions" aria-label="場景層級操作">
             <label class="outliner-details-toggle" title="顯示詳細資訊"><input id="outlinerDetailsToggle" type="checkbox" checked /><span>詳</span></label>
             <span class="outliner-selection-count" id="outlinerSelectionCount" title="已選元素／全部元素">0/0</span>
@@ -421,11 +455,12 @@
                 <button type="button" data-create-shape="bezier3d-envelope"><span class="shape-menu-symbol">⌁³</span><span>三維包絡貝塞爾</span></button>
               </span>
             </span>
-            <button data-action="addLocator" title="新增 Locator"><svg class="panel-action-icon" aria-hidden="true" viewBox="0 0 197.49 189.08"><path d="M98.74,144.52c-38.86,0-72.06-19.5-85.3-46.99-1.11,4.43-1.7,9-1.7,13.69,0,38.28,38.95,69.32,87,69.32s87-31.03,87-69.32c0-4.69-.59-9.26-1.7-13.69-13.24,27.49-46.44,46.99-85.3,46.99Z"/><rect x="81.01" y="56.54" width="35.47" height="96.98"/><rect x="59.53" y="77.83" width="78.43" height="25.75" rx="7.93" ry="7.93"/><path d="M98.74,0c-18.89,0-34.21,15.31-34.21,34.21s15.31,34.21,34.21,34.21,34.21-15.31,34.21-34.21S117.63,0,98.74,0ZM98.74,49.2c-8.28,0-14.99-6.71-14.99-14.99s6.71-14.99,14.99-14.99,14.99,6.71,14.99,14.99-6.71,14.99-14.99,14.99Z"/><path d="M26.73,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66H5.18c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M179.83,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66h-34.03c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M97.08,188.46l-18.84-16.15c-1.8-1.55-.71-4.5,1.67-4.5h37.68c2.38,0,3.47,2.96,1.67,4.5l-18.84,16.15c-.96.82-2.37.82-3.33,0Z"/></svg></button>
+            <button class="panel-object-action" data-action="addLocator" title="新增 Locator"><svg class="panel-action-icon" aria-hidden="true" viewBox="0 0 197.49 189.08"><path d="M98.74,144.52c-38.86,0-72.06-19.5-85.3-46.99-1.11,4.43-1.7,9-1.7,13.69,0,38.28,38.95,69.32,87,69.32s87-31.03,87-69.32c0-4.69-.59-9.26-1.7-13.69-13.24,27.49-46.44,46.99-85.3,46.99Z"/><rect x="81.01" y="56.54" width="35.47" height="96.98"/><rect x="59.53" y="77.83" width="78.43" height="25.75" rx="7.93" ry="7.93"/><path d="M98.74,0c-18.89,0-34.21,15.31-34.21,34.21s15.31,34.21,34.21,34.21,34.21-15.31,34.21-34.21S117.63,0,98.74,0ZM98.74,49.2c-8.28,0-14.99-6.71-14.99-14.99s6.71-14.99,14.99-14.99,14.99,6.71,14.99,14.99-6.71,14.99-14.99,14.99Z"/><path d="M26.73,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66H5.18c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M179.83,85.59l17.01,31.01c1.89,3.45-.6,7.66-4.54,7.66h-34.03c-3.93,0-6.43-4.22-4.54-7.66l17.01-31.01c1.96-3.58,7.11-3.58,9.07,0Z"/><path d="M97.08,188.46l-18.84-16.15c-1.8-1.55-.71-4.5,1.67-4.5h37.68c2.38,0,3.47,2.96,1.67,4.5l-18.84,16.15c-.96.82-2.37.82-3.33,0Z"/></svg><span class="panel-action-add">+</span></button>
             <button class="panel-object-action" data-action="addGroup" title="新增組"><svg class="panel-action-icon object-icon" aria-hidden="true"><use href="#icon-group"></use></svg><span class="panel-action-add">+</span></button>
             <button data-action="deleteSelected" title="刪除選中項">×</button>
           </div>
           <label class="search-box"><span>⌕</span><input id="outlinerSearch" placeholder="搜尋物件或 UID" /></label>
+          </div>
           <div class="outliner" id="outliner" tabindex="0" aria-label="場景層級"></div>
         </section>
         <section class="dock-panel panel-section texture-layers-panel" data-panel="layers">
@@ -444,6 +479,8 @@
       </aside>
     </main>
     <div class="workspace-options-bar" aria-label="模式選項">
+      <button type="button" class="dock-corner-toggle" data-dock-corner="left" aria-pressed="false"><span class="ui-mask-icon" aria-hidden="true"></span></button>
+      <div class="workspace-option-items">
       <label class="toolbar-check" title="全局開啟或關閉面陰影預覽；不會覆蓋物件自身的陰影設定"><input type="checkbox" id="previewShadeToggle" checked /><span>◐</span> 面陰影</label>
       <label class="toolbar-check" title="顯示玩家尺寸與姿態參考；只用於預覽，不會寫入模型工程或導出檔。"><input type="checkbox" id="playerReferenceToggle" /><span>♙</span> 玩家參考</label>
       <label class="toolbar-check" title="只顯示 Cube 和 Shape；暫時隱藏 Locator 等輔助物件"><input type="checkbox" id="geometryOnlyToggle" /><span>◇</span> 僅幾何</label>
@@ -453,6 +490,8 @@
       <label class="toolbar-check paint-only-option" title="繪畫時鎖定透明度"><input type="checkbox" id="alphaLockToggle" /><span>◩</span> 鎖透明</label>
       <label class="toolbar-check paint-only-option" title="繪畫時略過原本完全透明的像素"><input type="checkbox" id="paintIgnoreTransparentToggle" /><span>◌</span> 忽視全透明</label>
       <label class="toolbar-check" title="生成物以 75% 可見度的獨立圖層顯示，後方模型與網格可透出；同時禁止選取及頂點捕捉"><input type="checkbox" id="modifierResultGhostToggle" /><span>◈</span> 修改器結果虛化</label>
+      </div>
+      <button type="button" class="dock-corner-toggle" data-dock-corner="right" aria-pressed="false"><span class="ui-mask-icon" aria-hidden="true"></span></button>
     </div>
   </div>
 

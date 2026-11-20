@@ -1,0 +1,31 @@
+/* The two corners are independent: the bottom row can span either side. */
+.workspace[data-dock-bottom-left="true"] > .dock-zone-left { grid-row: 1; }
+.workspace[data-dock-bottom-right="true"] > .dock-zone-right { grid-row: 1; }
+.workspace[data-dock-bottom-left="true"] > .dock-zone-bottom { grid-column-start: 1; }
+.workspace[data-dock-bottom-right="true"] > .dock-zone-bottom { grid-column-end: 4; }
+.workspace[data-dock-bottom-left="true"] > [data-dock-zone-toggle="left"],
+.workspace[data-dock-bottom-right="true"] > [data-dock-zone-toggle="right"] {
+  top: calc((100% - var(--bottom-panel-height)) / 2);
+}
+
+.dock-corner-toggle {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+}
+.dock-corner-toggle[data-priority="side"] { --ui-icon: url("../../assets/ui-icons/dock-side-over-bottom.svg"); }
+.dock-corner-toggle[data-priority="bottom"] { --ui-icon: url("../../assets/ui-icons/dock-bottom-over-side.svg"); }
+.dock-corner-toggle .ui-mask-icon {
+  width: 20px;
+  height: 20px;
+  /* Resolve the relative SVG URLs in this stylesheet, not in styles.css. */
+  mask: var(--ui-icon) center / contain no-repeat;
+}
+.dock-corner-toggle[data-dock-corner="left"] .ui-mask-icon { transform: scaleX(-1); }
+.project-home-active .dock-corner-toggle { visibility: hidden; pointer-events: none; }

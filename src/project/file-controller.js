@@ -12,12 +12,13 @@ import { loadRaster } from '../common/core/texture-features.js';
 import { splitTextureAnimation } from '../texture/animation-import.js';
 import { textureSnapshot } from './texture-snapshot.js';
 import { palettesForCbmodel } from '../common/core/project-palettes.js';
+import { isBedrockAnimationDocument } from '../animation/bedrock.js';
 
 export function createProjectFileController({
   state, fileInput, projectTabsController, journalController,
   getShapePacksReady, activateProjectTab, addProjectTab, markDirty,
   discardProjectTabJournal, renderProjectTabs, projectTabById,
-  flushProjectJournal, toast, textureFileController, paletteRows = []
+  flushProjectJournal, toast, textureFileController, paletteRows = [], importAnimations, exportAnimations
 }) {
   const blobTextureSourceCache = new Map();
   const exportNative = createNativeExportController({
@@ -115,7 +116,9 @@ export function createProjectFileController({
   }
 
   function loadProjectContent(content, filePath = '', resolvedTextures = [], journalId = null, options = {}) {
-    const data = decodeNativeJson(JSON.parse(content.replace(/^\uFEFF/, '')), filePath);
+    const parsed = JSON.parse(content.replace(/^\uFEFF/, ''));
+    if (isBedrockAnimationDocument(parsed)) return importAnimations(parsed);
+    const data = decodeNativeJson(parsed, filePath);
     // A journal already contains native snapshots, regardless of the original
     // imported filename recorded in saved_state.
     const isBlockbench = !journalId && (filePath.toLowerCase().endsWith('.bbmodel') || data.meta?.model_format);
@@ -216,8 +219,9 @@ export function createProjectFileController({
     if (state.projectHomeActive) return;
     try {
       const project = state.project, sourceAssets = state.textureAssets;
-      const extension = await chooseProjectExport(project.formatId);
+      const extension = await chooseProjectExport(project.formatId, { hasAnimations: project.animations.length > 0 });
       if (!extension) return;
+      if (extension === 'animation') { await exportAnimations(); return; }
       if (extension === 'json' || extension === 'java') {
         if (await exportNative(extension, project, sourceAssets)) toast(`已导出 .${extension}`);
         return;
@@ -301,6 +305,7 @@ export function createProjectFileController({
       const content = await file.text();
       if (/\.java$/i.test(file.name)) return loadProjectContent(JSON.stringify(await importModdedJava(content)), file.name);
       let data = JSON.parse(content.replace(/^\uFEFF/, ''));
+      if (isBedrockAnimationDocument(data)) return importAnimations(data);
       if (data['minecraft:geometry']?.length > 1) {
         const choices = data['minecraft:geometry'].map((geometry, index) => geometry.description?.identifier || String(index + 1));
         const selected = await showAppChoice({ title: '选择几何模型', message: '文件包含多个几何模型，请选择要导入的一个', buttons: [...choices, '取消'], cancelIndex: choices.length });

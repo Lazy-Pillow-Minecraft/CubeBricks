@@ -6,7 +6,13 @@ import { outlinerDock } from './outliner.js';
 import { paletteDock } from './palette.js';
 import { layersDock } from './layers.js';
 import { paintOperatorsDock } from './paint-operators.js';
+import { timelineDock } from './timeline.js';
+import { animationManagerDock } from './animation-manager.js';
+import { framePropertiesDock } from './frame-properties.js';
 
 // Only bundled panels are registered for now; there is no external pack loader.
 export const dockPanelRegistry = new DockPanelRegistry();
-dockPanelRegistry.registerMany([textureDock, uvPreviewDock, inspectorDock, outlinerDock, paletteDock, layersDock, paintOperatorsDock]);
+dockPanelRegistry.registerMany([
+  textureDock, uvPreviewDock, inspectorDock, outlinerDock, paletteDock, layersDock,
+  paintOperatorsDock, timelineDock, animationManagerDock, framePropertiesDock
+]);

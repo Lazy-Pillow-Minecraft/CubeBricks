@@ -60,7 +60,7 @@ export function createElementCommands({
   }
 
   function addCube() {
-    if (state.mode === 'paint') return;
+    if (state.mode === 'paint' || state.mode === 'animate') return;
     snapshot('core.cube.create');
     const cube = new Cube({ position: [-1, 0, -1], size: [2, 2, 2], pivot: [0, 0, 0],
       uvMode: state.project.uvMode, color: getDefaultCubeColor() });
@@ -74,7 +74,7 @@ export function createElementCommands({
   }
 
   function addShape(shapeType = 'polygon_prism') {
-    if (state.mode === 'paint') return;
+    if (state.mode === 'paint' || state.mode === 'animate') return;
     const definition = shapeRegistry.get(shapeType);
     if (!definition || ['bezier2d', 'bezier3d'].includes(shapeType)) return;
     if (!definition.supportsFormat(formatRules(state.project))) return toast('当前模型格式暂不支持此 Shape');
@@ -93,7 +93,7 @@ export function createElementCommands({
   }
 
   function addLocator() {
-    if (state.mode === 'paint') return;
+    if (state.mode === 'paint' || state.mode === 'animate') return;
     snapshot('core.locator.create');
     const locator = new Locator({ position: [0, 4, 0] });
     state.project.elements.push(locator);
@@ -106,7 +106,7 @@ export function createElementCommands({
   }
 
   function addBezierElement(dimension, variant = 'standard') {
-    if (state.mode === 'paint') return;
+    if (state.mode === 'paint' || state.mode === 'animate') return;
     snapshot('core.curve.create');
     const curve = new BezierElement({ origin: [0, 0, 0], rotation: dimension === 2 ? [-90, 0, 0] : [0, 0, 0],
       variant, uvMode: state.project.uvMode }, dimension);
@@ -123,7 +123,7 @@ export function createElementCommands({
   // The toolbar keeps its existing selection-aware behavior. Explicit commands
   // distinguish creating an empty sibling from wrapping even one selected row.
   function addGroup({ wrapSelection = selectedNodeUids().length > 1, afterSelection = false } = {}) {
-    if (state.mode === 'paint') return;
+    if (state.mode === 'paint' || state.mode === 'animate') return;
     const selectedIds = topLevelSelectedUids().filter(uidValue => state.project.getNode(uidValue));
     if (wrapSelection && !selectedIds.length) return;
     const previousRowPositions = captureOutlinerRowPositions();
@@ -208,7 +208,7 @@ export function createElementCommands({
   }
 
   function deleteSelected(operationId = 'core.element.delete') {
-    if (state.mode === 'paint') return;
+    if (state.mode === 'paint' || state.mode === 'animate') return;
     const selectedIds = topLevelSelectedUids();
     if (!selectedIds.length) return;
     if (inspectorController.subdivisionSession && selectedIds.some(uidValue => state.project.getNode(uidValue)?.subdivisionOwnerUid)) {
@@ -312,7 +312,7 @@ export function createElementCommands({
   }
 
   function pasteElements({ inPlace = false } = {}) {
-    if (state.mode === 'paint') return;
+    if (state.mode === 'paint' || state.mode === 'animate') return;
     const payload = inPlace ? captureSelectedElements() : elementClipboard;
     if (!payload) return toast(inPlace ? '沒有可複製的選中項' : '元素剪貼簿是空的');
     const cloned = instantiateClipboard(payload);
@@ -334,7 +334,7 @@ export function createElementCommands({
   }
 
   function cutSelected() {
-    if (state.mode === 'paint') return;
+    if (state.mode === 'paint' || state.mode === 'animate') return;
     if (!copySelected({ notify: false })) return;
     const count = elementClipboard.roots.length;
     deleteSelected('core.element.cut');

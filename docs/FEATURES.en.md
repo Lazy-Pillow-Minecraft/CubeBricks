@@ -44,6 +44,15 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 - Palettes support discrete colors, gradients, and 3D color-space curves. A single palette can be imported or exported as `.cbcmap`. The color picker offers square, circular, and triangular HSV interfaces.
 - In Paint mode, the hierarchy still supports finding, selecting, focusing, and toggling visibility/lock state. Model geometry changes require Edit mode.
 
+## Bone animation
+
+- Animation-capable formats provide Animation Manager, Frame Properties, and a bottom keyframe timeline. Animation selects groups; move, rotation, and matrix scale write keys, while pivot edits still change the base model.
+- Multiple clips, multiple-key selection, row-locked retiming, draggable end frames, Ctrl-wheel timeline zoom, and unsnapped Ctrl playhead dragging are supported. Key selection is independent of playback position.
+- Playback can return to the start, hold the last frame, or loop. Fractional times and full rotation turns are retained, and editing FPS changes preserve seconds.
+- Import/export Bedrock `.animation.json` using actual exported bone names. `.bbmodel` carries bone animation; `.cbmodel` and working history retain clips and native metadata.
+- Numeric channels support linear/Catmull-Rom interpolation and `pre/post`. Expressions, sound/particle events, and unmatched bones are preserved, but dynamic content is not fully previewed. Controllers and in-game wiring are not implemented.
+- Per-group mesh caches update matrices during playback and retain separate Edit-mode caches.
+
 ## Projects and extension points
 
 - `.cbmodel` saves model data, textures, and optional operation history. `.bbmodel` supports Blockbench interchange. The working directory keeps a recoverable operation journal; archive export can include or omit history.
@@ -51,5 +60,5 @@ CubeBricks is still a prototype. This page describes the current workflows and b
 - History nodes support six geometric marks, custom colors, and name labels with fixed screen sizes. `R` focuses the selected point and `Shift+R` resets the view. History and UV Preview share a low-contrast checkerboard background.
 - A registry defines model formats. Java Block/Item has three version-specific rotation rules, forced back-face culling, and element-coordinate bounds. Bedrock Block has a dynamic 30 px size constraint. Both show a complete boundary guide in the viewport. Modded Entity requires box UVs, integer cube dimensions, and group rotation rather than cube rotation.
 - Minecraft Skin projects include 330 Java 26.3 and Bedrock 1.26.63.1 entity templates; humanoid armor variants sharing the player's armor textures are omitted. Models have localized names, and every in-game texture variant plus the UV-preserving six-face template has its own preview. Skin projects are paint-only; new GeckoLib projects remain unavailable.
-- Java Block/Item has no Animation mode; its Display Settings page is currently a placeholder. Animation Editing in other formats also shows a placeholder while the full workflow is unfinished.
+- Java Block/Item has no Animation mode; its Display Settings page is currently a placeholder. Skin projects are paint-only.
 - External [Shape packs](../SHAPE_PACKS.en.md) and [language/font packs](../RESOURCE_PACKS.en.md) load through the pack manager. External modifier or operator packs are not available yet.

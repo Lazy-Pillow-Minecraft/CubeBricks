@@ -1,4 +1,5 @@
 import { DockLayoutStorage } from './docks/layout-storage.js';
+import { DockCornerLayout } from './docks/corner-layout.js';
 
 const DOCKS = new Set(['left', 'right', 'bottom', 'floating']);
 const MIN_WIDTH = 180;
@@ -48,6 +49,15 @@ export class DockManager {
     this.zoneState = { left: false, right: false, bottom: false, ...this.layoutStorage.initial.zones };
     this.panels = new Map();
     this.mode = 'edit';
+    this.cornerLayout = new DockCornerLayout({
+      root, controls: document.querySelectorAll('[data-dock-corner]'),
+      saved: this.layoutStorage.initial.corners,
+      onChange: () => {
+        this.refreshZones();
+        this.persist();
+        this.onLayoutChange();
+      }
+    });
     this.previewZone = null;
     this.previewIndex = -1;
     this.previewStackTarget = null;
@@ -117,6 +127,7 @@ export class DockManager {
         panel.state = normalizeState({ ...panel.defaultState, ...snapshot.layout[panel.id] }, panel.defaultState);
       }
       this.zoneState = { left: false, right: false, bottom: false, ...snapshot.zones };
+      this.cornerLayout?.restore(snapshot.corners);
       this.addDefaultStacks(snapshot.layout);
       this.restoreLayout();
       if (needsBackup) await this.persist();
@@ -143,6 +154,7 @@ export class DockManager {
 
   setMode(mode) {
     this.mode = mode;
+    this.cornerLayout?.setMode(mode);
     for (const panel of this.panels.values()) panel.element.hidden = !panel.modes.includes(mode);
     this.syncStacks();
     this.refreshZones();
@@ -576,9 +588,13 @@ export class DockManager {
       const zone = this.zones.get(dock);
       const rect = zone.getBoundingClientRect();
       if (dock === 'bottom') {
-        const leftEdge = this.zones.get('left')?.getBoundingClientRect().right || workspace.left;
-        const rightEdge = this.zones.get('right')?.getBoundingClientRect().left || workspace.right;
+        const corners = this.cornerLayout?.current;
+        const leftEdge = corners?.left ? workspace.left : this.zones.get('left')?.getBoundingClientRect().right || workspace.left;
+        const rightEdge = corners?.right ? workspace.right : this.zones.get('right')?.getBoundingClientRect().left || workspace.right;
         if (x < leftEdge || x > rightEdge) continue;
+      } else if (this.cornerLayout?.current[dock] && y > rect.bottom) {
+        // The bottom dock owns this corner, including its drag/drop region.
+        continue;
       }
       let distance;
       if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) distance = 0;
@@ -782,7 +798,7 @@ export class DockManager {
   persist() {
     this.layoutRevision++;
     const layout = Object.fromEntries([...this.panels].map(([id, panel]) => [id, panel.serialize()]));
-    return this.layoutStorage.save(layout, { ...this.zoneState }).catch(error => {
+    return this.layoutStorage.save(layout, { ...this.zoneState }, this.cornerLayout?.serialize()).catch(error => {
       console.warn('CubeBricks dock layout save failed:', error);
       this.onStorageError(error);
     });

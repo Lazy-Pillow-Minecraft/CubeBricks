@@ -185,3 +185,15 @@ The layer list supports new image layers or groups, drag reordering, collapse, a
 The context menu also offers Copy, Paste, and Duplicate Layer (`Ctrl+C`, `Ctrl+V`, and `Ctrl+D` while the layer list has focus). Group copies retain descendants and internal mask links with independent identities. Pasting into a selected group inserts children, while duplicating a group creates a sibling. Flipbook pastes connect to the current frame. **Binarize Alpha** leaves alpha 0 unchanged and sets every other pixel alpha to 255 without changing RGB. On groups it processes descendant image layers, preserving hierarchy, blending, and layer-opacity settings. Paste, duplicate, and binarization are undoable.
 
 Palettes can be created, selected, reordered, deleted, and renamed from their context menu. Export saves the currently selected single palette as `.cbcmap`; import appends instead of replacing. New palettes belong to the current project by default and are saved with `.cbmodel`. Use the Project/Global button or context menu to share a palette across projects. A `.cbmodel` export also embeds global palettes referenced by its layers, so the recipient can still edit tone mapping. The palette list can use a compact display. Dock panels around the left, right, and bottom edges can detach, snap back near an edge, or merge by dropping onto another panel's header. Collapse and sizing are managed at each dock position.
+
+## 7. Bone animation
+
+1. Prepare groups in an animation-capable model, switch to Animation, and create a clip in Animation Manager. Transform tools cannot write keys without an active clip.
+2. Clicking geometry selects its nearest group; Shift-click climbs to a parent. Move, Rotate, and matrix Scale write keys at the playhead and preview during dragging. Pivot still changes the base model.
+3. Frame Properties separates position, scale, and rotation; unconfigured channels show `-`. Selecting one key shows its properties; selecting multiple keys hides them. Key selection does not move the playhead.
+4. Drag the playhead to seek, holding Ctrl for subframe positions. Ctrl-wheel zooms the timeline. Key retiming uses horizontal position only and scrolls near the edges. A drop beyond the end extends the clip; hold Shift on release to clamp it inside the current end.
+5. Right-click or right-drag the top ruler to set the end, which cannot precede the last key. Transport controls jump to the start or end.
+6. Choose Once (return to start), Hold Last Frame, or Loop. Editing FPS changes preserve seconds; imported times retain fractional precision.
+7. Open a model with matching groups before importing `.animation.json` from Animation Manager. Export the current clip or all clips there, or through the main export chooser. `.bbmodel` and `.cbmodel` can retain bone animation.
+
+Expressions, sound/particle events, unmatched bones, and extension fields are retained for export but dynamic content is not fully previewed. Controllers and in-game references still require separate configuration.

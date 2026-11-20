@@ -31,6 +31,7 @@ npm run check
 npm run test:modules
 npm run test:model
 npm run test:render
+npm run test:animation
 npm run test:layer-tone-map
 npm run test:color-space
 npm run test:journal
@@ -44,4 +45,4 @@ Double-click `build-portable.bat` in the repository root, or run `npm run dist:p
 
 ## Build a Windows installer
 
-Double-click `build-installer.bat` in the repository root to enter a version before packaging (for example, `0.1.4-beta`; pressing Enter uses the current project version). You can also run `npm run dist:installer`, setting `CUBEBRICKS_INSTALLER_VERSION` to override the version. An entered version changes only the current build, not `package.json`. The script generates dark-brown and gold CubeBricks installer artwork and produces `dist/CubeBricks-v<version>-win-x64-setup.exe`. The wizard carries the existing app icon and title, offers an installation-directory choice, and creates desktop and Start Menu shortcuts. This installer is separate from the single-file portable build. A first build may need to download packaging resources; the output is not code-signed.
+Double-click `build-installer.bat` in the repository root to enter a version before packaging (for example, `0.2.3-beta`; pressing Enter uses the current project version). You can also run `npm run dist:installer`, setting `CUBEBRICKS_INSTALLER_VERSION` to override the version. An entered version changes only the current build, not `package.json`. The script generates dark-brown and gold CubeBricks installer artwork and produces `dist/CubeBricks-v<version>-win-x64-setup.exe`. The wizard carries the existing app icon and title, offers an installation-directory choice, and creates desktop and Start Menu shortcuts. This installer is separate from the single-file portable build. A first build may need to download packaging resources; the output is not code-signed.

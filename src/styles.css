@@ -469,6 +469,8 @@ input[type="checkbox"]:disabled {
 }
 .mode-tab[data-mode="edit"] { --ui-icon: url("assets/ui-icons/cube.svg"); }
 .mode-tab[data-mode="paint"] { --ui-icon: url("assets/ui-icons/brush.svg"); }
+.mode-tab[data-mode="animate"] { --ui-icon: url("assets/ui-icons/animation.svg"); }
+.keyframe-placeholder-content, .animation-placeholder-content { flex: 1; min-height: 0; }
 .mode-tab:hover { color: var(--text); }
 .mode-tab.active {
   background: rgba(var(--accent-rgb), .11);
@@ -729,13 +731,20 @@ input[type="checkbox"]:disabled {
 }
 .workspace-options-bar {
   min-width: 0;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 3px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.workspace-option-items {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 5px;
   overflow-x: auto;
-  padding: 1px 8px;
-  border-top: 1px solid var(--line);
-  background: var(--panel);
 }
 .workspace-options-bar .toolbar-check {
   height: 24px;
@@ -968,7 +977,7 @@ body:not([data-editor-mode="edit"]) .edit-only-option { display: none; }
   -webkit-mask: url("assets/ui-icons/search.svg") center / contain no-repeat;
   mask: url("assets/ui-icons/search.svg") center / contain no-repeat;
 }
-.tool:hover {
+.tool:hover, .dock-corner-toggle:hover {
   background: var(--line);
   color: var(--text);
 }
@@ -1164,11 +1173,13 @@ kbd {
   min-height: 0;
   display: grid;
   grid-template-columns: var(--left-panel-width) minmax(440px, 1fr) var(--right-panel-width);
+  grid-template-rows: minmax(0, 1fr) var(--bottom-panel-height);
   background: var(--bg);
 }
-.workspace > .dock-zone-left { grid-column: 1; }
-.workspace > .viewport-panel { grid-column: 2; }
-.workspace > .dock-zone-right { grid-column: 3; }
+.workspace > .dock-zone-left { grid-column: 1; grid-row: 1 / -1; }
+.workspace > .viewport-panel { grid-column: 2; grid-row: 1; }
+.workspace > .dock-zone-right { grid-column: 3; grid-row: 1 / -1; }
+.workspace > .dock-zone-bottom { grid-column: 2 / 3; grid-row: 2; }
 .dock-zone {
   position: relative;
   min-width: 0;
@@ -2441,7 +2452,7 @@ body[data-editor-mode="paint"] .outliner-create-actions > :not(.outliner-selecti
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 36px minmax(260px, 1fr) var(--bottom-panel-height);
+  grid-template-rows: 36px minmax(0, 1fr);
   background: var(--viewport);
 }
 .viewport-toolbar {

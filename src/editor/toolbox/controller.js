@@ -8,7 +8,7 @@ import { renameFlippedNodes } from '../../model.js';
 
 export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, selectedTopLevelNodes,
   isEffectivelyLocked, getSnapStep, snapshot, markDirty, renderAll, renderScene,
-  invalidateSelectionRenderGeometry, updateToolOptions, discardSubdivisionEdits }) {
+  invalidateSelectionRenderGeometry, updateToolOptions, discardSubdivisionEdits, getAnimationController = () => null }) {
   let frameRequest = null;
   const root = () => $('#toolboxOptions');
   const roots = () => selectedTopLevelNodes().filter(node => !isEffectivelyLocked(node.uid));
@@ -22,7 +22,7 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
   function refresh() {
     const container = root();
     if (!container?.childElementCount) return;
-    container.hidden = state.mode !== 'edit' || state.tool !== 'toolbox';
+    container.hidden = !['edit', 'animate'].includes(state.mode) || state.tool !== 'toolbox';
     if (container.hidden) { closeMenus(); return; }
     const values = { category: state.toolboxCategory, snap: state.toolboxSnap, centerBase: state.toolboxCenterBase };
     for (const [id, value] of Object.entries(values)) {
@@ -33,7 +33,7 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
     container.querySelectorAll('[data-toolbox-category]').forEach(group => { group.hidden = group.dataset.toolboxCategory !== state.toolboxCategory; });
     container.querySelectorAll('[data-toolbox-choice]').forEach(button => button.classList.toggle('active', values[button.dataset.toolboxChoice] === button.dataset.value));
     container.querySelector('[data-toolbox-rename-directions]').checked = state.toolboxRenameDirections !== false;
-    const disabled = !roots().length;
+    const disabled = !roots().length || state.mode === 'animate' && !getAnimationController()?.activeClip();
     container.querySelectorAll('[data-toolbox-action]').forEach(button => { button.disabled = disabled; });
   }
   function bind() {
@@ -82,6 +82,7 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
     return true;
   }
   function applyAction(action, options = {}) {
+    if (state.mode === 'animate') return getAnimationController()?.applyAction(action, options);
     if (state.mode !== 'edit' || !roots().length) return false;
     const capture = captureToolboxSelection(state.project, roots()), frame = selectionFrame();
     const pivot = generatedPoint(frame, capture.pivot);
@@ -113,6 +114,7 @@ export function createToolboxController({ state, $, sceneCanvas, sceneRenderer, 
     return true;
   }
   function startScale(event, captureTarget, handleElement) {
+    if (state.mode === 'animate') return getAnimationController()?.startTransform(event, null, captureTarget, 'uniform', 1, handleElement, 'uniform', []);
     if (event.button !== 0 || state.mode !== 'edit' || state.toolboxCategory !== 'scale' || !roots().length) return;
     event.preventDefault?.(); event.stopPropagation?.();
     const capture = captureToolboxSelection(state.project, roots()), frame = selectionFrame();

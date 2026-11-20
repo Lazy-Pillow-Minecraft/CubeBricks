@@ -5,7 +5,7 @@ export function createSceneController({
   uvPreviewController, LOCATOR_ICON_SHAPES, getSelectionExpansion,
   getTransformPivot, updateTransformGizmo, refreshUvPreview,
   currentProjection, activeSnapSubdivisions, buildEditorOverlayLines, updateMirrorGuideOverlay,
-  updateAxisWidget, updateReferenceImageLayer, updatePaintSelection = () => {}
+  updateAxisWidget, updateReferenceImageLayer, updatePaintSelection = () => {}, prepareAnimationScene = () => {}
 }) {
   let lockedHoverFrame = null;
   let lockedHoverPickFrame = null;
@@ -18,6 +18,7 @@ export function createSceneController({
   const emptyPaintSelection = new Set();
   let locatorCandidatesCache = null;
   function renderScene() {
+    prepareAnimationScene();
     if (sceneRenderFrame !== null) cancelAnimationFrame(sceneRenderFrame);
     sceneRenderFrame = null;
     const hidePaintSelection = state.mode === 'paint';

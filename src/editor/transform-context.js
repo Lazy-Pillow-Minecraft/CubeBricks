@@ -1,4 +1,5 @@
 import { applyGroupTransforms } from '../common/core/geometry-utils.js';
+import { animationGroupDirection, animationGroupPoint, animationGroupRotation, inverseAnimationGroupPoint } from '../animation/model.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { rotateVector, inverseRotateVector } from '../utils/math/rotation.js';
 import { proceduralMirrorVector } from '../common/core/procedural-mirror.js';
@@ -57,12 +58,15 @@ export function createTransformContext({
       return applyGroupTransforms(parentPoint, state.project.getGroupChain(owner.uid));
     }
     const local = item.type === 'cube' || item.type === 'group' || isShapeElement(item) ? item.pivot : item.position || item.origin;
+    if (state.mode === 'animate' && item.type === 'group')
+      return applyGroupTransforms(animationGroupPoint(local, item), state.project.getGroupChain(item.uid));
     return applyGroupTransforms(local, state.project.getGroupChain(item.uid));
   }
 
   function inverseApplyGroupTransforms(point, groupChain = []) {
     let transformed = [...point];
     for (const group of groupChain) {
+      if (group._animationPose) { transformed = inverseAnimationGroupPoint(transformed, group); continue; }
       const offset = transformed.map((value, axis) => value - group.pivot[axis]);
       const rotated = inverseRotateVector(offset, group.rotation || [0, 0, 0]);
       transformed = rotated.map((value, axis) => value + group.pivot[axis]);
@@ -106,7 +110,7 @@ export function createTransformContext({
     const nodes = selectedTopLevelNodes();
     const multiple = nodes.length > 1;
     const commonGroup = multiple ? deepestCommonSelectionGroup() : null;
-    const center = multiple ? selectionGeometryCenter() : null;
+    const center = multiple && state.mode !== 'animate' ? selectionGeometryCenter() : null;
     let averagePivot = null;
     if (multiple) {
       averagePivot = [0, 0, 0];
@@ -134,6 +138,24 @@ export function createTransformContext({
   }
 
   function getTransformAxes(item) {
+    if (state.mode === 'animate' && item.type === 'group') {
+      const chain = state.project.getGroupChain(item.uid);
+      const parentDirection = vector => [...chain].reverse().reduce((direction, group) => animationGroupDirection(direction, group), vector);
+      const pose = item._animationPose || { rotation: [0, 0, 0], scale: [1, 1, 1] };
+      const scale = state.dragging?.type === 'animation-transform' && state.dragging.tool === 'resize'
+        ? state.dragging.base.get(item.uid)?.scale || pose.scale : pose.scale;
+      return [0, 1, 2].map(axis => {
+        const unit = [0, 0, 0]; unit[axis] = 1;
+        if (state.transformSpace === 'global') return unit;
+        if (state.transformSpace === 'parent') return normalize3(parentDirection(unit));
+        const total = animationGroupRotation(item);
+        const rotation = state.tool === 'rotate' && state.rotationMode === 'euler'
+          ? axis === 0 ? [0, total[1], total[2]] : axis === 1 ? [0, 0, total[2]] : [0, 0, 0]
+          : total;
+        if (state.tool === 'resize' && scale[axis] < 0) unit[axis] = -1;
+        return normalize3(parentDirection(rotateVector(unit, rotation)));
+      });
+    }
     const owner = subdivisionOwner(item);
     const chain = state.project.getGroupChain(owner?.uid || item.uid);
     const parentRotation = vector => applyGroupTransforms(vector, chain.map(group => ({ pivot: [0, 0, 0], rotation: group.rotation })));
@@ -169,7 +191,7 @@ export function createTransformContext({
       && selectionTransformAxesCache.item === fallbackItem
       && selectionTransformAxesCache.key === cacheKey) return selectionTransformAxesCache.axes;
     let axes;
-    if (state.tool === 'resize') {
+    if (state.tool === 'resize' && state.mode !== 'animate') {
       const elements = selectedElementUids().map(uidValue => state.project.getNode(uidValue))
         .filter(node => node?.type === 'cube' || isShapeElement(node));
       if (elements.length) {
@@ -196,6 +218,7 @@ export function createTransformContext({
   }
 
   function activeCurveNodeContext() {
+    if (state.mode === 'animate') return null;
     const curve = selected();
     if (!isBezierElement(curve) || !Number.isInteger(state.selectedCurveNodeIndex)) return null;
     const node = curve.nodes[state.selectedCurveNodeIndex];
@@ -203,6 +226,7 @@ export function createTransformContext({
   }
 
   function activeModifierAnchorContext() {
+    if (state.mode === 'animate') return null;
     const owner = selected();
     const modifier = [...(owner?.modifiers || []), ...(owner?.operators || [])].find(entry => entry.uid === state.selectedModifierUid);
     if (modifier?.enabled && modifier.type === 'element_copy') {

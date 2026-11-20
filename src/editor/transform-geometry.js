@@ -1,4 +1,5 @@
 import { getBlockbenchBoxUv } from '../common/core/geometry-utils.js';
+import { inverseAnimationGroupPoint } from '../animation/model.js';
 import { setPivotPreservingGeometry } from '../model.js';
 import { dot3, cross3, normalize3 } from '../utils/math/vector3.js';
 import { inverseRotateVector, quaternionFromAxisAngle, quaternionMultiply, quaternionFromEuler, eulerFromQuaternion } from '../utils/math/rotation.js';
@@ -83,6 +84,7 @@ export function createTransformGeometry({
   function worldPointToParentLocal(item, worldPoint) {
     let local = [...worldPoint];
     for (const group of state.project.getGroupChain(item.uid)) {
+      if (group._animationPose) { local = inverseAnimationGroupPoint(local, group); continue; }
       const offset = local.map((value, axis) => value - group.pivot[axis]);
       local = inverseRotateVector(offset, group.rotation || [0, 0, 0]).map((value, axis) => value + group.pivot[axis]);
     }
